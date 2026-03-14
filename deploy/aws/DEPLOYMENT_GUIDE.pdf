@@ -1,0 +1,60 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 1214 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (?# Deployment Scripts + PDFs) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (## Deploy) Tj
+1 0 0 1 50 758 Tm (- Ubuntu: `deploy/aws/deploy.sh`) Tj
+1 0 0 1 50 744 Tm (- Amazon Linux 2023: `deploy/aws/deploy-amzn-linux-2023.sh`) Tj
+1 0 0 1 50 730 Tm () Tj
+1 0 0 1 50 716 Tm (## Undeploy / Rollback) Tj
+1 0 0 1 50 702 Tm (- Ubuntu: `deploy/aws/undeploy.sh`) Tj
+1 0 0 1 50 688 Tm (- Amazon Linux 2023: `deploy/aws/undeploy-amzn-linux-2023.sh`) Tj
+1 0 0 1 50 674 Tm () Tj
+1 0 0 1 50 660 Tm (## Nginx) Tj
+1 0 0 1 50 646 Tm (- `deploy/aws/chandudevopai.shop.nginx.conf`) Tj
+1 0 0 1 50 632 Tm () Tj
+1 0 0 1 50 618 Tm (## Service) Tj
+1 0 0 1 50 604 Tm (- `deploy/aws/intratrade.service`) Tj
+1 0 0 1 50 590 Tm () Tj
+1 0 0 1 50 576 Tm (## Streamlit Config) Tj
+1 0 0 1 50 562 Tm (- `deploy/streamlit/config.toml`) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm (## IAM Policy) Tj
+1 0 0 1 50 520 Tm (- `deploy/aws/iam-policy-s3.json`) Tj
+1 0 0 1 50 506 Tm () Tj
+1 0 0 1 50 492 Tm (## Notes) Tj
+1 0 0 1 50 478 Tm (1. Update placeholders in deploy scripts before running.) Tj
+1 0 0 1 50 464 Tm (2. Test nginx before reload: `sudo nginx -t`.) Tj
+1 0 0 1 50 450 Tm (3. Use certbot for TLS certs.) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000185 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1577
+%%EOF

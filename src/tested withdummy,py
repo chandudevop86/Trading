@@ -1,0 +1,373 @@
+from __future__ import annotations
+import sys
+from pathlib import Path
+
+# Add parent directory (F:\Trading) to sys.path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.aws_storage import build_s3_key, upload_text_to_s3
+
+import csv
+import io
+from pathlib import Path
+import os
+import altair as alt
+import pandas as pd
+import streamlit as st
+import streamlit.components.v1 as components
+import yfinance as yf
+from datetime import datetime
+#from src.pattern_detector import detect_patterns
+from src.supply_demand import detect_supply_demand
+#from src.heatmap import pattern_heatmap
+#from src.backtester import run_backtest
+#from src.mtf_analysis import get_mtf_data
+#from src.orderflow import detect_orderflow
+#st.subheader("Pattern Heatmap")
+#st.dataframe(heatmap)
+
+#st.subheader("Backtest Results")
+#st.write(results)
+
+#st.subheader("Supply / Demand Zones")
+#st.write(zones)
+
+# -----------------------------
+# Preprocessing function
+# -----------------------------
+def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:
+    if uploaded_file is not None:
+     df = pd.read_csv(uploaded_file)
+     df = prepare_trading_data(df)  # <-- here
+
+# OR for yfinance
+    df = yf.download(symbol, period=period, interval=interval)
+    df = prepare_trading_data(df)  # <-- here
+
+
+from src.aws_storage import build_s3_key, upload_text_to_s3
+from src.breakout_bot import generate_trades as generate_breakout_trades, load_candles
+from src.indicator_bot import IndicatorConfig, generate_indicator_rows
+from src.live_ohlcv import fetch_live_ohlcv
+from src.one_trade_day_bot import generate_trades as generate_one_trade_day_trades
+from src.price_action import annotate_trades_with_zones
+from src.strike_selector import attach_option_strikes
+#from src.pattern_detector import pattern_detector
+#from src.utils import prepare_trading_data
+from src.execution_engine import (
+    build_execution_candidates,
+    default_quantity_for_symbol,
+    execute_paper_trades,
+    execute_live_trades,
+    live_trading_unlock_status,
+)
+from src.telegram_notifier import build_trade_summary, send_telegram_message
+
+# Optional module
+try:
+    from src.demand_supply_bot import generate_trades as generate_demand_supply_trades
+except (ImportError, ModuleNotFoundError):
+    generate_demand_supply_trades = None
+
+# -------------------------------
+# Constants
+# -------------------------------
+
+
+def  create_df():
+     df = pd.DataFrame({'A': [1, 2], 'B': [3, 4]})
+     return df # Return the DataFrame
+
+df = create_df() # Assign the returned value to a variable in the global scope
+print(df.head())
+
+df = pd.read_csv('data/live_ohlcv.csv') # Define df first
+print(df.head())
+dff = pd.read_csv('data/live_ohlcv.csv')
+print(dff.head()) # Corrected to 'dff'
+print(os.getcwd())
+
+df = df.rename(columns={
+         "Open": "open",
+         "High": "high",
+         "Low": "low",
+         "Close": "close",
+         "Volume": "volume",
+         "Date": "timestamp"
+ }, inplace=True)
+
+REQUIRED_COLUMNS = {"timestamp","price","close", "high", "low", "open", "volume"}
+#REQUIRED_COLUMNS = {"close", "high", "low","open","timestamp","volume"}
+#print(df.columns)
+##df = pd.read_csv(uploaded_file)
+#trades = generate_trades(df)
+#st.write("Detected Patterns")
+#patterns = detect_patterns(df)
+#for p in patterns:
+#   st.write(p)
+STRATEGIES = [
+    "Breakout (15m)",
+    "Demand/Supply",
+    "Indicator (RSI/ADX/MACD+VWAP)",
+    "One Trade/Day (All Indicators)",
+    "Paper Trading (Auto)",
+    "Dhan API (Future)",
+]
+
+STRATEGY_PAGES = {
+    "Breakout Page": "Breakout (15m)",
+    "Demand/Supply Page": "Demand/Supply",
+    "Indicator Page": "Indicator (RSI/ADX/MACD+VWAP)",
+    "One Trade/Day Page": "One Trade/Day (All Indicators)",
+    "Paper Trading Page": "Paper Trading (Auto)",
+    "Dhan API Page": "Dhan API (Future)",
+}
+
+# -------------------------------
+# Helper Functions
+# -------------------------------
+def _load_rows_from_upload(uploaded_file) -> list[dict[str, str]]:
+    content = uploaded_file.getvalue().decode("utf-8")
+    reader = csv.DictReader(io.StringIO(content))
+    if reader.fieldnames is None:
+        raise ValueError("CSV must include a header row")
+    missing = REQUIRED_COLUMNS.difference({h.strip() for h in reader.fieldnames})
+    if missing:
+        raise ValueError(f"Missing required columns: {', '.join(sorted(missing))}")
+    return list(reader)
+
+
+def _to_csv(rows: list[dict[str, object]]) -> str:
+    if not rows:
+        return ""
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=list(rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(rows)
+    return buffer.getvalue()
+
+
+def _dhan_candidates_from_rows(rows: list[dict[str, object]], default_qty: int) -> list[dict[str, object]]:
+    candidates: list[dict[str, object]] = []
+    for row in rows:
+        side = str(row.get("side", "HOLD")).upper()
+        quantity_val = row.get("quantity")
+        quantity = int(str(quantity_val)) if quantity_val else default_qty
+        candidates.append(
+            {
+                "strategy": str(row.get("strategy", "DHAN_SIGNAL")),
+                "symbol": str(row.get("symbol", "NIFTY")),
+                "signal_time": str(row.get("timestamp", "")),
+                "side": side,
+                "price": row.get("price", ""),
+                "quantity": quantity,
+                "reason": str(row.get("reason", "Dhan tab signal")),
+            }
+        )
+    return candidates
+
+
+def _auto_refresh(seconds: int) -> None:
+    if seconds <= 0:
+        return
+    ms = int(seconds * 1000)
+    components.html(
+        f"""
+        <script>
+            setTimeout(function() {{
+                window.parent.location.reload();
+            }}, {ms});
+        </script>
+        """,
+        height=0,
+    )
+
+
+def _signal_time_map(candidates: list[dict[str, object]]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for c in candidates:
+        side = str(c.get("side", "")).upper()
+        if side not in {"BUY", "SELL"}:
+            continue
+        out[str(c.get("signal_time", ""))] = side
+    return out
+
+
+def _render_live_chart(
+    live_rows: list[dict[str, object]],
+    indicator_rows: list[dict[str, object]],
+    cand_breakout: list[dict[str, object]],
+    cand_ds: list[dict[str, object]],
+    cand_ind: list[dict[str, object]],
+) -> None:
+    ind_map = {str(r.get("timestamp", "")): r for r in indicator_rows}
+    b_map = _signal_time_map(cand_breakout)
+    d_map = _signal_time_map(cand_ds)
+    i_map = _signal_time_map(cand_ind)
+
+    rows: list[dict[str, object]] = []
+    for r in live_rows:
+        ts = str(r.get("timestamp"))
+        close = float(r.get("close", 0) or 0)
+        vwap_val = ind_map.get(ts, {}).get("vwap")
+        vwap = float(vwap_val) if vwap_val not in (None, "") else None
+        rows.append(
+            {
+                "timestamp": ts,
+                "close": close,
+                "vwap": vwap,
+                "breakout_signal": close if ts in b_map else None,
+                "ds_signal": close if ts in d_map else None,
+                "ind_signal": close if ts in i_map else None,
+            }
+        )
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return
+
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    base = alt.Chart(df).encode(x=alt.X("timestamp:T", title="Time"))
+    close_line = base.mark_line(color="#43d9ad", strokeWidth=2).encode(y=alt.Y("close:Q", title="Price"))
+    vwap_line = base.mark_line(color="#ffb347", strokeDash=[6, 4], strokeWidth=2).encode(y="vwap:Q")
+
+    b_points = alt.Chart(df.dropna(subset=["breakout_signal"])).mark_point(
+        shape="triangle-up", size=110, color="#64b5f6"
+    ).encode(x="timestamp:T", y="breakout_signal:Q")
+
+    d_points = alt.Chart(df.dropna(subset=["ds_signal"])).mark_point(
+        shape="diamond", size=100, color="#ff8a65"
+    ).encode(x="timestamp:T", y="ds_signal:Q")
+
+    i_points = alt.Chart(df.dropna(subset=["ind_signal"])).mark_point(
+        shape="circle", size=90, color="#ba68c8"
+    ).encode(x="timestamp:T", y="ind_signal:Q")
+
+    chart = alt.layer(close_line, vwap_line, b_points, d_points, i_points).properties(height=130).interactive()
+    st.altair_chart(chart, use_container_width=True)
+    st.caption("Chart markers: Blue=Breakout, Orange=Demand/Supply, Purple=Indicator.")
+
+# Sidebar parameters
+capital = st.sidebar.number_input(
+    "Capital (₹)",
+    min_value=1000,
+    max_value=10000000,
+    value=100000,
+    step=1000,
+    key="capital_input"
+)
+
+risk_pct = st.sidebar.slider(
+    "Risk per trade (%)",
+    0.1,
+    5.0,
+    1.0,
+    0.1,
+    key="risk_pct_slider"
+)
+
+rr_ratio = st.sidebar.slider(
+    "Risk/Reward ratio",
+    1.0,
+    5.0,
+    2.0,
+    0.1,
+    key="rr_ratio_slider"
+)
+
+trailing_sl_pct = st.sidebar.slider(
+    "Trailing SL (%)",
+    0.1,
+    5.0,
+    1.0,
+    0.1,
+    key="trailing_sl_slider"
+)
+# -------------------------------
+# Main Streamlit App
+# -------------------------------
+def main():
+    st.set_page_config(page_title="Trading Dashboard", page_icon="📈", layout="wide")
+
+    st.title("📈 Intratrade Algo Desk")
+
+    # Sidebar: Parameters
+    st.sidebar.title("⚙️ Bot Settings & Parameters")
+    capital = st.sidebar.number_input("Capital (₹)", min_value=1000, max_value=10000000, value=100000, step=1000)
+    risk_pct = st.sidebar.slider("Risk per trade (%)", 0.1, 5.0, 1.0, 0.1)
+    rr_ratio = st.sidebar.slider("Risk/Reward ratio", 1.0, 5.0, 2.0, 0.1)
+    trailing_sl_pct = st.sidebar.slider("Trailing SL (%)", 0.1, 5.0, 1.0, 0.1)
+
+st.subheader("Select Strategy")
+
+c1, c2, c3, c4, c5 = st.columns(5)
+
+if "strategy" not in st.session_state:
+    st.session_state.strategy = None
+
+with c1:
+    if st.button("🚀 Breakout"):
+        st.session_state.strategy = "breakout"
+
+with c2:
+    if st.button("📊 Demand/Supply"):
+        st.session_state.strategy = "ds"
+
+with c3:
+    if st.button("📈 Indicator"):
+        st.session_state.strategy = "indicator"
+
+with c4:
+    if st.button("🧠 One Trade/Day"):
+        st.session_state.strategy = "one_trade"
+
+with c5:
+    if st.button("📝 Paper Trading"):
+        st.session_state.strategy = "paper"
+
+strategy = st.session_state.strategy
+
+indicator_mode = strategy == "Indicator (RSI/ADX/MACD+VWAP)"
+paper_mode = strategy == "Paper Trading (Auto)"
+dhan_mode = strategy == "Dhan API (Future)"
+one_trade_mode = strategy == "One Trade/Day (All Indicators)"
+ds_mode = strategy == "Demand/Supply"
+
+uploaded_file = None
+symbol = st.sidebar.text_input("Symbol", "^NSEI")
+interval = st.sidebar.selectbox("Interval", ["1m","5m","15m","30m","1h"])
+period = st.sidebar.selectbox("Period", ["1d","5d","1mo"])
+
+st.info("Fetching live OHLCV data...")
+
+rows = fetch_live_ohlcv(symbol, interval, period)
+candles = load_candles(rows)
+    # Load data
+try:
+        rows = _load_rows_from_upload(uploaded_file) if uploaded_file else []
+        candles = load_candles(rows) if rows else []
+
+        output_rows = []
+        if indicator_mode:
+            output_rows = generate_indicator_rows(candles, config=IndicatorConfig(rsi_period=14, adx_period=14, macd_fast=12, macd_slow=26, macd_signal=9))
+        elif one_trade_mode:
+            output_rows = generate_one_trade_day_trades(candles, capital=capital, risk_pct=risk_pct / 100.0, rr_ratio=rr_ratio)
+        elif ds_mode and generate_demand_supply_trades:
+            output_rows = generate_demand_supply_trades(candles, capital=capital, risk_pct=risk_pct / 100.0, rr_ratio=rr_ratio)
+        else:
+            output_rows = generate_breakout_trades(candles, capital=capital, risk_pct=risk_pct / 100.0, rr_ratio=rr_ratio)
+
+except Exception as exc:
+        st.error(f"Could not run strategy: {exc}")
+        st.stop()
+
+    # Display output
+st.subheader("Execution Data")
+st.dataframe(output_rows, use_container_width=True, height=250)
+
+    # CSV download
+csv_data = _to_csv(output_rows)
+st.download_button("Download CSV", data=csv_data, file_name="output.csv", mime="text/csv")
+
+if __name__ == "__main__":
+    main()

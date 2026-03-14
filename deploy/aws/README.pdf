@@ -1,0 +1,83 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2943 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (?# AWS Deployment Files) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (This folder contains ready-to-use deployment files for hosting Intratrade on AWS EC2.) Tj
+1 0 0 1 50 758 Tm () Tj
+1 0 0 1 50 744 Tm (## Files) Tj
+1 0 0 1 50 730 Tm (- `deploy/aws/intratrade.service`: systemd service for Streamlit app) Tj
+1 0 0 1 50 716 Tm (- `deploy/aws/chandudevopai.shop.nginx.conf`: nginx reverse proxy config) Tj
+1 0 0 1 50 702 Tm (- `deploy/aws/iam-policy-s3.json`: IAM policy template for S3 access) Tj
+1 0 0 1 50 688 Tm (- `deploy/aws/deploy.sh`: one-shot setup script \(Ubuntu\)) Tj
+1 0 0 1 50 674 Tm (- `deploy/aws/deploy-amzn-linux-2023.sh`: one-shot setup script \(Amazon Linux 2023\)) Tj
+1 0 0 1 50 660 Tm (- `deploy/streamlit/config.toml`: streamlit server config for reverse proxy mode) Tj
+1 0 0 1 50 646 Tm () Tj
+1 0 0 1 50 632 Tm (## Quick steps \(manual\)) Tj
+1 0 0 1 50 618 Tm (1. Copy streamlit config:) Tj
+1 0 0 1 50 604 Tm (   - `cp deploy/streamlit/config.toml .streamlit/config.toml`) Tj
+1 0 0 1 50 590 Tm (2. Install service:) Tj
+1 0 0 1 50 576 Tm (   - `sudo cp deploy/aws/intratrade.service /etc/systemd/system/`) Tj
+1 0 0 1 50 562 Tm (   - `sudo systemctl daemon-reload && sudo systemctl enable --now intratrade`) Tj
+1 0 0 1 50 548 Tm (3. Install nginx vhost:) Tj
+1 0 0 1 50 534 Tm (   - Ubuntu/Debian:) Tj
+1 0 0 1 50 520 Tm (     - `sudo cp deploy/aws/chandudevopai.shop.nginx.conf /etc/nginx/sites-available/chandudevopai.shop.conf`) Tj
+1 0 0 1 50 506 Tm (     - `sudo ln -s /etc/nginx/sites-available/chandudevopai.shop.conf /etc/nginx/sites-enabled/`) Tj
+1 0 0 1 50 492 Tm (   - Amazon Linux 2023:) Tj
+1 0 0 1 50 478 Tm (     - `sudo cp deploy/aws/chandudevopai.shop.nginx.conf /etc/nginx/conf.d/chandudevopai.shop.conf`) Tj
+1 0 0 1 50 464 Tm (   - `sudo nginx -t && sudo systemctl reload nginx`) Tj
+1 0 0 1 50 450 Tm (4. Issue SSL cert:) Tj
+1 0 0 1 50 436 Tm (   - `sudo certbot --nginx -d chandudevopai.shop -d www.chandudevopai.shop`) Tj
+1 0 0 1 50 422 Tm () Tj
+1 0 0 1 50 408 Tm (## One-shot script \(Ubuntu\)) Tj
+1 0 0 1 50 394 Tm (Update placeholders in `deploy/aws/deploy.sh`:) Tj
+1 0 0 1 50 380 Tm (- `REPLACE_GIT_REPO_URL`) Tj
+1 0 0 1 50 366 Tm (- `REPLACE_EMAIL`) Tj
+1 0 0 1 50 352 Tm () Tj
+1 0 0 1 50 338 Tm (Run:) Tj
+1 0 0 1 50 324 Tm (```bash) Tj
+1 0 0 1 50 310 Tm (chmod +x deploy/aws/deploy.sh) Tj
+1 0 0 1 50 296 Tm (./deploy/aws/deploy.sh) Tj
+1 0 0 1 50 282 Tm (```) Tj
+1 0 0 1 50 268 Tm () Tj
+1 0 0 1 50 254 Tm (## One-shot script \(Amazon Linux 2023\)) Tj
+1 0 0 1 50 240 Tm (Update placeholders in `deploy/aws/deploy-amzn-linux-2023.sh`:) Tj
+1 0 0 1 50 226 Tm (- `REPLACE_GIT_REPO_URL`) Tj
+1 0 0 1 50 212 Tm (- `REPLACE_EMAIL`) Tj
+1 0 0 1 50 198 Tm () Tj
+1 0 0 1 50 184 Tm (Run:) Tj
+1 0 0 1 50 170 Tm (```bash) Tj
+1 0 0 1 50 156 Tm (chmod +x deploy/aws/deploy-amzn-linux-2023.sh) Tj
+1 0 0 1 50 142 Tm (./deploy/aws/deploy-amzn-linux-2023.sh) Tj
+1 0 0 1 50 128 Tm (```) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000185 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+3306
+%%EOF

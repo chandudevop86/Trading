@@ -1,0 +1,3 @@
+﻿PyYAML==6.0.2
+streamlit
+boto3

@@ -1,0 +1,151 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2456 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (# Docker + Kubernetes + Dhan API \(Future\) Guide) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (This guide deploys the Streamlit app with Docker and Kubernetes, routes traffic from `chandudevopai.shop`, and keeps a future-ready Dhan API tab in the app.) Tj
+1 0 0 1 50 758 Tm () Tj
+1 0 0 1 50 744 Tm (## 1\) Local Docker run) Tj
+1 0 0 1 50 730 Tm () Tj
+1 0 0 1 50 716 Tm (```bash) Tj
+1 0 0 1 50 702 Tm (cd /opt/intratrade) Tj
+1 0 0 1 50 688 Tm (vim deploy/docker/Dockerfile) Tj
+1 0 0 1 50 674 Tm (vim deploy/docker/docker-compose.yml) Tj
+1 0 0 1 50 660 Tm () Tj
+1 0 0 1 50 646 Tm (# Build image) Tj
+1 0 0 1 50 632 Tm (docker build -f deploy/docker/Dockerfile -t intratrade:latest .) Tj
+1 0 0 1 50 618 Tm () Tj
+1 0 0 1 50 604 Tm (# Run container) Tj
+1 0 0 1 50 590 Tm (docker compose -f deploy/docker/docker-compose.yml up -d) Tj
+1 0 0 1 50 576 Tm () Tj
+1 0 0 1 50 562 Tm (# Verify) Tj
+1 0 0 1 50 548 Tm (docker ps) Tj
+1 0 0 1 50 534 Tm (docker logs intratrade_app --tail 100) Tj
+1 0 0 1 50 520 Tm (```) Tj
+1 0 0 1 50 506 Tm () Tj
+1 0 0 1 50 492 Tm (Open `http://<server-ip>:8501`.) Tj
+1 0 0 1 50 478 Tm () Tj
+1 0 0 1 50 464 Tm (## 2\) Kubernetes deployment \(single node or cluster\)) Tj
+1 0 0 1 50 450 Tm () Tj
+1 0 0 1 50 436 Tm (```bash) Tj
+1 0 0 1 50 422 Tm (cd /opt/intratrade) Tj
+1 0 0 1 50 408 Tm () Tj
+1 0 0 1 50 394 Tm (# Create namespace + config) Tj
+1 0 0 1 50 380 Tm (kubectl apply -f deploy/k8s/namespace.yaml) Tj
+1 0 0 1 50 366 Tm (kubectl apply -f deploy/k8s/configmap.yaml) Tj
+1 0 0 1 50 352 Tm () Tj
+1 0 0 1 50 338 Tm (# Create secrets from template) Tj
+1 0 0 1 50 324 Tm (cp deploy/k8s/secret.example.yaml deploy/k8s/secret.yaml) Tj
+1 0 0 1 50 310 Tm (vim deploy/k8s/secret.yaml) Tj
+1 0 0 1 50 296 Tm (kubectl apply -f deploy/k8s/secret.yaml) Tj
+1 0 0 1 50 282 Tm () Tj
+1 0 0 1 50 268 Tm (# Apply workload) Tj
+1 0 0 1 50 254 Tm (kubectl apply -f deploy/k8s/deployment.yaml) Tj
+1 0 0 1 50 240 Tm (kubectl apply -f deploy/k8s/service.yaml) Tj
+1 0 0 1 50 226 Tm (kubectl apply -f deploy/k8s/ingress.yaml) Tj
+1 0 0 1 50 212 Tm (kubectl apply -f deploy/k8s/hpa.yaml) Tj
+1 0 0 1 50 198 Tm () Tj
+1 0 0 1 50 184 Tm (# Verify) Tj
+1 0 0 1 50 170 Tm (kubectl get all -n intratrade) Tj
+1 0 0 1 50 156 Tm (kubectl get ingress -n intratrade) Tj
+1 0 0 1 50 142 Tm (```) Tj
+1 0 0 1 50 128 Tm () Tj
+1 0 0 1 50 114 Tm (## 3\) Push image to registry \(recommended\)) Tj
+1 0 0 1 50 100 Tm () Tj
+1 0 0 1 50 86 Tm (```bash) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2524 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (# Example with Docker Hub) Tj
+1 0 0 1 50 786 Tm (docker tag intratrade:latest <dockerhub-user>/intratrade:latest) Tj
+1 0 0 1 50 772 Tm (docker push <dockerhub-user>/intratrade:latest) Tj
+1 0 0 1 50 758 Tm () Tj
+1 0 0 1 50 744 Tm (# Then update deploy/k8s/deployment.yaml image:) Tj
+1 0 0 1 50 730 Tm (# image: <dockerhub-user>/intratrade:latest) Tj
+1 0 0 1 50 716 Tm (kubectl apply -f deploy/k8s/deployment.yaml) Tj
+1 0 0 1 50 702 Tm (```) Tj
+1 0 0 1 50 688 Tm () Tj
+1 0 0 1 50 674 Tm (## 4\) Domain routing) Tj
+1 0 0 1 50 660 Tm () Tj
+1 0 0 1 50 646 Tm (Set DNS A record:) Tj
+1 0 0 1 50 632 Tm (- Host: `chandudevopai.shop`) Tj
+1 0 0 1 50 618 Tm (- Value: your load balancer/public IP) Tj
+1 0 0 1 50 604 Tm () Tj
+1 0 0 1 50 590 Tm (If using NGINX ingress controller, ensure ports 80/443 are open.) Tj
+1 0 0 1 50 576 Tm () Tj
+1 0 0 1 50 562 Tm (For TLS \(HTTPS\):) Tj
+1 0 0 1 50 548 Tm (- Install cert-manager in cluster.) Tj
+1 0 0 1 50 534 Tm (- Add TLS secret and issuer in ingress manifest.) Tj
+1 0 0 1 50 520 Tm () Tj
+1 0 0 1 50 506 Tm (## 5\) App feature included for future Dhan API) Tj
+1 0 0 1 50 492 Tm () Tj
+1 0 0 1 50 478 Tm (The app now includes strategy tab:) Tj
+1 0 0 1 50 464 Tm (- `Dhan API \(Future\)`) Tj
+1 0 0 1 50 450 Tm () Tj
+1 0 0 1 50 436 Tm (Inside that tab:) Tj
+1 0 0 1 50 422 Tm (- Auth panel for `client_id` and access token) Tj
+1 0 0 1 50 408 Tm (- Market feed contract example) Tj
+1 0 0 1 50 394 Tm (- Order router payload example) Tj
+1 0 0 1 50 380 Tm (- Webhook event schema example) Tj
+1 0 0 1 50 366 Tm (- Downloadable `dhan_order_template.csv`) Tj
+1 0 0 1 50 352 Tm () Tj
+1 0 0 1 50 338 Tm (Current status:) Tj
+1 0 0 1 50 324 Tm (- Dhan tab is scaffold-only \(safe for future extension\)) Tj
+1 0 0 1 50 310 Tm (- Existing bots continue to run normally) Tj
+1 0 0 1 50 296 Tm () Tj
+1 0 0 1 50 282 Tm (## 6\) Useful operations) Tj
+1 0 0 1 50 268 Tm () Tj
+1 0 0 1 50 254 Tm (```bash) Tj
+1 0 0 1 50 240 Tm (# Restart app deployment) Tj
+1 0 0 1 50 226 Tm (kubectl rollout restart deployment intratrade-app -n intratrade) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (# Follow logs) Tj
+1 0 0 1 50 184 Tm (kubectl logs -f deployment/intratrade-app -n intratrade) Tj
+1 0 0 1 50 170 Tm () Tj
+1 0 0 1 50 156 Tm (# Scale manually) Tj
+1 0 0 1 50 142 Tm (kubectl scale deployment intratrade-app --replicas=2 -n intratrade) Tj
+1 0 0 1 50 128 Tm () Tj
+1 0 0 1 50 114 Tm (# Remove everything) Tj
+1 0 0 1 50 100 Tm (kubectl delete ns intratrade) Tj
+1 0 0 1 50 86 Tm (```) Tj
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000002825 00000 n 
+0000002951 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+5527
+%%EOF

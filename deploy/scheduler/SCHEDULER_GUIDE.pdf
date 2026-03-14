@@ -1,0 +1,117 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2431 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (# Auto Backtest Scheduler Guide) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (This sets fully automatic backtest + paper logs without manual intervention.) Tj
+1 0 0 1 50 758 Tm () Tj
+1 0 0 1 50 744 Tm (## Output files updated each run) Tj
+1 0 0 1 50 730 Tm (- `data/live_ohlcv.csv`) Tj
+1 0 0 1 50 716 Tm (- `data/backtest_results_all.csv`) Tj
+1 0 0 1 50 702 Tm (- `data/backtest_results_history.csv`) Tj
+1 0 0 1 50 688 Tm (- `data/paper_trading_logs_all.csv`) Tj
+1 0 0 1 50 674 Tm () Tj
+1 0 0 1 50 660 Tm (## Windows Task Scheduler) Tj
+1 0 0 1 50 646 Tm () Tj
+1 0 0 1 50 632 Tm (### 1\) Test manually once) Tj
+1 0 0 1 50 618 Tm (```powershell) Tj
+1 0 0 1 50 604 Tm (cd F:\\Trading) Tj
+1 0 0 1 50 590 Tm (powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\run_auto_backtest.ps1) Tj
+1 0 0 1 50 576 Tm (```) Tj
+1 0 0 1 50 562 Tm () Tj
+1 0 0 1 50 548 Tm (### 2\) Register recurring task \(every 15 minutes\)) Tj
+1 0 0 1 50 534 Tm (```powershell) Tj
+1 0 0 1 50 520 Tm (cd F:\\Trading) Tj
+1 0 0 1 50 506 Tm (powershell -NoProfile -ExecutionPolicy Bypass -File .\\deploy\\scheduler\\register_windows_task.ps1 -TaskName "IntratradeAutoBacktest" -Schedule MINUTE -Modifier 15 -StartTime "09:15") Tj
+1 0 0 1 50 492 Tm (```) Tj
+1 0 0 1 50 478 Tm () Tj
+1 0 0 1 50 464 Tm (### 3\) Run on demand) Tj
+1 0 0 1 50 450 Tm (```powershell) Tj
+1 0 0 1 50 436 Tm (schtasks /Run /TN "IntratradeAutoBacktest") Tj
+1 0 0 1 50 422 Tm (```) Tj
+1 0 0 1 50 408 Tm () Tj
+1 0 0 1 50 394 Tm (### 4\) Check status) Tj
+1 0 0 1 50 380 Tm (```powershell) Tj
+1 0 0 1 50 366 Tm (schtasks /Query /TN "IntratradeAutoBacktest" /V /FO LIST) Tj
+1 0 0 1 50 352 Tm (```) Tj
+1 0 0 1 50 338 Tm () Tj
+1 0 0 1 50 324 Tm (### 5\) Delete task) Tj
+1 0 0 1 50 310 Tm (```powershell) Tj
+1 0 0 1 50 296 Tm (schtasks /Delete /TN "IntratradeAutoBacktest" /F) Tj
+1 0 0 1 50 282 Tm (```) Tj
+1 0 0 1 50 268 Tm () Tj
+1 0 0 1 50 254 Tm (## Linux Cron \(if deployed on Linux\)) Tj
+1 0 0 1 50 240 Tm () Tj
+1 0 0 1 50 226 Tm (### 1\) Make runner executable) Tj
+1 0 0 1 50 212 Tm (```bash) Tj
+1 0 0 1 50 198 Tm (cd /opt/intratrade) Tj
+1 0 0 1 50 184 Tm (chmod +x deploy/scheduler/run_auto_backtest.sh) Tj
+1 0 0 1 50 170 Tm (```) Tj
+1 0 0 1 50 156 Tm () Tj
+1 0 0 1 50 142 Tm (### 2\) Add cron entry \(every 15 minutes\)) Tj
+1 0 0 1 50 128 Tm (```bash) Tj
+1 0 0 1 50 114 Tm (crontab -e) Tj
+1 0 0 1 50 100 Tm (```) Tj
+1 0 0 1 50 86 Tm (Add this line:) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 1009 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (```cron) Tj
+1 0 0 1 50 786 Tm (*/15 * * * * REPO_DIR=/opt/intratrade SYMBOL=RELIANCE.NS INTERVAL=5m PERIOD=5d EXEC_SYMBOL=RELIANCE /opt/intratrade/deploy/scheduler/run_auto_backtest.sh >> /opt/intratrade/data/cron_backtest.log 2>&1) Tj
+1 0 0 1 50 772 Tm (```) Tj
+1 0 0 1 50 758 Tm () Tj
+1 0 0 1 50 744 Tm (### 3\) Verify cron installed) Tj
+1 0 0 1 50 730 Tm (```bash) Tj
+1 0 0 1 50 716 Tm (crontab -l) Tj
+1 0 0 1 50 702 Tm (```) Tj
+1 0 0 1 50 688 Tm () Tj
+1 0 0 1 50 674 Tm (## Customize strategy feed) Tj
+1 0 0 1 50 660 Tm (- Symbol: `RELIANCE.NS` / `^NSEI` / other Yahoo ticker) Tj
+1 0 0 1 50 646 Tm (- Interval: `1m|2m|5m|15m|30m|60m|1d`) Tj
+1 0 0 1 50 632 Tm (- Period: `1d|5d|1mo`) Tj
+1 0 0 1 50 618 Tm () Tj
+1 0 0 1 50 604 Tm (## Notes) Tj
+1 0 0 1 50 590 Tm (- Uses live OHLCV fetch from Yahoo on each run.) Tj
+1 0 0 1 50 576 Tm (- No manual CSV upload needed.) Tj
+1 0 0 1 50 562 Tm (- NIFTY quantity enforcement remains in execution engine \(lot multiple logic\).) Tj
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000002800 00000 n 
+0000002926 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+3987
+%%EOF

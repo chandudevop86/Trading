@@ -8,7 +8,11 @@ from typing import Optional, Tuple
 DEFAULT_LOT_SIZES = {
     "NIFTY": 65,
 }
+time_str = "2026-03-15 10:30:00"
+dt = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
 
+ts = dt.timestamp()
+print(ts)
 
 def default_quantity_for_symbol(symbol: str) -> int:
     normalized = symbol.strip().upper()

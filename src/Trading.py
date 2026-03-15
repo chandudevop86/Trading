@@ -19,7 +19,7 @@ from src.breakout_bot import generate_trades as generate_breakout_trades
 from src.indicator_bot import IndicatorConfig, generate_indicator_rows
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
 from src.telegram_notifier import build_trade_summary, send_telegram_message
-
+from src.strike_selector import strike_selector, pick_option_strike, attach_option_strikes
 try:
     from src.supply_demand import generate_trades as generate_demand_supply_trades
 except Exception:
@@ -86,10 +86,9 @@ st.set_page_config(
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "")
 
-
 def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
-        return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+        return pd.DataFrame(columns=["timestamp","open","high","low","close","volume"])
 
     df = df.copy().reset_index()
 
@@ -102,24 +101,29 @@ def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:
         df = df.rename(columns={"datetime": "timestamp"})
     elif "date" in df.columns:
         df = df.rename(columns={"date": "timestamp"})
-    elif "timestamp" not in df.columns and len(df.columns) > 0:
-        first_col = df.columns[0]
-        df = df.rename(columns={first_col: "timestamp"})
+    elif "timestamp" not in df.columns:
+        df = df.rename(columns={df.columns[0]: "timestamp"})
 
-    required = ["timestamp", "open", "high", "low", "close", "volume"]
+    required = ["timestamp","open","high","low","close","volume"]
     missing = [c for c in required if c not in df.columns]
     if missing:
         raise ValueError(f"Missing columns: {missing}")
 
     df = df[required].copy()
+
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 
-    for col in ["open", "high", "low", "close", "volume"]:
+    for col in ["open","high","low","close","volume"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    df = df.dropna(subset=["timestamp", "open", "high", "low", "close"])
-    df = df.reset_index(drop=True)
+    df = df.dropna(subset=["timestamp","open","high","low","close"])
+    df = df.drop_duplicates(subset=["timestamp"])
+    df = df.sort_values("timestamp").reset_index(drop=True)
+
+    df["unix"] = df["timestamp"].astype("int64") // 10**9
+
     return df
+
 
 
 def fetch_ohlcv_data(symbol: str, interval: str = "1m", period: str = "1d") -> pd.DataFrame:

@@ -45,3 +45,39 @@ candidates.append(
             }
         )
         return candidates
+def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+
+    df = df.copy().reset_index()
+
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [c[0] for c in df.columns]
+
+    df.columns = [str(c).strip().lower() for c in df.columns]
+
+    if "datetime" in df.columns:
+        df = df.rename(columns={"datetime": "timestamp"})
+    elif "date" in df.columns:
+        df = df.rename(columns={"date": "timestamp"})
+    elif "timestamp" not in df.columns and len(df.columns) > 0:
+        first_col = df.columns[0]
+        df = df.rename(columns={first_col: "timestamp"})
+
+    required = ["timestamp", "open", "high", "low", "close", "volume"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing columns: {missing}")
+
+    df = df[required].copy()
+    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+
+    for col in ["open", "high", "low", "close", "volume"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df = df.dropna(subset=["timestamp", "open", "high", "low", "close"])
+    df = df.reset_index(drop=True)
+    df["unix"] = df["timestamp"].astype("int64") // 10**9
+    df = df.sort_values("timestamp")
+    df = df.drop_duplicates(subset=["timestamp"])
+    return df

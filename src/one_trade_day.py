@@ -171,7 +171,7 @@ def generate_trades(
     return trades
 def generate_trades(
     candles,
-    capital=100000,
+    capital=20000,
     risk_pct=1.0,
     rr_ratio=2.0,
     config=None,

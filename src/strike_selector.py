@@ -56,3 +56,28 @@ def attach_option_strikes(
         trade_copy["strike_price"] = strike
         annotated.append(trade_copy)
     return annotated
+def generate_trades(df):
+    trades = []
+
+    for i in range(1, len(df)):
+        prev = df.iloc[i-1]
+        curr = df.iloc[i]
+
+        if curr["close"] > prev["high"]:
+            trades.append({
+                "timestamp": curr["timestamp"],
+                "side": "BUY",
+                "entry_price": curr["close"]
+            })
+
+        elif curr["close"] < prev["low"]:
+            trades.append({
+                "timestamp": curr["timestamp"],
+                "side": "SELL",
+                "entry_price": curr["close"]
+            })
+
+    return trades
+def strike_selector(
+    trades, strike_step, moneyness, steps):
+    return attach_option_strikes(trades, strike_step, moneyness, steps)

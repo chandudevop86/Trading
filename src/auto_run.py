@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 from datetime import UTC, datetime
@@ -7,7 +7,8 @@ from typing import Any
 
 from src import auto_backtest
 from src.csv_io import read_csv_rows
-from src.telegram_notifier import build_trade_summary, send_telegram_message
+from src.execution_engine import live_trading_unlock_status
+from src.telegram_notifier import build_trade_summary, send_telegram_document, send_telegram_message
 
 
 def _escape_pdf_text(text: str) -> str:
@@ -42,9 +43,14 @@ def write_text_pdf(path: Path, title: str, lines: list[str]) -> None:
     objects: list[bytes] = []
     objects.append(b'1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n')
     objects.append(b'2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n')
-    objects.append(b'3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources<< /Font<< /F1 4 0 R >> >> /Contents 5 0 R >>endobj\n')
+    objects.append(
+        b'3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] '
+        b'/Resources<< /Font<< /F1 4 0 R >> >> /Contents 5 0 R >>endobj\n'
+    )
     objects.append(b'4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n')
-    objects.append(b'5 0 obj<< /Length ' + str(len(stream)).encode() + b' >>stream\n' + stream + b'\nendstream\nendobj\n')
+    objects.append(
+        b'5 0 obj<< /Length ' + str(len(stream)).encode() + b' >>stream\n' + stream + b'\nendstream\nendobj\n'
+    )
 
     # Write with xref.
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -87,7 +93,7 @@ def write_html_report(path: Path, title: str, summary_rows: list[dict[str, Any]]
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description='Auto-run: fetch data, backtest, paper-execute, report, telegram')
+    p = argparse.ArgumentParser(description='Auto-run: fetch data, backtest, execute, report, telegram')
     p.add_argument('--symbol', default='^NSEI')
     p.add_argument('--interval', default='5m')
     p.add_argument('--period', default='1d')
@@ -96,9 +102,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument('--rr-ratio', type=float, default=2.0)
     p.add_argument('--trailing-sl-pct', type=float, default=1.0)
     p.add_argument('--execution-symbol', default='NIFTY')
+    p.add_argument('--execution-type', default='PAPER', choices=['PAPER', 'LIVE', 'NONE'])
     p.add_argument('--paper-log-output', type=Path, default=Path('data/paper_trading_logs_all.csv'))
+    p.add_argument('--live-log-output', type=Path, default=Path('data/live_trading_logs_all.csv'))
+    p.add_argument('--min-paper-days', type=int, default=30)
     p.add_argument('--report-dir', type=Path, default=Path('reports'))
     p.add_argument('--send-telegram', action='store_true')
+    p.add_argument('--send-telegram-pdf', action='store_true')
     p.add_argument('--telegram-token', default='')
     p.add_argument('--telegram-chat-id', default='')
     return p.parse_args()
@@ -107,7 +117,19 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    # Adapt args for auto_backtest.run
+    requested_execution = str(args.execution_type or 'PAPER').strip().upper()
+    execution_type = requested_execution
+    execution_note = ''
+
+    if requested_execution == 'LIVE':
+        unlocked, days, unlock_date = live_trading_unlock_status(args.paper_log_output, min_days=int(args.min_paper_days))
+        if not unlocked:
+            execution_type = 'NONE'
+            unlock_txt = unlock_date or 'N/A'
+            execution_note = f'Live execution locked: paper days {days}/{int(args.min_paper_days)} (unlock: {unlock_txt})'
+        else:
+            execution_note = f'Live execution unlocked: paper days {days} (unlock date: {unlock_date})'
+
     backtest_args = argparse.Namespace(
         symbol=args.symbol,
         interval=args.interval,
@@ -123,6 +145,8 @@ def main() -> None:
         summary_output=Path('data/backtest_results_all.csv'),
         summary_history_output=Path('data/backtest_results_history.csv'),
         paper_log_output=args.paper_log_output,
+        execution_type=execution_type,
+        live_log_output=args.live_log_output,
     )
 
     out = auto_backtest.run(backtest_args)
@@ -130,16 +154,33 @@ def main() -> None:
     run_at = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
     title = f"Intratrade Auto Run - {out['timeframe']}"
 
-    # Build a signal summary from the last few paper rows.
-    recent = list(read_csv_rows(args.paper_log_output))[-20:]
-    signal_summary = build_trade_summary(recent) if recent else 'No signals in paper log.'
+    executed_log_path = Path(str(out.get('executed_log_path') or args.paper_log_output))
+    recent: list[dict[str, Any]] = []
+    if executed_log_path.exists():
+        recent = list(read_csv_rows(executed_log_path))[-20:]
+
+    signal_summary = build_trade_summary(recent) if recent else 'No recent rows in execution log.'
+
+    summary_lines = [
+        f"{r.get('strategy')}: trades={r.get('trades')} pnl={r.get('total_pnl')} win%={r.get('win_rate_pct')}"
+        for r in (out.get('summary_rows') or [])
+    ]
 
     extra_lines = [
         f"Run at: {run_at}",
         f"Data points: {out.get('data_points')}",
         f"Data range: {out.get('data_start')} → {out.get('data_end')}",
-        signal_summary.replace('\n', ' | '),
+        f"Execution requested: {requested_execution}",
+        f"Execution used: {out.get('execution_type')}",
+        f"Executed rows: {out.get('executed_rows_count')}",
+        f"Log: {out.get('executed_log_path')}",
     ]
+
+    if execution_note:
+        extra_lines.append(execution_note)
+
+    extra_lines.append(signal_summary.replace('\n', ' | '))
+    extra_lines.extend(summary_lines)
 
     ts = datetime.now(UTC).strftime('%Y%m%d_%H%M%S')
     html_path = args.report_dir / f"auto_run_{ts}.html"
@@ -148,13 +189,18 @@ def main() -> None:
     write_html_report(html_path, title=title, summary_rows=out['summary_rows'], extra_lines=extra_lines)
     write_text_pdf(pdf_path, title=title, lines=extra_lines)
 
-    if args.send_telegram:
+    if args.send_telegram or args.send_telegram_pdf:
         token = (args.telegram_token or '').strip()
         chat = (args.telegram_chat_id or '').strip()
         if not token or not chat:
-            raise SystemExit('Telegram token/chat id required when --send-telegram is set')
-        msg = title + "\n\n" + "\n".join(extra_lines)
-        send_telegram_message(token, chat, msg)
+            raise SystemExit('Telegram token/chat id required when --send-telegram or --send-telegram-pdf is set')
+
+        if args.send_telegram:
+            msg = title + "\n\n" + "\n".join(extra_lines[:20])
+            send_telegram_message(token, chat, msg)
+
+        if args.send_telegram_pdf:
+            send_telegram_document(token, chat, str(pdf_path), caption=title)
 
     print(f"Wrote report: {html_path}")
     print(f"Wrote report: {pdf_path}")

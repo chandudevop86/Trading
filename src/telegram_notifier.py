@@ -1,6 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
+import mimetypes
+import os
 import ssl
 from urllib import error, parse, request
 
@@ -125,6 +127,76 @@ def send_telegram_message(token: str, chat_id: str, text: str, timeout: float = 
         raise RuntimeError(f"Telegram API HTTP {exc.code}: {details}") from exc
     except error.URLError as exc:
         raise RuntimeError(f"Telegram API connection error: {exc}") from exc
+def _encode_multipart_formdata(
+    fields: dict[str, str],
+    files: dict[str, tuple[str, bytes, str]],
+) -> tuple[bytes, str]:
+    boundary = f"----intratrade-{os.urandom(16).hex()}"
+    crlf = "\r\n"
+    body = bytearray()
+
+    for name, value in (fields or {}).items():
+        body.extend(f"--{boundary}{crlf}".encode("utf-8"))
+        body.extend(f'Content-Disposition: form-data; name="{name}"{crlf}{crlf}'.encode("utf-8"))
+        body.extend(str(value).encode("utf-8"))
+        body.extend(crlf.encode("utf-8"))
+
+    for name, (filename, data, content_type) in (files or {}).items():
+        body.extend(f"--{boundary}{crlf}".encode("utf-8"))
+        body.extend(
+            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"{crlf}'.encode("utf-8")
+        )
+        body.extend(f"Content-Type: {content_type}{crlf}{crlf}".encode("utf-8"))
+        body.extend(data)
+        body.extend(crlf.encode("utf-8"))
+
+    body.extend(f"--{boundary}--{crlf}".encode("utf-8"))
+    return bytes(body), f"multipart/form-data; boundary={boundary}"
 
 
+def send_telegram_document(
+    token: str,
+    chat_id: str,
+    file_path: str,
+    caption: str = "",
+    timeout: float = 20.0,
+) -> dict[str, object]:
+    token = token.strip()
+    chat_id = chat_id.strip()
+    if not token:
+        raise ValueError("Telegram token is required")
+    if not chat_id:
+        raise ValueError("Telegram chat id is required")
 
+    file_path = str(file_path).strip()
+    if not file_path:
+        raise ValueError("Telegram document file path is required")
+
+    with open(file_path, "rb") as f:
+        data = f.read()
+
+    filename = os.path.basename(file_path) or "report.pdf"
+    content_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+
+    endpoint = f"https://api.telegram.org/bot{token}/sendDocument"
+    fields = {"chat_id": chat_id}
+    if caption.strip():
+        fields["caption"] = caption.strip()
+
+    body, content_type_header = _encode_multipart_formdata(
+        fields=fields,
+        files={"document": (filename, data, content_type)},
+    )
+
+    req = request.Request(endpoint, data=body, method="POST")
+    req.add_header("Content-Type", content_type_header)
+
+    try:
+        with request.urlopen(req, timeout=timeout, context=ssl_context) as resp:
+            payload = resp.read().decode("utf-8", errors="replace")
+            return json.loads(payload)
+    except error.HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Telegram API HTTP {exc.code}: {details}") from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"Telegram API connection error: {exc}") from exc

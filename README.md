@@ -203,3 +203,16 @@ This tab includes:
 - `Dhan API (Future)` strategy now supports **paper execution now**.
 - Live execution is locked until **30 days** of paper-trade history exists in `data/dhan_paper_trades.csv`.
 - Default NIFTY lot size is set to **65**.
+
+## Auto Run (Backtest + Execute + Report)
+
+Run the end-to-end pipeline (fetch OHLCV → backtest → execute to log → HTML/PDF report → optional Telegram message/PDF):
+
+```bash
+py -3 -m src.auto_run --symbol ^NSEI --interval 5m --period 1d --execution-type PAPER --send-telegram --send-telegram-pdf --telegram-token "<BOT_TOKEN>" --telegram-chat-id "<CHAT_ID>"
+```
+
+Execution modes:
+- `--execution-type PAPER` writes to `data/paper_trading_logs_all.csv`
+- `--execution-type LIVE` writes to `data/live_trading_logs_all.csv` (locked until 30 days of PAPER history; see `--min-paper-days`)
+- `--execution-type NONE` skips execution (backtest/report only)

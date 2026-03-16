@@ -10,7 +10,7 @@ from src.breakout_bot import generate_trades as generate_breakout_trades
 from src.breakout_bot import load_candles
 from src.btst_bot import generate_trades as generate_btst_trades
 from src.supply_demand import generate_trades as generate_demand_supply_trades
-from src.execution_engine import build_execution_candidates, execute_paper_trades
+from src.execution_engine import build_execution_candidates, execute_paper_trades, execute_live_trades
 from src.indicator_bot import IndicatorConfig, generate_indicator_rows
 from src.live_ohlcv import fetch_live_ohlcv, write_csv
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
@@ -77,6 +77,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--summary-output", type=Path, default=Path("data/backtest_results_all.csv"))
     parser.add_argument("--summary-history-output", type=Path, default=Path("data/backtest_results_history.csv"))
     parser.add_argument("--paper-log-output", type=Path, default=Path("data/paper_trading_logs_all.csv"))
+    
+    parser.add_argument("--execution-type", default="PAPER", choices=["PAPER", "LIVE", "NONE"])
+    parser.add_argument("--live-log-output", type=Path, default=Path("data/live_trading_logs_all.csv"))
     return parser.parse_args()
 
 
@@ -151,10 +154,24 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         c["data_end"] = data_end
         c["backtest_run_at_utc"] = run_at
 
-    paper_rows = execute_paper_trades(candidates, args.paper_log_output, deduplicate=False)
+    execution_type = str(getattr(args, "execution_type", "PAPER") or "PAPER").strip().upper()
+    executed_log_path = args.paper_log_output
+    paper_rows: list[dict[str, object]] = []
+
+    if execution_type == "NONE":
+        paper_rows = []
+    elif execution_type == "LIVE":
+        executed_log_path = getattr(args, "live_log_output", Path("data/live_trading_logs_all.csv"))
+        paper_rows = execute_live_trades(candidates, executed_log_path, deduplicate=False)
+    else:
+        execution_type = "PAPER"
+        paper_rows = execute_paper_trades(candidates, args.paper_log_output, deduplicate=False)
 
     return {
         "summary_rows": summary_rows,
+        "execution_type": execution_type,
+        "executed_log_path": str(executed_log_path),
+        "executed_rows_count": len(paper_rows),
         "paper_rows_count": len(paper_rows),
         "timeframe": timeframe,
         "data_points": len(rows),
@@ -168,7 +185,7 @@ def main() -> None:
     out = run(args)
     print(f"Backtest timeframe: {out['timeframe']}")
     print(f"Data points: {out['data_points']} | Start: {out['data_start']} | End: {out['data_end']}")
-    print(f"Paper rows written: {out['paper_rows_count']}")
+    print(f"Execution: {out.get(\x27execution_type\x27)} | Rows written: {out.get(\x27executed_rows_count\x27)} | Log: {out.get(\x27executed_log_path\x27)}")
     for row in out["summary_rows"]:
         print(
             f"{row['strategy']}: trades={row['trades']} wins={row['wins']} "

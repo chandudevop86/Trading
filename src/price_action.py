@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 
@@ -112,5 +112,4 @@ def annotate_trades_with_zones(
             trade_copy["supply_zone_high"] = round(latest_supply.high, 4)
 
         annotated.append(trade_copy)
-
     return annotated

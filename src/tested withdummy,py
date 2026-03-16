@@ -127,7 +127,7 @@ STRATEGY_PAGES = {
 # Helper Functions
 # -------------------------------
 def _load_rows_from_upload(uploaded_file) -> list[dict[str, str]]:
-    content = uploaded_file.getvalue().decode("utf-8")
+    content = _decode_bytes(uploaded_file.getvalue())
     reader = csv.DictReader(io.StringIO(content))
     if reader.fieldnames is None:
         raise ValueError("CSV must include a header row")
@@ -183,7 +183,14 @@ def _auto_refresh(seconds: int) -> None:
     )
 
 
-def _signal_time_map(candidates: list[dict[str, object]]) -> dict[str, str]:
+
+def _decode_bytes(data: bytes) -> str:
+    for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")def _signal_time_map(candidates: list[dict[str, object]]) -> dict[str, str]:
     out: dict[str, str] = {}
     for c in candidates:
         side = str(c.get("side", "")).upper()

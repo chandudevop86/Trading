@@ -6,10 +6,7 @@ from pathlib import Path
 
 from src.breakout_bot import Candle, add_intraday_vwap, load_candles
 from src.csv_io import read_csv_rows, write_csv_rows
-from datetime import datetime
 
-dt = datetime.now()
-print(dt.timestamp())
 
 @dataclass
 class IndicatorConfig:

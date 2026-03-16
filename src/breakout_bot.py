@@ -60,6 +60,9 @@ def parse_timestamp_robust(text: str) -> datetime:
         raise ValueError(f"Unsupported timestamp format: {text}")
 
 # ==============================
+
+parse_timestamp = parse_timestamp_robust
+
 # CSV → CANDLE LOADER
 # ==============================
 
@@ -82,7 +85,7 @@ def load_candles(rows: list[dict[str, str]]) -> list[Candle]:
                 continue
 
             candle = Candle(
-                timestamp=parse_timestamp(ts),
+                timestamp=parse_timestamp_robust(ts),
                 open=float(row.get("open", 0)),
                 high=float(row.get("high", 0)),
                 low=float(row.get("low", 0)),

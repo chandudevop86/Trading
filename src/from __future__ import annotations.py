@@ -286,8 +286,15 @@ def _auto_refresh(seconds: int) -> None:
     )
 
 
-def _load_rows_from_upload(uploaded_file) -> list[dict[str, str]]:
-    content = uploaded_file.getvalue().decode("utf-8")
+
+def _decode_bytes(data: bytes) -> str:
+    for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        try:
+            return data.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")def _load_rows_from_upload(uploaded_file) -> list[dict[str, str]]:
+    content = _decode_bytes(uploaded_file.getvalue())
     reader = csv.DictReader(io.StringIO(content))
     if reader.fieldnames is None:
         raise ValueError("CSV must include a header row")
@@ -906,7 +913,7 @@ else:
         dhan_upload = st.file_uploader("Upload Dhan signal CSV (optional)", type=["csv"], key="dhan_signal_upload")
         signal_rows = template_rows
         if dhan_upload is not None:
-                content = dhan_upload.getvalue().decode("utf-8")
+                content = _decode_bytes(dhan_upload.getvalue())
                 parsed = list(csv.DictReader(io.StringIO(content)))
                 if parsed:
                     signal_rows = parsed

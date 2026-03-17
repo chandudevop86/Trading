@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from src.execution_engine import (
+    build_analysis_queue,
     build_execution_candidates,
     default_quantity_for_symbol,
     execute_paper_trades,
@@ -26,6 +27,43 @@ class TestExecutionEngine(unittest.TestCase):
         self.assertEqual(default_quantity_for_symbol("NIFTY"), 65)
         self.assertEqual(default_quantity_for_symbol("BANKNIFTY"), 1)
 
+    def test_build_analysis_queue_filters_actionable_candidates(self):
+        analyzed = build_analysis_queue(
+            [
+                {"strategy": "BREAKOUT", "symbol": "NIFTY", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100},
+                {"strategy": "INDICATOR", "symbol": "NIFTY", "signal_time": "2026-03-06 10:05:00", "side": "HOLD", "price": 101},
+            ],
+            analyzed_at_utc="2026-03-06 10:10:00",
+        )
+        self.assertEqual(len(analyzed), 1)
+        self.assertEqual(analyzed[0]["analysis_status"], "ANALYZED")
+        self.assertEqual(analyzed[0]["execution_ready"], "YES")
+        self.assertEqual(analyzed[0]["analyzed_at_utc"], "2026-03-06 10:10:00")
+
+
+    def test_build_execution_candidates_preserves_trade_labels(self):
+        rows = [
+            {
+                "strategy": "MTF_5M",
+                "entry_time": "2026-03-05 10:50:00",
+                "side": "BUY",
+                "entry_price": 107.3,
+                "stop_loss": 105.1,
+                "trailing_stop_loss": 105.1,
+                "target_price": 109.5,
+                "quantity": 65,
+                "trade_no": 2,
+                "trade_label": "Trade 2",
+                "option_type": "CE",
+                "strike_price": 23450,
+            }
+        ]
+
+        candidates = build_execution_candidates("MTF 5m", rows, "NIFTY")
+
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["trade_no"], 2)
+        self.assertEqual(candidates[0]["trade_label"], "Trade 2")
     def test_normalize_order_quantity_nifty(self):
         self.assertEqual(normalize_order_quantity("NIFTY", 10), 65)
         self.assertEqual(normalize_order_quantity("NIFTY", 129), 65)
@@ -87,4 +125,6 @@ class TestExecutionEngine(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
 

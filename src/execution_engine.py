@@ -124,6 +124,15 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
                 "strike_price": strike_price,
                 "option_type": option_type,
                 "option_strike": option_strike,
+                "trade_no": row.get("trade_no", ""),
+                "trade_label": row.get("trade_label", ""),
+                "target_1": row.get("target_1", ""),
+                "target_2": row.get("target_2", ""),
+                "target_3": row.get("target_3", ""),
+                "spot_ltp": row.get("spot_ltp", row.get("close", row.get("share_price", ""))),
+                "option_ltp": row.get("option_ltp", ""),
+                "lots": row.get("lots", ""),
+                "order_value": row.get("order_value", ""),
                 "stop_loss": row.get("stop_loss", ""),
                 "trailing_stop_loss": row.get("trailing_stop_loss", ""),
                 "target_price": row.get("target_price", ""),
@@ -133,6 +142,25 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
         )
 
     return candidates
+
+
+def build_analysis_queue(
+    candidates: list[dict[str, object]],
+    analyzed_at_utc: Optional[str] = None,
+) -> list[dict[str, object]]:
+    actionable = [c for c in candidates if str(c.get("side", "")).upper() in {"BUY", "SELL"}]
+    if not actionable:
+        return []
+
+    stamp = analyzed_at_utc or datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+    analyzed: list[dict[str, object]] = []
+    for candidate in actionable:
+        row = dict(candidate)
+        row["analysis_status"] = "ANALYZED"
+        row["analyzed_at_utc"] = stamp
+        row["execution_ready"] = "YES"
+        analyzed.append(row)
+    return analyzed
 
 
 def _existing_keys(path: Path) -> set[str]:

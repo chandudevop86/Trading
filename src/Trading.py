@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import io
@@ -18,11 +18,26 @@ import streamlit.components.v1 as components
 import yfinance as yf
 
 from src.breakout_bot import Candle
+from src.charting import build_live_market_chart, build_market_depth_summary, compute_market_levels
 from src.breakout_bot import generate_trades as generate_breakout_trades
 from src.indicator_bot import IndicatorConfig, generate_indicator_rows
+from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
 from src.strike_selector import attach_option_strikes, pick_option_strike
 from src.telegram_notifier import build_trade_summary, send_telegram_message
+
+try:
+    from src.execution_engine import (
+        build_analysis_queue,
+        build_execution_candidates,
+        execute_live_trades,
+        execute_paper_trades,
+    )
+except Exception:
+    build_analysis_queue = None
+    build_execution_candidates = None
+    execute_live_trades = None
+    execute_paper_trades = None
 
 try:
     from src.supply_demand import generate_trades as generate_demand_supply_trades
@@ -43,7 +58,7 @@ except Exception:
     normalize_index_symbol = None
 
 
-st.set_page_config(page_title="Trading Dashboard", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Trading Dashboard", page_icon="chart", layout="wide")
 
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "")
@@ -142,6 +157,603 @@ def _to_csv(rows: list[dict]) -> str:
     writer.writerows(rows)
     return buffer.getvalue()
 
+def _order_trade_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+
+    preferred = [
+        "trade_label",
+        "trade_no",
+        "strategy",
+        "symbol",
+        "side",
+        "entry_price",
+        "spot_ltp",
+        "target_1",
+        "target_2",
+        "target_3",
+        "target_price",
+        "stop_loss",
+        "option_strike",
+        "option_type",
+        "option_ltp",
+        "quantity",
+        "lots",
+        "order_value",
+        "signal_time",
+        "entry_time",
+        "timestamp",
+        "analysis_status",
+        "execution_ready",
+        "execution_type",
+        "execution_status",
+    ]
+    ordered = [c for c in preferred if c in df.columns]
+    ordered.extend([c for c in df.columns if c not in ordered])
+    return df.loc[:, ordered]
+
+def _render_sidebar_shell() -> None:
+    st.markdown(
+        """
+        <style>
+        [data-testid="stAppViewContainer"] {
+            background:
+                radial-gradient(circle at top right, rgba(14,165,233,0.10), transparent 20%),
+                radial-gradient(circle at bottom left, rgba(34,197,94,0.10), transparent 22%),
+                linear-gradient(180deg, #020617 0%, #07111f 44%, #0b1728 100%);
+        }
+        [data-testid="stHeader"] {
+            background: rgba(2, 6, 23, 0.72);
+        }
+        [data-testid="stAppViewContainer"] .main .block-container {
+            padding-top: 1.2rem;
+        }
+        [data-testid="stAppViewContainer"] [data-testid="stMetric"] {
+            background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(9,14,26,0.96));
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 18px;
+            padding: 10px 12px;
+            box-shadow: 0 14px 30px rgba(2, 6, 23, 0.22);
+        }
+        [data-testid="stAppViewContainer"] [data-testid="stDataFrame"] {
+            background: rgba(15, 23, 42, 0.7);
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.10);
+            padding: 4px;
+        }
+        .hero-strip {
+            border-radius: 24px;
+            padding: 20px 22px;
+            margin: 10px 0 16px 0;
+            box-shadow: 0 24px 48px rgba(2, 6, 23, 0.32);
+        }
+        .hero-strip.hero-bull {
+            background: linear-gradient(135deg, rgba(6,78,59,0.96) 0%, rgba(15,23,42,0.94) 52%, rgba(34,197,94,0.90) 100%);
+            border: 1px solid rgba(74, 222, 128, 0.18);
+        }
+        .hero-strip.hero-bear {
+            background: linear-gradient(135deg, rgba(127,29,29,0.96) 0%, rgba(15,23,42,0.94) 52%, rgba(239,68,68,0.90) 100%);
+            border: 1px solid rgba(248, 113, 113, 0.18);
+        }
+        .hero-strip.hero-range {
+            background: linear-gradient(135deg, rgba(120,53,15,0.96) 0%, rgba(15,23,42,0.94) 52%, rgba(245,158,11,0.88) 100%);
+            border: 1px solid rgba(251, 191, 36, 0.18);
+        }
+        .hero-kicker {
+            color: #93c5fd;
+            font-size: 11px;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .hero-symbol {
+            color: #f8fafc;
+            font-size: 34px;
+            font-weight: 800;
+            line-height: 1.05;
+            margin-bottom: 4px;
+        }
+        .hero-price {
+            color: #e0f2fe;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        .hero-change {
+            font-size: 15px;
+            font-weight: 700;
+            margin-top: 6px;
+        }
+        .hero-grid {
+            display: grid;
+            grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(120px, 1fr));
+            gap: 12px;
+            align-items: stretch;
+        }
+        .hero-tile {
+            background: rgba(15, 23, 42, 0.66);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 18px;
+            padding: 14px 16px;
+        }
+        .hero-label {
+            color: #94a3b8;
+            font-size: 11px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .hero-value {
+            color: #f8fafc;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        @media (max-width: 900px) {
+            .hero-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        [data-testid="stTabs"] [role="tablist"] {
+            gap: 10px;
+            background: rgba(15, 23, 42, 0.56);
+            border: 1px solid rgba(148, 163, 184, 0.10);
+            border-radius: 18px;
+            padding: 8px;
+            margin-bottom: 14px;
+        }
+        [data-testid="stTabs"] [role="tab"] {
+            background: rgba(15, 23, 42, 0.82);
+            color: #cbd5e1;
+            border-radius: 14px;
+            border: 1px solid rgba(148, 163, 184, 0.10);
+            padding: 10px 16px;
+            font-weight: 700;
+        }
+        [data-testid="stTabs"] [aria-selected="true"] {
+            background: linear-gradient(135deg, rgba(14,165,233,0.95), rgba(34,197,94,0.90));
+            color: #04111d;
+            border-color: transparent;
+            box-shadow: 0 12px 26px rgba(14, 165, 233, 0.20);
+        }
+        .stButton > button {
+            background: linear-gradient(135deg, #0f172a 0%, #162338 100%);
+            color: #e2e8f0;
+            border: 1px solid rgba(125, 211, 252, 0.16);
+            border-radius: 14px;
+            font-weight: 700;
+            padding: 0.62rem 1rem;
+            box-shadow: 0 12px 24px rgba(2, 6, 23, 0.22);
+        }
+        .stButton > button:hover {
+            border-color: rgba(74, 222, 128, 0.28);
+            color: #f8fafc;
+        }
+        .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, #0ea5e9 0%, #22c55e 100%);
+            color: #04111d;
+            border-color: transparent;
+        }
+        [data-testid="stDataFrame"] [role="columnheader"] {
+            background: linear-gradient(180deg, rgba(14,165,233,0.12), rgba(15,23,42,0.92));
+            color: #e2e8f0;
+            font-weight: 700;
+            border-bottom: 1px solid rgba(125, 211, 252, 0.14);
+        }
+        [data-testid="stDataFrame"] [role="gridcell"] {
+            background: rgba(8, 15, 28, 0.78);
+            color: #dbeafe;
+            border-color: rgba(148, 163, 184, 0.08);
+        }
+        [data-testid="stExpander"] {
+            border: 1px solid rgba(148, 163, 184, 0.10);
+            border-radius: 18px;
+            background: rgba(15, 23, 42, 0.62);
+        }
+        [data-testid="stVerticalBlock"] [data-testid="stAltairChart"],
+        [data-testid="stVerticalBlock"] [data-testid="stDataFrame"] {
+            box-shadow: 0 18px 36px rgba(2, 6, 23, 0.22);
+        }
+        .chart-shell {
+            background: linear-gradient(180deg, rgba(15,23,42,0.88), rgba(8,15,28,0.92));
+            border: 1px solid rgba(148, 163, 184, 0.10);
+            border-radius: 20px;
+            padding: 12px 14px 6px 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 20px 40px rgba(2, 6, 23, 0.24);
+        }
+        .section-shell {
+            background: linear-gradient(180deg, rgba(15,23,42,0.76), rgba(8,15,28,0.84));
+            border: 1px solid rgba(148, 163, 184, 0.10);
+            border-radius: 20px;
+            padding: 14px 16px;
+            margin-bottom: 14px;
+            box-shadow: 0 18px 34px rgba(2, 6, 23, 0.18);
+        }
+        [data-testid="stSidebar"] {
+            background:
+                radial-gradient(circle at top left, rgba(34,197,94,0.14), transparent 24%),
+                linear-gradient(180deg, #08111f 0%, #0b1220 48%, #0f172a 100%);
+            border-right: 1px solid rgba(148, 163, 184, 0.18);
+        }
+        [data-testid="stSidebar"] .block-container {
+            padding-top: 1rem;
+        }
+        [data-testid="stSidebar"] .live-panel {
+            background: linear-gradient(180deg, rgba(15,23,42,0.96), rgba(8,15,28,0.98));
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 18px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 16px 40px rgba(2, 6, 23, 0.35);
+        }
+        [data-testid="stSidebar"] .live-kicker {
+            color: #7dd3fc;
+            font-size: 11px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        [data-testid="stSidebar"] .live-title {
+            color: #e2e8f0;
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.1;
+            margin-bottom: 8px;
+        }
+        [data-testid="stSidebar"] .live-sub {
+            color: #94a3b8;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        [data-testid="stSidebar"] .live-section {
+            color: #f8fafc;
+            font-size: 12px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            margin: 14px 0 6px 0;
+        }
+        [data-testid="stSidebar"] .stSegmentedControl,
+        [data-testid="stSidebar"] .stPills {
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            border-radius: 16px;
+            padding: 6px;
+        }
+        [data-testid="stSidebar"] .stSegmentedControl [role="radiogroup"],
+        [data-testid="stSidebar"] .stPills [role="radiogroup"] {
+            gap: 8px;
+        }
+        [data-testid="stSidebar"] .stSegmentedControl label,
+        [data-testid="stSidebar"] .stPills label {
+            border-radius: 12px !important;
+            border: 1px solid rgba(148, 163, 184, 0.14) !important;
+            background: rgba(15, 23, 42, 0.95) !important;
+            color: #cbd5e1 !important;
+            font-weight: 600 !important;
+        }
+        [data-testid="stSidebar"] .stSegmentedControl label[data-selected="true"],
+        [data-testid="stSidebar"] .stPills label[data-selected="true"] {
+            background: linear-gradient(135deg, #0ea5e9, #22c55e) !important;
+            color: #04111d !important;
+            border-color: transparent !important;
+            box-shadow: 0 10px 24px rgba(14, 165, 233, 0.22);
+        }
+        [data-testid="stSidebar"] .status-card {
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 14px;
+            padding: 10px 12px;
+        }
+        [data-testid="stSidebar"] .status-label {
+            color: #94a3b8;
+            font-size: 10px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        [data-testid="stSidebar"] .status-value {
+            color: #f8fafc;
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        [data-testid="stSidebar"] .status-price {
+            color: #4ade80;
+        }
+        [data-testid="stSidebar"] .stButton button,
+        [data-testid="stSidebar"] .stDownloadButton button {
+            border-radius: 14px;
+        }
+        </style>
+        """,
+
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <style>
+        [data-testid="stAppViewContainer"] {
+            background: linear-gradient(180deg, #f3f6fb 0%, #eef3f8 100%);
+        }
+        [data-testid="stHeader"] {
+            background: rgba(255, 255, 255, 0.86);
+            border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+        }
+        [data-testid="stAppViewContainer"] .main .block-container {
+            max-width: 1480px;
+            padding-top: 1.1rem;
+        }
+        h1, h2, h3, h4, h5, h6, p, label, span, div {
+            color: #0f172a;
+        }
+        [data-testid="stMetric"] {
+            background: #ffffff !important;
+            border: 1px solid #dbe4ee !important;
+            border-radius: 18px !important;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06) !important;
+        }
+        [data-testid="stMetricLabel"] {
+            color: #64748b !important;
+        }
+        [data-testid="stMetricValue"] {
+            color: #0f172a !important;
+        }
+        [data-testid="stTabs"] [role="tablist"] {
+            background: #ffffff;
+            border: 1px solid #dbe4ee;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+        }
+        [data-testid="stTabs"] [role="tab"] {
+            background: #f8fafc;
+            color: #334155;
+            border: 1px solid #e2e8f0;
+        }
+        [data-testid="stTabs"] [aria-selected="true"] {
+            background: #0f172a;
+            color: #f8fafc;
+            box-shadow: none;
+        }
+        .stButton > button {
+            background: #ffffff;
+            color: #0f172a;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+        }
+        .stButton > button:hover {
+            background: #f8fafc;
+            border-color: #94a3b8;
+            color: #0f172a;
+        }
+        .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%);
+            color: #ffffff;
+            border-color: transparent;
+        }
+        [data-testid="stDataFrame"] {
+            background: #ffffff !important;
+            border: 1px solid #dbe4ee !important;
+            border-radius: 18px !important;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05) !important;
+        }
+        [data-testid="stDataFrame"] [role="columnheader"] {
+            background: #f8fafc;
+            color: #334155;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        [data-testid="stDataFrame"] [role="gridcell"] {
+            background: #ffffff;
+            color: #0f172a;
+        }
+        [data-testid="stExpander"] {
+            background: #ffffff;
+            border: 1px solid #dbe4ee;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        }
+        .hero-strip,
+        .hero-strip.hero-bull,
+        .hero-strip.hero-bear,
+        .hero-strip.hero-range {
+            background: #ffffff;
+            border: 1px solid #dbe4ee;
+            border-radius: 22px;
+            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+        }
+        .hero-strip.hero-bull {
+            border-left: 6px solid #16a34a;
+        }
+        .hero-strip.hero-bear {
+            border-left: 6px solid #dc2626;
+        }
+        .hero-strip.hero-range {
+            border-left: 6px solid #d97706;
+        }
+        .hero-kicker, .hero-label {
+            color: #64748b;
+        }
+        .hero-symbol, .hero-value {
+            color: #0f172a;
+        }
+        .hero-price {
+            color: #1e293b;
+        }
+        .hero-tile {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+        .section-shell, .chart-shell {
+            background: #ffffff;
+            border: 1px solid #dbe4ee;
+            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.05);
+        }
+        [data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+            border-right: 1px solid #dbe4ee;
+        }
+        [data-testid="stSidebar"] .live-panel,
+        [data-testid="stSidebar"] .status-card {
+            background: #ffffff;
+            border: 1px solid #dbe4ee;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        }
+        [data-testid="stSidebar"] .live-kicker,
+        [data-testid="stSidebar"] .live-sub,
+        [data-testid="stSidebar"] .status-label,
+        [data-testid="stSidebar"] .live-section {
+            color: #64748b;
+        }
+        [data-testid="stSidebar"] .live-title,
+        [data-testid="stSidebar"] .status-value {
+            color: #0f172a;
+        }
+        [data-testid="stSidebar"] .status-price {
+            color: #0f766e;
+        }
+        [data-testid="stSidebar"] .stSegmentedControl,
+        [data-testid="stSidebar"] .stPills {
+            background: #ffffff;
+            border: 1px solid #dbe4ee;
+        }
+        [data-testid="stSidebar"] .stSegmentedControl label,
+        [data-testid="stSidebar"] .stPills label {
+            background: #f8fafc !important;
+            color: #334155 !important;
+            border: 1px solid #e2e8f0 !important;
+        }
+        [data-testid="stSidebar"] .stSegmentedControl label[data-selected="true"],
+        [data-testid="stSidebar"] .stPills label[data-selected="true"] {
+            background: #0f172a !important;
+            color: #ffffff !important;
+            box-shadow: none;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+def _render_hero_strip(
+    symbol: str,
+    last_price: object,
+    day_change: float,
+    strategy: str,
+    execution_mode: str,
+    open_trades: int,
+    support_band: str,
+    resistance_band: str,
+    option_bias: str,
+    market_status: str,
+) -> None:
+    price_text = _fmt_num(last_price)
+    change_color = "#4ade80" if day_change >= 0 else "#f87171"
+    change_prefix = "+" if day_change > 0 else ""
+    status_text = "ACTIVE" if open_trades > 0 else "STANDBY"
+    market_upper = str(market_status or "").upper()
+    if "BREAKOUT" in market_upper or "LIVE BUY" in market_upper:
+        hero_tone = "hero-bull"
+    elif "BREAKDOWN" in market_upper or "LIVE SELL" in market_upper:
+        hero_tone = "hero-bear"
+    else:
+        hero_tone = "hero-range"
+    st.markdown(
+        f"""
+        <div class="hero-strip {hero_tone}">
+            <div class="hero-grid">
+                <div>
+                    <div class="hero-kicker">Market Snapshot</div>
+                    <div class="hero-symbol">{symbol}</div>
+                    <div class="hero-price">Spot LTP {price_text}</div>
+                    <div class="hero-change" style="color:{change_color};">{change_prefix}{day_change:.2f} vs previous close</div>
+                </div>
+                <div class="hero-tile">
+                    <div class="hero-label">Strategy</div>
+                    <div class="hero-value">{strategy}</div>
+                </div>
+                <div class="hero-tile">
+                    <div class="hero-label">Execution</div>
+                    <div class="hero-value">{execution_mode}</div>
+                </div>
+                <div class="hero-tile">
+                    <div class="hero-label">Status</div>
+                    <div class="hero-value">{market_status}</div>
+                </div>
+                <div class="hero-tile">
+                    <div class="hero-label">Support</div>
+                    <div class="hero-value">{support_band}</div>
+                </div>
+                <div class="hero-tile">
+                    <div class="hero-label">Resistance</div>
+                    <div class="hero-value">{resistance_band}</div>
+                </div>
+                <div class="hero-tile">
+                    <div class="hero-label">CE / PE Bias</div>
+                    <div class="hero-value">{option_bias}</div>
+                </div>
+                <div class="hero-tile">
+                    <div class="hero-label">Open Trades</div>
+                    <div class="hero-value">{status_text} / {open_trades}</div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+
+def _sidebar_section(title: str, subtitle: str = "") -> None:
+    text = f'<div class="live-section">{title}</div>'
+    if subtitle:
+        text += f'<div class="live-sub" style="margin-bottom:8px;">{subtitle}</div>'
+    st.sidebar.markdown(text, unsafe_allow_html=True)
+
+
+def _render_sidebar_status(
+    symbol: str,
+    last_price: object,
+    strategy: str,
+    execution_mode: str,
+    open_trades: int = 0,
+    last_signal_side: str = "-",
+    auto_execute_enabled: bool = False,
+) -> None:
+    price_text = _fmt_num(last_price)
+    auto_text = "ON" if auto_execute_enabled else "OFF"
+    signal_text = str(last_signal_side or "-").upper()
+    st.sidebar.markdown(
+        f"""
+        <div class="live-panel" style="padding:12px 14px;">
+            <div class="live-kicker">Live Status</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div class="status-card">
+                    <div class="status-label">Symbol</div>
+                    <div class="status-value">{symbol}</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-label">Last Price</div>
+                    <div class="status-value status-price">{price_text}</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-label">Strategy</div>
+                    <div class="status-value">{strategy}</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-label">Mode</div>
+                    <div class="status-value">{execution_mode}</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-label">Open Trades</div>
+                    <div class="status-value">{open_trades}</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-label">Last Signal</div>
+                    <div class="status-value">{signal_text}</div>
+                </div>
+                <div class="status-card" style="grid-column: span 2;">
+                    <div class="status-label">Auto Execute</div>
+                    <div class="status-value">{auto_text}</div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 def _fmt_num(val: object) -> str:
     if val is None:
@@ -155,6 +767,7 @@ def _fmt_num(val: object) -> str:
         return text
     out = f"{num:.2f}"
     return out[:-3] if out.endswith(".00") else out
+
 
 
 def _format_expiry(expiry: object) -> str:
@@ -191,6 +804,45 @@ def _format_ts_ist(ts: object) -> str:
 
     ist = py.astimezone(ZoneInfo("Asia/Kolkata"))
     return ist.strftime("%Y-%m-%d %H:%M:%S IST")
+
+
+def _safe_float(val: object) -> float | None:
+    try:
+        num = float(val)  # type: ignore[arg-type]
+    except Exception:
+        return None
+    if pd.isna(num):
+        return None
+    return float(num)
+
+
+def _enrich_trade_row(row: dict[str, object], spot_ltp: float | None = None) -> dict[str, object]:
+    enriched = dict(row)
+    if spot_ltp is not None and not enriched.get("spot_ltp"):
+        enriched["spot_ltp"] = round(float(spot_ltp), 2)
+
+    side = str(enriched.get("side", "") or "").upper()
+    entry = _safe_float(enriched.get("entry_price", enriched.get("entry")))
+    stop = _safe_float(enriched.get("stop_loss", enriched.get("sl")))
+    if side not in {"BUY", "SELL"} or entry is None or stop is None:
+        return enriched
+
+    risk = abs(float(entry) - float(stop))
+    if risk <= 0:
+        return enriched
+
+    if side == "BUY":
+        targets = [entry + risk, entry + (2.0 * risk), entry + (3.0 * risk)]
+    else:
+        targets = [entry - risk, entry - (2.0 * risk), entry - (3.0 * risk)]
+
+    for idx, value in enumerate(targets, start=1):
+        enriched.setdefault(f"target_{idx}", round(float(value), 4))
+
+    if not enriched.get("target_price"):
+        enriched["target_price"] = enriched.get("target_2")
+
+    return enriched
 
 
 
@@ -239,11 +891,16 @@ def send_signal_alert(
         return
 
     side = str(trade.get("side", "-") or "-")
+    trade_label = str(trade.get("trade_label", "") or "").strip()
     entry = _fmt_num(trade.get("entry_price", trade.get("entry", "-")))
     sl = _fmt_num(trade.get("stop_loss", trade.get("sl", "-")))
     target = _fmt_num(trade.get("target_price", trade.get("target", "-")))
+    target_1 = _fmt_num(trade.get("target_1"))
+    target_2 = _fmt_num(trade.get("target_2"))
+    target_3 = _fmt_num(trade.get("target_3"))
     option = str(trade.get("option_strike", "") or "").strip()
 
+    spot_ltp = _fmt_num(trade.get("spot_ltp", trade.get("close", trade.get("share_price", "-"))))
     opt_ltp = _fmt_num(trade.get("option_ltp"))
     opt_oi = _fmt_num(trade.get("option_oi"))
     opt_vol = _fmt_num(trade.get("option_vol"))
@@ -267,24 +924,34 @@ def send_signal_alert(
             extra = f" (next update in {refresh_seconds} sec)"
 
     parts: list[str] = [
-        "🚨 Trade Signal",
+        "Trade Signal",
         "",
         f"Strategy: {strategy}",
         f"Symbol: {symbol}",
         f"Side: {side}",
     ]
+    if trade_label:
+        parts.append(f"Setup: {trade_label}")
     if entry != "-":
         parts.append(f"Entry: {entry}")
     if sl != "-":
         parts.append(f"SL: {sl}")
     if target != "-":
         parts.append(f"Target: {target}")
+    if target_1 != "-":
+        parts.append(f"Target 1: {target_1}")
+    if target_2 != "-":
+        parts.append(f"Target 2: {target_2}")
+    if target_3 != "-":
+        parts.append(f"Target 3: {target_3}")
     if option:
         parts.append(f"Option: {option}")
     if opt_expiry:
         parts.append(f"Expiry: {opt_expiry}")
+    if spot_ltp != "-":
+        parts.append(f"Spot LTP: {spot_ltp}")
     if opt_ltp != "-":
-        parts.append(f"LTP: {opt_ltp}")
+        parts.append(f"Option LTP: {opt_ltp}")
     if opt_oi != "-":
         parts.append(f"OI: {opt_oi}")
     if opt_vol != "-":
@@ -304,7 +971,6 @@ def send_signal_alert(
         send_telegram_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg)
     except Exception as exc:
         st.warning(f"Telegram alert failed: {exc}")
-
 
 def call_strategy_function(func, candles, **kwargs):
     sig = inspect.signature(func)
@@ -370,6 +1036,10 @@ def run_strategy(
     moneyness: str,
     strike_steps: int,
     fetch_option_metrics: bool,
+    mtf_ema_period: int,
+    mtf_setup_mode: str,
+    mtf_retest_strength: bool,
+    mtf_max_trades_per_day: int,
 ) -> list[dict[str, object]]:
     if candles.empty:
         return []
@@ -379,6 +1049,10 @@ def run_strategy(
         "risk_pct": float(risk_pct) / 100.0,
         "rr_ratio": float(rr_ratio),
         "trailing_sl_pct": float(trailing_sl_pct) / 100.0,
+        "ema_period": int(mtf_ema_period),
+        "setup_mode": str(mtf_setup_mode),
+        "require_retest_strength": bool(mtf_retest_strength),
+        "max_trades_per_day": int(mtf_max_trades_per_day),
     }
 
     metrics_map: dict[tuple[int, str], dict[str, object]] = {}
@@ -390,6 +1064,7 @@ def run_strategy(
             metrics_map = build_metrics_map(records)  # type: ignore[assignment]
         except Exception:
             metrics_map = {}
+    latest_spot_ltp = _safe_float(candles["close"].iloc[-1]) if not candles.empty else None
 
     if strategy == "Demand Supply":
         if generate_demand_supply_trades is None:
@@ -475,7 +1150,7 @@ def run_strategy(
             if "option_expiry" in row:
                 row["option_expiry"] = _format_expiry(row.get("option_expiry"))
 
-            out_rows.append(row)
+            out_rows.append(_enrich_trade_row(row, latest_spot_ltp))
 
         return out_rows
 
@@ -492,7 +1167,7 @@ def run_strategy(
             ),
         )
         rows = _attach_indicator_trade_levels(rows, rr_ratio=rr_ratio, trailing_sl_pct=trailing_sl_pct)
-        rows = [dict(r, strategy="Indicator", symbol=symbol) for r in rows]
+        rows = [_enrich_trade_row(dict(r, strategy="Indicator", symbol=symbol), latest_spot_ltp) for r in rows]
 
         actionable = [r for r in rows if str(r.get("side")) in {"BUY", "SELL"} and r.get("entry_price")]
         if actionable:
@@ -529,6 +1204,9 @@ def run_strategy(
     elif strategy == "Breakout":
         candle_list = _df_to_candles(candles)
         trades = call_strategy_function(generate_breakout_trades, candle_list, **strategy_kwargs)
+    elif strategy == "MTF 5m":
+        candle_list = _df_to_candles(candles)
+        trades = call_strategy_function(generate_mtf_trade_trades, candle_list, **strategy_kwargs)
     else:
         trades = []
 
@@ -572,42 +1250,68 @@ def run_strategy(
             except Exception:
                 pass
 
-        out_rows.append(row)
+        out_rows.append(_enrich_trade_row(row, latest_spot_ltp))
 
     return out_rows
 
 
 def main() -> None:
-    st.title("📈 Intratrade Algo Desk")
+    _render_sidebar_shell()
+    st.title("Intratrade Algo Desk")
 
-    st.sidebar.header("Market Data")
+    st.sidebar.markdown(
+        """
+        <div class="live-panel">
+            <div class="live-kicker">Control Center</div>
+            <div class="live-title">Live Trade Desk</div>
+            <div class="live-sub">Switch symbols, tune intraday filters, and send executions from one compact panel.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    _sidebar_section("Market Data", "Fast symbol and timeframe switching")
     symbol = st.sidebar.text_input("Symbol", "^NSEI")
-    interval = st.sidebar.selectbox("Interval", ["1m", "5m", "15m", "30m", "1h"], index=0)
-    period = st.sidebar.selectbox("Period", ["1d", "5d", "1mo", "3mo"], index=0)
+    interval = st.sidebar.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default="1m")
+    period = st.sidebar.segmented_control("Period", ["1d", "5d", "1mo", "3mo"], default="1d")
 
-    st.sidebar.header("⚙ Bot Settings")
+    _sidebar_section("Bot Settings", "Risk and trade generation profile")
     capital = st.sidebar.number_input("Capital (INR)", min_value=1000, value=100000, step=1000)
     risk_pct = st.sidebar.slider("Risk per trade (%)", 0.1, 10.0, 1.0)
     rr_ratio = st.sidebar.slider("Risk/Reward Ratio", 1.0, 10.0, 2.0)
     trailing_sl_pct = st.sidebar.slider("Trailing Stop Loss %", 0.1, 10.0, 1.0, 0.1)
 
-    strategy = st.sidebar.selectbox("Strategy", ["Breakout", "Demand Supply", "Indicator", "One Trade/Day"])
+    strategy = st.sidebar.pills("Strategy", ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"], default="Breakout")
 
-    st.sidebar.header("🧾 Option Settings")
-    strike_step = st.sidebar.selectbox("Strike step", [25, 50, 100], index=1)
-    moneyness = st.sidebar.selectbox("Moneyness", ["ATM", "ITM", "OTM"], index=0)
+    mtf_ema_period = 3
+    mtf_setup_mode = "either"
+    mtf_retest_strength = True
+    mtf_max_trades_per_day = 3
+    if strategy == "MTF 5m":
+        _sidebar_section("MTF Settings", "1h bias, 15m setup, 5m trigger")
+        mtf_ema_period = int(st.sidebar.number_input("EMA period (1h)", min_value=2, max_value=20, value=3, step=1))
+        mtf_setup_label = st.sidebar.segmented_control("15m setup filter", ["Either", "BOS only", "FVG only"], default="Either")
+        mtf_setup_mode = {"Either": "either", "BOS only": "bos", "FVG only": "fvg"}[str(mtf_setup_label)]
+        mtf_retest_strength = st.sidebar.checkbox("Require strong 5m retest candle", value=True)
+        mtf_max_trades_per_day = int(st.sidebar.segmented_control("Max trades/day", [1, 2, 3], default=3))
+
+    _sidebar_section("Option Setup", "Button-style strike and moneyness controls")
+    strike_step = int(st.sidebar.segmented_control("Strike step", [25, 50, 100], default=50))
+    moneyness = st.sidebar.pills("Moneyness", ["ATM", "ITM", "OTM"], default="ATM")
     strike_steps = st.sidebar.slider("Steps (ITM/OTM)", 0, 5, 0)
     fetch_option_metrics = st.sidebar.checkbox("Fetch option LTP/OI/Vol/IV + Expiry", value=False)
 
     lot_size = st.sidebar.number_input("Lot size", min_value=1, value=65, step=1)
-    lots = st.sidebar.slider("Lots (qty = lots × lot size)", 1, 10, 1)
+    lots = st.sidebar.slider("Lots (qty = lots x lot size)", 1, 10, 2)
 
-    st.sidebar.header("Live Update")
+    _sidebar_section("Execution Flow", "Refresh, alert, and order routing controls")
     live_update = st.sidebar.checkbox("Auto refresh", value=False)
     refresh_seconds = st.sidebar.slider("Refresh every (seconds)", 2, 120, 10)
 
     send_telegram = st.sidebar.checkbox("Send Telegram alert (latest signal)", value=False)
 
+    execution_mode = st.sidebar.segmented_control("Execution mode", ["PAPER", "LIVE"], default="PAPER")
+    auto_execute_generated = st.sidebar.checkbox("Auto execute generated trades", value=False)
     if live_update:
         components.html(
             f"""<script>
@@ -630,19 +1334,27 @@ def main() -> None:
         st.dataframe(candles, use_container_width=True)
 
     try:
-        output_rows = run_strategy(
-            strategy=strategy,
-            candles=candles,
-            capital=capital,
-            risk_pct=risk_pct,
-            rr_ratio=rr_ratio,
-            trailing_sl_pct=trailing_sl_pct,
-            symbol=symbol,
-            strike_step=int(strike_step),
-            moneyness=str(moneyness),
-            strike_steps=int(strike_steps),
-            fetch_option_metrics=bool(fetch_option_metrics),
-        )
+        if strategy == "MTF 5m" and interval != "5m":
+            st.warning("MTF 5m strategy requires the base interval to be 5m so it can derive 15m and 1h candles.")
+            output_rows = []
+        else:
+            output_rows = run_strategy(
+                strategy=strategy,
+                candles=candles,
+                capital=capital,
+                risk_pct=risk_pct,
+                rr_ratio=rr_ratio,
+                trailing_sl_pct=trailing_sl_pct,
+                symbol=symbol,
+                strike_step=int(strike_step),
+                moneyness=str(moneyness),
+                strike_steps=int(strike_steps),
+                fetch_option_metrics=bool(fetch_option_metrics),
+                mtf_ema_period=int(mtf_ema_period),
+                mtf_setup_mode=str(mtf_setup_mode),
+                mtf_retest_strength=bool(mtf_retest_strength),
+                mtf_max_trades_per_day=int(mtf_max_trades_per_day),
+            )
     except Exception as exc:
         st.error(f"Strategy execution failed: {exc}")
         output_rows = []
@@ -650,7 +1362,20 @@ def main() -> None:
     if output_rows:
         output_rows = attach_lots(output_rows, lot_size=int(lot_size), lots=int(lots))
 
-    if send_telegram and output_rows:
+
+    latest_sidebar_price = candles["close"].iloc[-1] if not candles.empty else "-"
+    signal_rows = [r for r in output_rows if str(r.get("side", "")).upper() in {"BUY", "SELL"}]
+    last_signal_side = str(signal_rows[-1].get("side", "-")) if signal_rows else "-"
+    _render_sidebar_status(
+        symbol=symbol,
+        last_price=latest_sidebar_price,
+        strategy=str(strategy),
+        execution_mode=str(execution_mode),
+        open_trades=len(signal_rows),
+        last_signal_side=last_signal_side,
+        auto_execute_enabled=bool(auto_execute_generated),
+    )
+    if send_telegram and output_rows and not auto_execute_generated:
         latest = None
         for r in reversed(output_rows):
             if str(r.get("side")) in {"BUY", "SELL"}:
@@ -660,7 +1385,88 @@ def main() -> None:
             latest = output_rows[-1]
         send_signal_alert(latest, strategy=strategy, symbol=symbol, refresh_seconds=int(refresh_seconds))
 
-    tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "📈 Charts", "📋 Trades"])
+    execution_candidates: list[dict[str, object]] = []
+    analyzed_candidates: list[dict[str, object]] = []
+    if build_execution_candidates is not None:
+        try:
+            execution_candidates = build_execution_candidates(strategy, output_rows, symbol)
+        except Exception as exc:
+            st.warning(f"Could not build execution candidates: {exc}")
+            execution_candidates = []
+    if build_analysis_queue is not None:
+        analyzed_candidates = build_analysis_queue(execution_candidates)
+
+    auto_executed_rows: list[dict[str, object]] = []
+    if auto_execute_generated and execution_candidates:
+        try:
+            if execution_mode == "LIVE":
+                if execute_live_trades is None:
+                    st.error("Live execution module is not available.")
+                else:
+                    auto_executed_rows = execute_live_trades(execution_candidates, Path("data/live_trading_logs_all.csv"), deduplicate=True)
+            else:
+                if execute_paper_trades is None:
+                    st.error("Paper execution module is not available.")
+                else:
+                    auto_executed_rows = execute_paper_trades(execution_candidates, Path("data/paper_trading_logs_all.csv"), deduplicate=True)
+        except Exception as exc:
+            st.error(f"Auto execution failed: {exc}")
+            auto_executed_rows = []
+
+        if auto_executed_rows:
+            st.success(f"Auto executed {len(auto_executed_rows)} trade(s) in {execution_mode} mode.")
+            if send_telegram:
+                signal_map = {
+                    f"{row.get('strategy','')}|{row.get('symbol','')}|{row.get('entry_time', row.get('timestamp',''))}|{row.get('side','')}": row
+                    for row in output_rows
+                    if isinstance(row, dict)
+                }
+                for executed in auto_executed_rows:
+                    exec_key = f"{executed.get('strategy','')}|{executed.get('symbol','')}|{executed.get('signal_time','')}|{executed.get('side','')}"
+                    alert_row = dict(signal_map.get(exec_key, {}))
+                    alert_row.update(executed)
+                    send_signal_alert(alert_row, strategy=strategy, symbol=symbol, refresh_seconds=int(refresh_seconds))
+    if "analyzed_trade_queue" not in st.session_state:
+        st.session_state["analyzed_trade_queue"] = []
+
+
+    hero_last_price = float(candles["close"].iloc[-1]) if not candles.empty else 0.0
+    if not candles.empty and len(candles) >= 2:
+        hero_day_change = float(candles["close"].iloc[-1]) - float(candles["close"].iloc[-2])
+    else:
+        hero_day_change = 0.0
+    hero_levels = compute_market_levels(candles) if not candles.empty else {"support_low": 0.0, "support_high": 0.0, "resistance_low": 0.0, "resistance_high": 0.0}
+    support_band = f"{hero_levels['support_low']:.2f}-{hero_levels['support_high']:.2f}" if hero_levels['support_high'] else "-"
+    resistance_band = f"{hero_levels['resistance_low']:.2f}-{hero_levels['resistance_high']:.2f}" if hero_levels['resistance_high'] else "-"
+    ce_count = sum(1 for r in signal_rows if str(r.get("option_type", "")).upper() == "CE")
+    pe_count = sum(1 for r in signal_rows if str(r.get("option_type", "")).upper() == "PE")
+    if ce_count > pe_count:
+        option_bias = f"CE {ce_count}:{pe_count}"
+    elif pe_count > ce_count:
+        option_bias = f"PE {pe_count}:{ce_count}"
+    elif ce_count == pe_count and ce_count > 0:
+        option_bias = f"BAL {ce_count}:{pe_count}"
+    else:
+        option_bias = "NEUTRAL"
+    if hero_last_price and hero_levels["resistance_high"] and hero_last_price >= hero_levels["resistance_high"]:
+        market_status = "BREAKOUT"
+    elif hero_last_price and hero_levels["support_low"] and hero_last_price <= hero_levels["support_low"]:
+        market_status = "BREAKDOWN"
+    else:
+        market_status = "RANGE" if not signal_rows else f"LIVE {last_signal_side}"
+    _render_hero_strip(
+        symbol=str(symbol),
+        last_price=hero_last_price if not candles.empty else "-",
+        day_change=float(hero_day_change),
+        strategy=str(strategy),
+        execution_mode=str(execution_mode),
+        open_trades=len(signal_rows),
+        support_band=support_band,
+        resistance_band=resistance_band,
+        option_bias=option_bias,
+        market_status=market_status,
+    )
+    tab1, tab2, tab3 = st.tabs(["Dashboard", "Charts", "Trades"])
 
     with tab1:
         st.subheader("Market Overview")
@@ -685,24 +1491,64 @@ def main() -> None:
             st.warning("No candle data available.")
 
     with tab2:
-        st.subheader("Live Price Chart")
+        st.subheader("Live Market Chart")
         if not candles.empty:
-            chart = (
-                alt.Chart(candles)
-                .mark_line()
-                .encode(
-                    x=alt.X("timestamp:T", title="Time"),
-                    y=alt.Y("close:Q", title="Close Price"),
-                    tooltip=["timestamp:T", "open:Q", "high:Q", "low:Q", "close:Q", "volume:Q"],
-                )
-                .interactive()
+            latest_move = 0.0
+            if len(candles) >= 2:
+                try:
+                    latest_move = float(candles["close"].iloc[-1]) - float(candles["close"].iloc[-2])
+                except Exception:
+                    latest_move = 0.0
+
+            levels = compute_market_levels(candles)
+            move_color = "#22c55e" if latest_move >= 0 else "#ef4444"
+            move_prefix = "+" if latest_move > 0 else ""
+            st.markdown(
+                f"""
+                <div style=\"background:linear-gradient(135deg,#0f172a 0%,#111827 55%,#172554 100%);border:1px solid #1e293b;border-radius:18px;padding:18px 20px;margin-bottom:12px;box-shadow:0 16px 36px rgba(2,6,23,0.34);\"> 
+                    <div style=\"display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;\">
+                        <div>
+                            <div style=\"color:#94a3b8;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;\">Live Price</div>
+                            <div style=\"color:#e2e8f0;font-size:34px;font-weight:700;line-height:1.05;\">{levels['last_price']:.2f}</div>
+                        </div>
+                        <div style=\"text-align:right;\">
+                            <div style=\"color:{move_color};font-size:24px;font-weight:700;animation:pulse 1.2s ease-in-out infinite;\">{move_prefix}{latest_move:.2f}</div>
+                            <div style=\"color:#94a3b8;font-size:12px;\">vs previous candle close</div>
+                        </div>
+                    </div>
+                </div>
+                <style>
+                    @keyframes pulse {{ 0% {{ opacity: 0.75; }} 50% {{ opacity: 1; }} 100% {{ opacity: 0.75; }} }}
+                </style>
+                """,
+                unsafe_allow_html=True,
             )
-            st.altair_chart(chart, use_container_width=True)
+
+            h1, h2, h3, h4 = st.columns(4)
+            h1.metric("Session High", round(levels["session_high"], 2))
+            h2.metric("Session Low", round(levels["session_low"], 2))
+            h3.metric("Support Band", f"{levels['support_low']:.2f}-{levels['support_high']:.2f}")
+            h4.metric("Resistance Band", f"{levels['resistance_low']:.2f}-{levels['resistance_high']:.2f}")
+
+            left, right = st.columns([4.4, 1.6])
+            with left:
+                chart = build_live_market_chart(candles, output_rows=output_rows)
+                st.altair_chart(chart, use_container_width=True)
+                st.caption("Standard candlestick chart with volume and optional BUY/SELL or CE/PE trade markers.")
+            with right:
+                st.markdown("**Market Depth View**")
+                depth_df = build_market_depth_summary(candles)
+                st.dataframe(depth_df, use_container_width=True, hide_index=True)
+                st.caption(f"Price spread between support and resistance bands: {levels['spread']:.2f}")
         else:
             st.info("No chart data available.")
 
     with tab3:
-        st.subheader("Execution Data")
+        if auto_executed_rows:
+            st.caption("Auto-executed trades from this run.")
+            st.dataframe(_order_trade_columns(pd.DataFrame(auto_executed_rows)), use_container_width=True)
+
+        st.subheader("Trade Analysis")
         if output_rows:
             trades_df = pd.DataFrame(output_rows)
             st.dataframe(trades_df, use_container_width=True)
@@ -718,6 +1564,56 @@ def main() -> None:
         else:
             st.info("No trades generated yet.")
 
+        st.divider()
+        st.subheader("Analyze First, Execute Later")
+        if execution_candidates:
+            st.caption("Current executable candidates generated from the latest strategy run.")
+            st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), use_container_width=True)
+        else:
+            st.info("No execution candidates are available for the current strategy output.")
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if st.button("Analyze Current Trades", use_container_width=True):
+                st.session_state["analyzed_trade_queue"] = analyzed_candidates
+                if analyzed_candidates:
+                    st.success(f"Analyzed {len(analyzed_candidates)} executable trade(s). Review them below before execution.")
+                else:
+                    st.warning("No BUY/SELL trades were available to analyze.")
+        with c2:
+            if st.button("Clear Analyzed Queue", use_container_width=True):
+                st.session_state["analyzed_trade_queue"] = []
+                st.info("Cleared the analyzed trade queue.")
+        with c3:
+            st.caption(f"Execution mode: {execution_mode}")
+
+        staged_candidates = st.session_state.get("analyzed_trade_queue", [])
+        if staged_candidates:
+            st.caption("Reviewed trade queue. Only this staged list will be executed.")
+            st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), use_container_width=True)
+
+            executed_rows: list[dict[str, object]] = []
+            execute_clicked = st.button("Execute Reviewed Trades", type="primary", use_container_width=True)
+            if execute_clicked:
+                if execution_mode == "LIVE":
+                    if execute_live_trades is None:
+                        st.error("Live execution module is not available.")
+                    else:
+                        executed_rows = execute_live_trades(staged_candidates, Path("data/live_trading_logs_all.csv"), deduplicate=True)
+                else:
+                    if execute_paper_trades is None:
+                        st.error("Paper execution module is not available.")
+                    else:
+                        executed_rows = execute_paper_trades(staged_candidates, Path("data/paper_trading_logs_all.csv"), deduplicate=True)
+
+                if executed_rows:
+                    st.success(f"Executed {len(executed_rows)} reviewed trade(s) in {execution_mode} mode.")
+                    st.dataframe(_order_trade_columns(pd.DataFrame(executed_rows)), use_container_width=True)
+                else:
+                    st.warning("No new reviewed trades were executed. They may already be logged.")
+        else:
+            st.info("Analyze trades first to build a review queue, then execute that reviewed batch later.")
+
     with st.expander("Debug Output"):
         st.write("Strategy selected:", strategy)
         st.write("Output rows type:", type(output_rows))
@@ -726,6 +1622,44 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

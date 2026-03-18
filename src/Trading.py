@@ -1022,6 +1022,10 @@ def _render_page_masthead(
     open_trades: int,
     account_status: str,
 ) -> None:
+    auto_text = "Auto execute ready" if auto_execute else "Review before send"
+    signal_text = str(last_signal_side or "-").upper()
+    order_text = f"{instrument_mode} {int(lots)} x {int(lot_size)}"
+    risk_text = f"{float(risk_pct):.1f}% risk / {float(rr_ratio):.1f}R"
     st.markdown(
         f"""
         <div class="page-masthead">

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import inspect
 import sys
@@ -66,7 +67,7 @@ except Exception:
 
 
 
-st.set_page_config(page_title="Trading Dashboard", page_icon="chart", layout="wide")
+st.set_page_config(page_title="KRSH", page_icon="chart", layout="wide")
 
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "")
@@ -987,7 +988,7 @@ def main() -> None:
     with row1[4]:
         instrument_mode = st.segmented_control("Instrument", ["Options", "Futures"], default="Options")
 
-    row2 = st.columns([1, 1, 1, 1, 1, 1])
+    row2 = st.columns([1, 1, 1, 1, 1, 1, 1])
     with row2[0]:
         lot_size = st.number_input("Lot size", min_value=1, value=65, step=1)
     with row2[1]:
@@ -1000,6 +1001,8 @@ def main() -> None:
         rr_ratio = st.slider("Risk / Reward", 1.0, 10.0, 2.0)
     with row2[5]:
         trailing_sl_pct = st.slider("Trailing stop loss %", 0.1, 10.0, 1.0, 0.1)
+    with row2[6]:
+        auto_execute_generated = st.toggle("Auto execute", value=False)
 
     strike_step = 50
     moneyness = "ATM"
@@ -1039,7 +1042,8 @@ def main() -> None:
     live_update = False
     refresh_seconds = 10
     send_telegram = False
-    auto_execute_generated = False
+    paper_log_output = "data/paper_trading_logs_all.csv"
+    live_log_output = "data/live_trading_logs_all.csv"
     with st.expander("Advanced execution controls", expanded=False):
         adv_cols = st.columns([1, 1, 1, 1])
         with adv_cols[0]:
@@ -1049,12 +1053,28 @@ def main() -> None:
         with adv_cols[2]:
             send_telegram = st.checkbox("Send Telegram alert", value=False)
         with adv_cols[3]:
-            auto_execute_generated = st.checkbox("Auto execute generated trades", value=False)
+            st.caption("Use the main-page Auto execute toggle above.")
 
     dhan_client_id = ""
+    st.markdown('<div class="section-copy" style="margin-top:8px;">Trade integration</div>', unsafe_allow_html=True)
+    if execution_mode == "PAPER":
+        paper_cols = st.columns([1.6, 1, 1])
+        with paper_cols[0]:
+            paper_log_output = st.text_input("Paper trade log path", value="data/paper_trading_logs_all.csv")
+        with paper_cols[1]:
+            st.info("Execution type: simulated")
+        with paper_cols[2]:
+            st.info("Broker: disabled")
     dhan_token_present = False
     dhan_security_map_path = "data/dhan_security_map.csv"
     if execution_mode == "LIVE":
+        live_cols = st.columns([1.3, 1.3, 1])
+        with live_cols[0]:
+            live_log_output = st.text_input("Live trade log path", value="data/live_trading_logs_all.csv")
+        with live_cols[1]:
+            dhan_security_map_path = st.text_input("Security map path", value="data/dhan_security_map.csv")
+        with live_cols[2]:
+            st.info("Broker: Dhan")
         st.markdown('<div class="section-copy" style="margin-top:8px;">Dhan live routing</div>', unsafe_allow_html=True)
         dhan_client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
         dhan_token_present = bool(os.getenv("DHAN_ACCESS_TOKEN", "").strip())
@@ -1098,9 +1118,6 @@ def main() -> None:
         candles = pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
 
     st.caption(f"Total candles fetched: {len(candles)}")
-
-    with st.expander("View raw candle data", expanded=False):
-        st.dataframe(candles.tail(20), use_container_width=True, height=320)
 
     try:
         if strategy == "MTF 5m" and interval != "5m":
@@ -1165,12 +1182,12 @@ def main() -> None:
                 if execute_live_trades is None:
                     st.error("Live execution module is not available.")
                 else:
-                    auto_executed_rows = execute_live_trades(execution_candidates, Path("data/live_trading_logs_all.csv"), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
+                    auto_executed_rows = execute_live_trades(execution_candidates, Path(live_log_output), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
             else:
                 if execute_paper_trades is None:
                     st.error("Paper execution module is not available.")
                 else:
-                    auto_executed_rows = execute_paper_trades(execution_candidates, Path("data/paper_trading_logs_all.csv"), deduplicate=True)
+                    auto_executed_rows = execute_paper_trades(execution_candidates, Path(paper_log_output), deduplicate=True)
         except Exception as exc:
             st.error(f"Auto execution failed: {exc}")
             auto_executed_rows = []
@@ -1251,7 +1268,7 @@ def main() -> None:
     tab1, tab2, tab3 = st.tabs(["Dashboard", "Charts", "Trades"])
 
     with tab1:
-        st.markdown('<div class="section-shell">', unsafe_allow_html=True)
+    st.markdown('<div class="section-shell">', unsafe_allow_html=True)
         st.markdown('<div class="section-heading">Market Overview</div><div class="section-copy">Live market snapshot with the latest price, volume, and recent candles.</div>', unsafe_allow_html=True)
         c1, c2, c3, c4 = st.columns(4)
 
@@ -1327,7 +1344,7 @@ def main() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
     with tab3:
-        st.markdown('<div class="section-shell">', unsafe_allow_html=True)
+    st.markdown('<div class="section-shell">', unsafe_allow_html=True)
         st.markdown('<div class="section-heading">Trade Workspace</div><div class="section-copy">Review live-ready setups, preview broker payloads, and send only the orders you actually want routed.</div>', unsafe_allow_html=True)
         if auto_executed_rows:
             st.caption("Auto-executed trades from this run.")
@@ -1398,12 +1415,12 @@ def main() -> None:
                     if execute_live_trades is None:
                         st.error("Live execution module is not available.")
                     else:
-                        executed_rows = execute_live_trades(staged_candidates, Path("data/live_trading_logs_all.csv"), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
+                        executed_rows = execute_live_trades(staged_candidates, Path(live_log_output), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
                 else:
                     if execute_paper_trades is None:
                         st.error("Paper execution module is not available.")
                     else:
-                        executed_rows = execute_paper_trades(staged_candidates, Path("data/paper_trading_logs_all.csv"), deduplicate=True)
+                        executed_rows = execute_paper_trades(staged_candidates, Path(paper_log_output), deduplicate=True)
 
                 if executed_rows:
                     st.success(f"Executed {len(executed_rows)} reviewed trade(s) in {execution_mode} mode.")
@@ -1415,15 +1432,38 @@ def main() -> None:
         else:
             st.info("Analyze trades first to build a review queue, then execute that reviewed batch later.")
         st.markdown("</div>", unsafe_allow_html=True)
+    raw_candles_csv = candles.to_csv(index=False) if not candles.empty else "timestamp,open,high,low,close,volume`n"
+    debug_payload = {
+        "strategy": strategy,
+        "workspace": workspace,
+        "symbol": symbol,
+        "execution_mode": execution_mode,
+        "instrument_mode": instrument_mode,
+        "output_rows_count": len(output_rows) if isinstance(output_rows, list) else 0,
+        "execution_candidates_count": len(execution_candidates),
+        "reviewed_queue_count": len(st.session_state.get("analyzed_trade_queue", [])),
+    }
+
+    st.markdown('<div class="section-shell">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading">Downloads</div><div class="section-copy">Raw data and debug output are hidden from the page and available only as file downloads.</div>', unsafe_allow_html=True)
+    download_cols = st.columns(3)
+    with download_cols[0]:
+        st.download_button("Download Raw Candles CSV", data=raw_candles_csv, file_name="krsh_raw_candles.csv", mime="text/csv", use_container_width=True)
+    with download_cols[1]:
+        st.download_button("Download Trades CSV", data=_to_csv(output_rows) if output_rows else "", file_name="krsh_trades.csv", mime="text/csv", use_container_width=True)
+    with download_cols[2]:
+        st.download_button("Download Debug JSON", data=json.dumps(debug_payload, indent=2), file_name="krsh_debug.json", mime="application/json", use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
     _render_page_footer()
-    with st.expander("Debug Output", expanded=False):
-        st.write("Strategy selected:", strategy)
-        st.write("Output rows type:", type(output_rows))
-        st.write("Output sample:", output_rows[:5] if isinstance(output_rows, list) else output_rows)
 
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

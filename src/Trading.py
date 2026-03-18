@@ -811,7 +811,7 @@ def _render_page_masthead(
     st.markdown(
         f"""
         <div class="top-nav">
-            <div class="top-nav-brand">DHAN<span>DESK</span></div>
+            <div class="top-nav-brand">KRSH<span>TRADE</span></div>
             <div class="top-nav-menu">
                 <span class="active">Live Desk: {symbol} {interval} {period}</span>
                 <span>Signals: {signal_text} / {open_trades}</span>
@@ -824,9 +824,9 @@ def _render_page_masthead(
         <div class="page-masthead">
             <div class="masthead-grid">
                 <div>
-                    <div class="page-eyebrow">Broker Connected Workspace</div>
-                    <h1 class="page-title">Dhan <span class="accent">Live Trading</span> Desk</h1>
-                    <div class="page-subtitle">Read the market, build the contract, preview the payload, and route orders for {symbol} from one refined execution screen.</div>
+                    <div class="page-eyebrow">KRSH Broker Workspace</div>
+                    <h1 class="page-title">KRSH <span class="accent">Live Trading</span> Desk</h1>
+                    <div class="page-subtitle">KRSH combines live market structure, order preparation, and Dhan execution for {symbol} in one modern trading workspace.</div>
                 </div>
                 <div class="page-badge">{strategy}<br/>{mode_badge}<br/>{auto_text}</div>
             </div>
@@ -840,6 +840,20 @@ def _render_page_masthead(
         """,
         unsafe_allow_html=True,
     )
+
+
+def _fmt_num(val: object) -> str:
+    if val is None:
+        return "-"
+    text = str(val).strip()
+    if text in {"", "-", "N/A"}:
+        return "-"
+    try:
+        num = float(text)
+    except Exception:
+        return text
+    out = f"{num:.2f}"
+    return out[:-3] if out.endswith(".00") else out
 
 def _render_hero_strip(
     symbol: str,
@@ -916,6 +930,19 @@ def _sidebar_section(title: str, subtitle: str = "") -> None:
         text += f'<div class="live-sub" style="margin-bottom:8px;">{subtitle}</div>'
     st.markdown(text, unsafe_allow_html=True)
 
+
+
+
+def _render_page_footer() -> None:
+    st.markdown(
+        """
+        <div style="margin-top:18px;padding:14px 18px;border-radius:18px;background:linear-gradient(90deg, rgba(8,18,32,0.96), rgba(18,48,82,0.92));border:1px solid rgba(118,164,210,0.16);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:0.04em;">KRSH <span style="color:#ffb84d;">TRADE</span></div>
+            <div style="color:#9bb6d3;font-size:12px;">Modern live-trading workspace for strategy review, payload preview, and broker execution.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 def main() -> None:
     _render_sidebar_shell()
@@ -1388,6 +1415,7 @@ def main() -> None:
         else:
             st.info("Analyze trades first to build a review queue, then execute that reviewed batch later.")
         st.markdown("</div>", unsafe_allow_html=True)
+    _render_page_footer()
     with st.expander("Debug Output", expanded=False):
         st.write("Strategy selected:", strategy)
         st.write("Output rows type:", type(output_rows))
@@ -1396,6 +1424,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

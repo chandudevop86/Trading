@@ -214,6 +214,7 @@ def _render_sidebar_shell() -> None:
             background: rgba(2, 6, 23, 0.72);
         }
         [data-testid="stAppViewContainer"] .main .block-container {
+            max-width: 1600px;
             padding-top: 1.2rem;
         }
         [data-testid="stAppViewContainer"] [data-testid="stMetric"] {
@@ -377,6 +378,7 @@ def _render_sidebar_shell() -> None:
             box-shadow: 0 18px 34px rgba(2, 6, 23, 0.18);
         }
         [data-testid="stSidebar"] {
+            display: none;
             background:
                 radial-gradient(circle at top left, rgba(34,197,94,0.14), transparent 24%),
                 linear-gradient(180deg, #08111f 0%, #0b1220 48%, #0f172a 100%);
@@ -492,6 +494,7 @@ def _render_sidebar_shell() -> None:
             border-bottom: 1px solid rgba(118, 164, 210, 0.10);
         }
         [data-testid="stAppViewContainer"] .main .block-container {
+            max-width: 1600px;
             max-width: 1480px;
             padding-top: 1.1rem;
         }
@@ -566,6 +569,7 @@ def _render_sidebar_shell() -> None:
             box-shadow: 0 18px 32px rgba(2, 12, 27, 0.20);
         }
         [data-testid="stSidebar"] {
+            display: none;
             background: radial-gradient(circle at top left, rgba(255,184,77,0.12), transparent 26%), linear-gradient(180deg, #071524 0%, #0b1d33 100%);
             border-right: 1px solid rgba(118, 164, 210, 0.16);
         }
@@ -910,789 +914,146 @@ def _sidebar_section(title: str, subtitle: str = "") -> None:
     text = f'<div class="live-section">{title}</div>'
     if subtitle:
         text += f'<div class="live-sub" style="margin-bottom:8px;">{subtitle}</div>'
-    st.sidebar.markdown(text, unsafe_allow_html=True)
-
-
-def _render_sidebar_status(
-    symbol: str,
-    last_price: object,
-    strategy: str,
-    execution_mode: str,
-    open_trades: int = 0,
-    last_signal_side: str = "-",
-    auto_execute_enabled: bool = False,
-) -> None:
-    price_text = _fmt_num(last_price)
-    auto_text = "ON" if auto_execute_enabled else "OFF"
-    signal_text = str(last_signal_side or "-").upper()
-    st.sidebar.markdown(
-        f"""
-        <div class="live-panel" style="padding:12px 14px;">
-            <div class="live-kicker">Live Status</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div class="status-card">
-                    <div class="status-label">Symbol</div>
-                    <div class="status-value">{symbol}</div>
-                </div>
-                <div class="status-card">
-                    <div class="status-label">Last Price</div>
-                    <div class="status-value status-price">{price_text}</div>
-                </div>
-                <div class="status-card">
-                    <div class="status-label">Strategy</div>
-                    <div class="status-value">{strategy}</div>
-                </div>
-                <div class="status-card">
-                    <div class="status-label">Mode</div>
-                    <div class="status-value">{execution_mode}</div>
-                </div>
-                <div class="status-card">
-                    <div class="status-label">Open Trades</div>
-                    <div class="status-value">{open_trades}</div>
-                </div>
-                <div class="status-card">
-                    <div class="status-label">Last Signal</div>
-                    <div class="status-value">{signal_text}</div>
-                </div>
-                <div class="status-card" style="grid-column: span 2;">
-                    <div class="status-label">Auto Execute</div>
-                    <div class="status-value">{auto_text}</div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-def _fmt_num(val: object) -> str:
-    if val is None:
-        return "-"
-    text = str(val).strip()
-    if text in {"", "-", "N/A"}:
-        return "-"
-    try:
-        num = float(text)
-    except Exception:
-        return text
-    out = f"{num:.2f}"
-    return out[:-3] if out.endswith(".00") else out
-
-
-
-def _format_expiry(expiry: object) -> str:
-    if expiry is None:
-        return ""
-    text = str(expiry).strip()
-    if not text or text in {"-", "N/A"}:
-        return ""
-    for fmt in ("%Y-%m-%d", "%d-%b-%Y"):
-        try:
-            return datetime.strptime(text, fmt).date().isoformat()
-        except Exception:
-            pass
-    return text
-
-
-def _format_ts_ist(ts: object) -> str:
-    if ts is None:
-        return "-"
-    try:
-        dt = pd.to_datetime(ts, errors="coerce")
-    except Exception:
-        dt = None
-    if dt is None or pd.isna(dt):
-        return str(ts)
-
-    if isinstance(dt, pd.Timestamp):
-        py = dt.to_pydatetime()
-    else:
-        py = dt
-
-    if getattr(py, "tzinfo", None) is None:
-        py = py.replace(tzinfo=ZoneInfo("UTC"))
-
-    ist = py.astimezone(ZoneInfo("Asia/Kolkata"))
-    return ist.strftime("%Y-%m-%d %H:%M:%S IST")
-
-
-def _safe_float(val: object) -> float | None:
-    try:
-        num = float(val)  # type: ignore[arg-type]
-    except Exception:
-        return None
-    if pd.isna(num):
-        return None
-    return float(num)
-
-
-def _enrich_trade_row(row: dict[str, object], spot_ltp: float | None = None) -> dict[str, object]:
-    enriched = dict(row)
-    if spot_ltp is not None and not enriched.get("spot_ltp"):
-        enriched["spot_ltp"] = round(float(spot_ltp), 2)
-
-    side = str(enriched.get("side", "") or "").upper()
-    entry = _safe_float(enriched.get("entry_price", enriched.get("entry")))
-    stop = _safe_float(enriched.get("stop_loss", enriched.get("sl")))
-    if side not in {"BUY", "SELL"} or entry is None or stop is None:
-        return enriched
-
-    risk = abs(float(entry) - float(stop))
-    if risk <= 0:
-        return enriched
-
-    if side == "BUY":
-        targets = [entry + risk, entry + (2.0 * risk), entry + (3.0 * risk)]
-    else:
-        targets = [entry - risk, entry - (2.0 * risk), entry - (3.0 * risk)]
-
-    for idx, value in enumerate(targets, start=1):
-        enriched.setdefault(f"target_{idx}", round(float(value), 4))
-
-    if not enriched.get("target_price"):
-        enriched["target_price"] = enriched.get("target_2")
-
-    return enriched
-
-
-
-def _estimate_weekly_expiry(symbol: str, now: datetime | None = None) -> str:
-    s = (symbol or "").strip().upper()
-    if s in {"^NSEI", "NIFTY", "NIFTY 50", "NIFTY50"}:
-        tz = ZoneInfo("Asia/Kolkata")
-        dt = now or datetime.now(tz)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=tz)
-        # Thursday = 3 (Mon=0)
-        days_ahead = (3 - dt.weekday()) % 7
-        expiry = dt.date() + timedelta(days=days_ahead)
-        return expiry.isoformat()
-    return ""
-
-
-def _estimate_monthly_expiry(symbol: str, now: datetime | None = None) -> str:
-    s = (symbol or "").strip().upper()
-    if s not in {"^NSEI", "NIFTY", "NIFTY 50", "NIFTY50", "NIFTY FUT", "NIFTY FUTURES", "NIFTYFUT"}:
-        return ""
-
-    tz = ZoneInfo("Asia/Kolkata")
-    dt = now or datetime.now(tz)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=tz)
-
-    first_next_month = (dt.replace(day=28) + timedelta(days=4)).replace(day=1)
-    expiry = first_next_month - timedelta(days=1)
-    while expiry.weekday() != 3:
-        expiry -= timedelta(days=1)
-    return expiry.date().isoformat()
-
-
-def attach_futures_contracts(rows: list[dict[str, object]], symbol: str) -> list[dict[str, object]]:
-    contract_symbol = normalize_index_symbol(symbol) if normalize_index_symbol else str(symbol).strip().upper().replace("^", "")
-    expiry = _estimate_monthly_expiry(symbol)
-    out: list[dict[str, object]] = []
-    for r in rows:
-        row = dict(r)
-        row["instrument"] = "FUTURES"
-        row["contract_type"] = "FUTIDX"
-        row["contract_symbol"] = contract_symbol
-        if expiry:
-            row["contract_expiry"] = _format_expiry(expiry)
-            row["contract_expiry_source"] = "EST"
-        for key in ["option_type", "strike_price", "option_strike", "option_ltp", "option_oi", "option_vol", "option_iv", "option_expiry", "option_expiry_source"]:
-            row.pop(key, None)
-        out.append(row)
-    return out
-
-def attach_lots(rows: list[dict[str, object]], lot_size: int, lots: int) -> list[dict[str, object]]:
-    lot_size = int(lot_size) if lot_size and int(lot_size) > 0 else 0
-    lots = int(lots) if lots and int(lots) > 0 else 0
-    if lot_size <= 0 or lots <= 0:
-        return rows
-
-    qty = lot_size * lots
-    out: list[dict[str, object]] = []
-    for r in rows:
-        row = dict(r)
-        row["lots"] = lots
-        row["quantity"] = qty
-        try:
-            ltp = float(row.get("option_ltp", row.get("entry_price", row.get("share_price", row.get("price", 0)))) or 0)
-        except Exception:
-            ltp = 0.0
-        if ltp > 0:
-            row["order_value"] = round(ltp * qty, 2)
-        out.append(row)
-    return out
-
-
-def send_signal_alert(
-    trade: dict[str, object],
-    strategy: str,
-    symbol: str,
-    refresh_seconds: int | None = None,
-) -> None:
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        return
-
-    side = str(trade.get("side", "-") or "-")
-    trade_label = str(trade.get("trade_label", "") or "").strip()
-    entry = _fmt_num(trade.get("entry_price", trade.get("entry", "-")))
-    sl = _fmt_num(trade.get("stop_loss", trade.get("sl", "-")))
-    target = _fmt_num(trade.get("target_price", trade.get("target", "-")))
-    target_1 = _fmt_num(trade.get("target_1"))
-    target_2 = _fmt_num(trade.get("target_2"))
-    target_3 = _fmt_num(trade.get("target_3"))
-    option = str(trade.get("option_strike", "") or "").strip()
-    contract = str(trade.get("contract_symbol", "") or "").strip()
-    contract_expiry = str(trade.get("contract_expiry", "") or "").strip()
-
-    spot_ltp = _fmt_num(trade.get("spot_ltp", trade.get("close", trade.get("share_price", "-"))))
-    opt_ltp = _fmt_num(trade.get("option_ltp"))
-    opt_oi = _fmt_num(trade.get("option_oi"))
-    opt_vol = _fmt_num(trade.get("option_vol"))
-    opt_iv = _fmt_num(trade.get("option_iv"))
-    opt_expiry = _format_expiry(trade.get("option_expiry"))
-    opt_expiry_source = str(trade.get("option_expiry_source", "") or "").upper()
-    if opt_expiry and opt_expiry_source == "EST":
-        opt_expiry = opt_expiry + " (est)"
-
-    lots = str(trade.get("lots", "") or "").strip()
-    qty = str(trade.get("quantity", "") or "").strip()
-    value = _fmt_num(trade.get("order_value"))
-
-    ts = _format_ts_ist(trade.get("timestamp") or trade.get("entry_time"))
-
-    extra = ""
-    if refresh_seconds is not None:
-        if refresh_seconds >= 60:
-            extra = f" (next update in {refresh_seconds // 60} min)"
-        else:
-            extra = f" (next update in {refresh_seconds} sec)"
-
-    parts: list[str] = [
-        "Trade Signal",
-        "",
-        f"Strategy: {strategy}",
-        f"Symbol: {symbol}",
-        f"Side: {side}",
-    ]
-    if trade_label:
-        parts.append(f"Setup: {trade_label}")
-    if entry != "-":
-        parts.append(f"Entry: {entry}")
-    if sl != "-":
-        parts.append(f"SL: {sl}")
-    if target != "-":
-        parts.append(f"Target: {target}")
-    if target_1 != "-":
-        parts.append(f"Target 1: {target_1}")
-    if target_2 != "-":
-        parts.append(f"Target 2: {target_2}")
-    if target_3 != "-":
-        parts.append(f"Target 3: {target_3}")
-    if option:
-        parts.append(f"Option: {option}")
-    if contract:
-        contract_line = f"Futures: {contract}"
-        if contract_expiry:
-            contract_line = contract_line + f" ({contract_expiry})"
-        parts.append(contract_line)
-    if opt_expiry:
-        parts.append(f"Expiry: {opt_expiry}")
-    if spot_ltp != "-":
-        parts.append(f"Spot LTP: {spot_ltp}")
-    if opt_ltp != "-":
-        parts.append(f"Option LTP: {opt_ltp}")
-    if opt_oi != "-":
-        parts.append(f"OI: {opt_oi}")
-    if opt_vol != "-":
-        parts.append(f"Vol: {opt_vol}")
-    if opt_iv != "-":
-        parts.append(f"IV: {opt_iv}")
-    if lots and qty:
-        parts.append(f"Lots: {lots} (Qty: {qty})")
-    if value != "-":
-        parts.append(f"Value: {value}")
-
-    parts.append(f"Time: {ts}{extra}")
-
-    msg = "\n".join(parts)
-
-    try:
-        send_telegram_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, msg)
-    except Exception as exc:
-        st.warning(f"Telegram alert failed: {exc}")
-
-def call_strategy_function(func, candles, **kwargs):
-    sig = inspect.signature(func)
-    accepted = sig.parameters
-    filtered_kwargs = {k: v for k, v in kwargs.items() if k in accepted}
-    try:
-        return func(candles, **filtered_kwargs)
-    except TypeError:
-        return func(candles)
-
-
-def _indicator_side(signal: str) -> str:
-    s = (signal or "").upper()
-    if s in {"BULLISH_TREND", "OVERSOLD", "BUY"}:
-        return "BUY"
-    if s in {"BEARISH_TREND", "OVERBOUGHT", "SELL"}:
-        return "SELL"
-    return "-"
-
-
-def _attach_indicator_trade_levels(rows: list[dict[str, object]], rr_ratio: float, trailing_sl_pct: float) -> list[dict[str, object]]:
-    out: list[dict[str, object]] = []
-    sl_frac = max(0.0, float(trailing_sl_pct) / 100.0)
-    for r in rows:
-        row = dict(r)
-        side = _indicator_side(str(row.get("market_signal", "")))
-        row.setdefault("side", side)
-
-        try:
-            entry = float(row.get("close", 0.0) or 0.0)
-        except Exception:
-            entry = 0.0
-
-        if entry > 0 and side in {"BUY", "SELL"}:
-            row["entry_price"] = round(entry, 2)
-            if sl_frac <= 0:
-                sl_frac = 0.002
-            if side == "BUY":
-                sl = entry * (1.0 - sl_frac)
-                tp = entry + (entry - sl) * float(rr_ratio)
-            else:
-                sl = entry * (1.0 + sl_frac)
-                tp = entry - (sl - entry) * float(rr_ratio)
-            row["stop_loss"] = round(sl, 2)
-            row["target_price"] = round(tp, 2)
-
-        if "timestamp" in row:
-            row["timestamp"] = str(row["timestamp"])
-        out.append(row)
-
-    return out
-
-
-def run_strategy(
-    strategy: str,
-    candles: pd.DataFrame,
-    capital: float,
-    risk_pct: float,
-    rr_ratio: float,
-    trailing_sl_pct: float,
-    symbol: str,
-    strike_step: int,
-    moneyness: str,
-    strike_steps: int,
-    fetch_option_metrics: bool,
-    mtf_ema_period: int,
-    mtf_setup_mode: str,
-    mtf_retest_strength: bool,
-    mtf_max_trades_per_day: int,
-) -> list[dict[str, object]]:
-    if candles.empty:
-        return []
-
-    strategy_kwargs = {
-        "capital": float(capital),
-        "risk_pct": float(risk_pct) / 100.0,
-        "rr_ratio": float(rr_ratio),
-        "trailing_sl_pct": float(trailing_sl_pct) / 100.0,
-        "ema_period": int(mtf_ema_period),
-        "setup_mode": str(mtf_setup_mode),
-        "require_retest_strength": bool(mtf_retest_strength),
-        "max_trades_per_day": int(mtf_max_trades_per_day),
-    }
-
-    metrics_map: dict[tuple[int, str], dict[str, object]] = {}
-    if fetch_option_metrics and fetch_option_chain and extract_option_records and build_metrics_map and normalize_index_symbol:
-        try:
-            sym = normalize_index_symbol(symbol)
-            payload = fetch_option_chain(sym, timeout=10.0)
-            records = extract_option_records(payload)
-            metrics_map = build_metrics_map(records)  # type: ignore[assignment]
-        except Exception:
-            metrics_map = {}
-    latest_spot_ltp = _safe_float(candles["close"].iloc[-1]) if not candles.empty else None
-
-    if strategy == "Demand Supply":
-        if generate_demand_supply_trades is None:
-            st.warning("Demand Supply module not available.")
-            return []
-        zones = call_strategy_function(generate_demand_supply_trades, candles, **strategy_kwargs)
-
-        out_rows: list[dict[str, object]] = []
-        sl_frac = max(0.0, float(trailing_sl_pct) / 100.0)
-        if sl_frac <= 0:
-            sl_frac = 0.002
-
-        for z in zones or []:
-            if not isinstance(z, dict):
-                continue
-            zone_type = str(z.get("type", "")).lower()
-            side = "BUY" if zone_type == "demand" else "SELL" if zone_type == "supply" else "-"
-            if side == "-":
-                continue
-            try:
-                entry = float(z.get("price", 0.0) or 0.0)
-            except Exception:
-                entry = 0.0
-            if entry <= 0:
-                continue
-
-            ts = ""
-            try:
-                idx = int(z.get("index", -1))
-                if 0 <= idx < len(candles):
-                    ts = str(candles["timestamp"].iloc[idx])
-            except Exception:
-                ts = ""
-
-            if side == "BUY":
-                sl = entry * (1.0 - sl_frac)
-                tp = entry + (entry - sl) * float(rr_ratio)
-            else:
-                sl = entry * (1.0 + sl_frac)
-                tp = entry - (sl - entry) * float(rr_ratio)
-
-            row: dict[str, object] = {
-                "strategy": "Demand Supply",
-                "symbol": symbol,
-                "zone_type": zone_type,
-                "side": side,
-                "entry_price": round(entry, 2),
-                "stop_loss": round(sl, 2),
-                "target_price": round(tp, 2),
-                "timestamp": ts,
-            }
-
-            try:
-                strike, opt = pick_option_strike(
-                    spot_price=float(row["entry_price"]),
-                    side=str(row["side"]),
-                    step=int(strike_step),
-                    moneyness=str(moneyness),
-                    steps=int(strike_steps),
-                )
-                row["option_type"] = opt
-                row["strike_price"] = strike
-                row["option_strike"] = f"{strike}{opt}"
-
-                metrics = metrics_map.get((int(strike), str(opt)))
-
-                if isinstance(metrics, dict):
-
-                    row.update(metrics)
-
-                    if metrics.get("option_expiry"):
-
-                        row["option_expiry_source"] = "NSE"
-            except Exception:
-                pass
-
-            if not row.get("option_expiry") and row.get("option_strike"):
-                est = _estimate_weekly_expiry(symbol)
-                if est:
-                    row["option_expiry"] = est
-                    row["option_expiry_source"] = "EST"
-
-            if "option_expiry" in row:
-                row["option_expiry"] = _format_expiry(row.get("option_expiry"))
-
-            out_rows.append(_enrich_trade_row(row, latest_spot_ltp))
-
-        return out_rows
-
-    if strategy == "Indicator":
-        candle_list = _df_to_candles(candles)
-        rows = generate_indicator_rows(
-            candle_list,
-            config=IndicatorConfig(
-                rsi_period=14,
-                adx_period=14,
-                macd_fast=12,
-                macd_slow=26,
-                macd_signal=9,
-            ),
-        )
-        rows = _attach_indicator_trade_levels(rows, rr_ratio=rr_ratio, trailing_sl_pct=trailing_sl_pct)
-        rows = [_enrich_trade_row(dict(r, strategy="Indicator", symbol=symbol), latest_spot_ltp) for r in rows]
-
-        actionable = [r for r in rows if str(r.get("side")) in {"BUY", "SELL"} and r.get("entry_price")]
-        if actionable:
-            actionable = attach_option_strikes(actionable, strike_step=int(strike_step), moneyness=str(moneyness), steps=int(strike_steps))
-            for r in actionable:
-                strike = int(r.get("strike_price") or 0)
-                opt = str(r.get("option_type") or "")
-                metrics = metrics_map.get((strike, opt))
-                if isinstance(metrics, dict):
-                    r.update(metrics)
-                    if metrics.get("option_expiry"):
-                        r["option_expiry_source"] = "NSE"
-
-                if not r.get("option_expiry") and r.get("option_strike"):
-                    est = _estimate_weekly_expiry(symbol)
-                    if est:
-                        r["option_expiry"] = est
-                        r["option_expiry_source"] = "EST"
-
-                if "option_expiry" in r:
-                    r["option_expiry"] = _format_expiry(r.get("option_expiry"))
-
-            last_actionable = actionable[-1]
-            for i in range(len(rows) - 1, -1, -1):
-                if str(rows[i].get("timestamp")) == str(last_actionable.get("timestamp")):
-                    rows[i].update(last_actionable)
-                    break
-
-        return rows[-200:]
-
-    if strategy == "One Trade/Day":
-        candle_list = _df_to_candles(candles)
-        trades = call_strategy_function(generate_one_trade_day_trades, candle_list, **strategy_kwargs)
-    elif strategy == "Breakout":
-        candle_list = _df_to_candles(candles)
-        trades = call_strategy_function(generate_breakout_trades, candle_list, **strategy_kwargs)
-    elif strategy == "MTF 5m":
-        candle_list = _df_to_candles(candles)
-        trades = call_strategy_function(generate_mtf_trade_trades, candle_list, **strategy_kwargs)
-    else:
-        trades = []
-
-    out_rows: list[dict[str, object]] = []
-    for t in trades or []:
-        if not isinstance(t, dict):
-            continue
-        row = dict(t)
-        row.setdefault("strategy", strategy)
-        row.setdefault("symbol", symbol)
-
-        if "timestamp" not in row:
-            if "entry_time" in row:
-                row["timestamp"] = str(row.get("entry_time"))
-            elif "time" in row:
-                row["timestamp"] = str(row.get("time"))
-
-        if "target" in row and "target_price" not in row:
-            row["target_price"] = row.get("target")
-
-        if "entry_price" in row and "side" in row:
-            try:
-                annotated = attach_option_strikes([row], strike_step=int(strike_step), moneyness=str(moneyness), steps=int(strike_steps))
-                row = annotated[0]
-                strike = int(row.get("strike_price") or 0)
-                opt = str(row.get("option_type") or "")
-                metrics = metrics_map.get((strike, opt))
-                if isinstance(metrics, dict):
-                    row.update(metrics)
-                    if metrics.get("option_expiry"):
-                        row["option_expiry_source"] = "NSE"
-
-                if not row.get("option_expiry") and row.get("option_strike"):
-                    est = _estimate_weekly_expiry(symbol)
-                    if est:
-                        row["option_expiry"] = est
-                        row["option_expiry_source"] = "EST"
-
-                if "option_expiry" in row:
-                    row["option_expiry"] = _format_expiry(row.get("option_expiry"))
-            except Exception:
-                pass
-
-        out_rows.append(_enrich_trade_row(row, latest_spot_ltp))
-
-    return out_rows
-
-
-def _resolve_live_execution_kwargs(security_map_path: str) -> dict[str, object]:
-    broker_name = "DHAN"
-    raw_path = str(security_map_path or "data/dhan_security_map.csv").strip() or "data/dhan_security_map.csv"
-    security_map: dict[str, dict[str, str]] | None = None
-    if load_security_map is not None:
-        try:
-            security_map = load_security_map(Path(raw_path))
-        except Exception:
-            security_map = None
-    return {
-        "broker_name": broker_name,
-        "security_map": security_map,
-    }
-
-
-def _render_live_execution_feedback(rows: list[dict[str, object]]) -> None:
-    if not rows:
-        return
-    broker_sent = sum(1 for r in rows if str(r.get("broker_status", "")).upper() not in {"", "ERROR", "NOT_CONFIGURED"})
-    broker_error = sum(1 for r in rows if str(r.get("broker_status", "")).upper() == "ERROR")
-    broker_not_configured = sum(1 for r in rows if str(r.get("broker_status", "")).upper() == "NOT_CONFIGURED")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Broker Sent", broker_sent)
-    c2.metric("Broker Errors", broker_error)
-    c3.metric("Not Configured", broker_not_configured)
-
-
-def _build_dhan_preview_rows(candidates: list[dict[str, object]], security_map_path: str) -> list[dict[str, object]]:
-    if build_order_request_from_candidate is None:
-        return [{"preview_status": "ERROR", "preview_error": "Dhan payload builder unavailable."}]
-
-    resolved = _resolve_live_execution_kwargs(security_map_path)
-    security_map = resolved.get("security_map")
-    client_id = os.getenv("DHAN_CLIENT_ID", "").strip() or "PREVIEW_CLIENT"
-    previews: list[dict[str, object]] = []
-
-    for candidate in candidates:
-        if str(candidate.get("side", "")).upper() not in {"BUY", "SELL"}:
-            continue
-        try:
-            request = build_order_request_from_candidate(
-                candidate,
-                client_id=client_id,
-                security_map=security_map,  # type: ignore[arg-type]
-            )
-            payload = request.to_payload()
-            payload["preview_status"] = "READY" if os.getenv("DHAN_CLIENT_ID", "").strip() else "CLIENT_ID_MISSING"
-            previews.append(payload)
-        except Exception as exc:
-            previews.append(
-                {
-                    "symbol": candidate.get("symbol", ""),
-                    "side": candidate.get("side", ""),
-                    "signal_time": candidate.get("signal_time", candidate.get("entry_time", "")),
-                    "preview_status": "ERROR",
-                    "preview_error": str(exc),
-                }
-            )
-    return previews
-
-
-def _run_dhan_readiness_check(symbol: str, security_map_path: str) -> list[str]:
-    notes: list[str] = []
-    client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
-    access_token = os.getenv("DHAN_ACCESS_TOKEN", "").strip()
-    if client_id:
-        notes.append("PASS: DHAN_CLIENT_ID is configured.")
-    else:
-        notes.append("FAIL: DHAN_CLIENT_ID is missing.")
-    if access_token:
-        notes.append("PASS: DHAN_ACCESS_TOKEN is configured.")
-    else:
-        notes.append("FAIL: DHAN_ACCESS_TOKEN is missing.")
-    raw_path = str(security_map_path or "data/dhan_security_map.csv").strip() or "data/dhan_security_map.csv"
-    map_path = Path(raw_path)
-    if not map_path.exists():
-        notes.append(f"FAIL: Security map not found at {raw_path}.")
-        return notes
-    notes.append(f"PASS: Security map found at {raw_path}.")
-    if load_security_map is None:
-        notes.append("FAIL: Security map loader is unavailable.")
-        return notes
-    try:
-        security_map = load_security_map(map_path)
-    except Exception as exc:
-        notes.append(f"FAIL: Could not load security map: {exc}")
-        return notes
-    notes.append(f"PASS: Loaded {len(security_map)} security-map keys.")
-    normalized_symbol = (normalize_index_symbol(symbol) if normalize_index_symbol else str(symbol)).strip().upper().replace("^", "")
-    symbol_matches = [k for k in security_map.keys() if normalized_symbol in k or k in {normalized_symbol, f"{normalized_symbol}FUT"}]
-    if symbol_matches:
-        notes.append(f"PASS: Found symbol coverage for {normalized_symbol}: {", ".join(symbol_matches[:5])}")
-    else:
-        notes.append(f"WARN: No direct security-map match found for {normalized_symbol}. Live orders may fail until security IDs are added.")
-    notes.append("INFO: Dhan live order APIs also require whitelisted static IPs in Dhan settings.")
-    return notes
+    st.markdown(text, unsafe_allow_html=True)
 
 
 def main() -> None:
     _render_sidebar_shell()
-    st.sidebar.markdown(
+    st.markdown(
         """
-        <div class="live-panel">
+        <div class="live-panel" style="margin-bottom:12px;">
             <div class="live-kicker">Execution Console</div>
             <div class="live-title">Dhan Live Desk</div>
-            <div class="live-sub">Clean order-ticket controls for live review, routing, and signal execution.</div>
+            <div class="live-sub">Main-page workspace for routing, strategy analysis, and live execution controls.</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    _sidebar_section("Live Ticket", "Only the inputs needed for signal generation and order routing")
-    symbol = st.sidebar.text_input("Symbol", "^NSEI")
-    strategy = st.sidebar.pills("Strategy", ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"], default="Breakout")
-    execution_mode = st.sidebar.segmented_control("Execution mode", ["PAPER", "LIVE"], default="PAPER")
-    interval = st.sidebar.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default="1m")
-    period = st.sidebar.segmented_control("Period", ["1d", "5d", "1mo", "3mo"], default="1d")
+    workspace = st.segmented_control(
+        "Workspace",
+        ["Desk", "Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"],
+        default="Desk",
+    )
+    strategy = "Breakout"
+    if workspace == "Desk":
+        strategy = st.segmented_control(
+            "Active strategy",
+            ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"],
+            default="Breakout",
+        )
+    else:
+        strategy = str(workspace)
 
-    _sidebar_section("Order Setup", "Contract type and quantity")
-    instrument_mode = st.sidebar.segmented_control("Instrument", ["Options", "Futures"], default="Options")
-    lot_size = st.sidebar.number_input("Lot size", min_value=1, value=65, step=1)
-    lots = st.sidebar.slider("Lots", 1, 10, 2)
+    st.markdown('<div class="section-shell">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading">Trading Controls</div><div class="section-copy">All required inputs are on the main page. Strategy-specific inputs appear only for the selected workspace.</div>', unsafe_allow_html=True)
+
+    row1 = st.columns([1.25, 1, 1, 1, 1])
+    with row1[0]:
+        symbol = st.text_input("Symbol", "^NSEI")
+    with row1[1]:
+        interval = st.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default="1m")
+    with row1[2]:
+        period = st.segmented_control("Period", ["1d", "5d", "1mo", "3mo"], default="1d")
+    with row1[3]:
+        execution_mode = st.segmented_control("Execution mode", ["PAPER", "LIVE"], default="PAPER")
+    with row1[4]:
+        instrument_mode = st.segmented_control("Instrument", ["Options", "Futures"], default="Options")
+
+    row2 = st.columns([1, 1, 1, 1, 1, 1])
+    with row2[0]:
+        lot_size = st.number_input("Lot size", min_value=1, value=65, step=1)
+    with row2[1]:
+        lots = st.slider("Lots", 1, 10, 2)
+    with row2[2]:
+        capital = st.number_input("Capital (INR)", min_value=1000, value=100000, step=1000)
+    with row2[3]:
+        risk_pct = st.slider("Risk per trade (%)", 0.1, 10.0, 1.0)
+    with row2[4]:
+        rr_ratio = st.slider("Risk / Reward", 1.0, 10.0, 2.0)
+    with row2[5]:
+        trailing_sl_pct = st.slider("Trailing stop loss %", 0.1, 10.0, 1.0, 0.1)
 
     strike_step = 50
     moneyness = "ATM"
     strike_steps = 0
     fetch_option_metrics = False
     if instrument_mode == "Options":
-        with st.sidebar.expander("Option contract details"):
+        st.markdown('<div class="section-copy" style="margin-top:8px;">Option contract controls</div>', unsafe_allow_html=True)
+        option_cols = st.columns([1, 1, 1, 1])
+        with option_cols[0]:
             strike_step = int(st.segmented_control("Strike step", [25, 50, 100], default=50))
-            moneyness = st.pills("Moneyness", ["ATM", "ITM", "OTM"], default="ATM")
+        with option_cols[1]:
+            moneyness = st.segmented_control("Moneyness", ["ATM", "ITM", "OTM"], default="ATM")
+        with option_cols[2]:
             strike_steps = st.slider("ITM / OTM steps", 0, 5, 0)
+        with option_cols[3]:
             fetch_option_metrics = st.checkbox("Fetch option chain metrics", value=False)
     else:
-        st.sidebar.caption("Futures mode uses the monthly futures contract automatically.")
+        st.caption("Futures mode uses the monthly futures contract automatically.")
 
     mtf_ema_period = 3
     mtf_setup_mode = "either"
     mtf_retest_strength = True
     mtf_max_trades_per_day = 3
     if strategy == "MTF 5m":
-        with st.sidebar.expander("MTF strategy controls"):
+        st.markdown('<div class="section-copy" style="margin-top:8px;">MTF 5m controls</div>', unsafe_allow_html=True)
+        mtf_cols = st.columns([1, 1, 1, 1])
+        with mtf_cols[0]:
             mtf_ema_period = int(st.number_input("EMA period (1h)", min_value=2, max_value=20, value=3, step=1))
+        with mtf_cols[1]:
             mtf_setup_label = st.segmented_control("15m setup filter", ["Either", "BOS only", "FVG only"], default="Either")
             mtf_setup_mode = {"Either": "either", "BOS only": "bos", "FVG only": "fvg"}[str(mtf_setup_label)]
+        with mtf_cols[2]:
             mtf_retest_strength = st.checkbox("Require strong 5m retest candle", value=True)
+        with mtf_cols[3]:
             mtf_max_trades_per_day = int(st.segmented_control("Max trades/day", [1, 2, 3], default=3))
 
-    capital = 100000
-    risk_pct = 1.0
-    rr_ratio = 2.0
-    trailing_sl_pct = 1.0
     live_update = False
     refresh_seconds = 10
     send_telegram = False
     auto_execute_generated = False
-    with st.sidebar.expander("Advanced controls"):
-        capital = st.number_input("Capital (INR)", min_value=1000, value=100000, step=1000)
-        risk_pct = st.slider("Risk per trade (%)", 0.1, 10.0, 1.0)
-        rr_ratio = st.slider("Risk / Reward", 1.0, 10.0, 2.0)
-        trailing_sl_pct = st.slider("Trailing stop loss %", 0.1, 10.0, 1.0, 0.1)
-        live_update = st.checkbox("Auto refresh", value=False)
-        refresh_seconds = st.slider("Refresh every (seconds)", 2, 120, 10)
-        send_telegram = st.checkbox("Send Telegram alert", value=False)
-        auto_execute_generated = st.checkbox("Auto execute generated trades", value=False)
+    with st.expander("Advanced execution controls", expanded=False):
+        adv_cols = st.columns([1, 1, 1, 1])
+        with adv_cols[0]:
+            live_update = st.checkbox("Auto refresh", value=False)
+        with adv_cols[1]:
+            refresh_seconds = st.slider("Refresh every (seconds)", 2, 120, 10)
+        with adv_cols[2]:
+            send_telegram = st.checkbox("Send Telegram alert", value=False)
+        with adv_cols[3]:
+            auto_execute_generated = st.checkbox("Auto execute generated trades", value=False)
 
+    dhan_client_id = ""
+    dhan_token_present = False
     dhan_security_map_path = "data/dhan_security_map.csv"
     if execution_mode == "LIVE":
-        _sidebar_section("Dhan Routing", "Credentials come from the root .env file")
+        st.markdown('<div class="section-copy" style="margin-top:8px;">Dhan live routing</div>', unsafe_allow_html=True)
         dhan_client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
         dhan_token_present = bool(os.getenv("DHAN_ACCESS_TOKEN", "").strip())
-        if dhan_client_id and dhan_token_present:
-            st.sidebar.success("Dhan credentials detected from .env")
-        else:
-            st.sidebar.warning("Add DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN to .env before sending live orders")
-        dhan_security_map_path = st.sidebar.text_input("Security map path", value="data/dhan_security_map.csv")
-        if st.sidebar.button("Check Dhan Live Ready", use_container_width=True):
-            readiness_notes = _run_dhan_readiness_check(symbol, dhan_security_map_path)
-            for note in readiness_notes:
-                if note.startswith("FAIL"):
-                    st.sidebar.error(note)
-                elif note.startswith("WARN"):
-                    st.sidebar.warning(note)
-                elif note.startswith("PASS"):
-                    st.sidebar.success(note)
-                else:
-                    st.sidebar.info(note)
+        route_cols = st.columns([1.4, 1, 1])
+        with route_cols[0]:
+            dhan_security_map_path = st.text_input("Security map path", value="data/dhan_security_map.csv")
+        with route_cols[1]:
+            if dhan_client_id and dhan_token_present:
+                st.success("Dhan credentials detected")
+            else:
+                st.warning("Add Dhan credentials to .env")
+        with route_cols[2]:
+            if st.button("Check Dhan Live Ready", use_container_width=True):
+                readiness_notes = _run_dhan_readiness_check(symbol, dhan_security_map_path)
+                for note in readiness_notes:
+                    if note.startswith("FAIL"):
+                        st.error(note)
+                    elif note.startswith("WARN"):
+                        st.warning(note)
+                    elif note.startswith("PASS"):
+                        st.success(note)
+                    else:
+                        st.info(note)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
     if live_update:
         components.html(
             f"""<script>
@@ -2035,6 +1396,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 

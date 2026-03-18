@@ -371,12 +371,60 @@ def _render_sidebar_shell() -> None:
             box-shadow: 0 20px 40px rgba(2, 6, 23, 0.24);
         }
         .section-shell {
-            background: linear-gradient(180deg, rgba(15,23,42,0.76), rgba(8,15,28,0.84));
-            border: 1px solid rgba(148, 163, 184, 0.10);
+            background: linear-gradient(180deg, rgba(15,23,42,0.82), rgba(8,15,28,0.90));
+            border: 1px solid rgba(148, 163, 184, 0.12);
+            border-radius: 22px;
+            padding: 16px 18px;
+            margin-bottom: 16px;
+            box-shadow: 0 20px 38px rgba(2, 6, 23, 0.20);
+        }
+        .live-panel {
+            background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(8,15,28,0.96));
+            border: 1px solid rgba(56, 189, 248, 0.18);
+            border-radius: 22px;
+            padding: 18px 20px;
+            margin-bottom: 12px;
+            box-shadow: 0 20px 42px rgba(2, 6, 23, 0.24);
+        }
+        .live-kicker {
+            color: #7dd3fc;
+            font-size: 11px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            font-weight: 700;
+        }
+        .live-title {
+            color: #f8fafc;
+            font-size: 30px;
+            font-weight: 800;
+            line-height: 1.05;
+            margin-bottom: 8px;
+        }
+        .live-sub {
+            color: #94a3b8;
+            font-size: 14px;
+            line-height: 1.5;
+            max-width: 760px;
+        }
+        .control-ribbon {
+            background: linear-gradient(180deg, rgba(12,32,57,0.90), rgba(9,24,44,0.96));
+            border: 1px solid rgba(118, 164, 210, 0.16);
             border-radius: 20px;
-            padding: 10px 12px;
+            padding: 14px 16px 8px 16px;
             margin-bottom: 14px;
-            box-shadow: 0 18px 34px rgba(2, 6, 23, 0.18);
+            box-shadow: 0 18px 34px rgba(2, 12, 27, 0.18);
+        }
+        .control-ribbon-title {
+            color: #f8fafc;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .control-ribbon-copy {
+            color: #94a3b8;
+            font-size: 13px;
+            margin-bottom: 10px;
         }
         [data-testid="stSidebar"] {
             display: none;
@@ -1073,54 +1121,12 @@ def _render_capability_band(
         unsafe_allow_html=True,
     )
 
-def _render_dhan_feature_sections(
-    symbol: str,
-    strategy: str,
-    execution_mode: str,
-    account_status: str,
-    signal_count: int,
-    auto_execute: bool,
-) -> None:
-    auto_text = "Auto execution enabled" if auto_execute else "Manual review before send"
-    st.markdown(
-        f"""
-        <div class="section-shell" style="margin-bottom:14px;">
-            <div class="section-heading">Experience the True Potential of Charts</div>
-            <div class="section-copy">Chart-first execution inspired by Dhan's TradingView connect flow, mapped to your live KRSH SOLUTIONS data.</div>
-            <div class="hero-chip-row">
-                <div class="hero-chip"><div class="hero-chip-label">Live Signals</div><div class="hero-chip-meta">{int(signal_count)} setups from {strategy}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Paper & Live</div><div class="hero-chip-meta">Current mode: {execution_mode}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Routing Status</div><div class="hero-chip-meta">{account_status}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Execution Style</div><div class="hero-chip-meta">{auto_text}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Instrument Focus</div><div class="hero-chip-meta">{symbol}</div></div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
-    step_cols = st.columns(3)
-    step_data = [
-        ("1. Prepare Your Desk", "Choose symbol, strategy, timeframe, and execution mode before routing orders."),
-        ("2. Review Signals on Charts", "Use dashboard, charts, and candidate previews to validate setups before execution."),
-        ("3. Authorize and Execute", "Send reviewed trades to paper logs or Dhan live routing only when ready."),
-    ]
-    for col, (title, body) in zip(step_cols, step_data):
-        with col:
-            st.markdown(
-                f"""
-                <div class="section-shell" style="min-height:170px; margin-bottom:14px;">
-                    <div class="section-heading" style="font-size:18px;">{title}</div>
-                    <div class="section-copy" style="font-size:14px; line-height:1.6; margin-bottom:0;">{body}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
 def main() -> None:
     _render_sidebar_shell()
     st.markdown(
         """
-        <div class="live-panel" style="margin-bottom:12px;">
+        <div class="live-panel">
             <div class="live-kicker">KRSH SOLUTIONS</div>
             <div class="live-title">Market Intelligence Desk</div>
             <div class="live-sub">Main-page workspace for routing, strategy analysis, and live execution controls.</div>
@@ -1129,20 +1135,25 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    workspace = st.segmented_control(
-        "Workspace",
-        ["Desk", "Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"],
-        default="Desk",
-    )
-    strategy = "Breakout"
-    if workspace == "Desk":
-        strategy = st.segmented_control(
-            "Active strategy",
-            ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"],
-            default="Breakout",
+    st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Desk Controls</div><div class="control-ribbon-copy">Keep the hero section, but drive the workspace from this compact Dhan-style utility bar.</div></div>', unsafe_allow_html=True)
+
+    ribbon_left, ribbon_right = st.columns([1.15, 1])
+    with ribbon_left:
+        workspace = st.segmented_control(
+            "Workspace",
+            ["Desk", "Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"],
+            default="Desk",
         )
-    else:
-        strategy = str(workspace)
+    strategy = "Breakout"
+    with ribbon_right:
+        if workspace == "Desk":
+            strategy = st.segmented_control(
+                "Active strategy",
+                ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"],
+                default="Breakout",
+            )
+        else:
+            strategy = str(workspace)
 
     st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
     st.markdown('<div class="section-heading">Trading Controls</div><div class="section-copy">A cleaner control deck inspired by product cards. Configure the market, size the trade, then unlock routing.</div>', unsafe_allow_html=True)
@@ -1633,6 +1644,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

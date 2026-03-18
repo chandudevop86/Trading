@@ -771,7 +771,7 @@ def _render_sidebar_shell() -> None:
             background: linear-gradient(180deg, #050505 0%, #090909 100%);
             border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: 0;
-            padding: 18px 22px 28px 22px;
+            padding: 24px 28px 30px 28px;
             margin-bottom: 14px;
             box-shadow: 0 24px 50px rgba(0, 0, 0, 0.34);
             overflow: hidden;
@@ -787,33 +787,33 @@ def _render_sidebar_shell() -> None:
             display: grid;
             grid-template-columns: auto 1fr auto auto auto;
             align-items: center;
-            gap: 18px;
+            gap: 24px;
             background: #050505;
             border: none;
             border-radius: 0;
-            padding: 4px 0 14px 0;
-            margin-bottom: 12px;
+            padding: 8px 0 18px 0;
+            margin-bottom: 14px;
             backdrop-filter: none;
         }
         .top-nav-brand {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             color: #ffffff;
-            font-size: 18px;
+            font-size: 24px;
             font-weight: 800;
             letter-spacing: 0;
         }
         .top-nav-logo {
-            width: 28px;
-            height: 28px;
+            width: 36px;
+            height: 36px;
             border-radius: 999px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             background: #1fba81;
             color: #ffffff;
-            font-size: 14px;
+            font-size: 17px;
             font-weight: 900;
             box-shadow: none;
         }
@@ -822,11 +822,11 @@ def _render_sidebar_shell() -> None:
         }
         .top-nav-menu {
             display: flex;
-            gap: 18px;
+            gap: 28px;
             align-items: center;
             flex-wrap: wrap;
             color: rgba(255,255,255,0.72);
-            font-size: 14px;
+            font-size: 17px;
             font-weight: 700;
         }
         .top-nav-pill {
@@ -836,7 +836,7 @@ def _render_sidebar_shell() -> None:
             background: transparent;
             border: none;
             color: rgba(255,255,255,0.74);
-            font-size: 14px;
+            font-size: 17px;
             font-weight: 700;
             line-height: 1.2;
         }
@@ -849,13 +849,13 @@ def _render_sidebar_shell() -> None:
             margin-top: 0;
         }
         .top-nav-search {
-            min-width: 250px;
+            min-width: 320px;
             border-radius: 14px;
             background: #171717;
             border: 1px solid rgba(255,255,255,0.08);
             color: rgba(255,255,255,0.72);
-            padding: 14px 18px;
-            font-size: 14px;
+            padding: 15px 18px;
+            font-size: 15px;
             font-weight: 700;
         }
         .top-nav-secondary {
@@ -863,37 +863,37 @@ def _render_sidebar_shell() -> None:
             border: 1px solid rgba(255,255,255,0.14);
             color: #ffffff;
             background: transparent;
-            padding: 13px 18px;
-            font-size: 14px;
+            padding: 14px 22px;
+            font-size: 15px;
             font-weight: 700;
         }
         .top-nav-cta {
             background: #f7a600;
             color: #101010;
             border-radius: 14px;
-            padding: 14px 18px;
-            font-size: 14px;
+            padding: 15px 22px;
+            font-size: 15px;
             font-weight: 800;
             letter-spacing: 0;
         }
         .mega-panel {
             position: relative;
             z-index: 2;
-            max-width: 820px;
+            max-width: 980px;
             background: #ffffff;
             color: #111827;
             border-radius: 22px;
-            padding: 26px 28px;
+            padding: 30px 34px;
             box-shadow: 0 28px 50px rgba(0,0,0,0.28);
-            margin: 6px 0 18px 28px;
+            margin: 8px 0 26px 34px;
         }
         .mega-panel::before {
             content: "";
             position: absolute;
             top: -14px;
-            left: 190px;
-            width: 26px;
-            height: 26px;
+            left: 220px;
+            width: 28px;
+            height: 28px;
             background: #ffffff;
             transform: rotate(45deg);
             border-radius: 4px;
@@ -901,22 +901,22 @@ def _render_sidebar_shell() -> None:
         .mega-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 22px 30px;
+            gap: 28px 36px;
         }
         .mega-item {
             display: grid;
-            grid-template-columns: 42px 1fr;
-            gap: 16px;
+            grid-template-columns: 50px 1fr;
+            gap: 18px;
             align-items: start;
         }
         .mega-icon {
-            width: 42px;
-            height: 42px;
-            border-radius: 14px;
+            width: 50px;
+            height: 50px;
+            border-radius: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
+            font-size: 20px;
             font-weight: 800;
             color: #ffffff;
             background: linear-gradient(135deg, #14b87a 0%, #0f9f6c 100%);
@@ -932,22 +932,23 @@ def _render_sidebar_shell() -> None:
         }
         .mega-title {
             color: #121826;
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 800;
-            margin-bottom: 2px;
+            margin-bottom: 4px;
         }
         .mega-copy {
             color: #6b7280;
-            font-size: 13px;
-            line-height: 1.45;
+            font-size: 14px;
+            line-height: 1.55;
         }
         .masthead-grid {
             position: relative;
             z-index: 2;
             display: grid;
-            grid-template-columns: minmax(360px, 1.05fr) minmax(300px, 0.95fr);
-            gap: 20px;
-            align-items: stretch;
+            grid-template-columns: minmax(420px, 1.05fr) minmax(380px, 0.95fr);
+            gap: 32px;
+            align-items: end;
+            padding: 8px 8px 0 8px;
         }
         .page-eyebrow {
             color: #88bfff;
@@ -958,21 +959,21 @@ def _render_sidebar_shell() -> None:
         }
         .page-title {
             color: #ffffff;
-            font-size: 62px;
+            font-size: 74px;
             font-weight: 900;
-            line-height: 0.96;
+            line-height: 0.94;
             margin: 0;
-            max-width: 560px;
+            max-width: 620px;
         }
         .page-title .accent {
             color: #ffffff;
         }
         .page-subtitle {
             color: #dbe7f8;
-            font-size: 18px;
-            line-height: 1.55;
-            margin-top: 18px;
-            max-width: 520px;
+            font-size: 19px;
+            line-height: 1.65;
+            margin-top: 22px;
+            max-width: 560px;
         }
         .page-badge {
             position: absolute;
@@ -991,27 +992,27 @@ def _render_sidebar_shell() -> None:
             display: none;
         }
         .hero-search {
-            margin-top: 18px;
-            max-width: 430px;
-            border-radius: 16px;
+            margin-top: 24px;
+            max-width: 520px;
+            border-radius: 18px;
             background: #ffffff;
             color: #4b5563;
-            padding: 14px 18px;
-            font-size: 15px;
+            padding: 16px 20px;
+            font-size: 16px;
             font-weight: 700;
             box-shadow: none;
             border: 1px solid rgba(0,0,0,0.08);
         }
         .hero-chip-row {
             display: flex;
-            gap: 12px;
+            gap: 14px;
             flex-wrap: wrap;
-            margin-top: 18px;
+            margin-top: 22px;
         }
         .hero-chip {
-            min-width: 118px;
-            border-radius: 14px;
-            padding: 12px 14px;
+            min-width: 132px;
+            border-radius: 16px;
+            padding: 14px 16px;
             background: rgba(255, 255, 255, 0.06);
             border: 1px solid rgba(255,255,255,0.10);
             box-shadow: none;
@@ -1028,30 +1029,131 @@ def _render_sidebar_shell() -> None:
         }
         .hero-visual {
             position: relative;
-            min-height: 320px;
-            border-radius: 22px;
-            background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+            min-height: 430px;
+            border-radius: 24px;
+            background: radial-gradient(circle at 18% 18%, rgba(76, 180, 255, 0.20), transparent 22%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
             border: 1px solid rgba(255,255,255,0.08);
             overflow: hidden;
+            padding: 28px;
         }
         .hero-visual::before {
             content: "";
             position: absolute;
-            inset: auto 18px 24px 18px;
-            height: 120px;
-            border-radius: 16px;
-            background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+            inset: auto 22px 26px 22px;
+            height: 132px;
+            border-radius: 18px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
             border: 1px solid rgba(255,255,255,0.06);
         }
         .hero-visual::after {
             content: "KRSH SOLUTIONS";
             position: absolute;
-            top: 24px;
-            left: 24px;
+            top: 28px;
+            left: 28px;
             color: rgba(255,255,255,0.92);
-            font-size: 28px;
+            font-size: 30px;
             font-weight: 800;
             letter-spacing: 0.02em;
+        }
+        .hero-orb {
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(10px);
+            opacity: 0.85;
+        }
+        .hero-orb-one {
+            width: 160px;
+            height: 160px;
+            right: 40px;
+            top: 54px;
+            background: radial-gradient(circle, rgba(255,193,92,0.85) 0%, rgba(255,193,92,0.08) 72%);
+        }
+        .hero-orb-two {
+            width: 190px;
+            height: 190px;
+            right: 110px;
+            bottom: 90px;
+            background: radial-gradient(circle, rgba(53,168,255,0.55) 0%, rgba(53,168,255,0.06) 72%);
+        }
+        .hero-curve {
+            position: absolute;
+            border-top: 3px solid;
+            border-radius: 999px;
+            opacity: 0.95;
+        }
+        .hero-curve-one {
+            right: -8px;
+            top: 110px;
+            width: 340px;
+            height: 180px;
+            border-color: rgba(43, 170, 255, 0.72);
+            transform: rotate(-4deg);
+        }
+        .hero-curve-two {
+            right: 34px;
+            top: 150px;
+            width: 300px;
+            height: 170px;
+            border-color: rgba(102, 222, 255, 0.44);
+            transform: rotate(8deg);
+        }
+        .hero-curve-three {
+            right: 76px;
+            top: 208px;
+            width: 240px;
+            height: 120px;
+            border-color: rgba(110, 103, 255, 0.45);
+            transform: rotate(-12deg);
+        }
+        .hero-preview-card {
+            position: absolute;
+            left: 28px;
+            right: 28px;
+            bottom: 28px;
+            z-index: 2;
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 16px;
+            align-items: center;
+            padding: 18px 20px;
+            background: linear-gradient(180deg, rgba(19,19,19,0.90), rgba(19,19,19,0.82));
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 18px;
+        }
+        .hero-preview-copy {
+            color: rgba(255,255,255,0.78);
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 290px;
+        }
+        .hero-preview-title {
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: 800;
+            margin-bottom: 6px;
+        }
+        .hero-preview-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .hero-preview-metric {
+            border-radius: 14px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 12px 14px;
+        }
+        .hero-preview-label {
+            color: rgba(255,255,255,0.62);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .hero-preview-value {
+            color: #ffffff;
+            font-size: 15px;
+            font-weight: 800;
+            margin-top: 4px;
         }
         .hero-strip,
         .hero-strip.hero-bull,
@@ -1173,6 +1275,23 @@ def _render_page_masthead(
                     </div>
                 </div>
                 <div class="hero-visual">
+                    <div class="hero-orb hero-orb-one"></div>
+                    <div class="hero-orb hero-orb-two"></div>
+                    <div class="hero-curve hero-curve-one"></div>
+                    <div class="hero-curve hero-curve-two"></div>
+                    <div class="hero-curve hero-curve-three"></div>
+                    <div class="hero-preview-card">
+                        <div>
+                            <div class="hero-preview-title">Live Market Routing</div>
+                            <div class="hero-preview-copy">Connect chart-driven setups, review execution state, and move from signal confirmation to broker action with a tighter live desk layout.</div>
+                        </div>
+                        <div class="hero-preview-metrics">
+                            <div class="hero-preview-metric"><div class="hero-preview-label">Strategy</div><div class="hero-preview-value">{strategy}</div></div>
+                            <div class="hero-preview-metric"><div class="hero-preview-label">Mode</div><div class="hero-preview-value">{execution_mode}</div></div>
+                            <div class="hero-preview-metric"><div class="hero-preview-label">Signal</div><div class="hero-preview-value">{signal_text}</div></div>
+                            <div class="hero-preview-metric"><div class="hero-preview-label">Account</div><div class="hero-preview-value">{account_status}</div></div>
+                        </div>
+                    </div>
                     <div class="page-badge">{strategy}<br>{execution_mode}<br>{auto_text}<br>{account_status}</div>
                 </div>
             </div>
@@ -1868,6 +1987,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 

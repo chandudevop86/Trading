@@ -201,6 +201,114 @@ def _order_trade_columns(df: pd.DataFrame) -> pd.DataFrame:
     ordered.extend([c for c in df.columns if c not in ordered])
     return df.loc[:, ordered]
 
+
+def attach_futures_contracts(trades: list[dict[str, object]], symbol: str) -> list[dict[str, object]]:
+    annotated: list[dict[str, object]] = []
+    future_symbol = f"{str(symbol).strip().upper()} FUT".strip()
+    for trade in trades:
+        row = dict(trade)
+        row["instrument_mode"] = "Futures"
+        row["trading_symbol"] = future_symbol
+        row.setdefault("option_strike", future_symbol)
+        annotated.append(row)
+    return annotated
+
+def send_signal_alert(row: dict[str, object], *, strategy: str, symbol: str, refresh_seconds: int) -> None:
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    try:
+        payload = dict(row)
+        payload.setdefault("strategy", strategy)
+        payload.setdefault("symbol", symbol)
+        payload.setdefault("refresh_seconds", refresh_seconds)
+        summary = build_trade_summary([payload])
+        send_telegram_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, summary)
+    except Exception:
+        return
+
+def _resolve_live_execution_kwargs(security_map_path: str) -> dict[str, object]:
+    security_map: dict[str, dict[str, str]] = {}
+    if load_security_map is not None:
+        try:
+            security_map = load_security_map(Path(str(security_map_path)))
+        except Exception:
+            security_map = {}
+    return {"broker_name": "DHAN", "security_map": security_map}
+
+def _build_dhan_preview_rows(candidates: list[dict[str, object]], security_map_path: str) -> list[dict[str, object]]:
+    if build_order_request_from_candidate is None or load_security_map is None:
+        return [{"status": "Broker payload builder unavailable"}]
+    try:
+        security_map = load_security_map(Path(str(security_map_path)))
+    except Exception as exc:
+        return [{"status": f"Security map load failed: {exc}"}]
+    preview_rows: list[dict[str, object]] = []
+    client_id = os.getenv("DHAN_CLIENT_ID", "")
+    for candidate in candidates:
+        try:
+            order_request = build_order_request_from_candidate(candidate, client_id=client_id, security_map=security_map)
+            preview_rows.append({"status": "READY", **order_request.to_payload()})
+        except Exception as exc:
+            preview_rows.append({"status": "ERROR", "symbol": candidate.get("symbol", ""), "side": candidate.get("side", ""), "message": str(exc)})
+    return preview_rows
+
+def _run_dhan_readiness_check(symbol: str, security_map_path: str) -> list[str]:
+    notes: list[str] = []
+    notes.append("PASS client id detected" if os.getenv("DHAN_CLIENT_ID", "").strip() else "FAIL missing DHAN_CLIENT_ID")
+    notes.append("PASS access token detected" if os.getenv("DHAN_ACCESS_TOKEN", "").strip() else "FAIL missing DHAN_ACCESS_TOKEN")
+    path = Path(str(security_map_path))
+    notes.append(f"PASS security map found: {path}" if path.exists() else f"WARN security map missing: {path}")
+    notes.append(f"INFO live symbol context: {symbol}")
+    return notes
+
+def _render_live_execution_feedback(rows: list[dict[str, object]]) -> None:
+    if not rows:
+        return
+    st.markdown('<div class="section-shell" style="margin-top:12px;">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading">Live Execution Feedback</div><div class="section-copy">Latest broker-side execution rows from this run.</div>', unsafe_allow_html=True)
+    st.dataframe(_order_trade_columns(pd.DataFrame(rows)), use_container_width=True, height=220)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+def run_strategy(*, strategy: str, candles: pd.DataFrame, capital: float, risk_pct: float, rr_ratio: float, trailing_sl_pct: float, symbol: str, strike_step: int, moneyness: str, strike_steps: int, fetch_option_metrics: bool, mtf_ema_period: int, mtf_setup_mode: str, mtf_retest_strength: bool, mtf_max_trades_per_day: int) -> list[dict[str, object]]:
+    candle_rows = _df_to_candles(candles)
+    strategy_name = str(strategy or "Breakout").strip()
+    risk_fraction = float(risk_pct) / 100.0
+    rows: list[dict[str, object]] = []
+    if strategy_name == "Breakout":
+        rows = generate_breakout_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct))
+    elif strategy_name == "Demand Supply":
+        rows = generate_demand_supply_trades(candles) if generate_demand_supply_trades is not None else []
+    elif strategy_name == "Indicator":
+        indicator_rows = generate_indicator_rows(candle_rows, config=IndicatorConfig())
+        mapped: list[dict[str, object]] = []
+        for row in indicator_rows:
+            item = dict(row)
+            signal = str(item.get("market_signal", "")).upper()
+            item["side"] = "BUY" if signal in {"BULLISH_TREND", "OVERSOLD", "BUY", "LONG"} else "SELL" if signal in {"BEARISH_TREND", "OVERBOUGHT", "SELL", "SHORT"} else ""
+            item.setdefault("entry_price", item.get("close", item.get("price", 0.0)))
+            item.setdefault("timestamp", item.get("timestamp", ""))
+            item.setdefault("strategy", "INDICATOR")
+            mapped.append(item)
+        rows = mapped
+    elif strategy_name == "One Trade/Day":
+        rows = generate_one_trade_day_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), config=IndicatorConfig(), trailing_sl_pct=float(trailing_sl_pct))
+    elif strategy_name == "MTF 5m":
+        rows = generate_mtf_trade_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct), ema_period=int(mtf_ema_period), setup_mode=str(mtf_setup_mode), require_retest_strength=bool(mtf_retest_strength), max_trades_per_day=int(mtf_max_trades_per_day))
+    else:
+        rows = generate_breakout_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct))
+    normalized: list[dict[str, object]] = []
+    for idx, row in enumerate(rows, start=1):
+        item = dict(row)
+        item.setdefault("strategy", strategy_name.upper().replace(" ", "_"))
+        item.setdefault("symbol", symbol)
+        item.setdefault("trade_no", idx)
+        item.setdefault("trade_label", f"Trade {idx}")
+        item.setdefault("entry_time", item.get("timestamp", ""))
+        normalized.append(item)
+    actionable = [r for r in normalized if str(r.get("side", "")).upper() in {"BUY", "SELL"}]
+    if actionable:
+        normalized = attach_option_strikes(actionable, strike_step=int(strike_step), moneyness=str(moneyness), steps=int(strike_steps))
+    return normalized
 def _render_sidebar_shell() -> None:
     st.markdown(
         """

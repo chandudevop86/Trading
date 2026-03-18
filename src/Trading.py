@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import io
@@ -1357,18 +1357,9 @@ def _render_dhan_feature_sections(
 
 def main() -> None:
     _render_sidebar_shell()
-    st.markdown(
-        """
-        <div class="live-panel">
-            <div class="live-kicker">KRSH SOLUTIONS</div>
-            <div class="live-title">Market Intelligence Desk</div>
-            <div class="live-sub">Main-page workspace for routing, strategy analysis, and live execution controls.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    masthead_slot = st.empty()
 
-    st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Desk Controls</div><div class="control-ribbon-copy">Keep the hero section, but drive the workspace from this compact Dhan-style utility bar.</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Workspace Selection</div><div class="control-ribbon-copy">Choose the workspace and active strategy below, then use the trading controls underneath.</div></div>', unsafe_allow_html=True)
 
     ribbon_left, ribbon_right = st.columns([1.15, 1])
     with ribbon_left:
@@ -1391,7 +1382,6 @@ def main() -> None:
     st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
     st.markdown('<div class="section-heading">Trading Controls</div><div class="section-copy">A cleaner control deck inspired by product cards. Configure the market, size the trade, then unlock routing.</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
-
     market_col, position_col, access_col = st.columns([1.15, 1.15, 1.1])
 
     with market_col:
@@ -1605,27 +1595,28 @@ def main() -> None:
                     alert_row = dict(signal_map.get(exec_key, {}))
                     alert_row.update(executed)
                     send_signal_alert(alert_row, strategy=strategy, symbol=symbol, refresh_seconds=int(refresh_seconds))
-    if "analyzed_trade_queue" not in st.session_state:
-        st.session_state["analyzed_trade_queue"] = []
 
+    account_status = "Paper"
+    if str(execution_mode).upper() == "LIVE":
+        account_status = "Dhan Ready" if dhan_client_id and dhan_token_present else "Dhan Missing"
 
-    account_status = "Paper" if execution_mode != "LIVE" else ("Dhan Ready" if (dhan_client_id and dhan_token_present) else "Dhan Missing")
-    _render_page_masthead(
-        symbol=str(symbol),
-        strategy=str(strategy),
-        execution_mode=str(execution_mode),
-        auto_execute=bool(auto_execute_generated),
-        interval=str(interval),
-        period=str(period),
-        instrument_mode=str(instrument_mode),
-        lots=int(lots),
-        lot_size=int(lot_size),
-        risk_pct=float(risk_pct),
-        rr_ratio=float(rr_ratio),
-        last_signal_side=str(last_signal_side),
-        open_trades=len(signal_rows),
-        account_status=account_status,
-    )
+    with masthead_slot.container():
+        _render_page_masthead(
+            symbol=str(symbol),
+            strategy=str(strategy),
+            execution_mode=str(execution_mode),
+            auto_execute=bool(auto_execute_generated),
+            interval=str(interval),
+            period=str(period),
+            instrument_mode=str(instrument_mode),
+            lots=int(lots),
+            lot_size=int(lot_size),
+            risk_pct=float(risk_pct),
+            rr_ratio=float(rr_ratio),
+            last_signal_side=str(last_signal_side),
+            open_trades=len(signal_rows),
+            account_status=account_status,
+        )
 
     hero_last_price = float(candles["close"].iloc[-1]) if not candles.empty else 0.0
     if not candles.empty and len(candles) >= 2:
@@ -1877,6 +1868,10 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

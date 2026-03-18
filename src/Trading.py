@@ -67,7 +67,7 @@ except Exception:
 
 
 
-st.set_page_config(page_title="KRSH", page_icon="chart", layout="wide")
+st.set_page_config(page_title="KRSH SOLUTIONS", page_icon="chart", layout="wide")
 
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "")
@@ -908,7 +908,7 @@ def _render_page_masthead(
     st.markdown(
         f"""
         <div class="top-nav">
-            <div class="top-nav-brand"><div class="top-nav-logo">K</div><div>KRSH<span>Trade</span></div></div>
+            <div class="top-nav-brand"><div class="top-nav-logo">K</div><div>KRSH<span>Solutions</span></div></div>
             <div class="top-nav-menu">
                 <div class="top-nav-pill"><span class="active">Desk</span><span class="top-nav-pill-value">{symbol}</span></div>
                 <div class="top-nav-pill"><span>Signals</span><span class="top-nav-pill-value">{signal_text} / {open_trades}</span></div>
@@ -921,7 +921,7 @@ def _render_page_masthead(
         <div class="page-masthead">
             <div class="masthead-grid">
                 <div>
-                    <div class="page-eyebrow">KRSH Live Trading Workspace</div>
+                    <div class="page-eyebrow">KRSH SOLUTIONS Trading Workspace</div>
                     <h1 class="page-title">Look first /<br><span class="accent">Then execute.</span></h1>
                     <div class="page-subtitle">Use live structure, strategy signals, and disciplined execution controls to trade {symbol} with clarity.</div>
                     <div class="hero-search">{symbol}  |  {interval}  |  {period}  |  {strategy}</div>
@@ -1037,20 +1037,48 @@ def _render_page_footer() -> None:
     st.markdown(
         """
         <div style="margin-top:18px;padding:14px 18px;border-radius:18px;background:linear-gradient(90deg, rgba(8,18,32,0.96), rgba(18,48,82,0.92));border:1px solid rgba(118,164,210,0.16);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-            <div style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:0.04em;">KRSH <span style="color:#ffb84d;">TRADE</span></div>
-            <div style="color:#9bb6d3;font-size:12px;">Modern live-trading workspace for strategy review, payload preview, and broker execution.</div>
+            <div style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:0.04em;">KRSH <span style="color:#ffb84d;">SOLUTIONS</span></div>
+            <div style="color:#9bb6d3;font-size:12px;">Research-led trading workspace for live charts, execution review, paper trading, and broker routing.</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+
+def _render_capability_band(
+    execution_mode: str,
+    account_status: str,
+    signal_count: int,
+    market_status: str,
+    refresh_seconds: int,
+    auto_execute: bool,
+) -> None:
+    auto_text = "Enabled" if auto_execute else "Manual review"
+    paper_status = "Ready" if execution_mode == "PAPER" else "Switch mode available"
+    broker_status = account_status if execution_mode == "LIVE" else "Available in LIVE mode"
+    st.markdown(
+        f"""
+        <div class="section-shell" style="margin-bottom:14px;">
+            <div class="section-heading">Must-Have Capabilities</div>
+            <div class="section-copy">Inspired by a TradingView-style product flow: real-time data, execution discipline, paper trading, broker connectivity, and performance visibility.</div>
+            <div class="hero-chip-row">
+                <div class="hero-chip"><div class="hero-chip-label">Real-Time Data</div><div class="hero-chip-meta">Refresh {int(refresh_seconds)}s / {market_status}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Signals & Alerts</div><div class="hero-chip-meta">{int(signal_count)} live setups / {auto_text}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Paper Trading</div><div class="hero-chip-meta">{paper_status}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Broker Routing</div><div class="hero-chip-meta">{broker_status}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Performance View</div><div class="hero-chip-meta">Dashboard, charts, trades, downloads</div></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 def main() -> None:
     _render_sidebar_shell()
     st.markdown(
         """
         <div class="live-panel" style="margin-bottom:12px;">
-            <div class="live-kicker">Execution Console</div>
-            <div class="live-title">Dhan Live Desk</div>
+            <div class="live-kicker">KRSH SOLUTIONS</div>
+            <div class="live-title">Market Intelligence Desk</div>
             <div class="live-sub">Main-page workspace for routing, strategy analysis, and live execution controls.</div>
         </div>
         """,
@@ -1364,6 +1392,14 @@ def main() -> None:
         option_bias=option_bias,
         market_status=market_status,
     )
+    _render_capability_band(
+        execution_mode=str(execution_mode),
+        account_status=account_status,
+        signal_count=len(signal_rows),
+        market_status=market_status,
+        refresh_seconds=int(refresh_seconds),
+        auto_execute=bool(auto_execute_generated),
+    )
     tab1, tab2, tab3 = st.tabs(["Dashboard", "Charts", "Trades"])
 
     with tab1:
@@ -1559,6 +1595,10 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

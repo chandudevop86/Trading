@@ -1288,6 +1288,7 @@ def _render_page_masthead(
                                 <div class="mega-item"><div class="mega-icon">K</div><div><div class="mega-title">KRSH App</div><div class="mega-copy">Strategy-led trading app built for active desk users and disciplined execution workflows.</div></div></div>
                                 <div class="mega-item"><div class="mega-icon dark">W</div><div><div class="mega-title">KRSH Web</div><div class="mega-copy">Web trading platform for users who prefer a bigger live trading screen.</div></div></div>
                                 <div class="mega-item"><div class="mega-icon alt">O</div><div><div class="mega-title">Options Trader</div><div class="mega-copy">Current instrument mode: {instrument_mode}. Built to evaluate F&O setups with clear sizing.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon">S</div><div><div class="mega-title">Strategy Desk</div><div class="mega-copy">Active strategy: {strategy}. Market read: {symbol} on {interval} / {period} with {execution_mode} workflow.</div></div></div>
                                 <div class="mega-item"><div class="mega-icon blue">T</div><div><div class="mega-title">Connect to TradingView</div><div class="mega-copy">Review {symbol} on {interval}, then route orders with {execution_mode} mode and {account_status} broker status.</div></div></div>
                                 <div class="mega-item"><div class="mega-icon dark">S</div><div><div class="mega-title">Signal Engine</div><div class="mega-copy">Latest signal state: {signal_text}. Open setups available: {open_trades}. Strategy: {strategy}.</div></div></div>
                                 <div class="mega-item"><div class="mega-icon blue">D</div><div><div class="mega-title">DhanHQ Routing</div><div class="mega-copy">Order configuration: {order_text}. Risk profile: {risk_text}. Execution mode: {execution_mode}.</div></div></div>
@@ -1309,6 +1310,7 @@ def _render_page_masthead(
                     <div class="page-subtitle">Available exclusively for KRSH SOLUTIONS users. Review live setups, connect broker routing, and execute directly from your trading workspace.</div>
                     <div class="hero-search">Connect to trading workflow  |  {symbol}  |  {interval}  |  {strategy}</div>
                     <div class="hero-chip-row">
+                        <div class="hero-chip"><div class="hero-chip-label">Strategy</div><div class="hero-chip-meta">{strategy}</div></div>
                         <div class="hero-chip"><div class="hero-chip-label">Market Access</div><div class="hero-chip-meta">{signal_text} / {open_trades}</div></div>
                         <div class="hero-chip"><div class="hero-chip-label">Trading Panel</div><div class="hero-chip-meta">{order_text}</div></div>
                         <div class="hero-chip"><div class="hero-chip-label">DhanHQ Ready</div><div class="hero-chip-meta">{risk_text}</div></div>
@@ -1519,7 +1521,7 @@ def main() -> None:
     _render_sidebar_shell()
     masthead_slot = st.empty()
 
-    st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Workspace Selection</div><div class="control-ribbon-copy">Choose the workspace and active strategy below, then use the trading controls underneath.</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Workspace Selection</div><div class="control-ribbon-copy">Choose the workspace and strategy below, then use the trading controls underneath.</div></div>', unsafe_allow_html=True)
 
     ribbon_left, ribbon_right = st.columns([1.15, 1])
     with ribbon_left:
@@ -1532,7 +1534,7 @@ def main() -> None:
     with ribbon_right:
         if workspace == "Desk":
             strategy = st.segmented_control(
-                "Active strategy",
+                "Strategy",
                 ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"],
                 default="Breakout",
             )
@@ -2028,6 +2030,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 

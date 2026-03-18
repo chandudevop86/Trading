@@ -660,112 +660,178 @@ def _render_sidebar_shell() -> None:
         }
                 .page-masthead {
             display: block;
-            background:
-                radial-gradient(circle at 16% 88%, rgba(5, 202, 255, 0.26), transparent 24%),
-                radial-gradient(circle at 78% 18%, rgba(162, 89, 255, 0.24), transparent 24%),
-                linear-gradient(180deg, #030815 0%, #060d1d 52%, #08172a 100%);
-            border: 1px solid rgba(77, 121, 180, 0.16);
-            border-radius: 28px;
-            padding: 22px 24px 22px 24px;
-            margin-bottom: 12px;
-            box-shadow: 0 28px 60px rgba(2, 12, 27, 0.42);
+            background: linear-gradient(180deg, #050505 0%, #090909 100%);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 0;
+            padding: 18px 22px 28px 22px;
+            margin-bottom: 14px;
+            box-shadow: 0 24px 50px rgba(0, 0, 0, 0.34);
             overflow: hidden;
             position: relative;
         }
-        .page-masthead::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background:
-                linear-gradient(90deg, rgba(1, 5, 13, 0.88) 0%, rgba(3, 8, 21, 0.72) 42%, rgba(5, 16, 34, 0.14) 100%),
-                linear-gradient(180deg, transparent 0%, rgba(2, 10, 24, 0.28) 100%);
-            pointer-events: none;
-        }
+        .page-masthead::before,
         .page-masthead::after {
-            content: "";
-            position: absolute;
-            right: -80px;
-            bottom: -90px;
-            width: 460px;
-            height: 460px;
-            border-radius: 999px;
-            background: radial-gradient(circle, rgba(46, 126, 255, 0.18) 0%, rgba(46,126,255,0.03) 60%, transparent 72%);
-            filter: blur(8px);
+            display: none;
         }
         .top-nav {
             position: relative;
-            z-index: 2;
-            display: flex;
-            justify-content: space-between;
+            z-index: 3;
+            display: grid;
+            grid-template-columns: auto 1fr auto auto auto;
             align-items: center;
-            gap: 16px;
-            background: rgba(6, 10, 23, 0.82);
-            border: 1px solid rgba(92, 114, 170, 0.16);
-            border-radius: 16px;
-            padding: 12px 18px;
-            margin-bottom: 16px;
-            backdrop-filter: blur(12px);
+            gap: 18px;
+            background: #050505;
+            border: none;
+            border-radius: 0;
+            padding: 4px 0 14px 0;
+            margin-bottom: 12px;
+            backdrop-filter: none;
         }
         .top-nav-brand {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             color: #ffffff;
-            font-size: 22px;
-            font-weight: 900;
-            letter-spacing: 0.01em;
+            font-size: 18px;
+            font-weight: 800;
+            letter-spacing: 0;
         }
         .top-nav-logo {
-            width: 34px;
-            height: 34px;
-            border-radius: 12px;
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #ffffff 0%, #9dd8ff 100%);
-            color: #07111f;
-            font-size: 15px;
+            background: #1fba81;
+            color: #ffffff;
+            font-size: 14px;
             font-weight: 900;
-            box-shadow: 0 10px 24px rgba(27, 133, 255, 0.28);
+            box-shadow: none;
         }
         .top-nav-brand span {
-            color: #67d8ff;
+            color: #ffffff;
         }
         .top-nav-menu {
             display: flex;
-            gap: 12px;
+            gap: 18px;
             align-items: center;
             flex-wrap: wrap;
+            color: rgba(255,255,255,0.72);
+            font-size: 14px;
+            font-weight: 700;
         }
         .top-nav-pill {
-            min-width: 118px;
-            padding: 8px 12px;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(148, 196, 232, 0.12);
-            color: #d5def1;
-            font-size: 11px;
+            min-width: 0;
+            padding: 0;
+            border-radius: 0;
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.74);
+            font-size: 14px;
             font-weight: 700;
             line-height: 1.2;
         }
-        .top-nav-pill .active {
-            color: #ffffff;
-        }
+        .top-nav-pill .active,
         .top-nav-pill-value {
-            display: block;
+            color: inherit;
+            display: inline;
+            font-size: inherit;
+            font-weight: inherit;
+            margin-top: 0;
+        }
+        .top-nav-search {
+            min-width: 250px;
+            border-radius: 14px;
+            background: #171717;
+            border: 1px solid rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.72);
+            padding: 14px 18px;
+            font-size: 14px;
+            font-weight: 700;
+        }
+        .top-nav-secondary {
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.14);
             color: #ffffff;
-            font-size: 12px;
-            font-weight: 800;
-            margin-top: 3px;
+            background: transparent;
+            padding: 13px 18px;
+            font-size: 14px;
+            font-weight: 700;
         }
         .top-nav-cta {
-            background: linear-gradient(135deg, #2e7eff 0%, #9b51ff 100%);
-            color: #ffffff;
-            border-radius: 12px;
-            padding: 10px 15px;
-            font-size: 12px;
+            background: #f7a600;
+            color: #101010;
+            border-radius: 14px;
+            padding: 14px 18px;
+            font-size: 14px;
             font-weight: 800;
-            letter-spacing: 0.04em;
+            letter-spacing: 0;
+        }
+        .mega-panel {
+            position: relative;
+            z-index: 2;
+            max-width: 820px;
+            background: #ffffff;
+            color: #111827;
+            border-radius: 22px;
+            padding: 26px 28px;
+            box-shadow: 0 28px 50px rgba(0,0,0,0.28);
+            margin: 6px 0 18px 28px;
+        }
+        .mega-panel::before {
+            content: "";
+            position: absolute;
+            top: -14px;
+            left: 190px;
+            width: 26px;
+            height: 26px;
+            background: #ffffff;
+            transform: rotate(45deg);
+            border-radius: 4px;
+        }
+        .mega-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 22px 30px;
+        }
+        .mega-item {
+            display: grid;
+            grid-template-columns: 42px 1fr;
+            gap: 16px;
+            align-items: start;
+        }
+        .mega-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 800;
+            color: #ffffff;
+            background: linear-gradient(135deg, #14b87a 0%, #0f9f6c 100%);
+        }
+        .mega-icon.alt {
+            background: linear-gradient(135deg, #7c4dff 0%, #a46dff 100%);
+        }
+        .mega-icon.dark {
+            background: linear-gradient(135deg, #2d3748 0%, #111827 100%);
+        }
+        .mega-icon.blue {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        }
+        .mega-title {
+            color: #121826;
+            font-size: 16px;
+            font-weight: 800;
+            margin-bottom: 2px;
+        }
+        .mega-copy {
+            color: #6b7280;
+            font-size: 13px;
+            line-height: 1.45;
         }
         .masthead-grid {
             position: relative;
@@ -801,29 +867,32 @@ def _render_sidebar_shell() -> None:
             max-width: 520px;
         }
         .page-badge {
-            background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
-            border: 1px solid rgba(109, 145, 211, 0.18);
-            border-radius: 20px;
-            color: #eff5ff;
+            position: absolute;
+            right: 22px;
+            bottom: 22px;
+            background: #ffffff;
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 18px;
+            color: #111827;
             font-size: 13px;
             font-weight: 700;
-            padding: 18px 20px;
-            box-shadow: 0 18px 36px rgba(1, 8, 19, 0.30);
-            backdrop-filter: blur(8px);
+            padding: 16px 18px;
+            box-shadow: none;
         }
         .masthead-pills {
             display: none;
         }
         .hero-search {
-            margin-top: 24px;
+            margin-top: 18px;
             max-width: 430px;
-            border-radius: 999px;
+            border-radius: 16px;
             background: #ffffff;
-            color: #586174;
-            padding: 16px 18px;
-            font-size: 16px;
+            color: #4b5563;
+            padding: 14px 18px;
+            font-size: 15px;
             font-weight: 700;
-            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
+            box-shadow: none;
+            border: 1px solid rgba(0,0,0,0.08);
         }
         .hero-chip-row {
             display: flex;
@@ -833,11 +902,11 @@ def _render_sidebar_shell() -> None:
         }
         .hero-chip {
             min-width: 118px;
-            border-radius: 999px;
+            border-radius: 14px;
             padding: 12px 14px;
-            background: rgba(9, 17, 33, 0.74);
-            border: 1px solid rgba(86, 116, 177, 0.16);
-            box-shadow: 0 12px 28px rgba(1, 8, 19, 0.22);
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: none;
         }
         .hero-chip-label {
             color: #ffffff;
@@ -851,50 +920,54 @@ def _render_sidebar_shell() -> None:
         }
         .hero-visual {
             position: relative;
-            min-height: 420px;
-            border-radius: 24px;
-            background:
-                radial-gradient(circle at 30% 18%, rgba(197, 116, 255, 0.55), transparent 22%),
-                radial-gradient(circle at 62% 72%, rgba(40, 163, 255, 0.42), transparent 28%),
-                linear-gradient(180deg, rgba(9,18,34,0.34), rgba(8,15,28,0.12));
+            min-height: 320px;
+            border-radius: 22px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+            border: 1px solid rgba(255,255,255,0.08);
             overflow: hidden;
         }
         .hero-visual::before {
             content: "";
             position: absolute;
-            inset: auto -30px -10px 20px;
-            height: 220px;
-            background: linear-gradient(180deg, rgba(13, 60, 110, 0.0), rgba(14, 200, 255, 0.34));
-            clip-path: polygon(0% 72%, 10% 58%, 20% 64%, 30% 34%, 42% 44%, 56% 18%, 68% 30%, 82% 10%, 100% 26%, 100% 100%, 0% 100%);
+            inset: auto 18px 24px 18px;
+            height: 120px;
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+            border: 1px solid rgba(255,255,255,0.06);
         }
         .hero-visual::after {
-            content: "";
+            content: "KRSH SOLUTIONS";
             position: absolute;
-            right: 42px;
-            bottom: 0;
-            width: 260px;
-            height: 360px;
-            border-radius: 160px 160px 24px 24px;
-            background:
-                radial-gradient(circle at 50% 18%, rgba(255,255,255,0.20), transparent 18%),
-                linear-gradient(180deg, rgba(255,255,255,0.16), rgba(114, 64, 255, 0.12) 28%, rgba(17, 23, 43, 0.02) 100%);
-            border: 1px solid rgba(255,255,255,0.12);
-            box-shadow: 0 0 0 10px rgba(124, 62, 255, 0.10), 0 22px 40px rgba(0,0,0,0.34);
-            transform: rotate(-3deg);
+            top: 24px;
+            left: 24px;
+            color: rgba(255,255,255,0.92);
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: 0.02em;
         }
         .hero-strip,
         .hero-strip.hero-bull,
         .hero-strip.hero-bear,
         .hero-strip.hero-range {
-            background: linear-gradient(180deg, #0c2039 0%, #102b49 100%);
-            border: 1px solid rgba(118, 164, 210, 0.14);
-            border-radius: 22px;
-            box-shadow: 0 20px 40px rgba(2, 12, 27, 0.26);
+            background: #ffffff;
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 20px;
+            box-shadow: none;
         }
         .hero-strip.hero-bull,
         .hero-strip.hero-bear,
         .hero-strip.hero-range {
-            border-left: 4px solid #ff6b2c;
+            border-left: 4px solid #f7a600;
+        }
+        .hero-kicker, .hero-label {
+            color: #6b7280;
+        }
+        .hero-symbol, .hero-value, .hero-price {
+            color: #111827;
+        }
+        .hero-tile {
+            background: #f8fafc;
+            border: 1px solid rgba(0,0,0,0.06);
         }
         .hero-kicker, .hero-label {
             color: #89a7c7;
@@ -949,24 +1022,31 @@ def _render_page_masthead(
     open_trades: int,
     account_status: str,
 ) -> None:
-    auto_text = "Auto execute ready" if auto_execute else "Review before send"
-    signal_text = str(last_signal_side or "-").upper()
-    order_text = f"{instrument_mode} {int(lots)} x {int(lot_size)}"
-    risk_text = f"{float(risk_pct):.1f}% risk / {float(rr_ratio):.1f}R"
     st.markdown(
         f"""
-        <div class="top-nav">
-            <div class="top-nav-brand"><div class="top-nav-logo">K</div><div>KRSH<span>Solutions</span></div></div>
-            <div class="top-nav-menu">
-                <div class="top-nav-pill"><span class="active">Products</span><span class="top-nav-pill-value">{symbol}</span></div>
-                <div class="top-nav-pill"><span>Markets</span><span class="top-nav-pill-value">{signal_text} / {open_trades}</span></div>
-                <div class="top-nav-pill"><span>Connect</span><span class="top-nav-pill-value">{order_text}</span></div>
-                <div class="top-nav-pill"><span>DhanHQ</span><span class="top-nav-pill-value">{risk_text}</span></div>
-                <div class="top-nav-pill"><span>Support</span><span class="top-nav-pill-value">{account_status}</span></div>
-            </div>
-            <div class="top-nav-cta">{execution_mode}</div>
-        </div>
         <div class="page-masthead">
+            <div class="top-nav">
+                <div class="top-nav-brand"><div class="top-nav-logo">K</div><div>KRSH<span> Solutions</span></div></div>
+                <div class="top-nav-menu">
+                    <div class="top-nav-pill"><span class="active">Products</span></div>
+                    <div class="top-nav-pill"><span>Investments</span></div>
+                    <div class="top-nav-pill"><span>Markets</span></div>
+                    <div class="top-nav-pill"><span>More</span></div>
+                </div>
+                <div class="top-nav-search">Search Stocks, Mutual Funds, F&O</div>
+                <div class="top-nav-secondary">Login</div>
+                <div class="top-nav-cta">Open Account</div>
+            </div>
+            <div class="mega-panel">
+                <div class="mega-grid">
+                    <div class="mega-item"><div class="mega-icon">K</div><div><div class="mega-title">KRSH App</div><div class="mega-copy">Strategy-led trading app built for active desk users and disciplined execution workflows.</div></div></div>
+                    <div class="mega-item"><div class="mega-icon dark">W</div><div><div class="mega-title">KRSH Web</div><div class="mega-copy">Web trading platform for users who prefer a bigger live trading screen.</div></div></div>
+                    <div class="mega-item"><div class="mega-icon alt">O</div><div><div class="mega-title">Options Trader</div><div class="mega-copy">Current instrument mode: {instrument_mode}. Built to evaluate F&O setups with clear sizing.</div></div></div>
+                    <div class="mega-item"><div class="mega-icon blue">T</div><div><div class="mega-title">Connect to TradingView</div><div class="mega-copy">Review {symbol} on {interval}, then route orders with {execution_mode} mode and {account_status} broker status.</div></div></div>
+                    <div class="mega-item"><div class="mega-icon dark">S</div><div><div class="mega-title">Signal Engine</div><div class="mega-copy">Latest signal state: {signal_text}. Open setups available: {open_trades}. Strategy: {strategy}.</div></div></div>
+                    <div class="mega-item"><div class="mega-icon blue">D</div><div><div class="mega-title">DhanHQ Routing</div><div class="mega-copy">Order configuration: {order_text}. Risk profile: {risk_text}. Execution mode: {execution_mode}.</div></div></div>
+                </div>
+            </div>
             <div class="masthead-grid">
                 <div>
                     <div class="page-eyebrow">KRSH SOLUTIONS Connect Workspace</div>
@@ -1102,24 +1182,20 @@ def _render_capability_band(
     auto_execute: bool,
 ) -> None:
     auto_text = "Enabled" if auto_execute else "Manual review"
-    paper_status = "Ready" if execution_mode == "PAPER" else "Switch mode available"
+    paper_status = "Ready" if execution_mode == "PAPER" else "Standby"
     broker_status = account_status if execution_mode == "LIVE" else "Available in LIVE mode"
-    st.markdown(
-        f"""
-        <div class="section-shell" style="margin-bottom:14px;">
-            <div class="section-heading">Must-Have Capabilities</div>
-            <div class="section-copy">Inspired by a TradingView-style product flow: real-time data, execution discipline, paper trading, broker connectivity, and performance visibility.</div>
-            <div class="hero-chip-row">
-                <div class="hero-chip"><div class="hero-chip-label">Real-Time Data</div><div class="hero-chip-meta">Refresh {int(refresh_seconds)}s / {market_status}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Signals & Alerts</div><div class="hero-chip-meta">{int(signal_count)} live setups / {auto_text}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Paper Trading</div><div class="hero-chip-meta">{paper_status}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Broker Routing</div><div class="hero-chip-meta">{broker_status}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Performance View</div><div class="hero-chip-meta">Dashboard, charts, trades, downloads</div></div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading">Live Status & Quick Actions</div><div class="section-copy">This section is now a working status strip, not a decorative capability banner.</div>', unsafe_allow_html=True)
+    status_cols = st.columns([1, 1, 1, 1, 0.9])
+    status_cols[0].metric("Market", str(market_status))
+    status_cols[1].metric("Signals", int(signal_count))
+    status_cols[2].metric("Execution", str(execution_mode), auto_text)
+    status_cols[3].metric("Broker", str(broker_status), paper_status)
+    with status_cols[4]:
+        st.caption(f"Refresh every {int(refresh_seconds)}s")
+        if st.button("Refresh Now", use_container_width=True):
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 
@@ -1689,6 +1765,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 

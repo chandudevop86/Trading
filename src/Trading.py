@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import io
@@ -610,132 +610,229 @@ def _render_sidebar_shell() -> None:
             color: #ffffff !important;
             box-shadow: none;
         }
-        .page-masthead {
+                .page-masthead {
             display: block;
             background:
-                linear-gradient(90deg, rgba(4, 12, 24, 0.96) 0%, rgba(10, 31, 53, 0.92) 42%, rgba(28, 54, 88, 0.82) 100%),
-                radial-gradient(circle at 72% 22%, rgba(122, 214, 255, 0.18), transparent 24%),
-                radial-gradient(circle at 82% 68%, rgba(122, 214, 255, 0.12), transparent 22%);
-            border: 1px solid rgba(118, 164, 210, 0.14);
-            border-radius: 26px;
-            padding: 24px 24px 18px 24px;
-            margin-bottom: 10px;
-            box-shadow: 0 26px 54px rgba(2, 12, 27, 0.34);
+                radial-gradient(circle at 16% 88%, rgba(5, 202, 255, 0.26), transparent 24%),
+                radial-gradient(circle at 78% 18%, rgba(162, 89, 255, 0.24), transparent 24%),
+                linear-gradient(180deg, #030815 0%, #060d1d 52%, #08172a 100%);
+            border: 1px solid rgba(77, 121, 180, 0.16);
+            border-radius: 28px;
+            padding: 22px 24px 22px 24px;
+            margin-bottom: 12px;
+            box-shadow: 0 28px 60px rgba(2, 12, 27, 0.42);
             overflow: hidden;
             position: relative;
+        }
+        .page-masthead::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(90deg, rgba(1, 5, 13, 0.88) 0%, rgba(3, 8, 21, 0.72) 42%, rgba(5, 16, 34, 0.14) 100%),
+                linear-gradient(180deg, transparent 0%, rgba(2, 10, 24, 0.28) 100%);
+            pointer-events: none;
         }
         .page-masthead::after {
             content: "";
             position: absolute;
-            inset: auto -90px -60px auto;
-            width: 320px;
-            height: 320px;
+            right: -80px;
+            bottom: -90px;
+            width: 460px;
+            height: 460px;
             border-radius: 999px;
-            border: 2px solid rgba(125, 211, 252, 0.16);
-            opacity: 0.6;
+            background: radial-gradient(circle, rgba(46, 126, 255, 0.18) 0%, rgba(46,126,255,0.03) 60%, transparent 72%);
+            filter: blur(8px);
         }
         .top-nav {
+            position: relative;
+            z-index: 2;
             display: flex;
             justify-content: space-between;
             align-items: center;
             gap: 16px;
-            background: linear-gradient(90deg, #091a2d 0%, #123052 52%, #1a446f 100%);
-            border: 1px solid rgba(120, 166, 214, 0.18);
-            border-radius: 18px;
+            background: rgba(6, 10, 23, 0.82);
+            border: 1px solid rgba(92, 114, 170, 0.16);
+            border-radius: 16px;
             padding: 12px 18px;
-            margin-bottom: 12px;
-            box-shadow: 0 18px 34px rgba(3, 18, 35, 0.28);
+            margin-bottom: 16px;
+            backdrop-filter: blur(12px);
         }
         .top-nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
             color: #ffffff;
             font-size: 22px;
-            font-weight: 800;
-            letter-spacing: 0.03em;
+            font-weight: 900;
+            letter-spacing: 0.01em;
+        }
+        .top-nav-logo {
+            width: 34px;
+            height: 34px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #ffffff 0%, #9dd8ff 100%);
+            color: #07111f;
+            font-size: 15px;
+            font-weight: 900;
+            box-shadow: 0 10px 24px rgba(27, 133, 255, 0.28);
         }
         .top-nav-brand span {
-            color: #ffb84d;
+            color: #67d8ff;
         }
         .top-nav-menu {
             display: flex;
-            gap: 18px;
+            gap: 12px;
             align-items: center;
             flex-wrap: wrap;
-            color: #d8e6f5;
-            font-size: 13px;
-            font-weight: 600;
         }
-        .top-nav-menu .active {
-            color: #ffb84d;
+        .top-nav-pill {
+            min-width: 118px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(148, 196, 232, 0.12);
+            color: #d5def1;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.2;
         }
-        .top-nav-cta {
-            background: linear-gradient(135deg, #ffb84d 0%, #ff8a2a 100%);
+        .top-nav-pill .active {
             color: #ffffff;
-            border-radius: 10px;
-            padding: 10px 14px;
+        }
+        .top-nav-pill-value {
+            display: block;
+            color: #ffffff;
             font-size: 12px;
             font-weight: 800;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
+            margin-top: 3px;
+        }
+        .top-nav-cta {
+            background: linear-gradient(135deg, #2e7eff 0%, #9b51ff 100%);
+            color: #ffffff;
+            border-radius: 12px;
+            padding: 10px 15px;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
         }
         .masthead-grid {
+            position: relative;
+            z-index: 2;
             display: grid;
-            grid-template-columns: minmax(320px, 1.35fr) minmax(240px, 0.75fr);
-            gap: 18px;
-            align-items: end;
+            grid-template-columns: minmax(360px, 1.05fr) minmax(300px, 0.95fr);
+            gap: 20px;
+            align-items: stretch;
         }
         .page-eyebrow {
-            color: #7dd3fc;
+            color: #88bfff;
             font-size: 11px;
             letter-spacing: 0.22em;
             text-transform: uppercase;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
         .page-title {
             color: #ffffff;
-            font-size: 42px;
-            font-weight: 800;
-            line-height: 1.03;
+            font-size: 62px;
+            font-weight: 900;
+            line-height: 0.96;
             margin: 0;
-            max-width: 640px;
+            max-width: 560px;
         }
         .page-title .accent {
-            color: #ffb84d;
+            color: #ffffff;
         }
         .page-subtitle {
-            color: #d5e5f6;
-            font-size: 15px;
-            line-height: 1.65;
-            margin-top: 14px;
-            max-width: 620px;
+            color: #dbe7f8;
+            font-size: 18px;
+            line-height: 1.55;
+            margin-top: 18px;
+            max-width: 520px;
         }
         .page-badge {
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(148, 196, 232, 0.20);
-            border-radius: 18px;
-            color: #eaf4ff;
+            background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+            border: 1px solid rgba(109, 145, 211, 0.18);
+            border-radius: 20px;
+            color: #eff5ff;
             font-size: 13px;
             font-weight: 700;
             padding: 18px 20px;
-            white-space: normal;
-            box-shadow: 0 12px 26px rgba(2, 12, 27, 0.24);
+            box-shadow: 0 18px 36px rgba(1, 8, 19, 0.30);
             backdrop-filter: blur(8px);
         }
         .masthead-pills {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(120px, 1fr));
-            gap: 12px;
-            margin-top: 14px;
+            display: none;
         }
-        .masthead-pill {
-            background: linear-gradient(180deg, rgba(214, 231, 255, 0.16), rgba(165, 192, 229, 0.10));
-            border: 1px solid rgba(148, 196, 232, 0.18);
-            border-radius: 14px;
-            color: #e7f1fb;
-            padding: 12px 14px;
-            font-size: 12px;
+        .hero-search {
+            margin-top: 24px;
+            max-width: 430px;
+            border-radius: 999px;
+            background: #ffffff;
+            color: #586174;
+            padding: 16px 18px;
+            font-size: 16px;
             font-weight: 700;
-            text-align: center;
-            backdrop-filter: blur(6px);
+            box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
+        }
+        .hero-chip-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 18px;
+        }
+        .hero-chip {
+            min-width: 118px;
+            border-radius: 999px;
+            padding: 12px 14px;
+            background: rgba(9, 17, 33, 0.74);
+            border: 1px solid rgba(86, 116, 177, 0.16);
+            box-shadow: 0 12px 28px rgba(1, 8, 19, 0.22);
+        }
+        .hero-chip-label {
+            color: #ffffff;
+            font-size: 13px;
+            font-weight: 800;
+        }
+        .hero-chip-meta {
+            color: #89a7c7;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+        .hero-visual {
+            position: relative;
+            min-height: 420px;
+            border-radius: 24px;
+            background:
+                radial-gradient(circle at 30% 18%, rgba(197, 116, 255, 0.55), transparent 22%),
+                radial-gradient(circle at 62% 72%, rgba(40, 163, 255, 0.42), transparent 28%),
+                linear-gradient(180deg, rgba(9,18,34,0.34), rgba(8,15,28,0.12));
+            overflow: hidden;
+        }
+        .hero-visual::before {
+            content: "";
+            position: absolute;
+            inset: auto -30px -10px 20px;
+            height: 220px;
+            background: linear-gradient(180deg, rgba(13, 60, 110, 0.0), rgba(14, 200, 255, 0.34));
+            clip-path: polygon(0% 72%, 10% 58%, 20% 64%, 30% 34%, 42% 44%, 56% 18%, 68% 30%, 82% 10%, 100% 26%, 100% 100%, 0% 100%);
+        }
+        .hero-visual::after {
+            content: "";
+            position: absolute;
+            right: 42px;
+            bottom: 0;
+            width: 260px;
+            height: 360px;
+            border-radius: 160px 160px 24px 24px;
+            background:
+                radial-gradient(circle at 50% 18%, rgba(255,255,255,0.20), transparent 18%),
+                linear-gradient(180deg, rgba(255,255,255,0.16), rgba(114, 64, 255, 0.12) 28%, rgba(17, 23, 43, 0.02) 100%);
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 0 0 10px rgba(124, 62, 255, 0.10), 0 22px 40px rgba(0,0,0,0.34);
+            transform: rotate(-3deg);
         }
         .hero-strip,
         .hero-strip.hero-bull,
@@ -804,38 +901,40 @@ def _render_page_masthead(
     open_trades: int,
     account_status: str,
 ) -> None:
-    auto_text = "Auto Send On" if auto_execute else "Manual Review"
-    mode_badge = "Live Broker Mode" if str(execution_mode).upper() == "LIVE" else "Paper Desk Mode"
+    auto_text = "Auto execute ready" if auto_execute else "Review before send"
     signal_text = str(last_signal_side or "-").upper()
     order_text = f"{instrument_mode} {int(lots)} x {int(lot_size)}"
-    risk_text = f"{float(risk_pct):.1f}% / {float(rr_ratio):.1f}R"
+    risk_text = f"{float(risk_pct):.1f}% risk / {float(rr_ratio):.1f}R"
     st.markdown(
         f"""
         <div class="top-nav">
-            <div class="top-nav-brand">KRSH<span>TRADE</span></div>
+            <div class="top-nav-brand"><div class="top-nav-logo">K</div><div>KRSH<span>Trade</span></div></div>
             <div class="top-nav-menu">
-                <span class="active">Live Desk: {symbol} {interval} {period}</span>
-                <span>Signals: {signal_text} / {open_trades}</span>
-                <span>Orders: {order_text}</span>
-                <span>Risk: {risk_text}</span>
-                <span>Account: {account_status}</span>
+                <div class="top-nav-pill"><span class="active">Desk</span><span class="top-nav-pill-value">{symbol}</span></div>
+                <div class="top-nav-pill"><span>Signals</span><span class="top-nav-pill-value">{signal_text} / {open_trades}</span></div>
+                <div class="top-nav-pill"><span>Orders</span><span class="top-nav-pill-value">{order_text}</span></div>
+                <div class="top-nav-pill"><span>Risk</span><span class="top-nav-pill-value">{risk_text}</span></div>
+                <div class="top-nav-pill"><span>Account</span><span class="top-nav-pill-value">{account_status}</span></div>
             </div>
             <div class="top-nav-cta">{execution_mode}</div>
         </div>
         <div class="page-masthead">
             <div class="masthead-grid">
                 <div>
-                    <div class="page-eyebrow">KRSH Broker Workspace</div>
-                    <h1 class="page-title">KRSH <span class="accent">Live Trading</span> Desk</h1>
-                    <div class="page-subtitle">KRSH combines live market structure, order preparation, and Dhan execution for {symbol} in one modern trading workspace.</div>
+                    <div class="page-eyebrow">KRSH Live Trading Workspace</div>
+                    <h1 class="page-title">Look first /<br><span class="accent">Then execute.</span></h1>
+                    <div class="page-subtitle">Use live structure, strategy signals, and disciplined execution controls to trade {symbol} with clarity.</div>
+                    <div class="hero-search">{symbol}  |  {interval}  |  {period}  |  {strategy}</div>
+                    <div class="hero-chip-row">
+                        <div class="hero-chip"><div class="hero-chip-label">Signals</div><div class="hero-chip-meta">{signal_text} / {open_trades}</div></div>
+                        <div class="hero-chip"><div class="hero-chip-label">Orders</div><div class="hero-chip-meta">{order_text}</div></div>
+                        <div class="hero-chip"><div class="hero-chip-label">Risk</div><div class="hero-chip-meta">{risk_text}</div></div>
+                        <div class="hero-chip"><div class="hero-chip-label">Account</div><div class="hero-chip-meta">{account_status}</div></div>
+                    </div>
                 </div>
-                <div class="page-badge">{strategy}<br/>{mode_badge}<br/>{auto_text}</div>
-            </div>
-            <div class="masthead-pills">
-                <div class="masthead-pill">Payload Preview</div>
-                <div class="masthead-pill">Live Routing</div>
-                <div class="masthead-pill">{account_status}</div>
-                <div class="masthead-pill">{order_text}</div>
+                <div class="hero-visual">
+                    <div class="page-badge">{strategy}<br>{auto_text}<br>{account_status}</div>
+                </div>
             </div>
         </div>
         """,
@@ -1460,6 +1559,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 

@@ -1288,7 +1288,7 @@ def _render_page_masthead(
                                 <div class="mega-item"><div class="mega-icon">K</div><div><div class="mega-title">KRSH App</div><div class="mega-copy">Strategy-led trading app built for active desk users and disciplined execution workflows.</div></div></div>
                                 <div class="mega-item"><div class="mega-icon dark">W</div><div><div class="mega-title">KRSH Web</div><div class="mega-copy">Web trading platform for users who prefer a bigger live trading screen.</div></div></div>
                                 <div class="mega-item"><div class="mega-icon alt">O</div><div><div class="mega-title">Options Trader</div><div class="mega-copy">Current instrument mode: {instrument_mode}. Built to evaluate F&O setups with clear sizing.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon">S</div><div><div class="mega-title">Strategy Desk</div><div class="mega-copy">Active strategy: {strategy}. Market read: {symbol} on {interval} / {period} with {execution_mode} workflow.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon">S</div><div><div class="mega-title">Strategy Selection</div><div class="mega-copy">Active strategy: {strategy}. Market read: {symbol} on {interval} / {period} with {execution_mode} workflow.</div><div class="mega-pill-row"><span class="mega-pill active">{strategy}</span><span class="mega-pill">Breakout</span><span class="mega-pill">Demand Supply</span><span class="mega-pill">Indicator</span><span class="mega-pill">One Trade/Day</span><span class="mega-pill">MTF 5m</span></div></div></div>
                                 <div class="mega-item"><div class="mega-icon blue">T</div><div><div class="mega-title">Connect to TradingView</div><div class="mega-copy">Review {symbol} on {interval}, then route orders with {execution_mode} mode and {account_status} broker status.</div></div></div>
                                 <div class="mega-item"><div class="mega-icon dark">S</div><div><div class="mega-title">Signal Engine</div><div class="mega-copy">Latest signal state: {signal_text}. Open setups available: {open_trades}. Strategy: {strategy}.</div></div></div>
                                 <div class="mega-item"><div class="mega-icon blue">D</div><div><div class="mega-title">DhanHQ Routing</div><div class="mega-copy">Order configuration: {order_text}. Risk profile: {risk_text}. Execution mode: {execution_mode}.</div></div></div>
@@ -2030,6 +2030,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 
 
 

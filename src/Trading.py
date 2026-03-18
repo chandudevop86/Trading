@@ -231,7 +231,7 @@ def _render_sidebar_shell() -> None:
         }
         .hero-strip {
             border-radius: 24px;
-            padding: 20px 22px;
+            padding: 10px 12px;
             margin: 10px 0 16px 0;
             box-shadow: 0 24px 48px rgba(2, 6, 23, 0.32);
         }
@@ -281,7 +281,7 @@ def _render_sidebar_shell() -> None:
             background: rgba(15, 23, 42, 0.66);
             border: 1px solid rgba(148, 163, 184, 0.12);
             border-radius: 18px;
-            padding: 14px 16px;
+            padding: 10px 12px;
         }
         .hero-label {
             color: #94a3b8;
@@ -372,7 +372,7 @@ def _render_sidebar_shell() -> None:
             background: linear-gradient(180deg, rgba(15,23,42,0.76), rgba(8,15,28,0.84));
             border: 1px solid rgba(148, 163, 184, 0.10);
             border-radius: 20px;
-            padding: 14px 16px;
+            padding: 10px 12px;
             margin-bottom: 14px;
             box-shadow: 0 18px 34px rgba(2, 6, 23, 0.18);
         }
@@ -389,7 +389,7 @@ def _render_sidebar_shell() -> None:
             background: linear-gradient(180deg, rgba(15,23,42,0.96), rgba(8,15,28,0.98));
             border: 1px solid rgba(56, 189, 248, 0.2);
             border-radius: 18px;
-            padding: 14px 16px;
+            padding: 10px 12px;
             margin-bottom: 12px;
             box-shadow: 0 16px 40px rgba(2, 6, 23, 0.35);
         }
@@ -613,8 +613,8 @@ def _render_sidebar_shell() -> None:
                 radial-gradient(circle at 82% 68%, rgba(122, 214, 255, 0.12), transparent 22%);
             border: 1px solid rgba(118, 164, 210, 0.14);
             border-radius: 26px;
-            padding: 34px 34px 26px 34px;
-            margin-bottom: 16px;
+            padding: 24px 24px 18px 24px;
+            margin-bottom: 10px;
             box-shadow: 0 26px 54px rgba(2, 12, 27, 0.34);
             overflow: hidden;
             position: relative;
@@ -687,7 +687,7 @@ def _render_sidebar_shell() -> None:
         }
         .page-title {
             color: #ffffff;
-            font-size: 52px;
+            font-size: 42px;
             font-weight: 800;
             line-height: 1.03;
             margin: 0;
@@ -719,7 +719,7 @@ def _render_sidebar_shell() -> None:
             display: grid;
             grid-template-columns: repeat(4, minmax(120px, 1fr));
             gap: 12px;
-            margin-top: 22px;
+            margin-top: 14px;
         }
         .masthead-pill {
             background: linear-gradient(180deg, rgba(214, 231, 255, 0.16), rgba(165, 192, 229, 0.10));
@@ -1698,8 +1698,8 @@ def main() -> None:
 
     st.caption(f"Total candles fetched: {len(candles)}")
 
-    with st.expander("View raw candle data"):
-        st.dataframe(candles, use_container_width=True)
+    with st.expander("View raw candle data", expanded=False):
+        st.dataframe(candles.tail(20), use_container_width=True, height=320)
 
     try:
         if strategy == "MTF 5m" and interval != "5m":
@@ -1859,7 +1859,7 @@ def main() -> None:
         c4.metric("Volume", int(latest_volume))
 
         if not candles.empty:
-            st.dataframe(candles.tail(10), use_container_width=True)
+            st.dataframe(candles.tail(6), use_container_width=True, height=240)
         else:
             st.warning("No candle data available.")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1925,7 +1925,8 @@ def main() -> None:
 
         if output_rows:
             trades_df = pd.DataFrame(output_rows)
-            st.dataframe(trades_df, use_container_width=True)
+            with st.expander(f"Generated Trades ({len(trades_df)})", expanded=False):
+                st.dataframe(trades_df.tail(12), use_container_width=True, height=300)
 
             try:
                 summary = build_trade_summary(output_rows)
@@ -1942,7 +1943,8 @@ def main() -> None:
         st.subheader("Analyze First, Execute Later")
         if execution_candidates:
             st.caption("Current executable candidates generated from the latest strategy run.")
-            st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), use_container_width=True)
+            with st.expander(f"Execution Candidates ({len(execution_candidates)})", expanded=False):
+                st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), use_container_width=True, height=280)
             if execution_mode == "LIVE":
                 with st.expander("Dhan Live Payload Preview"):
                     if st.button("Preview Live Payloads", use_container_width=True):
@@ -1976,7 +1978,8 @@ def main() -> None:
         staged_candidates = st.session_state.get("analyzed_trade_queue", [])
         if staged_candidates:
             st.caption("Reviewed trade queue. Only this staged list will be executed.")
-            st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), use_container_width=True)
+            with st.expander(f"Reviewed Queue ({len(staged_candidates)})", expanded=True):
+                st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), use_container_width=True, height=260)
 
             executed_rows: list[dict[str, object]] = []
             execute_clicked = st.button("Execute Reviewed Trades", type="primary", use_container_width=True)
@@ -2002,7 +2005,7 @@ def main() -> None:
         else:
             st.info("Analyze trades first to build a review queue, then execute that reviewed batch later.")
         st.markdown("</div>", unsafe_allow_html=True)
-    with st.expander("Debug Output"):
+    with st.expander("Debug Output", expanded=False):
         st.write("Strategy selected:", strategy)
         st.write("Output rows type:", type(output_rows))
         st.write("Output sample:", output_rows[:5] if isinstance(output_rows, list) else output_rows)
@@ -2010,6 +2013,10 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

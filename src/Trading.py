@@ -1144,120 +1144,65 @@ def main() -> None:
     else:
         strategy = str(workspace)
 
-    st.markdown('<div class="section-shell">', unsafe_allow_html=True)
-    st.markdown('<div class="section-heading">Trading Controls</div><div class="section-copy">All required inputs are on the main page. Strategy-specific inputs appear only for the selected workspace.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading">Trading Controls</div><div class="section-copy">A cleaner control deck inspired by product cards. Configure the market, size the trade, then unlock routing.</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    row1 = st.columns([1.25, 1, 1, 1, 1])
-    with row1[0]:
+    market_col, position_col, access_col = st.columns([1.15, 1.15, 1.1])
+
+    with market_col:
+        st.markdown('<div class="section-shell" style="min-height:330px;">', unsafe_allow_html=True)
+        st.markdown('<div class="section-heading">Market Setup</div><div class="section-copy">Choose what to scan and how the strategy should read the market.</div>', unsafe_allow_html=True)
         symbol = st.text_input("Symbol", "^NSEI")
-    with row1[1]:
         interval = st.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default="1m")
-    with row1[2]:
         period = st.segmented_control("Period", ["1d", "5d", "1mo", "3mo"], default="1d")
-    with row1[3]:
         execution_mode = st.segmented_control("Execution mode", ["PAPER", "LIVE"], default="PAPER")
-    with row1[4]:
         instrument_mode = st.segmented_control("Instrument", ["Options", "Futures"], default="Options")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    row2 = st.columns([1, 1, 1, 1, 1, 1, 1])
-    with row2[0]:
+    with position_col:
+        st.markdown('<div class="section-shell" style="min-height:330px;">', unsafe_allow_html=True)
+        st.markdown('<div class="section-heading">Position & Risk</div><div class="section-copy">Define capital, sizing, and protection logic before trades are generated.</div>', unsafe_allow_html=True)
         lot_size = st.number_input("Lot size", min_value=1, value=65, step=1)
-    with row2[1]:
         lots = st.slider("Lots", 1, 10, 2)
-    with row2[2]:
         capital = st.number_input("Capital (INR)", min_value=1000, value=100000, step=1000)
-    with row2[3]:
         risk_pct = st.slider("Risk per trade (%)", 0.1, 10.0, 1.0)
-    with row2[4]:
         rr_ratio = st.slider("Risk / Reward", 1.0, 10.0, 2.0)
-    with row2[5]:
         trailing_sl_pct = st.slider("Trailing stop loss %", 0.1, 10.0, 1.0, 0.1)
-    with row2[6]:
         auto_execute_generated = st.toggle("Auto execute", value=False)
-
-    strike_step = 50
-    moneyness = "ATM"
-    strike_steps = 0
-    fetch_option_metrics = False
-    if instrument_mode == "Options":
-        st.markdown('<div class="section-copy" style="margin-top:8px;">Option contract controls</div>', unsafe_allow_html=True)
-        option_cols = st.columns([1, 1, 1, 1])
-        with option_cols[0]:
-            strike_step = int(st.segmented_control("Strike step", [25, 50, 100], default=50))
-        with option_cols[1]:
-            moneyness = st.segmented_control("Moneyness", ["ATM", "ITM", "OTM"], default="ATM")
-        with option_cols[2]:
-            strike_steps = st.slider("ITM / OTM steps", 0, 5, 0)
-        with option_cols[3]:
-            fetch_option_metrics = st.checkbox("Fetch option chain metrics", value=False)
-    else:
-        st.caption("Futures mode uses the monthly futures contract automatically.")
-
-    mtf_ema_period = 3
-    mtf_setup_mode = "either"
-    mtf_retest_strength = True
-    mtf_max_trades_per_day = 3
-    if strategy == "MTF 5m":
-        st.markdown('<div class="section-copy" style="margin-top:8px;">MTF 5m controls</div>', unsafe_allow_html=True)
-        mtf_cols = st.columns([1, 1, 1, 1])
-        with mtf_cols[0]:
-            mtf_ema_period = int(st.number_input("EMA period (1h)", min_value=2, max_value=20, value=3, step=1))
-        with mtf_cols[1]:
-            mtf_setup_label = st.segmented_control("15m setup filter", ["Either", "BOS only", "FVG only"], default="Either")
-            mtf_setup_mode = {"Either": "either", "BOS only": "bos", "FVG only": "fvg"}[str(mtf_setup_label)]
-        with mtf_cols[2]:
-            mtf_retest_strength = st.checkbox("Require strong 5m retest candle", value=True)
-        with mtf_cols[3]:
-            mtf_max_trades_per_day = int(st.segmented_control("Max trades/day", [1, 2, 3], default=3))
+        st.markdown('</div>', unsafe_allow_html=True)
 
     live_update = False
     refresh_seconds = 10
     send_telegram = False
     paper_log_output = "data/paper_trading_logs_all.csv"
     live_log_output = "data/live_trading_logs_all.csv"
-    with st.expander("Advanced execution controls", expanded=False):
-        adv_cols = st.columns([1, 1, 1, 1])
-        with adv_cols[0]:
-            live_update = st.checkbox("Auto refresh", value=False)
-        with adv_cols[1]:
-            refresh_seconds = st.slider("Refresh every (seconds)", 2, 120, 10)
-        with adv_cols[2]:
-            send_telegram = st.checkbox("Send Telegram alert", value=False)
-        with adv_cols[3]:
-            st.caption("Use the main-page Auto execute toggle above.")
-
     dhan_client_id = ""
-    st.markdown('<div class="section-copy" style="margin-top:8px;">Trade integration</div>', unsafe_allow_html=True)
-    if execution_mode == "PAPER":
-        paper_cols = st.columns([1.6, 1, 1])
-        with paper_cols[0]:
-            paper_log_output = st.text_input("Paper trade log path", value="data/paper_trading_logs_all.csv")
-        with paper_cols[1]:
-            st.info("Execution type: simulated")
-        with paper_cols[2]:
-            st.info("Broker: disabled")
     dhan_token_present = False
     dhan_security_map_path = "data/dhan_security_map.csv"
-    if execution_mode == "LIVE":
-        live_cols = st.columns([1.3, 1.3, 1])
-        with live_cols[0]:
+
+    with access_col:
+        st.markdown('<div class="section-shell" style="min-height:330px;">', unsafe_allow_html=True)
+        st.markdown('<div class="section-heading">Execution Access</div><div class="section-copy">Switch between paper and live routing, set refresh behavior, and verify broker readiness.</div>', unsafe_allow_html=True)
+        live_update = st.checkbox("Auto refresh", value=False)
+        refresh_seconds = st.slider("Refresh every (seconds)", 2, 120, 10)
+        send_telegram = st.checkbox("Send Telegram alert", value=False)
+        st.caption("Use Auto execute only after reviewing generated trades and payload previews.")
+        st.markdown('<div class="section-copy" style="margin-top:8px; margin-bottom:8px;">Trade integration</div>', unsafe_allow_html=True)
+        if execution_mode == "PAPER":
+            paper_log_output = st.text_input("Paper trade log path", value="data/paper_trading_logs_all.csv")
+            st.info("Execution type: simulated")
+            st.info("Broker: disabled")
+        else:
             live_log_output = st.text_input("Live trade log path", value="data/live_trading_logs_all.csv")
-        with live_cols[1]:
             dhan_security_map_path = st.text_input("Security map path", value="data/dhan_security_map.csv")
-        with live_cols[2]:
             st.info("Broker: Dhan")
-        st.markdown('<div class="section-copy" style="margin-top:8px;">Dhan live routing</div>', unsafe_allow_html=True)
-        dhan_client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
-        dhan_token_present = bool(os.getenv("DHAN_ACCESS_TOKEN", "").strip())
-        route_cols = st.columns([1.4, 1, 1])
-        with route_cols[0]:
-            dhan_security_map_path = st.text_input("Security map path", value="data/dhan_security_map.csv")
-        with route_cols[1]:
+            dhan_client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
+            dhan_token_present = bool(os.getenv("DHAN_ACCESS_TOKEN", "").strip())
             if dhan_client_id and dhan_token_present:
                 st.success("Dhan credentials detected")
             else:
                 st.warning("Add Dhan credentials to .env")
-        with route_cols[2]:
             if st.button("Check Dhan Live Ready", use_container_width=True):
                 readiness_notes = _run_dhan_readiness_check(symbol, dhan_security_map_path)
                 for note in readiness_notes:
@@ -1269,8 +1214,46 @@ def main() -> None:
                         st.success(note)
                     else:
                         st.info(note)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    strike_step = 50
+    moneyness = "ATM"
+    strike_steps = 0
+    fetch_option_metrics = False
+    if instrument_mode == "Options":
+        st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
+        st.markdown('<div class="section-heading">Option Contract Controls</div><div class="section-copy">Fine-tune strike selection only when options are the selected instrument.</div>', unsafe_allow_html=True)
+        option_cols = st.columns([1, 1, 1, 1])
+        with option_cols[0]:
+            strike_step = int(st.segmented_control("Strike step", [25, 50, 100], default=50))
+        with option_cols[1]:
+            moneyness = st.segmented_control("Moneyness", ["ATM", "ITM", "OTM"], default="ATM")
+        with option_cols[2]:
+            strike_steps = st.slider("ITM / OTM steps", 0, 5, 0)
+        with option_cols[3]:
+            fetch_option_metrics = st.checkbox("Fetch option chain metrics", value=False)
+        st.markdown('</div>', unsafe_allow_html=True)
+    else:
+        st.caption("Futures mode uses the monthly futures contract automatically.")
+
+    mtf_ema_period = 3
+    mtf_setup_mode = "either"
+    mtf_retest_strength = True
+    mtf_max_trades_per_day = 3
+    if strategy == "MTF 5m":
+        st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
+        st.markdown('<div class="section-heading">MTF 5m Controls</div><div class="section-copy">Extra higher-timeframe filters appear only for the MTF strategy workspace.</div>', unsafe_allow_html=True)
+        mtf_cols = st.columns([1, 1, 1, 1])
+        with mtf_cols[0]:
+            mtf_ema_period = int(st.number_input("EMA period (1h)", min_value=2, max_value=20, value=3, step=1))
+        with mtf_cols[1]:
+            mtf_setup_label = st.segmented_control("15m setup filter", ["Either", "BOS only", "FVG only"], default="Either")
+            mtf_setup_mode = {"Either": "either", "BOS only": "bos", "FVG only": "fvg"}[str(mtf_setup_label)]
+        with mtf_cols[2]:
+            mtf_retest_strength = st.checkbox("Require strong 5m retest candle", value=True)
+        with mtf_cols[3]:
+            mtf_max_trades_per_day = int(st.segmented_control("Max trades/day", [1, 2, 3], default=3))
+        st.markdown('</div>', unsafe_allow_html=True)
 
     if live_update:
         components.html(
@@ -1452,173 +1435,176 @@ def main() -> None:
         signal_count=len(signal_rows),
         auto_execute=bool(auto_execute_generated),
     )
-    tab1, tab2, tab3 = st.tabs(["Dashboard", "Charts", "Trades"])
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading">Platform Sections</div><div class="section-copy">Explore the desk as a landing flow: market overview first, charts next, and trading actions last.</div>', unsafe_allow_html=True)
+    section_cols = st.columns(3)
+    section_cols[0].markdown("**01**  Market Overview")
+    section_cols[1].markdown("**02**  Market Chart")
+    section_cols[2].markdown("**03**  Trade Workspace")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with tab1:
-        st.markdown('<div class="section-shell">', unsafe_allow_html=True)
-        st.markdown('<div class="section-heading">Market Overview</div><div class="section-copy">Live market snapshot with the latest price, volume, and recent candles.</div>', unsafe_allow_html=True)
-        c1, c2, c3, c4 = st.columns(4)
+    st.markdown('<div class="section-shell">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading">Market Overview</div><div class="section-copy">Live market snapshot with the latest price, volume, and recent candles.</div>', unsafe_allow_html=True)
+    c1, c2, c3, c4 = st.columns(4)
 
-        if not candles.empty:
-            latest_close = float(candles["close"].iloc[-1])
-            latest_high = float(candles["high"].iloc[-1])
-            latest_low = float(candles["low"].iloc[-1])
-            latest_volume = float(candles["volume"].iloc[-1]) if "volume" in candles.columns else 0.0
-        else:
-            latest_close = latest_high = latest_low = latest_volume = 0.0
+    if not candles.empty:
+        latest_close = float(candles["close"].iloc[-1])
+        latest_high = float(candles["high"].iloc[-1])
+        latest_low = float(candles["low"].iloc[-1])
+        latest_volume = float(candles["volume"].iloc[-1]) if "volume" in candles.columns else 0.0
+    else:
+        latest_close = latest_high = latest_low = latest_volume = 0.0
 
-        c1.metric("Close", round(latest_close, 2))
-        c2.metric("High", round(latest_high, 2))
-        c3.metric("Low", round(latest_low, 2))
-        c4.metric("Volume", int(latest_volume))
+    c1.metric("Close", round(latest_close, 2))
+    c2.metric("High", round(latest_high, 2))
+    c3.metric("Low", round(latest_low, 2))
+    c4.metric("Volume", int(latest_volume))
 
-        if not candles.empty:
-            st.dataframe(candles.tail(6), use_container_width=True, height=240)
-        else:
-            st.warning("No candle data available.")
-        st.markdown("</div>", unsafe_allow_html=True)
+    if not candles.empty:
+        st.dataframe(candles.tail(6), use_container_width=True, height=240)
+    else:
+        st.warning("No candle data available.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with tab2:
-        st.markdown('<div class="chart-shell">', unsafe_allow_html=True)
-        st.markdown('<div class="section-heading">Market Chart</div><div class="section-copy">Intraday candlestick view with support, resistance, and market depth context.</div>', unsafe_allow_html=True)
-        if not candles.empty:
-            latest_move = 0.0
-            if len(candles) >= 2:
-                try:
-                    latest_move = float(candles["close"].iloc[-1]) - float(candles["close"].iloc[-2])
-                except Exception:
-                    latest_move = 0.0
+    st.markdown('<div class="chart-shell">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading">Market Chart</div><div class="section-copy">Intraday candlestick view with support, resistance, and market depth context.</div>', unsafe_allow_html=True)
+    if not candles.empty:
+        latest_move = 0.0
+        if len(candles) >= 2:
+            try:
+                latest_move = float(candles["close"].iloc[-1]) - float(candles["close"].iloc[-2])
+            except Exception:
+                latest_move = 0.0
 
-            levels = compute_market_levels(candles)
-            move_color = "#16a34a" if latest_move >= 0 else "#dc2626"
-            move_prefix = "+" if latest_move > 0 else ""
-            st.markdown(
-                f"""
-                <div style=\"background:#f8fafc;border:1px solid #dbe4ee;border-radius:18px;padding:18px 20px;margin-bottom:12px;box-shadow:0 10px 24px rgba(15,23,42,0.05);\"> 
-                    <div style=\"display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;\">
-                        <div>
-                            <div style=\"color:#64748b;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;\">Live Price</div>
-                            <div style=\"color:#0f172a;font-size:34px;font-weight:700;line-height:1.05;\">{levels['last_price']:.2f}</div>
-                        </div>
-                        <div style=\"text-align:right;\">
-                            <div style=\"color:{move_color};font-size:24px;font-weight:700;\">{move_prefix}{latest_move:.2f}</div>
-                            <div style=\"color:#64748b;font-size:12px;\">vs previous candle close</div>
-                        </div>
+        levels = compute_market_levels(candles)
+        move_color = "#16a34a" if latest_move >= 0 else "#dc2626"
+        move_prefix = "+" if latest_move > 0 else ""
+        st.markdown(
+            f"""
+            <div style=\"background:#f8fafc;border:1px solid #dbe4ee;border-radius:18px;padding:18px 20px;margin-bottom:12px;box-shadow:0 10px 24px rgba(15,23,42,0.05);\"> 
+                <div style=\"display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;\">
+                    <div>
+                        <div style=\"color:#64748b;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;\">Live Price</div>
+                        <div style=\"color:#0f172a;font-size:34px;font-weight:700;line-height:1.05;\">{levels['last_price']:.2f}</div>
+                    </div>
+                    <div style=\"text-align:right;\">
+                        <div style=\"color:{move_color};font-size:24px;font-weight:700;\">{move_prefix}{latest_move:.2f}</div>
+                        <div style=\"color:#64748b;font-size:12px;\">vs previous candle close</div>
                     </div>
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-            h1, h2, h3, h4 = st.columns(4)
-            h1.metric("Session High", round(levels["session_high"], 2))
-            h2.metric("Session Low", round(levels["session_low"], 2))
-            h3.metric("Support Band", f"{levels['support_low']:.2f}-{levels['support_high']:.2f}")
-            h4.metric("Resistance Band", f"{levels['resistance_low']:.2f}-{levels['resistance_high']:.2f}")
+        h1, h2, h3, h4 = st.columns(4)
+        h1.metric("Session High", round(levels["session_high"], 2))
+        h2.metric("Session Low", round(levels["session_low"], 2))
+        h3.metric("Support Band", f"{levels['support_low']:.2f}-{levels['support_high']:.2f}")
+        h4.metric("Resistance Band", f"{levels['resistance_low']:.2f}-{levels['resistance_high']:.2f}")
 
-            left, right = st.columns([4.4, 1.6])
-            with left:
-                chart = build_live_market_chart(candles, output_rows=output_rows)
-                st.altair_chart(chart, use_container_width=True)
-                st.caption("Standard candlestick chart with volume and optional BUY/SELL or CE/PE trade markers.")
-            with right:
-                st.markdown("**Market Depth View**")
-                depth_df = build_market_depth_summary(candles)
-                st.dataframe(depth_df, use_container_width=True, hide_index=True)
-                st.caption(f"Price spread between support and resistance bands: {levels['spread']:.2f}")
-        else:
-            st.info("No chart data available.")
-        st.markdown("</div>", unsafe_allow_html=True)
+        left, right = st.columns([4.4, 1.6])
+        with left:
+            chart = build_live_market_chart(candles, output_rows=output_rows)
+            st.altair_chart(chart, use_container_width=True)
+            st.caption("Standard candlestick chart with volume and optional BUY/SELL or CE/PE trade markers.")
+        with right:
+            st.markdown("**Market Depth View**")
+            depth_df = build_market_depth_summary(candles)
+            st.dataframe(depth_df, use_container_width=True, hide_index=True)
+            st.caption(f"Price spread between support and resistance bands: {levels['spread']:.2f}")
+    else:
+        st.info("No chart data available.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with tab3:
-        st.markdown('<div class="section-shell">', unsafe_allow_html=True)
-        st.markdown('<div class="section-heading">Trade Workspace</div><div class="section-copy">Review live-ready setups, preview broker payloads, and send only the orders you actually want routed.</div>', unsafe_allow_html=True)
-        if auto_executed_rows:
-            st.caption("Auto-executed trades from this run.")
-            st.dataframe(_order_trade_columns(pd.DataFrame(auto_executed_rows)), use_container_width=True)
+    st.markdown('<div class="section-shell">', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading">Trade Workspace</div><div class="section-copy">Review live-ready setups, preview broker payloads, and send only the orders you actually want routed.</div>', unsafe_allow_html=True)
+    if auto_executed_rows:
+        st.caption("Auto-executed trades from this run.")
+        st.dataframe(_order_trade_columns(pd.DataFrame(auto_executed_rows)), use_container_width=True)
 
-        if output_rows:
-            trades_df = pd.DataFrame(output_rows)
-            with st.expander(f"Generated Trades ({len(trades_df)})", expanded=False):
-                st.dataframe(trades_df.tail(12), use_container_width=True, height=300)
+    if output_rows:
+        trades_df = pd.DataFrame(output_rows)
+        with st.expander(f"Generated Trades ({len(trades_df)})", expanded=False):
+            st.dataframe(trades_df.tail(12), use_container_width=True, height=300)
 
-            try:
-                summary = build_trade_summary(output_rows)
-                st.text(summary)
-            except Exception as exc:
-                st.warning(f"Could not build trade summary: {exc}")
+        try:
+            summary = build_trade_summary(output_rows)
+            st.text(summary)
+        except Exception as exc:
+            st.warning(f"Could not build trade summary: {exc}")
 
-            csv_data = _to_csv(output_rows)
-            st.download_button("Download CSV", data=csv_data, file_name="trades.csv", mime="text/csv")
-        else:
-            st.info("No trades generated yet.")
+        csv_data = _to_csv(output_rows)
+        st.download_button("Download CSV", data=csv_data, file_name="trades.csv", mime="text/csv")
+    else:
+        st.info("No trades generated yet.")
 
-        st.divider()
-        st.subheader("Analyze First, Execute Later")
-        if execution_candidates:
-            st.caption("Current executable candidates generated from the latest strategy run.")
-            with st.expander(f"Execution Candidates ({len(execution_candidates)})", expanded=False):
-                st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), use_container_width=True, height=280)
+    st.divider()
+    st.subheader("Analyze First, Execute Later")
+    if execution_candidates:
+        st.caption("Current executable candidates generated from the latest strategy run.")
+        with st.expander(f"Execution Candidates ({len(execution_candidates)})", expanded=False):
+            st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), use_container_width=True, height=280)
+        if execution_mode == "LIVE":
+            with st.expander("Dhan Live Payload Preview"):
+                if st.button("Preview Live Payloads", use_container_width=True):
+                    st.session_state["dhan_payload_preview"] = _build_dhan_preview_rows(
+                        execution_candidates,
+                        dhan_security_map_path,
+                    )
+                preview_rows = st.session_state.get("dhan_payload_preview", [])
+                if preview_rows:
+                    st.dataframe(pd.DataFrame(preview_rows), use_container_width=True)
+                else:
+                    st.caption("Preview the exact Dhan live-order payloads here before sending them to the broker.")
+    else:
+        st.info("No execution candidates are available for the current strategy output.")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        if st.button("Analyze Current Trades", use_container_width=True):
+            st.session_state["analyzed_trade_queue"] = analyzed_candidates
+            if analyzed_candidates:
+                st.success(f"Analyzed {len(analyzed_candidates)} executable trade(s). Review them below before execution.")
+            else:
+                st.warning("No BUY/SELL trades were available to analyze.")
+    with c2:
+        if st.button("Clear Analyzed Queue", use_container_width=True):
+            st.session_state["analyzed_trade_queue"] = []
+            st.info("Cleared the analyzed trade queue.")
+    with c3:
+        st.caption(f"Execution mode: {execution_mode}")
+
+    staged_candidates = st.session_state.get("analyzed_trade_queue", [])
+    if staged_candidates:
+        st.caption("Reviewed trade queue. Only this staged list will be executed.")
+        with st.expander(f"Reviewed Queue ({len(staged_candidates)})", expanded=True):
+            st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), use_container_width=True, height=260)
+
+        executed_rows: list[dict[str, object]] = []
+        execute_clicked = st.button("Execute Reviewed Trades", type="primary", use_container_width=True)
+        if execute_clicked:
             if execution_mode == "LIVE":
-                with st.expander("Dhan Live Payload Preview"):
-                    if st.button("Preview Live Payloads", use_container_width=True):
-                        st.session_state["dhan_payload_preview"] = _build_dhan_preview_rows(
-                            execution_candidates,
-                            dhan_security_map_path,
-                        )
-                    preview_rows = st.session_state.get("dhan_payload_preview", [])
-                    if preview_rows:
-                        st.dataframe(pd.DataFrame(preview_rows), use_container_width=True)
-                    else:
-                        st.caption("Preview the exact Dhan live-order payloads here before sending them to the broker.")
-        else:
-            st.info("No execution candidates are available for the current strategy output.")
-
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            if st.button("Analyze Current Trades", use_container_width=True):
-                st.session_state["analyzed_trade_queue"] = analyzed_candidates
-                if analyzed_candidates:
-                    st.success(f"Analyzed {len(analyzed_candidates)} executable trade(s). Review them below before execution.")
+                if execute_live_trades is None:
+                    st.error("Live execution module is not available.")
                 else:
-                    st.warning("No BUY/SELL trades were available to analyze.")
-        with c2:
-            if st.button("Clear Analyzed Queue", use_container_width=True):
-                st.session_state["analyzed_trade_queue"] = []
-                st.info("Cleared the analyzed trade queue.")
-        with c3:
-            st.caption(f"Execution mode: {execution_mode}")
+                    executed_rows = execute_live_trades(staged_candidates, Path(live_log_output), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
+            else:
+                if execute_paper_trades is None:
+                    st.error("Paper execution module is not available.")
+                else:
+                    executed_rows = execute_paper_trades(staged_candidates, Path(paper_log_output), deduplicate=True)
 
-        staged_candidates = st.session_state.get("analyzed_trade_queue", [])
-        if staged_candidates:
-            st.caption("Reviewed trade queue. Only this staged list will be executed.")
-            with st.expander(f"Reviewed Queue ({len(staged_candidates)})", expanded=True):
-                st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), use_container_width=True, height=260)
-
-            executed_rows: list[dict[str, object]] = []
-            execute_clicked = st.button("Execute Reviewed Trades", type="primary", use_container_width=True)
-            if execute_clicked:
+            if executed_rows:
+                st.success(f"Executed {len(executed_rows)} reviewed trade(s) in {execution_mode} mode.")
+                st.dataframe(_order_trade_columns(pd.DataFrame(executed_rows)), use_container_width=True)
                 if execution_mode == "LIVE":
-                    if execute_live_trades is None:
-                        st.error("Live execution module is not available.")
-                    else:
-                        executed_rows = execute_live_trades(staged_candidates, Path(live_log_output), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
-                else:
-                    if execute_paper_trades is None:
-                        st.error("Paper execution module is not available.")
-                    else:
-                        executed_rows = execute_paper_trades(staged_candidates, Path(paper_log_output), deduplicate=True)
-
-                if executed_rows:
-                    st.success(f"Executed {len(executed_rows)} reviewed trade(s) in {execution_mode} mode.")
-                    st.dataframe(_order_trade_columns(pd.DataFrame(executed_rows)), use_container_width=True)
-                    if execution_mode == "LIVE":
-                        _render_live_execution_feedback(executed_rows)
-                else:
-                    st.warning("No new reviewed trades were executed. They may already be logged.")
-        else:
-            st.info("Analyze trades first to build a review queue, then execute that reviewed batch later.")
-        st.markdown("</div>", unsafe_allow_html=True)
+                    _render_live_execution_feedback(executed_rows)
+            else:
+                st.warning("No new reviewed trades were executed. They may already be logged.")
+    else:
+        st.info("Analyze trades first to build a review queue, then execute that reviewed batch later.")
+    st.markdown("</div>", unsafe_allow_html=True)
     raw_candles_csv = candles.to_csv(index=False) if not candles.empty else "timestamp,open,high,low,close,volume`n"
     debug_payload = {
         "strategy": strategy,
@@ -1647,6 +1633,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

@@ -105,6 +105,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument('--execution-type', default='PAPER', choices=['PAPER', 'LIVE', 'NONE'])
     p.add_argument('--paper-log-output', type=Path, default=Path('data/paper_trading_logs_all.csv'))
     p.add_argument('--live-log-output', type=Path, default=Path('data/live_trading_logs_all.csv'))
+    p.add_argument('--live-broker', default='DHAN', choices=['DHAN', 'NONE'])
+    p.add_argument('--security-map', type=Path, default=Path('data/dhan_security_map.csv'))
     p.add_argument('--min-paper-days', type=int, default=30)
     p.add_argument('--report-dir', type=Path, default=Path('reports'))
     p.add_argument('--send-telegram', action='store_true')
@@ -122,13 +124,7 @@ def main() -> None:
     execution_note = ''
 
     if requested_execution == 'LIVE':
-        unlocked, days, unlock_date = live_trading_unlock_status(args.paper_log_output, min_days=int(args.min_paper_days))
-        if not unlocked:
-            execution_type = 'NONE'
-            unlock_txt = unlock_date or 'N/A'
-            execution_note = f'Live execution locked: paper days {days}/{int(args.min_paper_days)} (unlock: {unlock_txt})'
-        else:
-            execution_note = f'Live execution unlocked: paper days {days} (unlock date: {unlock_date})'
+        execution_note = 'Live execution enabled for auto-run when Dhan credentials and security map are configured.'
 
     backtest_args = argparse.Namespace(
         symbol=args.symbol,
@@ -147,6 +143,8 @@ def main() -> None:
         paper_log_output=args.paper_log_output,
         execution_type=execution_type,
         live_log_output=args.live_log_output,
+        live_broker=args.live_broker,
+        security_map=args.security_map,
     )
 
     out = auto_backtest.run(backtest_args)
@@ -208,3 +206,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+

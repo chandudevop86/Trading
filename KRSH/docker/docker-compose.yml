@@ -1,0 +1,19 @@
+﻿version: "3.9"
+
+services:
+  krsh-app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: krsh-trading:latest
+    container_name: krsh_trading_app
+    ports:
+      - "8501:8501"
+    environment:
+      STREAMLIT_SERVER_PORT: "8501"
+      STREAMLIT_SERVER_ADDRESS: "0.0.0.0"
+      EXECUTION_MODE: "PAPER"
+      AWS_DEFAULT_REGION: "ap-south-1"
+    volumes:
+      - ../app/data:/opt/krsh/data
+    restart: unless-stopped

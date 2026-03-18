@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from math import floor
 
 from src.breakout_bot import Candle
+from src.trade_safety import calculate_net_pnl, daily_limit_reached
 
 
 @dataclass
@@ -127,6 +128,9 @@ def generate_trades(
     setup_mode: str = "either",
     require_retest_strength: bool = True,
     max_trades_per_day: int = 3,
+    cost_bps: float = 0.0,
+    fixed_cost_per_trade: float = 0.0,
+    max_daily_loss: float | None = None,
 ) -> list[dict[str, object]]:
     trades: list[dict[str, object]] = []
     by_day = _group_by_day(candles)
@@ -145,8 +149,9 @@ def generate_trades(
 
         search_start = 15
         trades_taken = 0
+        realized_pnl = 0.0
 
-        while trades_taken < max_trades_per_day and search_start < len(day_candles):
+        while search_start < len(day_candles) and not daily_limit_reached(trades_taken, realized_pnl, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss):
             trade = None
             entry_idx = -1
 
@@ -287,14 +292,24 @@ def generate_trades(
                         exit_idx = idx
                         break
 
-            pnl = (exit_price - entry) * qty if side == "BUY" else (entry - exit_price) * qty
+            gross_pnl, trading_cost, pnl = calculate_net_pnl(
+                side,
+                entry,
+                exit_price,
+                qty,
+                cost_bps=cost_bps,
+                fixed_cost_per_trade=fixed_cost_per_trade,
+            )
             trade["exit_time"] = exit_time.isoformat(sep=" ")
             trade["exit_price"] = round(exit_price, 4)
             trade["exit_reason"] = exit_reason
+            trade["gross_pnl"] = round(gross_pnl, 2)
+            trade["trading_cost"] = round(trading_cost, 2)
             trade["pnl"] = round(pnl, 2)
             trades.append(trade)
 
             trades_taken += 1
+            realized_pnl += float(pnl)
             search_start = exit_idx + 1
 
     return trades

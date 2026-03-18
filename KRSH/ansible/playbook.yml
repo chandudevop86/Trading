@@ -1,0 +1,30 @@
+﻿---
+- name: Prepare KRSH host and deploy container stack
+  hosts: krsh_hosts
+  become: true
+  vars:
+    app_root: /opt/krsh
+  tasks:
+    - name: Install base packages
+      ansible.builtin.package:
+        name:
+          - docker.io
+          - docker-compose
+          - python3-pip
+        state: present
+
+    - name: Ensure application root exists
+      ansible.builtin.file:
+        path: "{{ app_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: Copy KRSH project
+      ansible.builtin.copy:
+        src: ../
+        dest: "{{ app_root }}/"
+
+    - name: Start compose stack
+      ansible.builtin.shell: docker compose -f {{ app_root }}/docker/docker-compose.yml up -d --build
+      args:
+        chdir: "{{ app_root }}"

@@ -33,6 +33,12 @@ py -3 -m src.nifty50 --snapshot-output data/nifty50_snapshot.csv --rules data/ni
 py -3 -m src.nifty_options --input data/nifty_options_chain_sample.csv --rules data/nifty_options_rules.yaml --output data/nifty_options_scored.csv
 ```
 
+## NIFTY Futures Run
+
+```bash
+py -3 -m src.nifty_futures --symbol NIFTY --snapshot-output data/nifty_futures_snapshot.csv --rules data/nifty_futures_rules.yaml --scored-output data/nifty_futures_scored.csv
+```
+
 If rules exist, output is generated with extra boolean columns per rule.
 
 ## Rule format
@@ -186,27 +192,26 @@ kubectl apply -f deploy/k8s/service.yaml
 kubectl apply -f deploy/k8s/ingress.yaml
 ```
 
-## Dhan API Integration Tab (Future)
+## Dhan Integration
 
-A future-ready strategy tab is available in app:
-- `Dhan API (Future)`
+The app now supports Dhan-based execution and account connectivity.
 
-This tab includes:
-- Auth config placeholders
-- Market feed payload example
-- Order router payload example
-- Webhook schema example
-- Downloadable `dhan_order_template.csv`
+Current capabilities:
+- Preview Dhan order payloads before sending
+- Route live orders through Dhan when execution mode is `LIVE`
+- Run readiness checks for Dhan credentials and security-map coverage
+- Fetch positions and order details from the Dhan account CLI tools
+- Use a root `.env` file for `DHAN_CLIENT_ID` and `DHAN_ACCESS_TOKEN`
 
 ## Dhan Execution Policy
 
-- `Dhan API (Future)` strategy now supports **paper execution now**.
-- Live execution is locked until **30 days** of paper-trade history exists in `data/dhan_paper_trades.csv`.
+- Live execution is available when Dhan credentials and the security map are configured correctly.
+- Orders are sent only when you choose `LIVE` execution or pass `--place-live` in the CLI.
 - Default NIFTY lot size is set to **65**.
 
 ## Auto Run (Backtest + Execute + Report)
 
-Run the end-to-end pipeline (fetch OHLCV → backtest → execute to log → HTML/PDF report → optional Telegram message/PDF):
+Run the end-to-end pipeline (fetch OHLCV -> backtest -> execute to log -> HTML/PDF report -> optional Telegram message/PDF):
 
 ```bash
 py -3 -m src.auto_run --symbol ^NSEI --interval 5m --period 1d --execution-type PAPER --send-telegram --send-telegram-pdf --telegram-token "<BOT_TOKEN>" --telegram-chat-id "<CHAT_ID>"
@@ -214,5 +219,63 @@ py -3 -m src.auto_run --symbol ^NSEI --interval 5m --period 1d --execution-type 
 
 Execution modes:
 - `--execution-type PAPER` writes to `data/paper_trading_logs_all.csv`
-- `--execution-type LIVE` writes to `data/live_trading_logs_all.csv` (locked until 30 days of PAPER history; see `--min-paper-days`)
+- `--execution-type LIVE` writes to `data/live_trading_logs_all.csv` when Dhan credentials and the security map are configured
 - `--execution-type NONE` skips execution (backtest/report only)
+
+
+## Dhan HQ CLI Preview / Order
+
+Preview a Dhan order payload safely:
+
+```bash
+py -3 -m src.dhan_example --symbol NIFTY --side BUY --quantity 50 --option-strike 27MAR24500CE --option-type CE --strike-price 24500 --security-map data/dhan_security_map.csv
+```
+
+Place the same order live after previewing it:
+
+```bash
+py -3 -m src.dhan_example --symbol NIFTY --side BUY --quantity 50 --option-strike 27MAR24500CE --option-type CE --strike-price 24500 --security-map data/dhan_security_map.csv --place-live
+```
+
+Required environment variables for live use:
+- `DHAN_CLIENT_ID`
+- `DHAN_ACCESS_TOKEN`
+- Optional: `DHAN_BASE_URL`
+- Optional: `DHAN_SECURITY_MAP`
+
+Notes:
+- Default behavior is preview-only and does not hit the broker.
+- The security-map CSV must contain Dhan security IDs and symbol aliases used by your contract names.
+- Use `--order-type LIMIT --price <value>` for limit orders.
+
+Fetch current Dhan positions:
+
+```bash
+py -3 -m src.dhan_account --resource positions
+```
+
+Fetch a single Dhan order by ID:
+
+```bash
+py -3 -m src.dhan_account --resource order --order-id <ORDER_ID>
+```
+
+## Environment File
+
+This repo now auto-loads a root `.env` file whenever a `src.*` module starts, so Dhan credentials can live in one place.
+
+Example `.env` values:
+
+```env
+DHAN_CLIENT_ID=your_client_id_here
+DHAN_ACCESS_TOKEN=your_access_token_here
+DHAN_BASE_URL=https://api-hq.dhan.co
+DHAN_SECURITY_MAP=data/dhan_security_map.csv
+```
+
+Files added:
+- `.env` for your local secrets
+- `.env.example` as the shareable template
+
+Because `src/__init__.py` loads `.env` automatically, the same credentials are available to `src.dhan_example`, `src.dhan_account`, `src.auto_run`, and other `src.*` entry points that read `os.getenv(...)`.
+

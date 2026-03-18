@@ -1,0 +1,1000 @@
+﻿<!doctype html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <title>Intratrade Complete Documentation</title>
+  <style>
+    @page { size: A4; margin: 18mm 14mm; }
+    body { font-family: Segoe UI, Arial, sans-serif; color: #102033; margin: 0; background: #f4f7fb; }
+    .cover { min-height: 92vh; display: flex; flex-direction: column; justify-content: center; padding: 24px; background: linear-gradient(135deg, #e8f1ff, #fdfdfd 55%, #dff3ea); }
+    .cover h1 { font-size: 34px; margin: 0 0 12px; }
+    .cover p { font-size: 15px; max-width: 760px; line-height: 1.6; }
+    .meta { color: #4b5b70; font-size: 13px; margin-top: 12px; }
+    .toc { background: white; margin: 0; padding: 28px; page-break-after: always; }
+    .toc h2 { margin-top: 0; }
+    .toc ol { line-height: 1.8; }
+    .doc-section { page-break-before: always; background: white; padding: 0; }
+    .doc-header { border-bottom: 2px solid #d7e3f1; padding: 8px 0 14px; margin-bottom: 18px; }
+    .doc-kicker { text-transform: uppercase; letter-spacing: .12em; font-size: 11px; color: #5d738d; }
+    .doc-header h1 { margin: 6px 0; font-size: 24px; }
+    .doc-path { color: #6b7280; font-size: 11px; word-break: break-all; }
+    .doc-body { font-size: 14px; line-height: 1.55; }
+    .doc-body img { max-width: 100%; }
+    .doc-body table { width: 100%; border-collapse: collapse; }
+    .doc-body th, .doc-body td { border: 1px solid #cfd8e3; padding: 6px 8px; }
+    .doc-body pre, .doc-body code { white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <section class='cover'>
+    <div class='doc-kicker'>Master PDF</div>
+    <h1>Intratrade Complete Documentation Pack</h1>
+    <p>This merged PDF combines all generated project, deployment, client-facing, and branded trading app documents into one Adobe-friendly deliverable.</p>
+    <div class='meta'>Generated on 2026-03-18 | Workspace: F:\Trading | Total documents: 17</div>
+  </section>
+  <section class='toc'>
+    <h2>Included Documents</h2>
+    <ol>
+      <li>Trade Output Summary</li>
+      <li>AWS README</li>
+      <li>AWS Deployment Guide</li>
+      <li>Docker Kubernetes Dhan Guide</li>
+      <li>Scheduler Guide</li>
+      <li>Trading App Architecture</li>
+      <li>Trading App Deployment</li>
+      <li>Trading App Architecture Diagram</li>
+      <li>Trading App Production Runbook</li>
+      <li>Client Executive Overview</li>
+      <li>Client Architecture</li>
+      <li>Client Deployment</li>
+      <li>Broker Integration Flow</li>
+      <li>Intratrade Master Documentation</li>
+      <li>Intratrade Client Proposal</li>
+      <li>Intratrade Commercial Proposal</li>
+      <li>Intratrade Premium Master Dark</li>
+    </ol>
+  </section>
+  <section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Trade Output Summary</h1>
+    <div class='doc-path'>F:\Trading\data\pdf_html\trade.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>Intratrade Fix Report</h1>
+<div class="section"># Intratrade Dashboard Fix Report<br/>
+<br/>
+Generated: 2026-03-16 (IST)<br/>
+<br/>
+## Problem<br/>
+Dashboard summary was misleading:<br/>
+<br/>
+- `Intratrade alert` showed many rows (e.g., `Trades: 103`) but `Win rate: 0.00%`, `Total PnL: 0.00`, `Last exit: N/A`, `Last reason: N/A`.<br/>
+<br/>
+Root cause: the dashboard was sending **non-closed rows** (signals / indicator rows / mixed rows) into the **closed-trade** summarizer.<br/>
+<br/>
+## Fix Location<br/>
+- `F:\Trading\src\telegram_notifier.py` â†’ `build_trade_summary()` (around line 12).<br/>
+<br/>
+## What I Changed (Steps)<br/>
+1. **Classify input rows** before summarizing:<br/>
+   - Indicator rows: contain `market_signal`<br/>
+   - Execution candidates: contain `signal_time` + `side`<br/>
+   - Trade signals (entries without exits): contain `entry_price/stop_loss/target_price` but no `pnl/exit_*`<br/>
+2. **Only compute Win rate / PnL on closed trades**:<br/>
+   - Filter to rows that contain `pnl` and at least one of `exit_time` / `exit_reason`.<br/>
+3. **Fallback summaries** for signals:<br/>
+   - If there are no closed trades, show a `Signal alert` with last time/side/entry/SL/target.<br/>
+<br/>
+## How To Export To PDF<br/>
+Option A (recommended):<br/>
+1. Open this file: `F:\Trading\intratrade_fix_report.html`<br/>
+2. Press **Ctrl+P** â†’ choose **Save as PDF**.<br/>
+<br/>
+Option B:<br/>
+- Open `F:\Trading\intratrade_fix_report.md` and print to PDF from your editor.<br/>
+</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>AWS README</h1>
+    <div class='doc-path'>F:\Trading\data\pdf_html\README.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>AWS README</h1>
+<div class="section"># AWS Deployment Files<br/>
+<br/>
+This folder contains ready-to-use deployment files for hosting Intratrade on AWS EC2.<br/>
+<br/>
+## Files<br/>
+- `deploy/aws/intratrade.service`: systemd service for Streamlit app<br/>
+- `deploy/aws/chandudevopai.shop.nginx.conf`: nginx reverse proxy config<br/>
+- `deploy/aws/iam-policy-s3.json`: IAM policy template for S3 access<br/>
+- `deploy/aws/deploy.sh`: one-shot setup script (Ubuntu)<br/>
+- `deploy/aws/deploy-amzn-linux-2023.sh`: one-shot setup script (Amazon Linux 2023)<br/>
+- `deploy/streamlit/config.toml`: streamlit server config for reverse proxy mode<br/>
+<br/>
+## Quick steps (manual)<br/>
+1. Copy streamlit config:<br/>
+   - `cp deploy/streamlit/config.toml .streamlit/config.toml`<br/>
+2. Install service:<br/>
+   - `sudo cp deploy/aws/intratrade.service /etc/systemd/system/`<br/>
+   - `sudo systemctl daemon-reload &amp;&amp; sudo systemctl enable --now intratrade`<br/>
+3. Install nginx vhost:<br/>
+   - Ubuntu/Debian:<br/>
+     - `sudo cp deploy/aws/chandudevopai.shop.nginx.conf /etc/nginx/sites-available/chandudevopai.shop.conf`<br/>
+     - `sudo ln -s /etc/nginx/sites-available/chandudevopai.shop.conf /etc/nginx/sites-enabled/`<br/>
+   - Amazon Linux 2023:<br/>
+     - `sudo cp deploy/aws/chandudevopai.shop.nginx.conf /etc/nginx/conf.d/chandudevopai.shop.conf`<br/>
+   - `sudo nginx -t &amp;&amp; sudo systemctl reload nginx`<br/>
+4. Issue SSL cert:<br/>
+   - `sudo certbot --nginx -d chandudevopai.shop -d www.chandudevopai.shop`<br/>
+<br/>
+## One-shot script (Ubuntu)<br/>
+Update placeholders in `deploy/aws/deploy.sh`:<br/>
+- `REPLACE_GIT_REPO_URL`<br/>
+- `REPLACE_EMAIL`<br/>
+<br/>
+Run:<br/>
+```bash<br/>
+chmod +x deploy/aws/deploy.sh<br/>
+./deploy/aws/deploy.sh<br/>
+```<br/>
+<br/>
+## One-shot script (Amazon Linux 2023)<br/>
+Update placeholders in `deploy/aws/deploy-amzn-linux-2023.sh`:<br/>
+- `REPLACE_GIT_REPO_URL`<br/>
+- `REPLACE_EMAIL`<br/>
+<br/>
+Run:<br/>
+```bash<br/>
+chmod +x deploy/aws/deploy-amzn-linux-2023.sh<br/>
+./deploy/aws/deploy-amzn-linux-2023.sh<br/>
+```<br/>
+</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>AWS Deployment Guide</h1>
+    <div class='doc-path'>F:\Trading\data\pdf_html\DEPLOYMENT_GUIDE.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>AWS Deployment Guide</h1>
+<div class="section"># Deployment Scripts + PDFs<br/>
+<br/>
+## Deploy<br/>
+- Ubuntu: `deploy/aws/deploy.sh`<br/>
+- Amazon Linux 2023: `deploy/aws/deploy-amzn-linux-2023.sh`<br/>
+<br/>
+## Undeploy / Rollback<br/>
+- Ubuntu: `deploy/aws/undeploy.sh`<br/>
+- Amazon Linux 2023: `deploy/aws/undeploy-amzn-linux-2023.sh`<br/>
+<br/>
+## Nginx<br/>
+- `deploy/aws/chandudevopai.shop.nginx.conf`<br/>
+<br/>
+## Service<br/>
+- `deploy/aws/intratrade.service`<br/>
+<br/>
+## Streamlit Config<br/>
+- `deploy/streamlit/config.toml`<br/>
+<br/>
+## IAM Policy<br/>
+- `deploy/aws/iam-policy-s3.json`<br/>
+<br/>
+## Notes<br/>
+1. Update placeholders in deploy scripts before running.<br/>
+2. Test nginx before reload: `sudo nginx -t`.<br/>
+3. Use certbot for TLS certs.<br/>
+</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Docker Kubernetes Dhan Guide</h1>
+    <div class='doc-path'>F:\Trading\data\pdf_html\DOCKER_KUBERNETES_DHAN_GUIDE.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>Docker Kubernetes Dhan Guide</h1>
+<div class="section"># Docker + Kubernetes + Dhan API (Future) Guide<br/>
+<br/>
+This guide deploys the Streamlit app with Docker and Kubernetes, routes traffic from `chandudevopai.shop`, and keeps a future-ready Dhan API tab in the app.<br/>
+<br/>
+## 1) Local Docker run<br/>
+<br/>
+```bash<br/>
+cd /opt/intratrade<br/>
+vim deploy/docker/Dockerfile<br/>
+vim deploy/docker/docker-compose.yml<br/>
+<br/>
+# Build image<br/>
+docker build -f deploy/docker/Dockerfile -t intratrade:latest .<br/>
+<br/>
+# Run container<br/>
+docker compose -f deploy/docker/docker-compose.yml up -d<br/>
+<br/>
+# Verify<br/>
+docker ps<br/>
+docker logs intratrade_app --tail 100<br/>
+```<br/>
+<br/>
+Open `http://&lt;server-ip&gt;:8501`.<br/>
+<br/>
+## 2) Kubernetes deployment (single node or cluster)<br/>
+<br/>
+```bash<br/>
+cd /opt/intratrade<br/>
+<br/>
+# Create namespace + config<br/>
+kubectl apply -f deploy/k8s/namespace.yaml<br/>
+kubectl apply -f deploy/k8s/configmap.yaml<br/>
+<br/>
+# Create secrets from template<br/>
+cp deploy/k8s/secret.example.yaml deploy/k8s/secret.yaml<br/>
+vim deploy/k8s/secret.yaml<br/>
+kubectl apply -f deploy/k8s/secret.yaml<br/>
+<br/>
+# Apply workload<br/>
+kubectl apply -f deploy/k8s/deployment.yaml<br/>
+kubectl apply -f deploy/k8s/service.yaml<br/>
+kubectl apply -f deploy/k8s/ingress.yaml<br/>
+kubectl apply -f deploy/k8s/hpa.yaml<br/>
+<br/>
+# Verify<br/>
+kubectl get all -n intratrade<br/>
+kubectl get ingress -n intratrade<br/>
+```<br/>
+<br/>
+## 3) Push image to registry (recommended)<br/>
+<br/>
+```bash<br/>
+# Example with Docker Hub<br/>
+docker tag intratrade:latest &lt;dockerhub-user&gt;/intratrade:latest<br/>
+docker push &lt;dockerhub-user&gt;/intratrade:latest<br/>
+<br/>
+# Then update deploy/k8s/deployment.yaml image:<br/>
+# image: &lt;dockerhub-user&gt;/intratrade:latest<br/>
+kubectl apply -f deploy/k8s/deployment.yaml<br/>
+```<br/>
+<br/>
+## 4) Domain routing<br/>
+<br/>
+Set DNS A record:<br/>
+- Host: `chandudevopai.shop`<br/>
+- Value: your load balancer/public IP<br/>
+<br/>
+If using NGINX ingress controller, ensure ports 80/443 are open.<br/>
+<br/>
+For TLS (HTTPS):<br/>
+- Install cert-manager in cluster.<br/>
+- Add TLS secret and issuer in ingress manifest.<br/>
+<br/>
+## 5) App feature included for future Dhan API<br/>
+<br/>
+The app now includes strategy tab:<br/>
+- `Dhan API (Future)`<br/>
+<br/>
+Inside that tab:<br/>
+- Auth panel for `client_id` and access token<br/>
+- Market feed contract example<br/>
+- Order router payload example<br/>
+- Webhook event schema example<br/>
+- Downloadable `dhan_order_template.csv`<br/>
+<br/>
+Current status:<br/>
+- Dhan tab is scaffold-only (safe for future extension)<br/>
+- Existing bots continue to run normally<br/>
+<br/>
+## 6) Useful operations<br/>
+<br/>
+```bash<br/>
+# Restart app deployment<br/>
+kubectl rollout restart deployment intratrade-app -n intratrade<br/>
+<br/>
+# Follow logs<br/>
+kubectl logs -f deployment/intratrade-app -n intratrade<br/>
+<br/>
+# Scale manually<br/>
+kubectl scale deployment intratrade-app --replicas=2 -n intratrade<br/>
+<br/>
+# Remove everything<br/>
+kubectl delete ns intratrade<br/>
+```<br/>
+</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Scheduler Guide</h1>
+    <div class='doc-path'>F:\Trading\data\pdf_html\SCHEDULER_GUIDE.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>Scheduler Guide</h1>
+<div class="section"># Auto Backtest Scheduler Guide<br/>
+<br/>
+This sets fully automatic backtest + paper logs without manual intervention.<br/>
+<br/>
+## Output files updated each run<br/>
+- `data/live_ohlcv.csv`<br/>
+- `data/backtest_results_all.csv`<br/>
+- `data/backtest_results_history.csv`<br/>
+- `data/paper_trading_logs_all.csv`<br/>
+<br/>
+## Windows Task Scheduler<br/>
+<br/>
+### 1) Test manually once<br/>
+```powershell<br/>
+cd F:\Trading<br/>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_auto_backtest.ps1<br/>
+```<br/>
+<br/>
+### 2) Register recurring task (every 15 minutes)<br/>
+```powershell<br/>
+cd F:\Trading<br/>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\scheduler\register_windows_task.ps1 -TaskName &quot;IntratradeAutoBacktest&quot; -Schedule MINUTE -Modifier 15 -StartTime &quot;09:15&quot;<br/>
+```<br/>
+<br/>
+### 3) Run on demand<br/>
+```powershell<br/>
+schtasks /Run /TN &quot;IntratradeAutoBacktest&quot;<br/>
+```<br/>
+<br/>
+### 4) Check status<br/>
+```powershell<br/>
+schtasks /Query /TN &quot;IntratradeAutoBacktest&quot; /V /FO LIST<br/>
+```<br/>
+<br/>
+### 5) Delete task<br/>
+```powershell<br/>
+schtasks /Delete /TN &quot;IntratradeAutoBacktest&quot; /F<br/>
+```<br/>
+<br/>
+## Linux Cron (if deployed on Linux)<br/>
+<br/>
+### 1) Make runner executable<br/>
+```bash<br/>
+cd /opt/intratrade<br/>
+chmod +x deploy/scheduler/run_auto_backtest.sh<br/>
+```<br/>
+<br/>
+### 2) Add cron entry (every 15 minutes)<br/>
+```bash<br/>
+crontab -e<br/>
+```<br/>
+Add this line:<br/>
+```cron<br/>
+*/15 * * * * REPO_DIR=/opt/intratrade SYMBOL=RELIANCE.NS INTERVAL=5m PERIOD=5d EXEC_SYMBOL=RELIANCE /opt/intratrade/deploy/scheduler/run_auto_backtest.sh &gt;&gt; /opt/intratrade/data/cron_backtest.log 2&gt;&amp;1<br/>
+```<br/>
+<br/>
+### 3) Verify cron installed<br/>
+```bash<br/>
+crontab -l<br/>
+```<br/>
+<br/>
+## Customize strategy feed<br/>
+- Symbol: `RELIANCE.NS` / `^NSEI` / other Yahoo ticker<br/>
+- Interval: `1m|2m|5m|15m|30m|60m|1d`<br/>
+- Period: `1d|5d|1mo`<br/>
+<br/>
+## Notes<br/>
+- Uses live OHLCV fetch from Yahoo on each run.<br/>
+- No manual CSV upload needed.<br/>
+- NIFTY quantity enforcement remains in execution engine (lot multiple logic).</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Trading App Architecture</h1>
+    <div class='doc-path'>F:\Trading\data\docs\html\01_trading_app_architecture.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>01_trading_app_architecture</h1>
+<div class="section">TRADING APP ARCHITECTURE DOCUMENTATION<br/>
+<br/>
+Overview<br/>
+This Trading App is designed with multiple tiers so market data, strategy logic, execution flow, notifications, and reporting stay organized and easy to manage.<br/>
+<br/>
+WEB OR UI TIER<br/>
+Usually UI tier is the one which has frontend and user interaction components.<br/>
+In this project, UI tier is mainly Streamlit dashboard.<br/>
+This tier is used for symbol selection, strategy selection, risk setup, lot size setup, execution mode, charts, signal review, and trade analysis.<br/>
+If required in production, this UI can be exposed through Nginx reverse proxy.<br/>
+<br/>
+APP OR STRATEGY TIER<br/>
+App tier is the main business logic layer.<br/>
+In this project it contains market data fetch, technical strategy execution, signal generation, strike selection, futures contract mapping, execution preparation, and reporting flow.<br/>
+Major modules include Trading.py, live_ohlcv.py, breakout_bot.py, supply_demand.py, indicator_bot.py, one_trade_day.py, mtf_trade_bot.py, execution_engine.py, auto_backtest.py, and auto_run.py.<br/>
+Usually this tier should not be directly open to the internet.<br/>
+<br/>
+MARKET DATA TIER<br/>
+Market data tier provides the raw inputs required for strategy calculations.<br/>
+This project uses Yahoo Finance OHLCV data, NSE option chain data, NSE futures derivative data, and uploaded CSV files for testing or backtesting.<br/>
+This tier is used for live candles, spot price, option metrics, futures contract data, and historical analysis.<br/>
+<br/>
+EXECUTION TIER<br/>
+Execution tier handles paper execution and live-execution-ready flow.<br/>
+This tier converts trade signals into executable candidate rows, normalizes quantity using lot size, and writes execution logs.<br/>
+Current project supports PAPER flow and LIVE-ready structure.<br/>
+Future broker APIs can be attached here.<br/>
+<br/>
+STORAGE TIER<br/>
+Storage tier keeps the application outputs and logs.<br/>
+This project mainly uses CSV, YAML, HTML, and PDF files.<br/>
+Examples include live_ohlcv.csv, paper_trading_logs_all.csv, live_trading_logs_all.csv, backtest_results_all.csv, nifty_options_scored.csv, and nifty_futures_snapshot.csv.<br/>
+<br/>
+NOTIFICATION TIER<br/>
+Notification tier is used for communicating signals and summaries.<br/>
+In this project Telegram is used for alerts, signal summaries, and report delivery.<br/>
+<br/>
+REPORTING TIER<br/>
+Reporting tier generates user-readable outputs.<br/>
+This includes CSV reports, HTML summaries, PDF files, backtest summaries, and trade result snapshots.<br/>
+<br/>
+COMMUNICATION FLOW<br/>
+1. User opens the dashboard.<br/>
+2. UI sends strategy settings to app tier.<br/>
+3. App tier fetches market data from Yahoo or NSE sources.<br/>
+4. Strategy modules generate BUY, SELL, or HOLD signals.<br/>
+5. Contract layer converts signals into options or futures contracts.<br/>
+6. Execution tier prepares paper or live-ready trade rows.<br/>
+7. Storage tier writes logs and result files.<br/>
+8. Notification tier sends Telegram alerts if enabled.<br/>
+9. Reporting tier prepares summaries and downloadable documents.<br/>
+<br/>
+DEPENDENCY FLOW<br/>
+UI Tier depends on App Tier.<br/>
+App Tier depends on Market Data Tier.<br/>
+Execution Tier depends on App Tier.<br/>
+Storage Tier depends on App Tier and Execution Tier.<br/>
+Notification Tier depends on App Tier and Execution Tier.<br/>
+Reporting Tier depends on Storage Tier and App Tier.<br/>
+</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Trading App Deployment</h1>
+    <div class='doc-path'>F:\Trading\data\docs\html\02_trading_app_deployment.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>02_trading_app_deployment</h1>
+<div class="section">TRADING APP DEPLOYMENT DOCUMENTATION<br/>
+<br/>
+Overview<br/>
+This document explains how the Trading App can be deployed for local use, server use, and production-style access.<br/>
+<br/>
+LOCAL DEPLOYMENT<br/>
+The project can run locally using Python and Streamlit.<br/>
+Install dependencies from requirements.txt.<br/>
+Launch the dashboard using Streamlit.<br/>
+This mode is suitable for development, testing, and strategy review.<br/>
+<br/>
+APPLICATION ENTRY POINTS<br/>
+Main UI entry point is Trading.py.<br/>
+Other entry points include auto_backtest.py, auto_run.py, nifty50.py, nifty_options.py, and nifty_futures.py.<br/>
+These scripts support automation, scoring, and reporting outside the UI.<br/>
+<br/>
+WEB ACCESS LAYER<br/>
+For production-style deployment, Streamlit can be placed behind Nginx.<br/>
+Nginx can work as reverse proxy for domain-based access.<br/>
+This improves routing and gives a cleaner public endpoint.<br/>
+<br/>
+SERVER RECOMMENDATION<br/>
+Recommended server setup:<br/>
+1. Linux or Windows VM.<br/>
+2. Python runtime.<br/>
+3. Streamlit service.<br/>
+4. Optional Nginx reverse proxy.<br/>
+5. Secure secrets storage for tokens and credentials.<br/>
+<br/>
+CONFIGURATION REQUIREMENTS<br/>
+Required configuration may include Telegram bot token, Telegram chat ID, broker credentials for future live trading, and optional AWS S3 configuration.<br/>
+These values should be stored in environment variables, secrets, or protected config files.<br/>
+<br/>
+DATA AND FILE PATHS<br/>
+Application reads and writes under the data folder.<br/>
+Make sure the deployment host has read and write permission for logs, report files, and snapshots.<br/>
+If using persistent server deployment, this folder should be backed up or mounted on persistent storage.<br/>
+<br/>
+SECURITY RECOMMENDATIONS<br/>
+Only UI tier should be internet-facing.<br/>
+App and execution internals should remain private.<br/>
+Do not expose secrets inside source files.<br/>
+Use HTTPS when publishing through a domain.<br/>
+Protect broker APIs and notification credentials.<br/>
+<br/>
+AUTOMATION OPTIONS<br/>
+The project already supports scheduled or repeated runs using scripts and scheduler folders.<br/>
+Auto backtests and reporting tasks can be scheduled using Windows Task Scheduler, cron, or container orchestration.<br/>
+<br/>
+DEPLOYMENT MODES<br/>
+Development Mode:<br/>
+Run Streamlit locally for testing.<br/>
+<br/>
+Internal Server Mode:<br/>
+Run Streamlit on internal network for team use.<br/>
+<br/>
+Production Mode:<br/>
+Run Streamlit behind Nginx with restricted access, secrets management, and scheduled automation.<br/>
+<br/>
+FUTURE EXTENSIONS<br/>
+The deployment design allows addition of:<br/>
+Broker API execution.<br/>
+Container deployment.<br/>
+Kubernetes deployment.<br/>
+Cloud object storage for reports.<br/>
+Monitoring and alerting.<br/>
+</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Trading App Architecture Diagram</h1>
+    <div class='doc-path'>F:\Trading\data\docs\html\03_trading_app_architecture_diagram.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>03_trading_app_architecture_diagram</h1>
+<div class="section">TRADING APP ARCHITECTURE DIAGRAM DOCUMENTATION<br/>
+<br/>
+High Level Component View<br/>
+<br/>
+USER<br/>
+  |<br/>
+  v<br/>
+STREAMLIT DASHBOARD<br/>
+  |<br/>
+  v<br/>
+APPLICATION LOGIC LAYER<br/>
+  |<br/>
+  +--&gt; MARKET DATA CONNECTORS<br/>
+  |      +--&gt; Yahoo Finance OHLCV<br/>
+  |      +--&gt; NSE Option Chain<br/>
+  |      +--&gt; NSE Futures Data<br/>
+  |<br/>
+  +--&gt; STRATEGY ENGINES<br/>
+  |      +--&gt; Breakout Strategy<br/>
+  |      +--&gt; Demand Supply Strategy<br/>
+  |      +--&gt; Indicator Strategy<br/>
+  |      +--&gt; One Trade Day Strategy<br/>
+  |      +--&gt; MTF 5m Strategy<br/>
+  |<br/>
+  +--&gt; CONTRACT MAPPING LAYER<br/>
+  |      +--&gt; Option Strike Selection<br/>
+  |      +--&gt; Futures Contract Attachment<br/>
+  |<br/>
+  +--&gt; EXECUTION ENGINE<br/>
+  |      +--&gt; Paper Execution<br/>
+  |      +--&gt; Live Ready Execution<br/>
+  |<br/>
+  +--&gt; NOTIFICATION LAYER<br/>
+  |      +--&gt; Telegram Alerts<br/>
+  |<br/>
+  +--&gt; REPORTING LAYER<br/>
+         +--&gt; CSV Outputs<br/>
+         +--&gt; HTML Reports<br/>
+         +--&gt; PDF Reports<br/>
+<br/>
+STORAGE LAYER<br/>
+  +--&gt; CSV Files<br/>
+  +--&gt; YAML Rules<br/>
+  +--&gt; HTML Files<br/>
+  +--&gt; PDF Files<br/>
+  +--&gt; Optional S3 Upload<br/>
+<br/>
+Communication Notes<br/>
+The dashboard does not directly execute trades by itself.<br/>
+It passes user-selected settings into the application logic layer.<br/>
+The application logic layer fetches market data, runs strategies, maps contracts, and prepares execution rows.<br/>
+The execution engine stores output into log files.<br/>
+The reporting layer converts those outputs into readable summaries.<br/>
+The notification layer shares important signals through Telegram.<br/>
+<br/>
+Security Notes<br/>
+UI can be exposed with controlled access.<br/>
+Execution internals and secrets should remain protected.<br/>
+Broker integrations should be attached only inside secure backend flow.<br/>
+</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Trading App Production Runbook</h1>
+    <div class='doc-path'>F:\Trading\data\docs\html\04_trading_app_production_runbook.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>04_trading_app_production_runbook</h1>
+<div class="section">TRADING APP PRODUCTION RUNBOOK<br/>
+<br/>
+Purpose<br/>
+This runbook explains how to operate, monitor, and troubleshoot the Trading App in a production or semi-production environment.<br/>
+<br/>
+STARTUP CHECKLIST<br/>
+1. Verify Python environment is available.<br/>
+2. Verify required packages are installed.<br/>
+3. Verify Streamlit app starts successfully.<br/>
+4. Verify data folder is writable.<br/>
+5. Verify Telegram credentials are configured if alerts are needed.<br/>
+6. Verify broker credentials are configured if future live execution is enabled.<br/>
+<br/>
+RUNTIME CHECKS<br/>
+1. Confirm dashboard is reachable.<br/>
+2. Confirm OHLCV data is loading.<br/>
+3. Confirm strategy outputs are generated.<br/>
+4. Confirm paper execution logs are updating.<br/>
+5. Confirm report files are being created.<br/>
+6. Confirm Telegram alerts are delivered when enabled.<br/>
+<br/>
+DAILY OPERATIONS<br/>
+Review live candles and trade signals.<br/>
+Check paper or live trading logs.<br/>
+Check backtest summary outputs.<br/>
+Archive important CSV and PDF reports.<br/>
+Validate that scheduled tasks completed without failure.<br/>
+<br/>
+INCIDENT SCENARIOS<br/>
+No market data:<br/>
+Check external data provider access and symbol formatting.<br/>
+<br/>
+No trade signals:<br/>
+Check strategy settings, timeframe, and available candles.<br/>
+<br/>
+Execution log not updating:<br/>
+Check write permission on data directory and execution mode.<br/>
+<br/>
+Telegram not sending:<br/>
+Check token, chat ID, internet access, and notifier settings.<br/>
+<br/>
+Wrong contract mapping:<br/>
+Check whether Options or Futures mode is selected.<br/>
+Check strike step, moneyness, and symbol normalization.<br/>
+<br/>
+BACKUP RECOMMENDATION<br/>
+Back up data folder regularly.<br/>
+Critical files include paper trading logs, live trading logs, backtest summaries, and generated reports.<br/>
+<br/>
+CHANGE MANAGEMENT<br/>
+Apply changes first in local or testing environment.<br/>
+Validate strategies and outputs.<br/>
+Then promote to production server.<br/>
+Avoid editing live configuration without backup.<br/>
+<br/>
+FUTURE OPERATIONS IMPROVEMENT<br/>
+Add service monitoring.<br/>
+Add broker health checks.<br/>
+Add log rotation.<br/>
+Add alerting for failed scheduled runs.<br/>
+Add persistent cloud storage for reports.<br/>
+</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Client Executive Overview</h1>
+    <div class='doc-path'>F:\Trading\data\docs\client_facing\html\01_executive_overview.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>01_executive_overview</h1>
+<div class="section">TRADING APP EXECUTIVE OVERVIEW<br/>
+<br/>
+Overview<br/>
+This Trading App is a unified trading workspace designed for market analysis, strategy execution, trade review, and reporting.<br/>
+It brings live market data, multiple technical strategies, contract mapping, execution flow, and reporting into one operational platform.<br/>
+<br/>
+Business Value<br/>
+The application helps traders and operations teams reduce manual work by combining market monitoring, strategy testing, signal generation, contract preparation, and reporting in one place.<br/>
+<br/>
+Core Capabilities<br/>
+Live OHLCV market data viewing.<br/>
+Multiple strategy engines.<br/>
+Options contract selection.<br/>
+Futures contract mode.<br/>
+Paper execution workflow.<br/>
+Live-execution-ready architecture.<br/>
+Telegram alerting.<br/>
+CSV, HTML, and PDF reporting.<br/>
+<br/>
+User Benefits<br/>
+Faster review of opportunities.<br/>
+Structured trading workflow.<br/>
+Centralized trade logs.<br/>
+Repeatable backtesting and reporting.<br/>
+Clear separation between analysis and execution.<br/>
+<br/>
+Target Usage<br/>
+This platform is suitable for active traders, internal trading desks, research teams, and semi-automated strategy operations.</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Client Architecture</h1>
+    <div class='doc-path'>F:\Trading\data\docs\client_facing\html\02_client_architecture.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>02_client_architecture</h1>
+<div class="section">TRADING APP CLIENT ARCHITECTURE<br/>
+<br/>
+User Interface Layer<br/>
+The application uses a Streamlit dashboard as the main user-facing layer.<br/>
+Users can select symbols, intervals, strategies, risk settings, execution mode, and contract type from a single interface.<br/>
+<br/>
+Application Layer<br/>
+The backend logic is implemented in Python modules that manage market data processing, strategy execution, signal preparation, contract conversion, and trade output generation.<br/>
+<br/>
+Market Data Layer<br/>
+The system consumes Yahoo Finance OHLCV data, NSE option-chain data, NSE futures data, and uploaded CSV datasets.<br/>
+<br/>
+Execution Layer<br/>
+The application currently supports paper execution and is structured for future broker API integration.<br/>
+<br/>
+Reporting Layer<br/>
+The system generates CSV outputs, HTML summaries, PDF documents, and Telegram notifications.<br/>
+<br/>
+Storage Layer<br/>
+Operational files are stored in structured folders so logs, snapshots, reports, and rule files remain accessible and auditable.</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Client Deployment</h1>
+    <div class='doc-path'>F:\Trading\data\docs\client_facing\html\03_client_deployment.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>03_client_deployment</h1>
+<div class="section">TRADING APP CLIENT DEPLOYMENT SUMMARY<br/>
+<br/>
+Deployment Style<br/>
+The platform can run locally for development, on an internal server for team usage, or behind Nginx for controlled production-style access.<br/>
+<br/>
+Recommended Stack<br/>
+Python runtime.<br/>
+Streamlit application server.<br/>
+Optional Nginx reverse proxy.<br/>
+Persistent storage for logs and reports.<br/>
+Secure secret storage for tokens and credentials.<br/>
+<br/>
+Operational Readiness<br/>
+The design already supports scheduled jobs, repeatable backtests, report generation, and phased extension toward broker integrations.<br/>
+<br/>
+Security Guidance<br/>
+Only the user interface should be internet-facing.<br/>
+Execution internals, credentials, and broker integrations should remain protected.</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Broker Integration Flow</h1>
+    <div class='doc-path'>F:\Trading\data\docs\client_facing\html\04_broker_integration_flow.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<h1>04_broker_integration_flow</h1>
+<div class="section">TRADING APP BROKER INTEGRATION FLOW<br/>
+<br/>
+Current State<br/>
+The platform already supports signal generation, quantity preparation, and execution logging.<br/>
+Paper trading is active and live integration is prepared as the next extension point.<br/>
+<br/>
+Future Broker Flow<br/>
+1. Strategy generates BUY or SELL signal.<br/>
+2. Contract layer maps the signal to options or futures.<br/>
+3. Execution engine prepares order payload.<br/>
+4. Broker adapter validates symbol, quantity, and product type.<br/>
+5. Order is sent to broker API.<br/>
+6. Response is stored in execution log.<br/>
+7. Telegram notification is sent if enabled.<br/>
+<br/>
+Integration Targets<br/>
+Dhan API.<br/>
+Zerodha API.<br/>
+Angel One API.<br/>
+Other REST or WebSocket brokers.<br/>
+<br/>
+Operational Requirement<br/>
+Broker APIs should be attached only after stable paper-trading validation and proper secret management.</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Intratrade Master Documentation</h1>
+    <div class='doc-path'>F:\Trading\data\docs\branded\intratrade_master_documentation.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<div class="cover">
+  <div class="brand">INTRATRADE</div>
+  <h1>Trading App Master Documentation</h1>
+  <p class="muted">Architecture, deployment, diagram summary, and production runbook in one document.</p>
+</div>
+<h2>1. Architecture</h2>
+<div class="section">TRADING APP ARCHITECTURE DOCUMENTATION<br/><br/>Overview<br/>This Trading App is designed with multiple tiers so market data, strategy logic, execution flow, notifications, and reporting stay organized and easy to manage.<br/><br/>WEB OR UI TIER<br/>Usually UI tier is the one which has frontend and user interaction components.<br/>In this project, UI tier is mainly Streamlit dashboard.<br/>This tier is used for symbol selection, strategy selection, risk setup, lot size setup, execution mode, charts, signal review, and trade analysis.<br/>If required in production, this UI can be exposed through Nginx reverse proxy.<br/><br/>APP OR STRATEGY TIER<br/>App tier is the main business logic layer.<br/>In this project it contains market data fetch, technical strategy execution, signal generation, strike selection, futures contract mapping, execution preparation, and reporting flow.<br/>Major modules include Trading.py, live_ohlcv.py, breakout_bot.py, supply_demand.py, indicator_bot.py, one_trade_day.py, mtf_trade_bot.py, execution_engine.py, auto_backtest.py, and auto_run.py.<br/>Usually this tier should not be directly open to the internet.<br/><br/>MARKET DATA TIER<br/>Market data tier provides the raw inputs required for strategy calculations.<br/>This project uses Yahoo Finance OHLCV data, NSE option chain data, NSE futures derivative data, and uploaded CSV files for testing or backtesting.<br/>This tier is used for live candles, spot price, option metrics, futures contract data, and historical analysis.<br/><br/>EXECUTION TIER<br/>Execution tier handles paper execution and live-execution-ready flow.<br/>This tier converts trade signals into executable candidate rows, normalizes quantity using lot size, and writes execution logs.<br/>Current project supports PAPER flow and LIVE-ready structure.<br/>Future broker APIs can be attached here.<br/><br/>STORAGE TIER<br/>Storage tier keeps the application outputs and logs.<br/>This project mainly uses CSV, YAML, HTML, and PDF files.<br/>Examples include live_ohlcv.csv, paper_trading_logs_all.csv, live_trading_logs_all.csv, backtest_results_all.csv, nifty_options_scored.csv, and nifty_futures_snapshot.csv.<br/><br/>NOTIFICATION TIER<br/>Notification tier is used for communicating signals and summaries.<br/>In this project Telegram is used for alerts, signal summaries, and report delivery.<br/><br/>REPORTING TIER<br/>Reporting tier generates user-readable outputs.<br/>This includes CSV reports, HTML summaries, PDF files, backtest summaries, and trade result snapshots.<br/><br/>COMMUNICATION FLOW<br/>1. User opens the dashboard.<br/>2. UI sends strategy settings to app tier.<br/>3. App tier fetches market data from Yahoo or NSE sources.<br/>4. Strategy modules generate BUY, SELL, or HOLD signals.<br/>5. Contract layer converts signals into options or futures contracts.<br/>6. Execution tier prepares paper or live-ready trade rows.<br/>7. Storage tier writes logs and result files.<br/>8. Notification tier sends Telegram alerts if enabled.<br/>9. Reporting tier prepares summaries and downloadable documents.<br/><br/>DEPENDENCY FLOW<br/>UI Tier depends on App Tier.<br/>App Tier depends on Market Data Tier.<br/>Execution Tier depends on App Tier.<br/>Storage Tier depends on App Tier and Execution Tier.<br/>Notification Tier depends on App Tier and Execution Tier.<br/>Reporting Tier depends on Storage Tier and App Tier.<br/></div>
+<h2>2. Deployment</h2>
+<div class="section">TRADING APP DEPLOYMENT DOCUMENTATION<br/><br/>Overview<br/>This document explains how the Trading App can be deployed for local use, server use, and production-style access.<br/><br/>LOCAL DEPLOYMENT<br/>The project can run locally using Python and Streamlit.<br/>Install dependencies from requirements.txt.<br/>Launch the dashboard using Streamlit.<br/>This mode is suitable for development, testing, and strategy review.<br/><br/>APPLICATION ENTRY POINTS<br/>Main UI entry point is Trading.py.<br/>Other entry points include auto_backtest.py, auto_run.py, nifty50.py, nifty_options.py, and nifty_futures.py.<br/>These scripts support automation, scoring, and reporting outside the UI.<br/><br/>WEB ACCESS LAYER<br/>For production-style deployment, Streamlit can be placed behind Nginx.<br/>Nginx can work as reverse proxy for domain-based access.<br/>This improves routing and gives a cleaner public endpoint.<br/><br/>SERVER RECOMMENDATION<br/>Recommended server setup:<br/>1. Linux or Windows VM.<br/>2. Python runtime.<br/>3. Streamlit service.<br/>4. Optional Nginx reverse proxy.<br/>5. Secure secrets storage for tokens and credentials.<br/><br/>CONFIGURATION REQUIREMENTS<br/>Required configuration may include Telegram bot token, Telegram chat ID, broker credentials for future live trading, and optional AWS S3 configuration.<br/>These values should be stored in environment variables, secrets, or protected config files.<br/><br/>DATA AND FILE PATHS<br/>Application reads and writes under the data folder.<br/>Make sure the deployment host has read and write permission for logs, report files, and snapshots.<br/>If using persistent server deployment, this folder should be backed up or mounted on persistent storage.<br/><br/>SECURITY RECOMMENDATIONS<br/>Only UI tier should be internet-facing.<br/>App and execution internals should remain private.<br/>Do not expose secrets inside source files.<br/>Use HTTPS when publishing through a domain.<br/>Protect broker APIs and notification credentials.<br/><br/>AUTOMATION OPTIONS<br/>The project already supports scheduled or repeated runs using scripts and scheduler folders.<br/>Auto backtests and reporting tasks can be scheduled using Windows Task Scheduler, cron, or container orchestration.<br/><br/>DEPLOYMENT MODES<br/>Development Mode:<br/>Run Streamlit locally for testing.<br/><br/>Internal Server Mode:<br/>Run Streamlit on internal network for team use.<br/><br/>Production Mode:<br/>Run Streamlit behind Nginx with restricted access, secrets management, and scheduled automation.<br/><br/>FUTURE EXTENSIONS<br/>The deployment design allows addition of:<br/>Broker API execution.<br/>Container deployment.<br/>Kubernetes deployment.<br/>Cloud object storage for reports.<br/>Monitoring and alerting.<br/></div>
+<h2>3. Architecture Diagram Summary</h2>
+<div class="section">TRADING APP ARCHITECTURE DIAGRAM DOCUMENTATION<br/><br/>High Level Component View<br/><br/>USER<br/>  |<br/>  v<br/>STREAMLIT DASHBOARD<br/>  |<br/>  v<br/>APPLICATION LOGIC LAYER<br/>  |<br/>  +--&gt; MARKET DATA CONNECTORS<br/>  |      +--&gt; Yahoo Finance OHLCV<br/>  |      +--&gt; NSE Option Chain<br/>  |      +--&gt; NSE Futures Data<br/>  |<br/>  +--&gt; STRATEGY ENGINES<br/>  |      +--&gt; Breakout Strategy<br/>  |      +--&gt; Demand Supply Strategy<br/>  |      +--&gt; Indicator Strategy<br/>  |      +--&gt; One Trade Day Strategy<br/>  |      +--&gt; MTF 5m Strategy<br/>  |<br/>  +--&gt; CONTRACT MAPPING LAYER<br/>  |      +--&gt; Option Strike Selection<br/>  |      +--&gt; Futures Contract Attachment<br/>  |<br/>  +--&gt; EXECUTION ENGINE<br/>  |      +--&gt; Paper Execution<br/>  |      +--&gt; Live Ready Execution<br/>  |<br/>  +--&gt; NOTIFICATION LAYER<br/>  |      +--&gt; Telegram Alerts<br/>  |<br/>  +--&gt; REPORTING LAYER<br/>         +--&gt; CSV Outputs<br/>         +--&gt; HTML Reports<br/>         +--&gt; PDF Reports<br/><br/>STORAGE LAYER<br/>  +--&gt; CSV Files<br/>  +--&gt; YAML Rules<br/>  +--&gt; HTML Files<br/>  +--&gt; PDF Files<br/>  +--&gt; Optional S3 Upload<br/><br/>Communication Notes<br/>The dashboard does not directly execute trades by itself.<br/>It passes user-selected settings into the application logic layer.<br/>The application logic layer fetches market data, runs strategies, maps contracts, and prepares execution rows.<br/>The execution engine stores output into log files.<br/>The reporting layer converts those outputs into readable summaries.<br/>The notification layer shares important signals through Telegram.<br/><br/>Security Notes<br/>UI can be exposed with controlled access.<br/>Execution internals and secrets should remain protected.<br/>Broker integrations should be attached only inside secure backend flow.<br/></div>
+<h2>4. Production Runbook</h2>
+<div class="section">TRADING APP PRODUCTION RUNBOOK<br/><br/>Purpose<br/>This runbook explains how to operate, monitor, and troubleshoot the Trading App in a production or semi-production environment.<br/><br/>STARTUP CHECKLIST<br/>1. Verify Python environment is available.<br/>2. Verify required packages are installed.<br/>3. Verify Streamlit app starts successfully.<br/>4. Verify data folder is writable.<br/>5. Verify Telegram credentials are configured if alerts are needed.<br/>6. Verify broker credentials are configured if future live execution is enabled.<br/><br/>RUNTIME CHECKS<br/>1. Confirm dashboard is reachable.<br/>2. Confirm OHLCV data is loading.<br/>3. Confirm strategy outputs are generated.<br/>4. Confirm paper execution logs are updating.<br/>5. Confirm report files are being created.<br/>6. Confirm Telegram alerts are delivered when enabled.<br/><br/>DAILY OPERATIONS<br/>Review live candles and trade signals.<br/>Check paper or live trading logs.<br/>Check backtest summary outputs.<br/>Archive important CSV and PDF reports.<br/>Validate that scheduled tasks completed without failure.<br/><br/>INCIDENT SCENARIOS<br/>No market data:<br/>Check external data provider access and symbol formatting.<br/><br/>No trade signals:<br/>Check strategy settings, timeframe, and available candles.<br/><br/>Execution log not updating:<br/>Check write permission on data directory and execution mode.<br/><br/>Telegram not sending:<br/>Check token, chat ID, internet access, and notifier settings.<br/><br/>Wrong contract mapping:<br/>Check whether Options or Futures mode is selected.<br/>Check strike step, moneyness, and symbol normalization.<br/><br/>BACKUP RECOMMENDATION<br/>Back up data folder regularly.<br/>Critical files include paper trading logs, live trading logs, backtest summaries, and generated reports.<br/><br/>CHANGE MANAGEMENT<br/>Apply changes first in local or testing environment.<br/>Validate strategies and outputs.<br/>Then promote to production server.<br/>Avoid editing live configuration without backup.<br/><br/>FUTURE OPERATIONS IMPROVEMENT<br/>Add service monitoring.<br/>Add broker health checks.<br/>Add log rotation.<br/>Add alerting for failed scheduled runs.<br/>Add persistent cloud storage for reports.<br/></div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Intratrade Client Proposal</h1>
+    <div class='doc-path'>F:\Trading\data\docs\branded\intratrade_client_proposal.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<div class="cover">
+  <div class="brand">INTRATRADE</div>
+  <h1>Trading App Client Proposal</h1>
+  <div class="small">Platform overview, architecture direction, deployment summary, and broker integration roadmap.</div>
+</div>
+<h2>Executive Overview</h2>
+<div class="card">TRADING APP EXECUTIVE OVERVIEW<br/><br/>Overview<br/>This Trading App is a unified trading workspace designed for market analysis, strategy execution, trade review, and reporting.<br/>It brings live market data, multiple technical strategies, contract mapping, execution flow, and reporting into one operational platform.<br/><br/>Business Value<br/>The application helps traders and operations teams reduce manual work by combining market monitoring, strategy testing, signal generation, contract preparation, and reporting in one place.<br/><br/>Core Capabilities<br/>Live OHLCV market data viewing.<br/>Multiple strategy engines.<br/>Options contract selection.<br/>Futures contract mode.<br/>Paper execution workflow.<br/>Live-execution-ready architecture.<br/>Telegram alerting.<br/>CSV, HTML, and PDF reporting.<br/><br/>User Benefits<br/>Faster review of opportunities.<br/>Structured trading workflow.<br/>Centralized trade logs.<br/>Repeatable backtesting and reporting.<br/>Clear separation between analysis and execution.<br/><br/>Target Usage<br/>This platform is suitable for active traders, internal trading desks, research teams, and semi-automated strategy operations.</div>
+<h2>Architecture Summary</h2>
+<div class="card">TRADING APP CLIENT ARCHITECTURE<br/><br/>User Interface Layer<br/>The application uses a Streamlit dashboard as the main user-facing layer.<br/>Users can select symbols, intervals, strategies, risk settings, execution mode, and contract type from a single interface.<br/><br/>Application Layer<br/>The backend logic is implemented in Python modules that manage market data processing, strategy execution, signal preparation, contract conversion, and trade output generation.<br/><br/>Market Data Layer<br/>The system consumes Yahoo Finance OHLCV data, NSE option-chain data, NSE futures data, and uploaded CSV datasets.<br/><br/>Execution Layer<br/>The application currently supports paper execution and is structured for future broker API integration.<br/><br/>Reporting Layer<br/>The system generates CSV outputs, HTML summaries, PDF documents, and Telegram notifications.<br/><br/>Storage Layer<br/>Operational files are stored in structured folders so logs, snapshots, reports, and rule files remain accessible and auditable.</div>
+<h2>Deployment Summary</h2>
+<div class="card">TRADING APP CLIENT DEPLOYMENT SUMMARY<br/><br/>Deployment Style<br/>The platform can run locally for development, on an internal server for team usage, or behind Nginx for controlled production-style access.<br/><br/>Recommended Stack<br/>Python runtime.<br/>Streamlit application server.<br/>Optional Nginx reverse proxy.<br/>Persistent storage for logs and reports.<br/>Secure secret storage for tokens and credentials.<br/><br/>Operational Readiness<br/>The design already supports scheduled jobs, repeatable backtests, report generation, and phased extension toward broker integrations.<br/><br/>Security Guidance<br/>Only the user interface should be internet-facing.<br/>Execution internals, credentials, and broker integrations should remain protected.</div>
+<h2>Broker Integration Roadmap</h2>
+<div class="card">TRADING APP BROKER INTEGRATION FLOW<br/><br/>Current State<br/>The platform already supports signal generation, quantity preparation, and execution logging.<br/>Paper trading is active and live integration is prepared as the next extension point.<br/><br/>Future Broker Flow<br/>1. Strategy generates BUY or SELL signal.<br/>2. Contract layer maps the signal to options or futures.<br/>3. Execution engine prepares order payload.<br/>4. Broker adapter validates symbol, quantity, and product type.<br/>5. Order is sent to broker API.<br/>6. Response is stored in execution log.<br/>7. Telegram notification is sent if enabled.<br/><br/>Integration Targets<br/>Dhan API.<br/>Zerodha API.<br/>Angel One API.<br/>Other REST or WebSocket brokers.<br/><br/>Operational Requirement<br/>Broker APIs should be attached only after stable paper-trading validation and proper secret management.</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Intratrade Commercial Proposal</h1>
+    <div class='doc-path'>F:\Trading\data\docs\branded\intratrade_commercial_proposal.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<div class="cover">
+  <div class="brand">INTRATRADE</div>
+  <h1>Trading App Commercial Proposal</h1>
+  <p>Proposal for a production-ready trading platform that combines live market data, multi-strategy execution workflow, options and futures contract mapping, reporting, and future broker API integration.</p>
+  <div class="ribbon">Client Proposal + Scope + Commercial Summary</div>
+</div>
+<div class="page">
+  <div class="section">
+    <h2>Executive Summary</h2>
+    <p>This proposal presents a structured trading application designed to support live market monitoring, strategy-based trade generation, paper execution, reporting, and future broker connectivity. The platform is suitable for internal desks, trading operations teams, and semi-automated research workflows.</p>
+  </div>
+  <div class="section">
+    <h2>Solution Overview</h2>
+    <div class="grid">
+      <div class="card"><strong>Frontend Layer</strong><br/>Streamlit dashboard for strategy controls, live charts, execution review, and reporting.</div>
+      <div class="card"><strong>Application Layer</strong><br/>Python-based strategy engine, signal flow, futures/options mapping, execution engine, and reporting logic.</div>
+      <div class="card"><strong>Data Layer</strong><br/>Yahoo OHLCV, NSE option-chain inputs, NSE futures data, CSV backtest files, and rule-based scoring.</div>
+      <div class="card"><strong>Operations Layer</strong><br/>Paper execution logs, Telegram alerts, PDF/CSV reports, and future broker API adapters.</div>
+    </div>
+  </div>
+  <div class="section">
+    <h2>Scope of Work</h2>
+    <h3>Included Scope</h3>
+    <ul>
+      <li>Trading dashboard for live analysis and strategy control</li>
+      <li>Support for breakout, demand-supply, indicator, one-trade-day, and MTF strategies</li>
+      <li>Options contract selection and futures contract mode</li>
+      <li>Paper trading workflow and execution logs</li>
+      <li>Telegram alert integration</li>
+      <li>CSV, HTML, and PDF reporting outputs</li>
+      <li>Deployment-ready documentation and operational runbook</li>
+    </ul>
+    <h3>Optional Add-ons</h3>
+    <ul>
+      <li>Broker API live order integration</li>
+      <li>Cloud deployment and monitoring</li>
+      <li>Authentication and role-based access</li>
+      <li>Database-backed execution history</li>
+      <li>Advanced analytics and trader performance dashboards</li>
+    </ul>
+  </div>
+  <div class="section">
+    <h2>Implementation Phases</h2>
+    <table class="table">
+      <tr><th>Phase</th><th>Focus</th><th>Outcome</th></tr>
+      <tr><td>Phase 1</td><td>Core platform</td><td>Dashboard, strategies, paper execution, reporting</td></tr>
+      <tr><td>Phase 2</td><td>Production hardening</td><td>Deployment setup, security controls, scheduling, backups</td></tr>
+      <tr><td>Phase 3</td><td>Broker integration</td><td>Live order routing, validation, execution audit trail</td></tr>
+      <tr><td>Phase 4</td><td>Scale and analytics</td><td>Monitoring, persistence, multi-user operations, advanced insights</td></tr>
+    </table>
+  </div>
+  <div class="section">
+    <h2>Commercial Summary</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="small">Starter Implementation</div>
+        <div class="price">Custom Quote</div>
+        <div class="small">Recommended when scope is finalized after business discussion.</div>
+      </div>
+      <div class="card">
+        <div class="small">Suggested Pricing Model</div>
+        <div>Phase-based delivery with milestone approvals for architecture, deployment readiness, and live integration.</div>
+      </div>
+    </div>
+    <h3>Indicative Commercial Options</h3>
+    <table class="table">
+      <tr><th>Package</th><th>Description</th><th>Commercial Style</th></tr>
+      <tr><td>Foundation</td><td>Dashboard, strategies, paper trading, reports</td><td>Fixed milestone pricing</td></tr>
+      <tr><td>Professional</td><td>Foundation plus production deployment and operations</td><td>Fixed milestone pricing</td></tr>
+      <tr><td>Enterprise</td><td>Professional plus broker integration and monitoring</td><td>Custom engagement pricing</td></tr>
+    </table>
+  </div>
+  <div class="section">
+    <h2>Assumptions</h2>
+    <ul>
+      <li>Live broker integration is handled as a later phase after paper validation</li>
+      <li>Market data provider access remains available from approved sources</li>
+      <li>Client branding assets can be added once logo and identity files are shared</li>
+      <li>Final commercials will depend on deployment environment and broker requirements</li>
+    </ul>
+    <div class="footer">Prepared as a branded proposal draft for Intratrade. Logo treatment currently uses text branding and can be replaced with your official logo anytime.</div>
+  </div>
+</div>
+
+  </div>
+</section>
+<section class='doc-section'>
+  <div class='doc-header'>
+    <div class='doc-kicker'>Intratrade Combined Documentation</div>
+    <h1>Intratrade Premium Master Dark</h1>
+    <div class='doc-path'>F:\Trading\data\docs\branded\intratrade_premium_master_dark.html</div>
+  </div>
+  <div class='doc-body'>
+    
+<div class="hero">
+  <div class="brand">INTRATRADE</div>
+  <h1>Premium Technical Documentation</h1>
+  <div class="muted">Master reference for architecture, deployment flow, diagram notes, and production operations.</div>
+</div>
+<div class="page">
+  <div class="panel"><h2>Architecture</h2><div>TRADING APP ARCHITECTURE DOCUMENTATION<br/><br/>Overview<br/>This Trading App is designed with multiple tiers so market data, strategy logic, execution flow, notifications, and reporting stay organized and easy to manage.<br/><br/>WEB OR UI TIER<br/>Usually UI tier is the one which has frontend and user interaction components.<br/>In this project, UI tier is mainly Streamlit dashboard.<br/>This tier is used for symbol selection, strategy selection, risk setup, lot size setup, execution mode, charts, signal review, and trade analysis.<br/>If required in production, this UI can be exposed through Nginx reverse proxy.<br/><br/>APP OR STRATEGY TIER<br/>App tier is the main business logic layer.<br/>In this project it contains market data fetch, technical strategy execution, signal generation, strike selection, futures contract mapping, execution preparation, and reporting flow.<br/>Major modules include Trading.py, live_ohlcv.py, breakout_bot.py, supply_demand.py, indicator_bot.py, one_trade_day.py, mtf_trade_bot.py, execution_engine.py, auto_backtest.py, and auto_run.py.<br/>Usually this tier should not be directly open to the internet.<br/><br/>MARKET DATA TIER<br/>Market data tier provides the raw inputs required for strategy calculations.<br/>This project uses Yahoo Finance OHLCV data, NSE option chain data, NSE futures derivative data, and uploaded CSV files for testing or backtesting.<br/>This tier is used for live candles, spot price, option metrics, futures contract data, and historical analysis.<br/><br/>EXECUTION TIER<br/>Execution tier handles paper execution and live-execution-ready flow.<br/>This tier converts trade signals into executable candidate rows, normalizes quantity using lot size, and writes execution logs.<br/>Current project supports PAPER flow and LIVE-ready structure.<br/>Future broker APIs can be attached here.<br/><br/>STORAGE TIER<br/>Storage tier keeps the application outputs and logs.<br/>This project mainly uses CSV, YAML, HTML, and PDF files.<br/>Examples include live_ohlcv.csv, paper_trading_logs_all.csv, live_trading_logs_all.csv, backtest_results_all.csv, nifty_options_scored.csv, and nifty_futures_snapshot.csv.<br/><br/>NOTIFICATION TIER<br/>Notification tier is used for communicating signals and summaries.<br/>In this project Telegram is used for alerts, signal summaries, and report delivery.<br/><br/>REPORTING TIER<br/>Reporting tier generates user-readable outputs.<br/>This includes CSV reports, HTML summaries, PDF files, backtest summaries, and trade result snapshots.<br/><br/>COMMUNICATION FLOW<br/>1. User opens the dashboard.<br/>2. UI sends strategy settings to app tier.<br/>3. App tier fetches market data from Yahoo or NSE sources.<br/>4. Strategy modules generate BUY, SELL, or HOLD signals.<br/>5. Contract layer converts signals into options or futures contracts.<br/>6. Execution tier prepares paper or live-ready trade rows.<br/>7. Storage tier writes logs and result files.<br/>8. Notification tier sends Telegram alerts if enabled.<br/>9. Reporting tier prepares summaries and downloadable documents.<br/><br/>DEPENDENCY FLOW<br/>UI Tier depends on App Tier.<br/>App Tier depends on Market Data Tier.<br/>Execution Tier depends on App Tier.<br/>Storage Tier depends on App Tier and Execution Tier.<br/>Notification Tier depends on App Tier and Execution Tier.<br/>Reporting Tier depends on Storage Tier and App Tier.<br/></div></div>
+  <div class="panel"><h2>Deployment</h2><div>TRADING APP DEPLOYMENT DOCUMENTATION<br/><br/>Overview<br/>This document explains how the Trading App can be deployed for local use, server use, and production-style access.<br/><br/>LOCAL DEPLOYMENT<br/>The project can run locally using Python and Streamlit.<br/>Install dependencies from requirements.txt.<br/>Launch the dashboard using Streamlit.<br/>This mode is suitable for development, testing, and strategy review.<br/><br/>APPLICATION ENTRY POINTS<br/>Main UI entry point is Trading.py.<br/>Other entry points include auto_backtest.py, auto_run.py, nifty50.py, nifty_options.py, and nifty_futures.py.<br/>These scripts support automation, scoring, and reporting outside the UI.<br/><br/>WEB ACCESS LAYER<br/>For production-style deployment, Streamlit can be placed behind Nginx.<br/>Nginx can work as reverse proxy for domain-based access.<br/>This improves routing and gives a cleaner public endpoint.<br/><br/>SERVER RECOMMENDATION<br/>Recommended server setup:<br/>1. Linux or Windows VM.<br/>2. Python runtime.<br/>3. Streamlit service.<br/>4. Optional Nginx reverse proxy.<br/>5. Secure secrets storage for tokens and credentials.<br/><br/>CONFIGURATION REQUIREMENTS<br/>Required configuration may include Telegram bot token, Telegram chat ID, broker credentials for future live trading, and optional AWS S3 configuration.<br/>These values should be stored in environment variables, secrets, or protected config files.<br/><br/>DATA AND FILE PATHS<br/>Application reads and writes under the data folder.<br/>Make sure the deployment host has read and write permission for logs, report files, and snapshots.<br/>If using persistent server deployment, this folder should be backed up or mounted on persistent storage.<br/><br/>SECURITY RECOMMENDATIONS<br/>Only UI tier should be internet-facing.<br/>App and execution internals should remain private.<br/>Do not expose secrets inside source files.<br/>Use HTTPS when publishing through a domain.<br/>Protect broker APIs and notification credentials.<br/><br/>AUTOMATION OPTIONS<br/>The project already supports scheduled or repeated runs using scripts and scheduler folders.<br/>Auto backtests and reporting tasks can be scheduled using Windows Task Scheduler, cron, or container orchestration.<br/><br/>DEPLOYMENT MODES<br/>Development Mode:<br/>Run Streamlit locally for testing.<br/><br/>Internal Server Mode:<br/>Run Streamlit on internal network for team use.<br/><br/>Production Mode:<br/>Run Streamlit behind Nginx with restricted access, secrets management, and scheduled automation.<br/><br/>FUTURE EXTENSIONS<br/>The deployment design allows addition of:<br/>Broker API execution.<br/>Container deployment.<br/>Kubernetes deployment.<br/>Cloud object storage for reports.<br/>Monitoring and alerting.<br/></div></div>
+  <div class="panel"><h2>Diagram Summary</h2><div>TRADING APP ARCHITECTURE DIAGRAM DOCUMENTATION<br/><br/>High Level Component View<br/><br/>USER<br/>  |<br/>  v<br/>STREAMLIT DASHBOARD<br/>  |<br/>  v<br/>APPLICATION LOGIC LAYER<br/>  |<br/>  +--&gt; MARKET DATA CONNECTORS<br/>  |      +--&gt; Yahoo Finance OHLCV<br/>  |      +--&gt; NSE Option Chain<br/>  |      +--&gt; NSE Futures Data<br/>  |<br/>  +--&gt; STRATEGY ENGINES<br/>  |      +--&gt; Breakout Strategy<br/>  |      +--&gt; Demand Supply Strategy<br/>  |      +--&gt; Indicator Strategy<br/>  |      +--&gt; One Trade Day Strategy<br/>  |      +--&gt; MTF 5m Strategy<br/>  |<br/>  +--&gt; CONTRACT MAPPING LAYER<br/>  |      +--&gt; Option Strike Selection<br/>  |      +--&gt; Futures Contract Attachment<br/>  |<br/>  +--&gt; EXECUTION ENGINE<br/>  |      +--&gt; Paper Execution<br/>  |      +--&gt; Live Ready Execution<br/>  |<br/>  +--&gt; NOTIFICATION LAYER<br/>  |      +--&gt; Telegram Alerts<br/>  |<br/>  +--&gt; REPORTING LAYER<br/>         +--&gt; CSV Outputs<br/>         +--&gt; HTML Reports<br/>         +--&gt; PDF Reports<br/><br/>STORAGE LAYER<br/>  +--&gt; CSV Files<br/>  +--&gt; YAML Rules<br/>  +--&gt; HTML Files<br/>  +--&gt; PDF Files<br/>  +--&gt; Optional S3 Upload<br/><br/>Communication Notes<br/>The dashboard does not directly execute trades by itself.<br/>It passes user-selected settings into the application logic layer.<br/>The application logic layer fetches market data, runs strategies, maps contracts, and prepares execution rows.<br/>The execution engine stores output into log files.<br/>The reporting layer converts those outputs into readable summaries.<br/>The notification layer shares important signals through Telegram.<br/><br/>Security Notes<br/>UI can be exposed with controlled access.<br/>Execution internals and secrets should remain protected.<br/>Broker integrations should be attached only inside secure backend flow.<br/></div></div>
+  <div class="panel"><h2>Runbook</h2><div>TRADING APP PRODUCTION RUNBOOK<br/><br/>Purpose<br/>This runbook explains how to operate, monitor, and troubleshoot the Trading App in a production or semi-production environment.<br/><br/>STARTUP CHECKLIST<br/>1. Verify Python environment is available.<br/>2. Verify required packages are installed.<br/>3. Verify Streamlit app starts successfully.<br/>4. Verify data folder is writable.<br/>5. Verify Telegram credentials are configured if alerts are needed.<br/>6. Verify broker credentials are configured if future live execution is enabled.<br/><br/>RUNTIME CHECKS<br/>1. Confirm dashboard is reachable.<br/>2. Confirm OHLCV data is loading.<br/>3. Confirm strategy outputs are generated.<br/>4. Confirm paper execution logs are updating.<br/>5. Confirm report files are being created.<br/>6. Confirm Telegram alerts are delivered when enabled.<br/><br/>DAILY OPERATIONS<br/>Review live candles and trade signals.<br/>Check paper or live trading logs.<br/>Check backtest summary outputs.<br/>Archive important CSV and PDF reports.<br/>Validate that scheduled tasks completed without failure.<br/><br/>INCIDENT SCENARIOS<br/>No market data:<br/>Check external data provider access and symbol formatting.<br/><br/>No trade signals:<br/>Check strategy settings, timeframe, and available candles.<br/><br/>Execution log not updating:<br/>Check write permission on data directory and execution mode.<br/><br/>Telegram not sending:<br/>Check token, chat ID, internet access, and notifier settings.<br/><br/>Wrong contract mapping:<br/>Check whether Options or Futures mode is selected.<br/>Check strike step, moneyness, and symbol normalization.<br/><br/>BACKUP RECOMMENDATION<br/>Back up data folder regularly.<br/>Critical files include paper trading logs, live trading logs, backtest summaries, and generated reports.<br/><br/>CHANGE MANAGEMENT<br/>Apply changes first in local or testing environment.<br/>Validate strategies and outputs.<br/>Then promote to production server.<br/>Avoid editing live configuration without backup.<br/><br/>FUTURE OPERATIONS IMPROVEMENT<br/>Add service monitoring.<br/>Add broker health checks.<br/>Add log rotation.<br/>Add alerting for failed scheduled runs.<br/>Add persistent cloud storage for reports.<br/></div></div>
+</div>
+
+  </div>
+</section>
+</body>
+</html>

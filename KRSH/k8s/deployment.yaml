@@ -1,0 +1,44 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: krsh-app
+  namespace: krsh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: krsh-app
+  template:
+    metadata:
+      labels:
+        app: krsh-app
+    spec:
+      containers:
+        - name: krsh-app
+          image: krsh-trading:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8501
+          envFrom:
+            - configMapRef:
+                name: krsh-config
+            - secretRef:
+                name: krsh-secrets
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8501
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8501
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          volumeMounts:
+            - name: krsh-data
+              mountPath: /opt/krsh/data
+      volumes:
+        - name: krsh-data
+          emptyDir: {}

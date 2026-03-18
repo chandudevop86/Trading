@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>03_client_deployment</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; color: #111; line-height: 1.5; font-size: 14px; }
+h1 { font-size: 24px; margin-bottom: 24px; }
+.section { margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<h1>03_client_deployment</h1>
+<div class="section">TRADING APP CLIENT DEPLOYMENT SUMMARY<br/>
+<br/>
+Deployment Style<br/>
+The platform can run locally for development, on an internal server for team usage, or behind Nginx for controlled production-style access.<br/>
+<br/>
+Recommended Stack<br/>
+Python runtime.<br/>
+Streamlit application server.<br/>
+Optional Nginx reverse proxy.<br/>
+Persistent storage for logs and reports.<br/>
+Secure secret storage for tokens and credentials.<br/>
+<br/>
+Operational Readiness<br/>
+The design already supports scheduled jobs, repeatable backtests, report generation, and phased extension toward broker integrations.<br/>
+<br/>
+Security Guidance<br/>
+Only the user interface should be internet-facing.<br/>
+Execution internals, credentials, and broker integrations should remain protected.</div>
+</body>
+</html>

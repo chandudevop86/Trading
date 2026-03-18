@@ -1,0 +1,8 @@
+﻿__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+.edge-profile/
+app/data/docs/
+app/data/pdf_html/

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import inspect
 import sys
 from datetime import datetime, timedelta
@@ -56,6 +57,13 @@ except Exception:
     extract_option_records = None
     fetch_option_chain = None
     normalize_index_symbol = None
+
+try:
+    from src.dhan_api import build_order_request_from_candidate, load_security_map
+except Exception:
+    build_order_request_from_candidate = None
+    load_security_map = None
+
 
 
 st.set_page_config(page_title="Trading Dashboard", page_icon="chart", layout="wide")
@@ -472,162 +480,344 @@ def _render_sidebar_shell() -> None:
         """
         <style>
         [data-testid="stAppViewContainer"] {
-            background: linear-gradient(180deg, #f3f6fb 0%, #eef3f8 100%);
+            background:
+                radial-gradient(circle at top right, rgba(14,165,233,0.10), transparent 20%),
+                radial-gradient(circle at bottom left, rgba(34,197,94,0.10), transparent 22%),
+                radial-gradient(circle at top right, rgba(255,184,77,0.16), transparent 24%),
+                radial-gradient(circle at bottom left, rgba(111,188,255,0.14), transparent 26%),
+                linear-gradient(180deg, #04101d 0%, #08192c 44%, #0b1f36 100%);
         }
         [data-testid="stHeader"] {
-            background: rgba(255, 255, 255, 0.86);
-            border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+            background: rgba(4, 17, 31, 0.74);
+            border-bottom: 1px solid rgba(118, 164, 210, 0.10);
         }
         [data-testid="stAppViewContainer"] .main .block-container {
             max-width: 1480px;
             padding-top: 1.1rem;
         }
         h1, h2, h3, h4, h5, h6, p, label, span, div {
-            color: #0f172a;
+            color: #e5eef8;
         }
         [data-testid="stMetric"] {
-            background: #ffffff !important;
-            border: 1px solid #dbe4ee !important;
+            background: linear-gradient(180deg, rgba(12,32,57,0.94), rgba(9,24,44,0.96)) !important;
+            border: 1px solid rgba(118, 164, 210, 0.14) !important;
             border-radius: 18px !important;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06) !important;
+            box-shadow: 0 14px 30px rgba(2, 12, 27, 0.22) !important;
         }
         [data-testid="stMetricLabel"] {
-            color: #64748b !important;
+            color: #89a7c7 !important;
         }
         [data-testid="stMetricValue"] {
-            color: #0f172a !important;
+            color: #ffffff !important;
         }
         [data-testid="stTabs"] [role="tablist"] {
-            background: #ffffff;
-            border: 1px solid #dbe4ee;
-            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+            background: rgba(12, 32, 57, 0.82);
+            border: 1px solid rgba(118, 164, 210, 0.14);
+            box-shadow: 0 14px 28px rgba(2, 12, 27, 0.18);
         }
         [data-testid="stTabs"] [role="tab"] {
-            background: #f8fafc;
-            color: #334155;
-            border: 1px solid #e2e8f0;
+            background: rgba(255, 255, 255, 0.05);
+            color: #d8e6f5;
+            border: 1px solid rgba(148, 196, 232, 0.12);
         }
         [data-testid="stTabs"] [aria-selected="true"] {
-            background: #0f172a;
-            color: #f8fafc;
+            background: linear-gradient(135deg, #ffb84d 0%, #ff8a2a 100%);
+            color: #ffffff;
             box-shadow: none;
         }
         .stButton > button {
-            background: #ffffff;
-            color: #0f172a;
-            border: 1px solid #cbd5e1;
-            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+            background: linear-gradient(135deg, #0c2039 0%, #12365b 100%);
+            color: #eaf4ff;
+            border: 1px solid rgba(148, 196, 232, 0.14);
+            box-shadow: 0 12px 24px rgba(2, 12, 27, 0.18);
         }
         .stButton > button:hover {
-            background: #f8fafc;
-            border-color: #94a3b8;
-            color: #0f172a;
+            border-color: rgba(255, 122, 47, 0.36);
+            color: #ffffff;
         }
         .stButton > button[kind="primary"] {
-            background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%);
+            background: linear-gradient(135deg, #ffb84d 0%, #ff8a2a 100%);
             color: #ffffff;
             border-color: transparent;
         }
         [data-testid="stDataFrame"] {
-            background: #ffffff !important;
-            border: 1px solid #dbe4ee !important;
+            background: rgba(12, 32, 57, 0.92) !important;
+            border: 1px solid rgba(118, 164, 210, 0.14) !important;
             border-radius: 18px !important;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05) !important;
+            box-shadow: 0 16px 30px rgba(2, 12, 27, 0.18) !important;
         }
         [data-testid="stDataFrame"] [role="columnheader"] {
-            background: #f8fafc;
-            color: #334155;
-            border-bottom: 1px solid #e2e8f0;
+            background: rgba(255, 255, 255, 0.06);
+            color: #eaf4ff;
+            border-bottom: 1px solid rgba(148, 196, 232, 0.12);
         }
         [data-testid="stDataFrame"] [role="gridcell"] {
-            background: #ffffff;
-            color: #0f172a;
+            background: rgba(9, 24, 44, 0.92);
+            color: #dbeafe;
         }
         [data-testid="stExpander"] {
-            background: #ffffff;
-            border: 1px solid #dbe4ee;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
-        }
-        .hero-strip,
-        .hero-strip.hero-bull,
-        .hero-strip.hero-bear,
-        .hero-strip.hero-range {
-            background: #ffffff;
-            border: 1px solid #dbe4ee;
-            border-radius: 22px;
-            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
-        }
-        .hero-strip.hero-bull {
-            border-left: 6px solid #16a34a;
-        }
-        .hero-strip.hero-bear {
-            border-left: 6px solid #dc2626;
-        }
-        .hero-strip.hero-range {
-            border-left: 6px solid #d97706;
-        }
-        .hero-kicker, .hero-label {
-            color: #64748b;
-        }
-        .hero-symbol, .hero-value {
-            color: #0f172a;
-        }
-        .hero-price {
-            color: #1e293b;
-        }
-        .hero-tile {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
+            background: rgba(12, 32, 57, 0.88);
+            border: 1px solid rgba(118, 164, 210, 0.14);
+            box-shadow: 0 16px 30px rgba(2, 12, 27, 0.16);
         }
         .section-shell, .chart-shell {
-            background: #ffffff;
-            border: 1px solid #dbe4ee;
-            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.05);
+            background: linear-gradient(180deg, rgba(12,32,57,0.94), rgba(9,24,44,0.98));
+            border: 1px solid rgba(118, 164, 210, 0.14);
+            box-shadow: 0 18px 32px rgba(2, 12, 27, 0.20);
         }
         [data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
-            border-right: 1px solid #dbe4ee;
+            background: radial-gradient(circle at top left, rgba(255,184,77,0.12), transparent 26%), linear-gradient(180deg, #071524 0%, #0b1d33 100%);
+            border-right: 1px solid rgba(118, 164, 210, 0.16);
         }
         [data-testid="stSidebar"] .live-panel,
         [data-testid="stSidebar"] .status-card {
-            background: #ffffff;
-            border: 1px solid #dbe4ee;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+            background: linear-gradient(180deg, rgba(12,32,57,0.96), rgba(9,24,44,0.98));
+            border: 1px solid rgba(118, 164, 210, 0.14);
+            box-shadow: 0 14px 28px rgba(2, 12, 27, 0.22);
         }
         [data-testid="stSidebar"] .live-kicker,
         [data-testid="stSidebar"] .live-sub,
         [data-testid="stSidebar"] .status-label,
         [data-testid="stSidebar"] .live-section {
-            color: #64748b;
+            color: #89a7c7;
         }
         [data-testid="stSidebar"] .live-title,
         [data-testid="stSidebar"] .status-value {
-            color: #0f172a;
+            color: #ffffff;
         }
         [data-testid="stSidebar"] .status-price {
-            color: #0f766e;
+            color: #7dd3fc;
         }
         [data-testid="stSidebar"] .stSegmentedControl,
         [data-testid="stSidebar"] .stPills {
-            background: #ffffff;
-            border: 1px solid #dbe4ee;
+            background: rgba(12, 32, 57, 0.82);
+            border: 1px solid rgba(118, 164, 210, 0.14);
         }
         [data-testid="stSidebar"] .stSegmentedControl label,
         [data-testid="stSidebar"] .stPills label {
-            background: #f8fafc !important;
-            color: #334155 !important;
-            border: 1px solid #e2e8f0 !important;
+            background: rgba(255, 255, 255, 0.05) !important;
+            color: #d8e6f5 !important;
+            border: 1px solid rgba(148, 196, 232, 0.12) !important;
         }
         [data-testid="stSidebar"] .stSegmentedControl label[data-selected="true"],
         [data-testid="stSidebar"] .stPills label[data-selected="true"] {
-            background: #0f172a !important;
+            background: linear-gradient(135deg, #ff7a2f 0%, #ff5b21 100%) !important;
             color: #ffffff !important;
             box-shadow: none;
+        }
+        .page-masthead {
+            display: block;
+            background:
+                linear-gradient(90deg, rgba(4, 12, 24, 0.96) 0%, rgba(10, 31, 53, 0.92) 42%, rgba(28, 54, 88, 0.82) 100%),
+                radial-gradient(circle at 72% 22%, rgba(122, 214, 255, 0.18), transparent 24%),
+                radial-gradient(circle at 82% 68%, rgba(122, 214, 255, 0.12), transparent 22%);
+            border: 1px solid rgba(118, 164, 210, 0.14);
+            border-radius: 26px;
+            padding: 34px 34px 26px 34px;
+            margin-bottom: 16px;
+            box-shadow: 0 26px 54px rgba(2, 12, 27, 0.34);
+            overflow: hidden;
+            position: relative;
+        }
+        .page-masthead::after {
+            content: "";
+            position: absolute;
+            inset: auto -90px -60px auto;
+            width: 320px;
+            height: 320px;
+            border-radius: 999px;
+            border: 2px solid rgba(125, 211, 252, 0.16);
+            opacity: 0.6;
+        }
+        .top-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            background: linear-gradient(90deg, #091a2d 0%, #123052 52%, #1a446f 100%);
+            border: 1px solid rgba(120, 166, 214, 0.18);
+            border-radius: 18px;
+            padding: 12px 18px;
+            margin-bottom: 12px;
+            box-shadow: 0 18px 34px rgba(3, 18, 35, 0.28);
+        }
+        .top-nav-brand {
+            color: #ffffff;
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: 0.03em;
+        }
+        .top-nav-brand span {
+            color: #ffb84d;
+        }
+        .top-nav-menu {
+            display: flex;
+            gap: 18px;
+            align-items: center;
+            flex-wrap: wrap;
+            color: #d8e6f5;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .top-nav-menu .active {
+            color: #ffb84d;
+        }
+        .top-nav-cta {
+            background: linear-gradient(135deg, #ffb84d 0%, #ff8a2a 100%);
+            color: #ffffff;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .masthead-grid {
+            display: grid;
+            grid-template-columns: minmax(320px, 1.35fr) minmax(240px, 0.75fr);
+            gap: 18px;
+            align-items: end;
+        }
+        .page-eyebrow {
+            color: #7dd3fc;
+            font-size: 11px;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .page-title {
+            color: #ffffff;
+            font-size: 52px;
+            font-weight: 800;
+            line-height: 1.03;
+            margin: 0;
+            max-width: 640px;
+        }
+        .page-title .accent {
+            color: #ffb84d;
+        }
+        .page-subtitle {
+            color: #d5e5f6;
+            font-size: 15px;
+            line-height: 1.65;
+            margin-top: 14px;
+            max-width: 620px;
+        }
+        .page-badge {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(148, 196, 232, 0.20);
+            border-radius: 18px;
+            color: #eaf4ff;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 18px 20px;
+            white-space: normal;
+            box-shadow: 0 12px 26px rgba(2, 12, 27, 0.24);
+            backdrop-filter: blur(8px);
+        }
+        .masthead-pills {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(120px, 1fr));
+            gap: 12px;
+            margin-top: 22px;
+        }
+        .masthead-pill {
+            background: linear-gradient(180deg, rgba(214, 231, 255, 0.16), rgba(165, 192, 229, 0.10));
+            border: 1px solid rgba(148, 196, 232, 0.18);
+            border-radius: 14px;
+            color: #e7f1fb;
+            padding: 12px 14px;
+            font-size: 12px;
+            font-weight: 700;
+            text-align: center;
+            backdrop-filter: blur(6px);
+        }
+        .hero-strip,
+        .hero-strip.hero-bull,
+        .hero-strip.hero-bear,
+        .hero-strip.hero-range {
+            background: linear-gradient(180deg, #0c2039 0%, #102b49 100%);
+            border: 1px solid rgba(118, 164, 210, 0.14);
+            border-radius: 22px;
+            box-shadow: 0 20px 40px rgba(2, 12, 27, 0.26);
+        }
+        .hero-strip.hero-bull,
+        .hero-strip.hero-bear,
+        .hero-strip.hero-range {
+            border-left: 4px solid #ff6b2c;
+        }
+        .hero-kicker, .hero-label {
+            color: #89a7c7;
+        }
+        .hero-symbol, .hero-value, .hero-price {
+            color: #ffffff;
+        }
+        .hero-tile {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(148, 196, 232, 0.14);
+        }
+        .section-heading {
+            color: #ffffff;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+        .section-copy {
+            color: #89a7c7;
+            font-size: 13px;
+            margin-bottom: 14px;
+        }
+        @media (max-width: 900px) {
+            .masthead-grid {
+                grid-template-columns: 1fr;
+            }
+            .masthead-pills {
+                grid-template-columns: repeat(2, minmax(120px, 1fr));
+            }
+            .page-title {
+                font-size: 40px;
+            }
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
+def _render_page_masthead(symbol: str, strategy: str, execution_mode: str, auto_execute: bool) -> None:
+    auto_text = "Auto Send On" if auto_execute else "Manual Review"
+    mode_badge = "Live Broker Mode" if str(execution_mode).upper() == "LIVE" else "Paper Desk Mode"
+    st.markdown(
+        f"""
+        <div class="top-nav">
+            <div class="top-nav-brand">DHAN<span>DESK</span></div>
+            <div class="top-nav-menu">
+                <span class="active">Live Desk</span>
+                <span>Signals</span>
+                <span>Orders</span>
+                <span>Risk</span>
+                <span>Account</span>
+            </div>
+            <div class="top-nav-cta">{execution_mode}</div>
+        </div>
+        <div class="page-masthead">
+            <div class="masthead-grid">
+                <div>
+                    <div class="page-eyebrow">Broker Connected Workspace</div>
+                    <h1 class="page-title">Dhan <span class="accent">Live Trading</span> Desk</h1>
+                    <div class="page-subtitle">Read the market, build the contract, preview the payload, and route orders for {symbol} from one refined execution screen.</div>
+                </div>
+                <div class="page-badge">{strategy}<br/>{mode_badge}<br/>{auto_text}</div>
+            </div>
+            <div class="masthead-pills">
+                <div class="masthead-pill">Payload Preview</div>
+                <div class="masthead-pill">Live Routing</div>
+                <div class="masthead-pill">.env Credentials</div>
+                <div class="masthead-pill">Order Control</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def _render_hero_strip(
     symbol: str,
     last_price: object,
@@ -859,6 +1049,41 @@ def _estimate_weekly_expiry(symbol: str, now: datetime | None = None) -> str:
         return expiry.isoformat()
     return ""
 
+
+def _estimate_monthly_expiry(symbol: str, now: datetime | None = None) -> str:
+    s = (symbol or "").strip().upper()
+    if s not in {"^NSEI", "NIFTY", "NIFTY 50", "NIFTY50", "NIFTY FUT", "NIFTY FUTURES", "NIFTYFUT"}:
+        return ""
+
+    tz = ZoneInfo("Asia/Kolkata")
+    dt = now or datetime.now(tz)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=tz)
+
+    first_next_month = (dt.replace(day=28) + timedelta(days=4)).replace(day=1)
+    expiry = first_next_month - timedelta(days=1)
+    while expiry.weekday() != 3:
+        expiry -= timedelta(days=1)
+    return expiry.date().isoformat()
+
+
+def attach_futures_contracts(rows: list[dict[str, object]], symbol: str) -> list[dict[str, object]]:
+    contract_symbol = normalize_index_symbol(symbol) if normalize_index_symbol else str(symbol).strip().upper().replace("^", "")
+    expiry = _estimate_monthly_expiry(symbol)
+    out: list[dict[str, object]] = []
+    for r in rows:
+        row = dict(r)
+        row["instrument"] = "FUTURES"
+        row["contract_type"] = "FUTIDX"
+        row["contract_symbol"] = contract_symbol
+        if expiry:
+            row["contract_expiry"] = _format_expiry(expiry)
+            row["contract_expiry_source"] = "EST"
+        for key in ["option_type", "strike_price", "option_strike", "option_ltp", "option_oi", "option_vol", "option_iv", "option_expiry", "option_expiry_source"]:
+            row.pop(key, None)
+        out.append(row)
+    return out
+
 def attach_lots(rows: list[dict[str, object]], lot_size: int, lots: int) -> list[dict[str, object]]:
     lot_size = int(lot_size) if lot_size and int(lot_size) > 0 else 0
     lots = int(lots) if lots and int(lots) > 0 else 0
@@ -872,7 +1097,7 @@ def attach_lots(rows: list[dict[str, object]], lot_size: int, lots: int) -> list
         row["lots"] = lots
         row["quantity"] = qty
         try:
-            ltp = float(row.get("option_ltp", 0) or 0)
+            ltp = float(row.get("option_ltp", row.get("entry_price", row.get("share_price", row.get("price", 0)))) or 0)
         except Exception:
             ltp = 0.0
         if ltp > 0:
@@ -899,6 +1124,8 @@ def send_signal_alert(
     target_2 = _fmt_num(trade.get("target_2"))
     target_3 = _fmt_num(trade.get("target_3"))
     option = str(trade.get("option_strike", "") or "").strip()
+    contract = str(trade.get("contract_symbol", "") or "").strip()
+    contract_expiry = str(trade.get("contract_expiry", "") or "").strip()
 
     spot_ltp = _fmt_num(trade.get("spot_ltp", trade.get("close", trade.get("share_price", "-"))))
     opt_ltp = _fmt_num(trade.get("option_ltp"))
@@ -946,6 +1173,11 @@ def send_signal_alert(
         parts.append(f"Target 3: {target_3}")
     if option:
         parts.append(f"Option: {option}")
+    if contract:
+        contract_line = f"Futures: {contract}"
+        if contract_expiry:
+            contract_line = contract_line + f" ({contract_expiry})"
+        parts.append(contract_line)
     if opt_expiry:
         parts.append(f"Expiry: {opt_expiry}")
     if spot_ltp != "-":
@@ -1255,63 +1487,199 @@ def run_strategy(
     return out_rows
 
 
+def _resolve_live_execution_kwargs(security_map_path: str) -> dict[str, object]:
+    broker_name = "DHAN"
+    raw_path = str(security_map_path or "data/dhan_security_map.csv").strip() or "data/dhan_security_map.csv"
+    security_map: dict[str, dict[str, str]] | None = None
+    if load_security_map is not None:
+        try:
+            security_map = load_security_map(Path(raw_path))
+        except Exception:
+            security_map = None
+    return {
+        "broker_name": broker_name,
+        "security_map": security_map,
+    }
+
+
+def _render_live_execution_feedback(rows: list[dict[str, object]]) -> None:
+    if not rows:
+        return
+    broker_sent = sum(1 for r in rows if str(r.get("broker_status", "")).upper() not in {"", "ERROR", "NOT_CONFIGURED"})
+    broker_error = sum(1 for r in rows if str(r.get("broker_status", "")).upper() == "ERROR")
+    broker_not_configured = sum(1 for r in rows if str(r.get("broker_status", "")).upper() == "NOT_CONFIGURED")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Broker Sent", broker_sent)
+    c2.metric("Broker Errors", broker_error)
+    c3.metric("Not Configured", broker_not_configured)
+
+
+def _build_dhan_preview_rows(candidates: list[dict[str, object]], security_map_path: str) -> list[dict[str, object]]:
+    if build_order_request_from_candidate is None:
+        return [{"preview_status": "ERROR", "preview_error": "Dhan payload builder unavailable."}]
+
+    resolved = _resolve_live_execution_kwargs(security_map_path)
+    security_map = resolved.get("security_map")
+    client_id = os.getenv("DHAN_CLIENT_ID", "").strip() or "PREVIEW_CLIENT"
+    previews: list[dict[str, object]] = []
+
+    for candidate in candidates:
+        if str(candidate.get("side", "")).upper() not in {"BUY", "SELL"}:
+            continue
+        try:
+            request = build_order_request_from_candidate(
+                candidate,
+                client_id=client_id,
+                security_map=security_map,  # type: ignore[arg-type]
+            )
+            payload = request.to_payload()
+            payload["preview_status"] = "READY" if os.getenv("DHAN_CLIENT_ID", "").strip() else "CLIENT_ID_MISSING"
+            previews.append(payload)
+        except Exception as exc:
+            previews.append(
+                {
+                    "symbol": candidate.get("symbol", ""),
+                    "side": candidate.get("side", ""),
+                    "signal_time": candidate.get("signal_time", candidate.get("entry_time", "")),
+                    "preview_status": "ERROR",
+                    "preview_error": str(exc),
+                }
+            )
+    return previews
+
+
+def _run_dhan_readiness_check(symbol: str, security_map_path: str) -> list[str]:
+    notes: list[str] = []
+    client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
+    access_token = os.getenv("DHAN_ACCESS_TOKEN", "").strip()
+    if client_id:
+        notes.append("PASS: DHAN_CLIENT_ID is configured.")
+    else:
+        notes.append("FAIL: DHAN_CLIENT_ID is missing.")
+    if access_token:
+        notes.append("PASS: DHAN_ACCESS_TOKEN is configured.")
+    else:
+        notes.append("FAIL: DHAN_ACCESS_TOKEN is missing.")
+    raw_path = str(security_map_path or "data/dhan_security_map.csv").strip() or "data/dhan_security_map.csv"
+    map_path = Path(raw_path)
+    if not map_path.exists():
+        notes.append(f"FAIL: Security map not found at {raw_path}.")
+        return notes
+    notes.append(f"PASS: Security map found at {raw_path}.")
+    if load_security_map is None:
+        notes.append("FAIL: Security map loader is unavailable.")
+        return notes
+    try:
+        security_map = load_security_map(map_path)
+    except Exception as exc:
+        notes.append(f"FAIL: Could not load security map: {exc}")
+        return notes
+    notes.append(f"PASS: Loaded {len(security_map)} security-map keys.")
+    normalized_symbol = (normalize_index_symbol(symbol) if normalize_index_symbol else str(symbol)).strip().upper().replace("^", "")
+    symbol_matches = [k for k in security_map.keys() if normalized_symbol in k or k in {normalized_symbol, f"{normalized_symbol}FUT"}]
+    if symbol_matches:
+        notes.append(f"PASS: Found symbol coverage for {normalized_symbol}: {", ".join(symbol_matches[:5])}")
+    else:
+        notes.append(f"WARN: No direct security-map match found for {normalized_symbol}. Live orders may fail until security IDs are added.")
+    notes.append("INFO: Dhan live order APIs also require whitelisted static IPs in Dhan settings.")
+    return notes
+
+
 def main() -> None:
     _render_sidebar_shell()
-    st.title("Intratrade Algo Desk")
-
     st.sidebar.markdown(
         """
         <div class="live-panel">
-            <div class="live-kicker">Control Center</div>
-            <div class="live-title">Live Trade Desk</div>
-            <div class="live-sub">Switch symbols, tune intraday filters, and send executions from one compact panel.</div>
+            <div class="live-kicker">Execution Console</div>
+            <div class="live-title">Dhan Live Desk</div>
+            <div class="live-sub">Clean order-ticket controls for live review, routing, and signal execution.</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    _sidebar_section("Market Data", "Fast symbol and timeframe switching")
+    _sidebar_section("Live Ticket", "Only the inputs needed for signal generation and order routing")
     symbol = st.sidebar.text_input("Symbol", "^NSEI")
+    strategy = st.sidebar.pills("Strategy", ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"], default="Breakout")
+    execution_mode = st.sidebar.segmented_control("Execution mode", ["PAPER", "LIVE"], default="PAPER")
     interval = st.sidebar.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default="1m")
     period = st.sidebar.segmented_control("Period", ["1d", "5d", "1mo", "3mo"], default="1d")
 
-    _sidebar_section("Bot Settings", "Risk and trade generation profile")
-    capital = st.sidebar.number_input("Capital (INR)", min_value=1000, value=100000, step=1000)
-    risk_pct = st.sidebar.slider("Risk per trade (%)", 0.1, 10.0, 1.0)
-    rr_ratio = st.sidebar.slider("Risk/Reward Ratio", 1.0, 10.0, 2.0)
-    trailing_sl_pct = st.sidebar.slider("Trailing Stop Loss %", 0.1, 10.0, 1.0, 0.1)
+    _sidebar_section("Order Setup", "Contract type and quantity")
+    instrument_mode = st.sidebar.segmented_control("Instrument", ["Options", "Futures"], default="Options")
+    lot_size = st.sidebar.number_input("Lot size", min_value=1, value=65, step=1)
+    lots = st.sidebar.slider("Lots", 1, 10, 2)
 
-    strategy = st.sidebar.pills("Strategy", ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"], default="Breakout")
+    strike_step = 50
+    moneyness = "ATM"
+    strike_steps = 0
+    fetch_option_metrics = False
+    if instrument_mode == "Options":
+        with st.sidebar.expander("Option contract details"):
+            strike_step = int(st.segmented_control("Strike step", [25, 50, 100], default=50))
+            moneyness = st.pills("Moneyness", ["ATM", "ITM", "OTM"], default="ATM")
+            strike_steps = st.slider("ITM / OTM steps", 0, 5, 0)
+            fetch_option_metrics = st.checkbox("Fetch option chain metrics", value=False)
+    else:
+        st.sidebar.caption("Futures mode uses the monthly futures contract automatically.")
 
     mtf_ema_period = 3
     mtf_setup_mode = "either"
     mtf_retest_strength = True
     mtf_max_trades_per_day = 3
     if strategy == "MTF 5m":
-        _sidebar_section("MTF Settings", "1h bias, 15m setup, 5m trigger")
-        mtf_ema_period = int(st.sidebar.number_input("EMA period (1h)", min_value=2, max_value=20, value=3, step=1))
-        mtf_setup_label = st.sidebar.segmented_control("15m setup filter", ["Either", "BOS only", "FVG only"], default="Either")
-        mtf_setup_mode = {"Either": "either", "BOS only": "bos", "FVG only": "fvg"}[str(mtf_setup_label)]
-        mtf_retest_strength = st.sidebar.checkbox("Require strong 5m retest candle", value=True)
-        mtf_max_trades_per_day = int(st.sidebar.segmented_control("Max trades/day", [1, 2, 3], default=3))
+        with st.sidebar.expander("MTF strategy controls"):
+            mtf_ema_period = int(st.number_input("EMA period (1h)", min_value=2, max_value=20, value=3, step=1))
+            mtf_setup_label = st.segmented_control("15m setup filter", ["Either", "BOS only", "FVG only"], default="Either")
+            mtf_setup_mode = {"Either": "either", "BOS only": "bos", "FVG only": "fvg"}[str(mtf_setup_label)]
+            mtf_retest_strength = st.checkbox("Require strong 5m retest candle", value=True)
+            mtf_max_trades_per_day = int(st.segmented_control("Max trades/day", [1, 2, 3], default=3))
 
-    _sidebar_section("Option Setup", "Button-style strike and moneyness controls")
-    strike_step = int(st.sidebar.segmented_control("Strike step", [25, 50, 100], default=50))
-    moneyness = st.sidebar.pills("Moneyness", ["ATM", "ITM", "OTM"], default="ATM")
-    strike_steps = st.sidebar.slider("Steps (ITM/OTM)", 0, 5, 0)
-    fetch_option_metrics = st.sidebar.checkbox("Fetch option LTP/OI/Vol/IV + Expiry", value=False)
+    capital = 100000
+    risk_pct = 1.0
+    rr_ratio = 2.0
+    trailing_sl_pct = 1.0
+    live_update = False
+    refresh_seconds = 10
+    send_telegram = False
+    auto_execute_generated = False
+    with st.sidebar.expander("Advanced controls"):
+        capital = st.number_input("Capital (INR)", min_value=1000, value=100000, step=1000)
+        risk_pct = st.slider("Risk per trade (%)", 0.1, 10.0, 1.0)
+        rr_ratio = st.slider("Risk / Reward", 1.0, 10.0, 2.0)
+        trailing_sl_pct = st.slider("Trailing stop loss %", 0.1, 10.0, 1.0, 0.1)
+        live_update = st.checkbox("Auto refresh", value=False)
+        refresh_seconds = st.slider("Refresh every (seconds)", 2, 120, 10)
+        send_telegram = st.checkbox("Send Telegram alert", value=False)
+        auto_execute_generated = st.checkbox("Auto execute generated trades", value=False)
 
-    lot_size = st.sidebar.number_input("Lot size", min_value=1, value=65, step=1)
-    lots = st.sidebar.slider("Lots (qty = lots x lot size)", 1, 10, 2)
-
-    _sidebar_section("Execution Flow", "Refresh, alert, and order routing controls")
-    live_update = st.sidebar.checkbox("Auto refresh", value=False)
-    refresh_seconds = st.sidebar.slider("Refresh every (seconds)", 2, 120, 10)
-
-    send_telegram = st.sidebar.checkbox("Send Telegram alert (latest signal)", value=False)
-
-    execution_mode = st.sidebar.segmented_control("Execution mode", ["PAPER", "LIVE"], default="PAPER")
-    auto_execute_generated = st.sidebar.checkbox("Auto execute generated trades", value=False)
+    dhan_security_map_path = "data/dhan_security_map.csv"
+    if execution_mode == "LIVE":
+        _sidebar_section("Dhan Routing", "Credentials come from the root .env file")
+        dhan_client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
+        dhan_token_present = bool(os.getenv("DHAN_ACCESS_TOKEN", "").strip())
+        if dhan_client_id and dhan_token_present:
+            st.sidebar.success("Dhan credentials detected from .env")
+        else:
+            st.sidebar.warning("Add DHAN_CLIENT_ID and DHAN_ACCESS_TOKEN to .env before sending live orders")
+        dhan_security_map_path = st.sidebar.text_input("Security map path", value="data/dhan_security_map.csv")
+        if st.sidebar.button("Check Dhan Live Ready", use_container_width=True):
+            readiness_notes = _run_dhan_readiness_check(symbol, dhan_security_map_path)
+            for note in readiness_notes:
+                if note.startswith("FAIL"):
+                    st.sidebar.error(note)
+                elif note.startswith("WARN"):
+                    st.sidebar.warning(note)
+                elif note.startswith("PASS"):
+                    st.sidebar.success(note)
+                else:
+                    st.sidebar.info(note)
+    _render_page_masthead(
+        symbol=str(symbol),
+        strategy=str(strategy),
+        execution_mode=str(execution_mode),
+        auto_execute=bool(auto_execute_generated),
+    )
     if live_update:
         components.html(
             f"""<script>
@@ -1360,6 +1728,8 @@ def main() -> None:
         output_rows = []
 
     if output_rows:
+        if instrument_mode == "Futures":
+            output_rows = attach_futures_contracts(output_rows, symbol)
         output_rows = attach_lots(output_rows, lot_size=int(lot_size), lots=int(lots))
 
 
@@ -1403,7 +1773,7 @@ def main() -> None:
                 if execute_live_trades is None:
                     st.error("Live execution module is not available.")
                 else:
-                    auto_executed_rows = execute_live_trades(execution_candidates, Path("data/live_trading_logs_all.csv"), deduplicate=True)
+                    auto_executed_rows = execute_live_trades(execution_candidates, Path("data/live_trading_logs_all.csv"), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
             else:
                 if execute_paper_trades is None:
                     st.error("Paper execution module is not available.")
@@ -1415,6 +1785,8 @@ def main() -> None:
 
         if auto_executed_rows:
             st.success(f"Auto executed {len(auto_executed_rows)} trade(s) in {execution_mode} mode.")
+            if execution_mode == "LIVE":
+                _render_live_execution_feedback(auto_executed_rows)
             if send_telegram:
                 signal_map = {
                     f"{row.get('strategy','')}|{row.get('symbol','')}|{row.get('entry_time', row.get('timestamp',''))}|{row.get('side','')}": row
@@ -1469,7 +1841,8 @@ def main() -> None:
     tab1, tab2, tab3 = st.tabs(["Dashboard", "Charts", "Trades"])
 
     with tab1:
-        st.subheader("Market Overview")
+        st.markdown('<div class="section-shell">', unsafe_allow_html=True)
+        st.markdown('<div class="section-heading">Market Overview</div><div class="section-copy">Live market snapshot with the latest price, volume, and recent candles.</div>', unsafe_allow_html=True)
         c1, c2, c3, c4 = st.columns(4)
 
         if not candles.empty:
@@ -1489,9 +1862,11 @@ def main() -> None:
             st.dataframe(candles.tail(10), use_container_width=True)
         else:
             st.warning("No candle data available.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with tab2:
-        st.subheader("Live Market Chart")
+        st.markdown('<div class="chart-shell">', unsafe_allow_html=True)
+        st.markdown('<div class="section-heading">Market Chart</div><div class="section-copy">Intraday candlestick view with support, resistance, and market depth context.</div>', unsafe_allow_html=True)
         if not candles.empty:
             latest_move = 0.0
             if len(candles) >= 2:
@@ -1501,25 +1876,22 @@ def main() -> None:
                     latest_move = 0.0
 
             levels = compute_market_levels(candles)
-            move_color = "#22c55e" if latest_move >= 0 else "#ef4444"
+            move_color = "#16a34a" if latest_move >= 0 else "#dc2626"
             move_prefix = "+" if latest_move > 0 else ""
             st.markdown(
                 f"""
-                <div style=\"background:linear-gradient(135deg,#0f172a 0%,#111827 55%,#172554 100%);border:1px solid #1e293b;border-radius:18px;padding:18px 20px;margin-bottom:12px;box-shadow:0 16px 36px rgba(2,6,23,0.34);\"> 
+                <div style=\"background:#f8fafc;border:1px solid #dbe4ee;border-radius:18px;padding:18px 20px;margin-bottom:12px;box-shadow:0 10px 24px rgba(15,23,42,0.05);\"> 
                     <div style=\"display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;\">
                         <div>
-                            <div style=\"color:#94a3b8;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;\">Live Price</div>
-                            <div style=\"color:#e2e8f0;font-size:34px;font-weight:700;line-height:1.05;\">{levels['last_price']:.2f}</div>
+                            <div style=\"color:#64748b;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;\">Live Price</div>
+                            <div style=\"color:#0f172a;font-size:34px;font-weight:700;line-height:1.05;\">{levels['last_price']:.2f}</div>
                         </div>
                         <div style=\"text-align:right;\">
-                            <div style=\"color:{move_color};font-size:24px;font-weight:700;animation:pulse 1.2s ease-in-out infinite;\">{move_prefix}{latest_move:.2f}</div>
-                            <div style=\"color:#94a3b8;font-size:12px;\">vs previous candle close</div>
+                            <div style=\"color:{move_color};font-size:24px;font-weight:700;\">{move_prefix}{latest_move:.2f}</div>
+                            <div style=\"color:#64748b;font-size:12px;\">vs previous candle close</div>
                         </div>
                     </div>
                 </div>
-                <style>
-                    @keyframes pulse {{ 0% {{ opacity: 0.75; }} 50% {{ opacity: 1; }} 100% {{ opacity: 0.75; }} }}
-                </style>
                 """,
                 unsafe_allow_html=True,
             )
@@ -1542,13 +1914,15 @@ def main() -> None:
                 st.caption(f"Price spread between support and resistance bands: {levels['spread']:.2f}")
         else:
             st.info("No chart data available.")
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with tab3:
+        st.markdown('<div class="section-shell">', unsafe_allow_html=True)
+        st.markdown('<div class="section-heading">Trade Workspace</div><div class="section-copy">Review live-ready setups, preview broker payloads, and send only the orders you actually want routed.</div>', unsafe_allow_html=True)
         if auto_executed_rows:
             st.caption("Auto-executed trades from this run.")
             st.dataframe(_order_trade_columns(pd.DataFrame(auto_executed_rows)), use_container_width=True)
 
-        st.subheader("Trade Analysis")
         if output_rows:
             trades_df = pd.DataFrame(output_rows)
             st.dataframe(trades_df, use_container_width=True)
@@ -1569,6 +1943,18 @@ def main() -> None:
         if execution_candidates:
             st.caption("Current executable candidates generated from the latest strategy run.")
             st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), use_container_width=True)
+            if execution_mode == "LIVE":
+                with st.expander("Dhan Live Payload Preview"):
+                    if st.button("Preview Live Payloads", use_container_width=True):
+                        st.session_state["dhan_payload_preview"] = _build_dhan_preview_rows(
+                            execution_candidates,
+                            dhan_security_map_path,
+                        )
+                    preview_rows = st.session_state.get("dhan_payload_preview", [])
+                    if preview_rows:
+                        st.dataframe(pd.DataFrame(preview_rows), use_container_width=True)
+                    else:
+                        st.caption("Preview the exact Dhan live-order payloads here before sending them to the broker.")
         else:
             st.info("No execution candidates are available for the current strategy output.")
 
@@ -1599,7 +1985,7 @@ def main() -> None:
                     if execute_live_trades is None:
                         st.error("Live execution module is not available.")
                     else:
-                        executed_rows = execute_live_trades(staged_candidates, Path("data/live_trading_logs_all.csv"), deduplicate=True)
+                        executed_rows = execute_live_trades(staged_candidates, Path("data/live_trading_logs_all.csv"), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
                 else:
                     if execute_paper_trades is None:
                         st.error("Paper execution module is not available.")
@@ -1609,11 +1995,13 @@ def main() -> None:
                 if executed_rows:
                     st.success(f"Executed {len(executed_rows)} reviewed trade(s) in {execution_mode} mode.")
                     st.dataframe(_order_trade_columns(pd.DataFrame(executed_rows)), use_container_width=True)
+                    if execution_mode == "LIVE":
+                        _render_live_execution_feedback(executed_rows)
                 else:
                     st.warning("No new reviewed trades were executed. They may already be logged.")
         else:
             st.info("Analyze trades first to build a review queue, then execute that reviewed batch later.")
-
+        st.markdown("</div>", unsafe_allow_html=True)
     with st.expander("Debug Output"):
         st.write("Strategy selected:", strategy)
         st.write("Output rows type:", type(output_rows))
@@ -1622,6 +2010,20 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

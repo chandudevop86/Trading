@@ -1,0 +1,23 @@
+TRADING APP BROKER INTEGRATION FLOW
+
+Current State
+The platform already supports signal generation, quantity preparation, and execution logging.
+Paper trading is active and live integration is prepared as the next extension point.
+
+Future Broker Flow
+1. Strategy generates BUY or SELL signal.
+2. Contract layer maps the signal to options or futures.
+3. Execution engine prepares order payload.
+4. Broker adapter validates symbol, quantity, and product type.
+5. Order is sent to broker API.
+6. Response is stored in execution log.
+7. Telegram notification is sent if enabled.
+
+Integration Targets
+Dhan API.
+Zerodha API.
+Angel One API.
+Other REST or WebSocket brokers.
+
+Operational Requirement
+Broker APIs should be attached only after stable paper-trading validation and proper secret management.

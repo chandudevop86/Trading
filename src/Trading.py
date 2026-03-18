@@ -1122,6 +1122,51 @@ def _render_capability_band(
     )
 
 
+
+def _render_dhan_feature_sections(
+    symbol: str,
+    strategy: str,
+    execution_mode: str,
+    account_status: str,
+    signal_count: int,
+    auto_execute: bool,
+) -> None:
+    auto_text = "Auto execution enabled" if auto_execute else "Manual review before send"
+    st.markdown(
+        f"""
+        <div class="section-shell" style="margin-bottom:14px;">
+            <div class="section-heading">Experience the True Potential of Charts</div>
+            <div class="section-copy">Chart-first execution inspired by Dhan's connect layout, mapped to your live KRSH SOLUTIONS data.</div>
+            <div class="hero-chip-row">
+                <div class="hero-chip"><div class="hero-chip-label">Live Signals</div><div class="hero-chip-meta">{int(signal_count)} setups from {strategy}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Paper & Live</div><div class="hero-chip-meta">Current mode: {execution_mode}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Routing Status</div><div class="hero-chip-meta">{account_status}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Execution Style</div><div class="hero-chip-meta">{auto_text}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Instrument Focus</div><div class="hero-chip-meta">{symbol}</div></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    step_cols = st.columns(3)
+    step_data = [
+        ("1. Prepare Your Desk", "Choose symbol, strategy, timeframe, and execution mode before routing orders."),
+        ("2. Review Signals on Charts", "Use dashboard, charts, and candidate previews to validate setups before execution."),
+        ("3. Authorize and Execute", "Send reviewed trades to paper logs or Dhan live routing only when ready."),
+    ]
+    for col, (title, body) in zip(step_cols, step_data):
+        with col:
+            st.markdown(
+                f"""
+                <div class="section-shell" style="min-height:170px; margin-bottom:14px;">
+                    <div class="section-heading" style="font-size:18px;">{title}</div>
+                    <div class="section-copy" style="font-size:14px; line-height:1.6; margin-bottom:0;">{body}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
 def main() -> None:
     _render_sidebar_shell()
     st.markdown(

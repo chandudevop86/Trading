@@ -828,6 +828,7 @@ def _render_sidebar_shell() -> None:
             color: rgba(255,255,255,0.72);
             font-size: 17px;
             font-weight: 700;
+            position: relative;
         }
         .top-nav-pill {
             min-width: 0;
@@ -839,6 +840,22 @@ def _render_sidebar_shell() -> None:
             font-size: 17px;
             font-weight: 700;
             line-height: 1.2;
+        }
+        .nav-dropdown-shell {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+        }
+        .nav-dropdown-trigger {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            cursor: default;
+        }
+        .nav-dropdown-caret {
+            color: rgba(255,255,255,0.78);
+            font-size: 13px;
+            transform: translateY(-1px);
         }
         .top-nav-pill .active,
         .top-nav-pill-value {
@@ -877,15 +894,28 @@ def _render_sidebar_shell() -> None:
             letter-spacing: 0;
         }
         .mega-panel {
-            position: relative;
-            z-index: 2;
-            max-width: 980px;
+            position: absolute;
+            z-index: 8;
+            top: calc(100% + 18px);
+            left: -28px;
+            width: min(980px, 76vw);
             background: #ffffff;
             color: #111827;
             border-radius: 22px;
             padding: 30px 34px;
             box-shadow: 0 28px 50px rgba(0,0,0,0.28);
-            margin: 8px 0 26px 34px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(12px);
+            transition: opacity 180ms ease, transform 180ms ease, visibility 180ms ease;
+            pointer-events: none;
+        }
+        .nav-dropdown-shell:hover .mega-panel,
+        .nav-dropdown-shell:focus-within .mega-panel {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+            pointer-events: auto;
         }
         .mega-panel::before {
             content: "";
@@ -1204,6 +1234,15 @@ def _render_sidebar_shell() -> None:
             .masthead-grid {
                 grid-template-columns: 1fr;
             }
+            .mega-panel {
+                position: static;
+                width: 100%;
+                opacity: 1;
+                visibility: visible;
+                transform: none;
+                pointer-events: auto;
+                margin-top: 16px;
+            }
             .masthead-pills {
                 grid-template-columns: repeat(2, minmax(120px, 1fr));
             }
@@ -1242,7 +1281,19 @@ def _render_page_masthead(
             <div class="top-nav">
                 <div class="top-nav-brand"><div class="top-nav-logo">K</div><div>KRSH<span> Solutions</span></div></div>
                 <div class="top-nav-menu">
-                    <div class="top-nav-pill"><span class="active">Products</span></div>
+                    <div class="nav-dropdown-shell">
+                        <div class="top-nav-pill nav-dropdown-trigger"><span class="active">Products</span><span class="nav-dropdown-caret">v</span></div>
+                        <div class="mega-panel">
+                            <div class="mega-grid">
+                                <div class="mega-item"><div class="mega-icon">K</div><div><div class="mega-title">KRSH App</div><div class="mega-copy">Strategy-led trading app built for active desk users and disciplined execution workflows.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon dark">W</div><div><div class="mega-title">KRSH Web</div><div class="mega-copy">Web trading platform for users who prefer a bigger live trading screen.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon alt">O</div><div><div class="mega-title">Options Trader</div><div class="mega-copy">Current instrument mode: {instrument_mode}. Built to evaluate F&O setups with clear sizing.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon blue">T</div><div><div class="mega-title">Connect to TradingView</div><div class="mega-copy">Review {symbol} on {interval}, then route orders with {execution_mode} mode and {account_status} broker status.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon dark">S</div><div><div class="mega-title">Signal Engine</div><div class="mega-copy">Latest signal state: {signal_text}. Open setups available: {open_trades}. Strategy: {strategy}.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon blue">D</div><div><div class="mega-title">DhanHQ Routing</div><div class="mega-copy">Order configuration: {order_text}. Risk profile: {risk_text}. Execution mode: {execution_mode}.</div></div></div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="top-nav-pill"><span>Investments</span></div>
                     <div class="top-nav-pill"><span>Markets</span></div>
                     <div class="top-nav-pill"><span>More</span></div>
@@ -1250,16 +1301,6 @@ def _render_page_masthead(
                 <div class="top-nav-search">Search Stocks, Mutual Funds, F&O</div>
                 <div class="top-nav-secondary">Login</div>
                 <div class="top-nav-cta">Open Account</div>
-            </div>
-            <div class="mega-panel">
-                <div class="mega-grid">
-                    <div class="mega-item"><div class="mega-icon">K</div><div><div class="mega-title">KRSH App</div><div class="mega-copy">Strategy-led trading app built for active desk users and disciplined execution workflows.</div></div></div>
-                    <div class="mega-item"><div class="mega-icon dark">W</div><div><div class="mega-title">KRSH Web</div><div class="mega-copy">Web trading platform for users who prefer a bigger live trading screen.</div></div></div>
-                    <div class="mega-item"><div class="mega-icon alt">O</div><div><div class="mega-title">Options Trader</div><div class="mega-copy">Current instrument mode: {instrument_mode}. Built to evaluate F&O setups with clear sizing.</div></div></div>
-                    <div class="mega-item"><div class="mega-icon blue">T</div><div><div class="mega-title">Connect to TradingView</div><div class="mega-copy">Review {symbol} on {interval}, then route orders with {execution_mode} mode and {account_status} broker status.</div></div></div>
-                    <div class="mega-item"><div class="mega-icon dark">S</div><div><div class="mega-title">Signal Engine</div><div class="mega-copy">Latest signal state: {signal_text}. Open setups available: {open_trades}. Strategy: {strategy}.</div></div></div>
-                    <div class="mega-item"><div class="mega-icon blue">D</div><div><div class="mega-title">DhanHQ Routing</div><div class="mega-copy">Order configuration: {order_text}. Risk profile: {risk_text}. Execution mode: {execution_mode}.</div></div></div>
-                </div>
             </div>
             <div class="masthead-grid">
                 <div>
@@ -1987,6 +2028,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

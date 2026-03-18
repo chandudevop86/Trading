@@ -1268,7 +1268,7 @@ def main() -> None:
     tab1, tab2, tab3 = st.tabs(["Dashboard", "Charts", "Trades"])
 
     with tab1:
-    st.markdown('<div class="section-shell">', unsafe_allow_html=True)
+        st.markdown('<div class="section-shell">', unsafe_allow_html=True)
         st.markdown('<div class="section-heading">Market Overview</div><div class="section-copy">Live market snapshot with the latest price, volume, and recent candles.</div>', unsafe_allow_html=True)
         c1, c2, c3, c4 = st.columns(4)
 
@@ -1344,7 +1344,7 @@ def main() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
 
     with tab3:
-    st.markdown('<div class="section-shell">', unsafe_allow_html=True)
+        st.markdown('<div class="section-shell">', unsafe_allow_html=True)
         st.markdown('<div class="section-heading">Trade Workspace</div><div class="section-copy">Review live-ready setups, preview broker payloads, and send only the orders you actually want routed.</div>', unsafe_allow_html=True)
         if auto_executed_rows:
             st.caption("Auto-executed trades from this run.")

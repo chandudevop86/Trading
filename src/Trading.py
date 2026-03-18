@@ -69,6 +69,26 @@ except Exception:
 
 st.set_page_config(page_title="KRSH SOLUTIONS", page_icon="chart", layout="wide")
 
+st.markdown(
+    """
+    <script>
+    (function () {
+        const ensureViewport = () => {
+            let meta = document.querySelector('meta[name="viewport"]');
+            if (!meta) {
+                meta = document.createElement('meta');
+                meta.name = 'viewport';
+                document.head.appendChild(meta);
+            }
+            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0';
+        };
+        ensureViewport();
+        setTimeout(ensureViewport, 0);
+    })();
+    </script>
+    """,
+    unsafe_allow_html=True,
+)
 TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "")
 
@@ -980,6 +1000,24 @@ def _render_sidebar_shell() -> None:
             align-items: end;
             padding: 8px 8px 0 8px;
         }
+        .breadcrumb-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+            color: rgba(255,255,255,0.72);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .breadcrumb-sep {
+            color: rgba(255,255,255,0.34);
+        }
+        .breadcrumb-current {
+            color: #ffffff;
+        }
         .page-eyebrow {
             color: #88bfff;
             font-size: 11px;
@@ -1305,6 +1343,7 @@ def _render_page_masthead(
             </div>
             <div class="masthead-grid">
                 <div>
+                    <div class="breadcrumb-list"><span>KRSH Solutions</span><span class="breadcrumb-sep">/</span><span>TradingView Connect</span><span class="breadcrumb-sep">/</span><span>{symbol}</span><span class="breadcrumb-sep">/</span><span class="breadcrumb-current">{strategy}</span></div>
                     <div class="page-eyebrow">KRSH SOLUTIONS Connect Workspace</div>
                     <h1 class="page-title">Trade Directly from<br><span class="accent">TradingView.com</span></h1>
                     <div class="page-subtitle">Available exclusively for KRSH SOLUTIONS users. Review live setups, connect broker routing, and execute directly from your trading workspace.</div>
@@ -2030,6 +2069,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 

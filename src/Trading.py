@@ -910,30 +910,30 @@ def _render_page_masthead(
         <div class="top-nav">
             <div class="top-nav-brand"><div class="top-nav-logo">K</div><div>KRSH<span>Solutions</span></div></div>
             <div class="top-nav-menu">
-                <div class="top-nav-pill"><span class="active">Desk</span><span class="top-nav-pill-value">{symbol}</span></div>
-                <div class="top-nav-pill"><span>Signals</span><span class="top-nav-pill-value">{signal_text} / {open_trades}</span></div>
-                <div class="top-nav-pill"><span>Orders</span><span class="top-nav-pill-value">{order_text}</span></div>
-                <div class="top-nav-pill"><span>Risk</span><span class="top-nav-pill-value">{risk_text}</span></div>
-                <div class="top-nav-pill"><span>Account</span><span class="top-nav-pill-value">{account_status}</span></div>
+                <div class="top-nav-pill"><span class="active">Products</span><span class="top-nav-pill-value">{symbol}</span></div>
+                <div class="top-nav-pill"><span>Markets</span><span class="top-nav-pill-value">{signal_text} / {open_trades}</span></div>
+                <div class="top-nav-pill"><span>Connect</span><span class="top-nav-pill-value">{order_text}</span></div>
+                <div class="top-nav-pill"><span>DhanHQ</span><span class="top-nav-pill-value">{risk_text}</span></div>
+                <div class="top-nav-pill"><span>Support</span><span class="top-nav-pill-value">{account_status}</span></div>
             </div>
             <div class="top-nav-cta">{execution_mode}</div>
         </div>
         <div class="page-masthead">
             <div class="masthead-grid">
                 <div>
-                    <div class="page-eyebrow">KRSH SOLUTIONS Trading Workspace</div>
-                    <h1 class="page-title">Look first /<br><span class="accent">Then execute.</span></h1>
-                    <div class="page-subtitle">Use live structure, strategy signals, and disciplined execution controls to trade {symbol} with clarity.</div>
-                    <div class="hero-search">{symbol}  |  {interval}  |  {period}  |  {strategy}</div>
+                    <div class="page-eyebrow">KRSH SOLUTIONS Connect Workspace</div>
+                    <h1 class="page-title">Trade Directly from<br><span class="accent">TradingView.com</span></h1>
+                    <div class="page-subtitle">Available exclusively for KRSH SOLUTIONS users. Review live setups, connect broker routing, and execute directly from your trading workspace.</div>
+                    <div class="hero-search">Connect to trading workflow  |  {symbol}  |  {interval}  |  {strategy}</div>
                     <div class="hero-chip-row">
-                        <div class="hero-chip"><div class="hero-chip-label">Signals</div><div class="hero-chip-meta">{signal_text} / {open_trades}</div></div>
-                        <div class="hero-chip"><div class="hero-chip-label">Orders</div><div class="hero-chip-meta">{order_text}</div></div>
-                        <div class="hero-chip"><div class="hero-chip-label">Risk</div><div class="hero-chip-meta">{risk_text}</div></div>
-                        <div class="hero-chip"><div class="hero-chip-label">Account</div><div class="hero-chip-meta">{account_status}</div></div>
+                        <div class="hero-chip"><div class="hero-chip-label">Market Access</div><div class="hero-chip-meta">{signal_text} / {open_trades}</div></div>
+                        <div class="hero-chip"><div class="hero-chip-label">Trading Panel</div><div class="hero-chip-meta">{order_text}</div></div>
+                        <div class="hero-chip"><div class="hero-chip-label">DhanHQ Ready</div><div class="hero-chip-meta">{risk_text}</div></div>
+                        <div class="hero-chip"><div class="hero-chip-label">Account Status</div><div class="hero-chip-meta">{account_status}</div></div>
                     </div>
                 </div>
                 <div class="hero-visual">
-                    <div class="page-badge">{strategy}<br>{auto_text}<br>{account_status}</div>
+                    <div class="page-badge">{strategy}<br>{execution_mode}<br>{auto_text}<br>{account_status}</div>
                 </div>
             </div>
         </div>
@@ -1072,6 +1072,50 @@ def _render_capability_band(
         """,
         unsafe_allow_html=True,
     )
+
+def _render_dhan_feature_sections(
+    symbol: str,
+    strategy: str,
+    execution_mode: str,
+    account_status: str,
+    signal_count: int,
+    auto_execute: bool,
+) -> None:
+    auto_text = "Auto execution enabled" if auto_execute else "Manual review before send"
+    st.markdown(
+        f"""
+        <div class="section-shell" style="margin-bottom:14px;">
+            <div class="section-heading">Experience the True Potential of Charts</div>
+            <div class="section-copy">Chart-first execution inspired by Dhan's TradingView connect flow, mapped to your live KRSH SOLUTIONS data.</div>
+            <div class="hero-chip-row">
+                <div class="hero-chip"><div class="hero-chip-label">Live Signals</div><div class="hero-chip-meta">{int(signal_count)} setups from {strategy}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Paper & Live</div><div class="hero-chip-meta">Current mode: {execution_mode}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Routing Status</div><div class="hero-chip-meta">{account_status}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Execution Style</div><div class="hero-chip-meta">{auto_text}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Instrument Focus</div><div class="hero-chip-meta">{symbol}</div></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    step_cols = st.columns(3)
+    step_data = [
+        ("1. Prepare Your Desk", "Choose symbol, strategy, timeframe, and execution mode before routing orders."),
+        ("2. Review Signals on Charts", "Use dashboard, charts, and candidate previews to validate setups before execution."),
+        ("3. Authorize and Execute", "Send reviewed trades to paper logs or Dhan live routing only when ready."),
+    ]
+    for col, (title, body) in zip(step_cols, step_data):
+        with col:
+            st.markdown(
+                f"""
+                <div class="section-shell" style="min-height:170px; margin-bottom:14px;">
+                    <div class="section-heading" style="font-size:18px;">{title}</div>
+                    <div class="section-copy" style="font-size:14px; line-height:1.6; margin-bottom:0;">{body}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 def main() -> None:
     _render_sidebar_shell()
     st.markdown(
@@ -1400,6 +1444,14 @@ def main() -> None:
         refresh_seconds=int(refresh_seconds),
         auto_execute=bool(auto_execute_generated),
     )
+    _render_dhan_feature_sections(
+        symbol=str(symbol),
+        strategy=str(strategy),
+        execution_mode=str(execution_mode),
+        account_status=account_status,
+        signal_count=len(signal_rows),
+        auto_execute=bool(auto_execute_generated),
+    )
     tab1, tab2, tab3 = st.tabs(["Dashboard", "Charts", "Trades"])
 
     with tab1:
@@ -1595,6 +1647,10 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

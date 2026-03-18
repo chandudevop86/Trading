@@ -782,19 +782,38 @@ def _render_sidebar_shell() -> None:
         """,
         unsafe_allow_html=True,
     )
-def _render_page_masthead(symbol: str, strategy: str, execution_mode: str, auto_execute: bool) -> None:
+def _render_page_masthead(
+    symbol: str,
+    strategy: str,
+    execution_mode: str,
+    auto_execute: bool,
+    *,
+    interval: str,
+    period: str,
+    instrument_mode: str,
+    lots: int,
+    lot_size: int,
+    risk_pct: float,
+    rr_ratio: float,
+    last_signal_side: str,
+    open_trades: int,
+    account_status: str,
+) -> None:
     auto_text = "Auto Send On" if auto_execute else "Manual Review"
     mode_badge = "Live Broker Mode" if str(execution_mode).upper() == "LIVE" else "Paper Desk Mode"
+    signal_text = str(last_signal_side or "-").upper()
+    order_text = f"{instrument_mode} {int(lots)} x {int(lot_size)}"
+    risk_text = f"{float(risk_pct):.1f}% / {float(rr_ratio):.1f}R"
     st.markdown(
         f"""
         <div class="top-nav">
             <div class="top-nav-brand">DHAN<span>DESK</span></div>
             <div class="top-nav-menu">
-                <span class="active">Live Desk</span>
-                <span>Signals</span>
-                <span>Orders</span>
-                <span>Risk</span>
-                <span>Account</span>
+                <span class="active">Live Desk: {symbol} {interval} {period}</span>
+                <span>Signals: {signal_text} / {open_trades}</span>
+                <span>Orders: {order_text}</span>
+                <span>Risk: {risk_text}</span>
+                <span>Account: {account_status}</span>
             </div>
             <div class="top-nav-cta">{execution_mode}</div>
         </div>
@@ -810,8 +829,8 @@ def _render_page_masthead(symbol: str, strategy: str, execution_mode: str, auto_
             <div class="masthead-pills">
                 <div class="masthead-pill">Payload Preview</div>
                 <div class="masthead-pill">Live Routing</div>
-                <div class="masthead-pill">.env Credentials</div>
-                <div class="masthead-pill">Order Control</div>
+                <div class="masthead-pill">{account_status}</div>
+                <div class="masthead-pill">{order_text}</div>
             </div>
         </div>
         """,
@@ -1674,12 +1693,6 @@ def main() -> None:
                     st.sidebar.success(note)
                 else:
                     st.sidebar.info(note)
-    _render_page_masthead(
-        symbol=str(symbol),
-        strategy=str(strategy),
-        execution_mode=str(execution_mode),
-        auto_execute=bool(auto_execute_generated),
-    )
     if live_update:
         components.html(
             f"""<script>
@@ -1736,15 +1749,6 @@ def main() -> None:
     latest_sidebar_price = candles["close"].iloc[-1] if not candles.empty else "-"
     signal_rows = [r for r in output_rows if str(r.get("side", "")).upper() in {"BUY", "SELL"}]
     last_signal_side = str(signal_rows[-1].get("side", "-")) if signal_rows else "-"
-    _render_sidebar_status(
-        symbol=symbol,
-        last_price=latest_sidebar_price,
-        strategy=str(strategy),
-        execution_mode=str(execution_mode),
-        open_trades=len(signal_rows),
-        last_signal_side=last_signal_side,
-        auto_execute_enabled=bool(auto_execute_generated),
-    )
     if send_telegram and output_rows and not auto_execute_generated:
         latest = None
         for r in reversed(output_rows):
@@ -1801,6 +1805,24 @@ def main() -> None:
     if "analyzed_trade_queue" not in st.session_state:
         st.session_state["analyzed_trade_queue"] = []
 
+
+    account_status = "Paper" if execution_mode != "LIVE" else ("Dhan Ready" if (dhan_client_id and dhan_token_present) else "Dhan Missing")
+    _render_page_masthead(
+        symbol=str(symbol),
+        strategy=str(strategy),
+        execution_mode=str(execution_mode),
+        auto_execute=bool(auto_execute_generated),
+        interval=str(interval),
+        period=str(period),
+        instrument_mode=str(instrument_mode),
+        lots=int(lots),
+        lot_size=int(lot_size),
+        risk_pct=float(risk_pct),
+        rr_ratio=float(rr_ratio),
+        last_signal_side=str(last_signal_side),
+        open_trades=len(signal_rows),
+        account_status=account_status,
+    )
 
     hero_last_price = float(candles["close"].iloc[-1]) if not candles.empty else 0.0
     if not candles.empty and len(candles) >= 2:
@@ -2013,6 +2035,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 

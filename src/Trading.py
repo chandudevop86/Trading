@@ -818,13 +818,13 @@ def _render_sidebar_shell() -> None:
         .top-nav-brand {
             grid-area: brand;
             display: flex;
+            align-items: center;
+            justify-content: center;
             gap: 12px;
             color: #ffffff;
             font-size: 24px;
             font-weight: 800;
             letter-spacing: 0;
-        }
-        .top-nav-logo {
             width: 36px;
             height: 36px;
             border-radius: 999px;

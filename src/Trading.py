@@ -805,10 +805,10 @@ def _render_sidebar_shell() -> None:
             position: relative;
             z-index: 3;
             display: grid;
-            grid-template-columns: auto 1fr auto auto auto;
+            grid-template-columns: minmax(0, 1fr) auto auto auto;
+            grid-template-areas: "brand brand brand brand" "menu search login cta";
             align-items: center;
-            gap: 24px;
-            background: #050505;
+            gap: 16px 24px;
             border: none;
             border-radius: 0;
             padding: 8px 0 18px 0;
@@ -816,8 +816,8 @@ def _render_sidebar_shell() -> None:
             backdrop-filter: none;
         }
         .top-nav-brand {
+            grid-area: brand;
             display: flex;
-            align-items: center;
             gap: 12px;
             color: #ffffff;
             font-size: 24px;
@@ -841,8 +841,8 @@ def _render_sidebar_shell() -> None:
             color: #ffffff;
         }
         .top-nav-menu {
+            grid-area: menu;
             display: flex;
-            gap: 28px;
             align-items: center;
             flex-wrap: wrap;
             color: rgba(255,255,255,0.72);
@@ -886,7 +886,7 @@ def _render_sidebar_shell() -> None:
             margin-top: 0;
         }
         .top-nav-search {
-            min-width: 320px;
+            grid-area: search;
             border-radius: 14px;
             background: #171717;
             border: 1px solid rgba(255,255,255,0.08);
@@ -896,7 +896,7 @@ def _render_sidebar_shell() -> None:
             font-weight: 700;
         }
         .top-nav-secondary {
-            border-radius: 14px;
+            grid-area: login;
             border: 1px solid rgba(255,255,255,0.14);
             color: #ffffff;
             background: transparent;
@@ -905,7 +905,7 @@ def _render_sidebar_shell() -> None:
             font-weight: 700;
         }
         .top-nav-cta {
-            background: #f7a600;
+            grid-area: cta;
             color: #101010;
             border-radius: 14px;
             padding: 15px 22px;
@@ -1358,9 +1358,9 @@ def _render_page_masthead(
             <div class="masthead-grid">
                 <div>
                     <div class="breadcrumb-list"><span>KRSH Solutions</span><span class="breadcrumb-sep">/</span><span>TradingView Connect</span><span class="breadcrumb-sep">/</span><span>{symbol}</span><span class="breadcrumb-sep">/</span><span class="breadcrumb-current">{strategy}</span></div>
-                    <div class="page-eyebrow">KRSH SOLUTIONS Connect Workspace</div>
+                    <div class="page-eyebrow">KRSH Solutions Connect Workspace</div>
                     <h1 class="page-title">Trade Directly from<br><span class="accent">TradingView.com</span></h1>
-                    <div class="page-subtitle">Available exclusively for KRSH SOLUTIONS users. Review live setups, connect broker routing, and execute directly from your trading workspace.</div>
+                    <div class="page-subtitle">Available exclusively for KRSH Solutions users. Review live setups, connect broker routing, and execute directly from your trading workspace.</div>
                     <div class="hero-search">Connect to trading workflow  |  {symbol}  |  {interval}  |  {strategy}</div>
                     <div class="hero-chip-row">
                         <div class="hero-chip"><div class="hero-chip-label">Workspace</div><div class="hero-chip-meta">{workspace}</div></div>
@@ -2108,6 +2108,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

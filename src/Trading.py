@@ -800,15 +800,13 @@ def _render_sidebar_shell() -> None:
         .page-masthead::before,
         .page-masthead::after {
             display: none;
-        }
-        .top-nav {
+        }        .top-nav {
             position: relative;
             z-index: 3;
             display: grid;
-            grid-template-columns: minmax(0, 1fr) auto auto auto;
-            grid-template-areas: "brand brand brand brand" "menu search login cta";
+            grid-template-columns: auto 1fr auto auto auto;
             align-items: center;
-            gap: 16px 24px;
+            gap: 18px;
             border: none;
             border-radius: 0;
             padding: 8px 0 18px 0;
@@ -816,24 +814,26 @@ def _render_sidebar_shell() -> None:
             backdrop-filter: none;
         }
         .top-nav-brand {
-            grid-area: brand;
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            justify-content: center;
-            gap: 12px;
+            justify-content: flex-start;
+            gap: 10px;
             color: #ffffff;
-            font-size: 24px;
+            font-size: 16px;
             font-weight: 800;
             letter-spacing: 0;
-            width: 36px;
-            height: 36px;
+            white-space: nowrap;
+        }
+        .top-nav-logo {
+            width: 28px;
+            height: 28px;
             border-radius: 999px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             background: #1fba81;
             color: #ffffff;
-            font-size: 17px;
+            font-size: 13px;
             font-weight: 900;
             box-shadow: none;
         }
@@ -841,36 +841,42 @@ def _render_sidebar_shell() -> None:
             color: #ffffff;
         }
         .top-nav-menu {
-            grid-area: menu;
             display: flex;
             align-items: center;
+            gap: 14px;
             flex-wrap: wrap;
             color: rgba(255,255,255,0.72);
-            font-size: 17px;
+            font-size: 15px;
             font-weight: 700;
             position: relative;
         }
         .top-nav-pill {
             min-width: 0;
-            padding: 12px 16px;
-            border-radius: 14px;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.10);
-            color: rgba(255,255,255,0.88);
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: transparent;
+            border: 1px solid transparent;
+            color: rgba(255,255,255,0.78);
             font-size: 15px;
             font-weight: 700;
             line-height: 1.1;
+        }
+        .top-nav-pill.active-nav {
+            color: #ffffff;
         }
         .nav-dropdown-shell {
             position: relative;
             display: inline-flex;
             align-items: center;
+            padding-bottom: 26px;
+            margin-bottom: -26px;
         }
         .nav-dropdown-trigger {
             display: inline-flex;
             align-items: center;
             gap: 8px;
             min-height: 42px;
+            cursor: default;
         }
         .nav-dropdown-caret {
             color: rgba(255,255,255,0.78);
@@ -886,7 +892,6 @@ def _render_sidebar_shell() -> None:
             margin-top: 0;
         }
         .top-nav-search {
-            grid-area: search;
             border-radius: 14px;
             background: #171717;
             border: 1px solid rgba(255,255,255,0.10);
@@ -897,9 +902,9 @@ def _render_sidebar_shell() -> None:
             min-height: 42px;
             display: inline-flex;
             align-items: center;
+            min-width: 250px;
         }
         .top-nav-secondary {
-            grid-area: login;
             border-radius: 14px;
             border: 1px solid rgba(255,255,255,0.16);
             color: #ffffff;
@@ -913,7 +918,6 @@ def _render_sidebar_shell() -> None:
             justify-content: center;
         }
         .top-nav-cta {
-            grid-area: cta;
             background: #f7a600;
             color: #101010;
             border-radius: 14px;
@@ -929,16 +933,16 @@ def _render_sidebar_shell() -> None:
         .mega-panel {
             position: absolute;
             z-index: 8;
-            top: calc(100% + 18px);
-            left: -28px;
-            width: min(980px, 76vw);
+            top: calc(100% + 14px);
+            left: -8px;
+            width: min(820px, 70vw);
             max-height: 68vh;
             overflow-y: auto;
             overflow-x: hidden;
             background: #ffffff;
             color: #111827;
             border-radius: 22px;
-            padding: 30px 34px;
+            padding: 28px 30px;
             box-shadow: 0 28px 50px rgba(0,0,0,0.28);
             opacity: 0;
             visibility: hidden;
@@ -948,25 +952,11 @@ def _render_sidebar_shell() -> None:
             scrollbar-width: thin;
             scrollbar-color: rgba(17,24,39,0.35) transparent;
         }
-        .mega-panel::-webkit-scrollbar {
-            width: 10px;
-        }
-        .mega-panel::-webkit-scrollbar-thumb {
-            background: rgba(17,24,39,0.28);
-            border-radius: 999px;
-        }
-        .nav-dropdown-shell:hover .mega-panel,
-        .nav-dropdown-shell:focus-within .mega-panel {
-            opacity: 1;
-            visibility: visible;
-            transform: translateY(0);
-            pointer-events: auto;
-        }
         .mega-panel::before {
             content: "";
             position: absolute;
             top: -14px;
-            left: 220px;
+            left: 190px;
             width: 28px;
             height: 28px;
             background: #ffffff;
@@ -976,22 +966,22 @@ def _render_sidebar_shell() -> None:
         .mega-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 28px 36px;
+            gap: 28px 34px;
         }
         .mega-item {
             display: grid;
-            grid-template-columns: 50px 1fr;
-            gap: 18px;
+            grid-template-columns: 36px 1fr;
+            gap: 16px;
             align-items: start;
         }
         .mega-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 16px;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
+            font-size: 15px;
             font-weight: 800;
             color: #ffffff;
             background: linear-gradient(135deg, #14b87a 0%, #0f9f6c 100%);
@@ -1010,6 +1000,108 @@ def _render_sidebar_shell() -> None:
             font-size: 18px;
             font-weight: 800;
             margin-bottom: 4px;
+        }
+        .markets-panel {
+            width: min(1000px, 78vw);
+            left: -120px;
+            padding: 0;
+            overflow: hidden;
+        }
+        .markets-panel::before {
+            left: 320px;
+        }
+        .markets-tabs {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            padding: 16px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #ffffff;
+        }
+        .markets-tab {
+            padding: 10px 18px;
+            border-radius: 10px;
+            border: 1px solid #d1d5db;
+            color: #4b5563;
+            font-size: 14px;
+            font-weight: 700;
+            background: #ffffff;
+        }
+        .markets-tab.active {
+            background: #f7a600;
+            border-color: #f7a600;
+            color: #ffffff;
+        }
+        .markets-body {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            min-height: 320px;
+        }
+        .markets-side {
+            border-right: 1px solid #e5e7eb;
+            background: #fbfbfb;
+            padding: 0;
+        }
+        .markets-side-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 24px;
+            font-size: 15px;
+            font-weight: 700;
+            color: #9ca3af;
+        }
+        .markets-side-item.active {
+            color: #f59e0b;
+            background: #fff7ed;
+        }
+        .markets-arrow {
+            color: #f59e0b;
+            font-size: 18px;
+        }
+        .markets-list-wrap {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 26px 48px;
+            padding: 26px 30px;
+            align-content: start;
+        }
+        .market-link {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #1f2937;
+            font-size: 17px;
+            font-weight: 700;
+        }
+        .market-dot {
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ef4444 0%, #f59e0b 100%);
+        }
+        .market-dot.blue {
+        .more-panel {
+            width: min(820px, 72vw);
+            left: -180px;
+        }
+        .more-panel::before {
+        .investments-panel {
+            width: min(900px, 74vw);
+            left: -80px;
+        }
+        .investments-panel::before {
+            left: 250px;
+        }
+            left: 210px;
+        }
+            background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
         }
         .mega-copy {
             color: #6b7280;
@@ -1360,9 +1452,34 @@ def _render_page_masthead(
                             </div>
                         </div>
                     </div>
-                    <div class="top-nav-pill"><span>Investments</span></div>
+                    <div class="nav-dropdown-shell">
+                        <div class="top-nav-pill nav-dropdown-trigger"><span>Investments</span><span class="nav-dropdown-caret">v</span></div>
+                        <div class="mega-panel investments-panel">
+                            <div class="mega-grid">
+                                <div class="mega-item"><div class="mega-icon">S</div><div><div class="mega-title">Stocks</div><div class="mega-copy">Equity-focused market access, delivery review, and active desk monitoring for listed names.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon alt">M</div><div><div class="mega-title">Mutual Funds</div><div class="mega-copy">Longer-horizon investment views, allocation tracking, and fund-side monitoring from the same workspace.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon blue">E</div><div><div class="mega-title">ETFs</div><div class="mega-copy">Track index-linked instruments and broader market exposure alongside live trade dashboards.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon dark">G</div><div><div class="mega-title">Gold & Silver</div><div class="mega-copy">Commodity-linked investment tracking with cleaner visibility into non-equity exposure.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon">I</div><div><div class="mega-title">IPO Watch</div><div class="mega-copy">Follow new listings, allocation status, and pre-open interest in one place.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon blue">C</div><div><div class="mega-title">Capital View</div><div class="mega-copy">See how capital, risk percentage, and deployment fit alongside your active trading flow.</div></div></div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="top-nav-pill"><span>Markets</span></div>
-                    <div class="top-nav-pill"><span>More</span></div>
+                    <div class="nav-dropdown-shell">
+                        <div class="top-nav-pill nav-dropdown-trigger active-nav"><span class="active">More</span><span class="nav-dropdown-caret">^</span></div>
+                        <div class="mega-panel more-panel">
+                            <div class="mega-grid">
+                                <div class="mega-item"><div class="mega-icon alt">P</div><div><div class="mega-title">Pricing</div><div class="mega-copy">Open free demat style onboarding, broker access details, and account-readiness information for your desk.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon blue">B</div><div><div class="mega-title">Become a Partner</div><div class="mega-copy">Extend KRSH Solutions with partner workflows, integrations, and shared execution operations.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon">F</div><div><div class="mega-title">fuzz</div><div class="mega-copy">Ask strategy, finance, and market questions inside your research-led trading workspace.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon dark">S</div><div><div class="mega-title">Dhan Support</div><div class="mega-copy">Browse setup help for broker routing, paper/live mode behavior, and execution readiness.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon alt">B</div><div><div class="mega-title">KRSH Blog</div><div class="mega-copy">Read notes on markets, trading strategies, execution discipline, and desk improvements.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon">I</div><div><div class="mega-title">Indicator by KRSH</div><div class="mega-copy">Review indicator-led market context, insights, and deeper setup visibility.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon blue">C</div><div><div class="mega-title">MadeForTrade Community</div><div class="mega-copy">Stay connected to the active trade review workflow and collaborative execution queue.</div></div></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="top-nav-search">Search Stocks, Mutual Funds, F&O</div>
                 <div class="top-nav-secondary">Login</div>
@@ -2121,6 +2238,11 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
 
 
 

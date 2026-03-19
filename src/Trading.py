@@ -1752,6 +1752,35 @@ def _render_desk_summary_page(workspace: str, strategy: str, content_view: str, 
         unsafe_allow_html=True,
     )
 
+
+def _render_strategy_page(strategy: str, workspace: str, symbol: str, interval: str, period: str, execution_mode: str) -> None:
+    strategy_copy = {
+        "Breakout": "Focuses on breakout moves after price clears structure and momentum confirms continuation.",
+        "Demand Supply": "Tracks reaction zones and setup quality around demand and supply behavior.",
+        "Indicator": "Uses indicator-led market context to classify bullish, bearish, and reversal-style setups.",
+        "One Trade/Day": "Keeps execution disciplined by limiting the flow to a single high-conviction setup each day.",
+        "MTF 5m": "Uses 5m execution with higher timeframe filters to improve structure and confirmation quality.",
+    }.get(str(strategy), "Review the currently selected strategy before running the desk.")
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Strategy</div><div class="section-copy">See the active strategy and its current market context in one place.</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="section-shell" style="margin-bottom:14px;">
+            <div class="hero-chip-row">
+                <div class="hero-chip"><div class="hero-chip-label">Active Strategy</div><div class="hero-chip-meta">{strategy}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Workspace</div><div class="hero-chip-meta">{workspace}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Symbol</div><div class="hero-chip-meta">{symbol}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Timeframe</div><div class="hero-chip-meta">{interval} / {period}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Mode</div><div class="hero-chip-meta">{execution_mode}</div></div>
+            </div>
+        </div>
+        <div class="section-shell" style="margin-bottom:14px;">
+            <div class="section-heading" style="font-size:18px;">Strategy Focus</div>
+            <div class="section-copy" style="font-size:14px; line-height:1.7; margin-bottom:0;">{strategy_copy}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def main() -> None:
     _render_sidebar_shell()
     masthead_slot = st.empty()
@@ -1776,14 +1805,14 @@ def main() -> None:
         st.caption("Open section")
         content_view = st.segmented_control(
             "Open section",
-            ["Home", "Desk Summary", "Prepare Desk", "Review Signals", "Authorize Execute", "Live Status", "Desk Controls", "Market", "Trades", "Downloads"],
+            ["Home", "Strategy", "Desk Summary", "Prepare Desk", "Review Signals", "Authorize Execute", "Live Status", "Desk Controls", "Market", "Trades", "Downloads"],
             default="Home",
             label_visibility="collapsed",
         )
     show_controls = content_view == "Desk Controls"
 
     if content_view == "Home":
-        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the compact tabs above to open desk summary, prepare desk, review signals, authorize execute, live status, controls, market, trades, or downloads. This default view stays short and clean.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the compact tabs above to open strategy, desk summary, prepare desk, review signals, authorize execute, live status, controls, market, trades, or downloads. This default view stays short and clean.</div></div>', unsafe_allow_html=True)
 
     symbol = "^NSEI"
     interval = "1m"
@@ -2073,6 +2102,8 @@ def main() -> None:
             option_bias=option_bias,
             market_status=market_status,
         )
+    if content_view == "Strategy":
+        _render_strategy_page(str(strategy), str(workspace), str(symbol), str(interval), str(period), str(execution_mode))
     if content_view == "Desk Summary":
         _render_desk_summary_page(str(workspace), str(strategy), str(content_view), risk_text, account_status)
     if content_view == "Prepare Desk":

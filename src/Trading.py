@@ -1572,95 +1572,95 @@ def main() -> None:
     _render_sidebar_shell()
     masthead_slot = st.empty()
 
-    st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Workspace Selection</div><div class="control-ribbon-copy">Choose the workspace and strategy below, then use the trading controls underneath.</div></div>', unsafe_allow_html=True)
-
     workspace_options = ["Desk", "Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
     strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
 
-    workspace = st.segmented_control(
-        "Workspace",
-        workspace_options,
-        default="Desk",
+    workspace = st.segmented_control("Workspace", workspace_options, default="Desk")
+    strategy = st.segmented_control(
+        "Strategy Selection",
+        strategy_options if workspace == "Desk" else [str(workspace)],
+        default="Breakout" if workspace == "Desk" else str(workspace),
     )
-
-    st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Strategy Selection</div><div class="control-ribbon-copy">Use these strategy pill tabs to choose the live logic for this workspace.</div></div>', unsafe_allow_html=True)
-    if workspace == "Desk":
-        strategy = st.segmented_control(
-            "Strategy Selection",
-            strategy_options,
-            default="Breakout",
-        )
-    else:
-        strategy = st.segmented_control(
-            "Strategy Selection",
-            [str(workspace)],
-            default=str(workspace),
-        )
-
-    st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Section Tabs</div><div class="control-ribbon-copy">Switch sections with pill tabs. Keep Home simple, then open controls, market, trades, or downloads only when needed.</div></div>', unsafe_allow_html=True)
     content_view = st.segmented_control(
         "Open section",
         ["Home", "Desk Controls", "Market", "Trades", "Downloads"],
         default="Home",
     )
     show_controls = content_view == "Desk Controls"
+
     if content_view == "Home":
-        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the pill tabs to open Desk Controls, Market, Trades, or Downloads. The default view stays short and landing-page focused.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the tabs above to open controls, market, trades, or downloads. This default view stays short and clean.</div></div>', unsafe_allow_html=True)
 
+    symbol = "^NSEI"
+    interval = "1m"
+    period = "1d"
+    execution_mode = "PAPER"
+    instrument_mode = "Options"
+    lot_size = 65
+    lots = 2
+    capital = 100000
+    risk_pct = 1.0
+    rr_ratio = 2.0
+    trailing_sl_pct = 1.0
+    auto_execute_generated = False
+    live_update = False
+    refresh_seconds = 10
+    send_telegram = False
+    paper_log_output = "data/paper_trading_logs_all.csv"
+    live_log_output = "data/live_trading_logs_all.csv"
+    dhan_client_id = ""
+    dhan_token_present = False
+    dhan_security_map_path = "data/dhan_security_map.csv"
+    strike_step = 50
+    moneyness = "ATM"
+    strike_steps = 0
+    fetch_option_metrics = False
+    mtf_ema_period = 3
+    mtf_setup_mode = "either"
+    mtf_retest_strength = True
+    mtf_max_trades_per_day = 3
 
-
-    with st.expander("Desk Controls", expanded=show_controls):
-        st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
-        st.markdown('<div class="section-heading">Trading Controls</div><div class="section-copy">A cleaner control deck inspired by product cards. Configure the market, size the trade, then unlock routing.</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+    if show_controls:
+        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Desk Controls</div><div class="section-copy">Configure market inputs, sizing, and routing only when you need them.</div></div>', unsafe_allow_html=True)
         market_col, position_col, access_col = st.columns([1.15, 1.15, 1.1])
-    
+
         with market_col:
             st.markdown('<div class="section-shell" style="min-height:330px;">', unsafe_allow_html=True)
             st.markdown('<div class="section-heading">Market Setup</div><div class="section-copy">Choose what to scan and how the strategy should read the market.</div>', unsafe_allow_html=True)
-            symbol = st.text_input("Symbol", "^NSEI")
-            interval = st.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default="1m")
-            period = st.segmented_control("Period", ["1d", "5d", "1mo", "3mo"], default="1d")
-            execution_mode = st.segmented_control("Execution mode", ["PAPER", "LIVE"], default="PAPER")
-            instrument_mode = st.segmented_control("Instrument", ["Options", "Futures"], default="Options")
+            symbol = st.text_input("Symbol", symbol)
+            interval = st.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default=interval)
+            period = st.segmented_control("Period", ["1d", "5d", "1mo", "3mo"], default=period)
+            execution_mode = st.segmented_control("Execution mode", ["PAPER", "LIVE"], default=execution_mode)
+            instrument_mode = st.segmented_control("Instrument", ["Options", "Futures"], default=instrument_mode)
             st.markdown('</div>', unsafe_allow_html=True)
-    
+
         with position_col:
             st.markdown('<div class="section-shell" style="min-height:330px;">', unsafe_allow_html=True)
             st.markdown('<div class="section-heading">Position & Risk</div><div class="section-copy">Define capital, sizing, and protection logic before trades are generated.</div>', unsafe_allow_html=True)
-            lot_size = st.number_input("Lot size", min_value=1, value=65, step=1)
-            lots = st.slider("Lots", 1, 10, 2)
-            capital = st.number_input("Capital (INR)", min_value=1000, value=100000, step=1000)
-            risk_pct = st.slider("Risk per trade (%)", 0.1, 10.0, 1.0)
-            rr_ratio = st.slider("Risk / Reward", 1.0, 10.0, 2.0)
-            trailing_sl_pct = st.slider("Trailing stop loss %", 0.1, 10.0, 1.0, 0.1)
-            auto_execute_generated = st.toggle("Auto execute", value=False)
+            lot_size = st.number_input("Lot size", min_value=1, value=lot_size, step=1)
+            lots = st.slider("Lots", 1, 10, lots)
+            capital = st.number_input("Capital (INR)", min_value=1000, value=capital, step=1000)
+            risk_pct = st.slider("Risk per trade (%)", 0.1, 10.0, risk_pct)
+            rr_ratio = st.slider("Risk / Reward", 1.0, 10.0, rr_ratio)
+            trailing_sl_pct = st.slider("Trailing stop loss %", 0.1, 10.0, trailing_sl_pct, 0.1)
+            auto_execute_generated = st.toggle("Auto execute", value=auto_execute_generated)
             st.markdown('</div>', unsafe_allow_html=True)
-    
-        live_update = False
-        refresh_seconds = 10
-        send_telegram = False
-        paper_log_output = "data/paper_trading_logs_all.csv"
-        live_log_output = "data/live_trading_logs_all.csv"
-        dhan_client_id = ""
-        dhan_token_present = False
-        dhan_security_map_path = "data/dhan_security_map.csv"
-    
+
         with access_col:
             st.markdown('<div class="section-shell" style="min-height:330px;">', unsafe_allow_html=True)
             st.markdown('<div class="section-heading">Execution Access</div><div class="section-copy">Switch between paper and live routing, set refresh behavior, and verify broker readiness.</div>', unsafe_allow_html=True)
-            live_update = st.checkbox("Auto refresh", value=False)
-            refresh_seconds = st.slider("Refresh every (seconds)", 2, 120, 10)
-            send_telegram = st.checkbox("Send Telegram alert", value=False)
+            live_update = st.checkbox("Auto refresh", value=live_update)
+            refresh_seconds = st.slider("Refresh every (seconds)", 2, 120, refresh_seconds)
+            send_telegram = st.checkbox("Send Telegram alert", value=send_telegram)
             st.caption("Use Auto execute only after reviewing generated trades and payload previews.")
             st.markdown('<div class="section-copy" style="margin-top:8px; margin-bottom:8px;">Trade integration</div>', unsafe_allow_html=True)
             if execution_mode == "PAPER":
-                paper_log_output = st.text_input("Paper trade log path", value="data/paper_trading_logs_all.csv")
+                paper_log_output = st.text_input("Paper trade log path", value=paper_log_output)
                 st.info("Execution type: simulated")
                 st.info("Broker: disabled")
             else:
-                live_log_output = st.text_input("Live trade log path", value="data/live_trading_logs_all.csv")
-                dhan_security_map_path = st.text_input("Security map path", value="data/dhan_security_map.csv")
+                live_log_output = st.text_input("Live trade log path", value=live_log_output)
+                dhan_security_map_path = st.text_input("Security map path", value=dhan_security_map_path)
                 st.info("Broker: Dhan")
                 dhan_client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
                 dhan_token_present = bool(os.getenv("DHAN_ACCESS_TOKEN", "").strip())
@@ -1680,46 +1680,37 @@ def main() -> None:
                         else:
                             st.info(note)
             st.markdown('</div>', unsafe_allow_html=True)
-    
-        strike_step = 50
-        moneyness = "ATM"
-        strike_steps = 0
-        fetch_option_metrics = False
+
         if instrument_mode == "Options":
             st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
             st.markdown('<div class="section-heading">Option Contract Controls</div><div class="section-copy">Fine-tune strike selection only when options are the selected instrument.</div>', unsafe_allow_html=True)
             option_cols = st.columns([1, 1, 1, 1])
             with option_cols[0]:
-                strike_step = int(st.segmented_control("Strike step", [25, 50, 100], default=50))
+                strike_step = int(st.segmented_control("Strike step", [25, 50, 100], default=strike_step))
             with option_cols[1]:
-                moneyness = st.segmented_control("Moneyness", ["ATM", "ITM", "OTM"], default="ATM")
+                moneyness = st.segmented_control("Moneyness", ["ATM", "ITM", "OTM"], default=moneyness)
             with option_cols[2]:
-                strike_steps = st.slider("ITM / OTM steps", 0, 5, 0)
+                strike_steps = st.slider("ITM / OTM steps", 0, 5, strike_steps)
             with option_cols[3]:
-                fetch_option_metrics = st.checkbox("Fetch option chain metrics", value=False)
+                fetch_option_metrics = st.checkbox("Fetch option chain metrics", value=fetch_option_metrics)
             st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.caption("Futures mode uses the monthly futures contract automatically.")
-    
-        mtf_ema_period = 3
-        mtf_setup_mode = "either"
-        mtf_retest_strength = True
-        mtf_max_trades_per_day = 3
+
         if strategy == "MTF 5m":
             st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
             st.markdown('<div class="section-heading">MTF 5m Controls</div><div class="section-copy">Extra higher-timeframe filters appear only for the MTF strategy workspace.</div>', unsafe_allow_html=True)
             mtf_cols = st.columns([1, 1, 1, 1])
             with mtf_cols[0]:
-                mtf_ema_period = int(st.number_input("EMA period (1h)", min_value=2, max_value=20, value=3, step=1))
+                mtf_ema_period = int(st.number_input("EMA period (1h)", min_value=2, max_value=20, value=mtf_ema_period, step=1))
             with mtf_cols[1]:
                 mtf_setup_label = st.segmented_control("15m setup filter", ["Either", "BOS only", "FVG only"], default="Either")
                 mtf_setup_mode = {"Either": "either", "BOS only": "bos", "FVG only": "fvg"}[str(mtf_setup_label)]
             with mtf_cols[2]:
-                mtf_retest_strength = st.checkbox("Require strong 5m retest candle", value=True)
+                mtf_retest_strength = st.checkbox("Require strong 5m retest candle", value=mtf_retest_strength)
             with mtf_cols[3]:
-                mtf_max_trades_per_day = int(st.segmented_control("Max trades/day", [1, 2, 3], default=3))
+                mtf_max_trades_per_day = int(st.segmented_control("Max trades/day", [1, 2, 3], default=mtf_max_trades_per_day))
             st.markdown('</div>', unsafe_allow_html=True)
-    
     if live_update:
         components.html(
             f"""<script>

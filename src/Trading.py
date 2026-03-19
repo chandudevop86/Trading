@@ -289,6 +289,28 @@ def _render_live_execution_feedback(rows: list[dict[str, object]]) -> None:
     st.dataframe(_order_trade_columns(pd.DataFrame(rows)), use_container_width=True, height=220)
     st.markdown('</div>', unsafe_allow_html=True)
 
+def attach_lots(rows: list[dict[str, object]], lot_size: int, lots: int) -> list[dict[str, object]]:
+    lot_size = int(lot_size) if lot_size and int(lot_size) > 0 else 0
+    lots = int(lots) if lots and int(lots) > 0 else 0
+    if lot_size <= 0 or lots <= 0:
+        return rows
+
+    qty = lot_size * lots
+    out: list[dict[str, object]] = []
+    for r in rows:
+        row = dict(r)
+        row["lots"] = lots
+        row["quantity"] = qty
+        try:
+            ltp = float(row.get("option_ltp", 0) or 0)
+        except Exception:
+            ltp = 0.0
+        if ltp > 0:
+            row["order_value"] = round(ltp * qty, 2)
+        out.append(row)
+    return out
+
+
 def run_strategy(*, strategy: str, candles: pd.DataFrame, capital: float, risk_pct: float, rr_ratio: float, trailing_sl_pct: float, symbol: str, strike_step: int, moneyness: str, strike_steps: int, fetch_option_metrics: bool, mtf_ema_period: int, mtf_setup_mode: str, mtf_retest_strength: bool, mtf_max_trades_per_day: int) -> list[dict[str, object]]:
     candle_rows = _df_to_candles(candles)
     strategy_name = str(strategy or "Breakout").strip()

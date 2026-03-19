@@ -1310,6 +1310,8 @@ def _render_page_masthead(
     execution_mode: str,
     auto_execute: bool,
     *,
+    workspace: str,
+    content_view: str,
     interval: str,
     period: str,
     instrument_mode: str,
@@ -1341,7 +1343,7 @@ def _render_page_masthead(
                                 <div class="mega-item"><div class="mega-icon">S</div><div><div class="mega-title">Strategy Selection</div><div class="mega-copy">Active strategy: {strategy}. Market read: {symbol} on {interval} / {period} with {execution_mode} workflow.</div><div class="mega-pill-row"><span class="mega-pill active">{strategy}</span><span class="mega-pill">Breakout</span><span class="mega-pill">Demand Supply</span><span class="mega-pill">Indicator</span><span class="mega-pill">One Trade/Day</span><span class="mega-pill">MTF 5m</span></div></div></div>
                                 <div class="mega-item"><div class="mega-icon blue">T</div><div><div class="mega-title">Connect to TradingView</div><div class="mega-copy">Review {symbol} on {interval}, then route orders with {execution_mode} mode and {account_status} broker status.</div></div></div>
                                 <div class="mega-item"><div class="mega-icon dark">S</div><div><div class="mega-title">Signal Engine</div><div class="mega-copy">Latest signal state: {signal_text}. Open setups available: {open_trades}. Strategy: {strategy}.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon blue">D</div><div><div class="mega-title">DhanHQ Routing</div><div class="mega-copy">Order configuration: {order_text}. Risk profile: {risk_text}. Execution mode: {execution_mode}.</div></div></div>
+                                <div class="mega-item"><div class="mega-icon blue">D</div><div><div class="mega-title">Desk Tabs</div><div class="mega-copy">Keep the main page simple. The page selectors live in one compact row under the hero and the current section stays on {content_view}.</div><div class="mega-pill-row"><span class="mega-pill active">{workspace}</span><span class="mega-pill">{strategy}</span><span class="mega-pill">{content_view}</span><span class="mega-pill">{execution_mode}</span></div></div></div>
                             </div>
                         </div>
                     </div>
@@ -1361,9 +1363,9 @@ def _render_page_masthead(
                     <div class="page-subtitle">Available exclusively for KRSH SOLUTIONS users. Review live setups, connect broker routing, and execute directly from your trading workspace.</div>
                     <div class="hero-search">Connect to trading workflow  |  {symbol}  |  {interval}  |  {strategy}</div>
                     <div class="hero-chip-row">
+                        <div class="hero-chip"><div class="hero-chip-label">Workspace</div><div class="hero-chip-meta">{workspace}</div></div>
                         <div class="hero-chip"><div class="hero-chip-label">Strategy</div><div class="hero-chip-meta">{strategy}</div></div>
-                        <div class="hero-chip"><div class="hero-chip-label">Market Access</div><div class="hero-chip-meta">{signal_text} / {open_trades}</div></div>
-                        <div class="hero-chip"><div class="hero-chip-label">Trading Panel</div><div class="hero-chip-meta">{order_text}</div></div>
+                        <div class="hero-chip"><div class="hero-chip-label">Section</div><div class="hero-chip-meta">{content_view}</div></div>
                         <div class="hero-chip"><div class="hero-chip-label">DhanHQ Ready</div><div class="hero-chip-meta">{risk_text}</div></div>
                         <div class="hero-chip"><div class="hero-chip-label">Account Status</div><div class="hero-chip-meta">{account_status}</div></div>
                     </div>
@@ -1380,10 +1382,10 @@ def _render_page_masthead(
                             <div class="hero-preview-copy">Connect chart-driven setups, review execution state, and move from signal confirmation to broker action with a tighter live desk layout.</div>
                         </div>
                         <div class="hero-preview-metrics">
-                            <div class="hero-preview-metric"><div class="hero-preview-label">Strategy</div><div class="hero-preview-value">{strategy}</div></div>
+                            <div class="hero-preview-metric"><div class="hero-preview-label">Workspace</div><div class="hero-preview-value">{workspace}</div></div>
                             <div class="hero-preview-metric"><div class="hero-preview-label">Mode</div><div class="hero-preview-value">{execution_mode}</div></div>
                             <div class="hero-preview-metric"><div class="hero-preview-label">Signal</div><div class="hero-preview-value">{signal_text}</div></div>
-                            <div class="hero-preview-metric"><div class="hero-preview-label">Account</div><div class="hero-preview-value">{account_status}</div></div>
+                            <div class="hero-preview-metric"><div class="hero-preview-label">Section</div><div class="hero-preview-value">{content_view}</div></div>
                         </div>
                     </div>
                     <div class="page-badge">{strategy}<br>{execution_mode}<br>{auto_text}<br>{account_status}</div>
@@ -1575,21 +1577,31 @@ def main() -> None:
     workspace_options = ["Desk", "Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
     strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
 
-    workspace = st.segmented_control("Workspace", workspace_options, default="Desk")
-    strategy = st.segmented_control(
-        "Strategy Selection",
-        strategy_options if workspace == "Desk" else [str(workspace)],
-        default="Breakout" if workspace == "Desk" else str(workspace),
-    )
-    content_view = st.segmented_control(
-        "Open section",
-        ["Home", "Desk Controls", "Market", "Trades", "Downloads"],
-        default="Home",
-    )
+    st.markdown('<div class="top-tab-shell"><div class="top-tab-title">Desk Navigation</div><div class="top-tab-copy">Use one compact row of side-by-side tabs for workspace, strategy, and page content.</div></div>', unsafe_allow_html=True)
+    nav_col1, nav_col2, nav_col3 = st.columns([1.1, 1.45, 1.2])
+    with nav_col1:
+        st.caption("Workspace")
+        workspace = st.segmented_control("Workspace", workspace_options, default="Desk", label_visibility="collapsed")
+    with nav_col2:
+        st.caption("Strategy Selection")
+        strategy = st.segmented_control(
+            "Strategy Selection",
+            strategy_options if workspace == "Desk" else [str(workspace)],
+            default="Breakout" if workspace == "Desk" else str(workspace),
+            label_visibility="collapsed",
+        )
+    with nav_col3:
+        st.caption("Open section")
+        content_view = st.segmented_control(
+            "Open section",
+            ["Home", "Desk Controls", "Market", "Trades", "Downloads"],
+            default="Home",
+            label_visibility="collapsed",
+        )
     show_controls = content_view == "Desk Controls"
 
     if content_view == "Home":
-        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the tabs above to open controls, market, trades, or downloads. This default view stays short and clean.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the compact tabs above to open controls, market, trades, or downloads. This default view stays short and clean.</div></div>', unsafe_allow_html=True)
 
     symbol = "^NSEI"
     interval = "1m"
@@ -1828,6 +1840,8 @@ def main() -> None:
             strategy=str(strategy),
             execution_mode=str(execution_mode),
             auto_execute=bool(auto_execute_generated),
+            workspace=str(workspace),
+            content_view=str(content_view),
             interval=str(interval),
             period=str(period),
             instrument_mode=str(instrument_mode),
@@ -1864,34 +1878,35 @@ def main() -> None:
         market_status = "BREAKDOWN"
     else:
         market_status = "RANGE" if not signal_rows else f"LIVE {last_signal_side}"
-    _render_hero_strip(
-        symbol=str(symbol),
-        last_price=hero_last_price if not candles.empty else "-",
-        day_change=float(hero_day_change),
-        strategy=str(strategy),
-        execution_mode=str(execution_mode),
-        open_trades=len(signal_rows),
-        support_band=support_band,
-        resistance_band=resistance_band,
-        option_bias=option_bias,
-        market_status=market_status,
-    )
-    _render_capability_band(
-        execution_mode=str(execution_mode),
-        account_status=account_status,
-        signal_count=len(signal_rows),
-        market_status=market_status,
-        refresh_seconds=int(refresh_seconds),
-        auto_execute=bool(auto_execute_generated),
-    )
-    _render_dhan_feature_sections(
-        symbol=str(symbol),
-        strategy=str(strategy),
-        execution_mode=str(execution_mode),
-        account_status=account_status,
-        signal_count=len(signal_rows),
-        auto_execute=bool(auto_execute_generated),
-    )
+    if content_view == "Home":
+        _render_hero_strip(
+            symbol=str(symbol),
+            last_price=hero_last_price if not candles.empty else "-",
+            day_change=float(hero_day_change),
+            strategy=str(strategy),
+            execution_mode=str(execution_mode),
+            open_trades=len(signal_rows),
+            support_band=support_band,
+            resistance_band=resistance_band,
+            option_bias=option_bias,
+            market_status=market_status,
+        )
+        _render_capability_band(
+            execution_mode=str(execution_mode),
+            account_status=account_status,
+            signal_count=len(signal_rows),
+            market_status=market_status,
+            refresh_seconds=int(refresh_seconds),
+            auto_execute=bool(auto_execute_generated),
+        )
+        _render_dhan_feature_sections(
+            symbol=str(symbol),
+            strategy=str(strategy),
+            execution_mode=str(execution_mode),
+            account_status=account_status,
+            signal_count=len(signal_rows),
+            auto_execute=bool(auto_execute_generated),
+        )
     if content_view == "Market":
         st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
         st.markdown('<div class="section-heading">Platform Sections</div><div class="section-copy">Explore the desk as a landing flow: market overview first, charts next, and trading actions last.</div>', unsafe_allow_html=True)
@@ -2093,6 +2108,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 
 
 

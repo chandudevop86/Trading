@@ -1492,13 +1492,6 @@ def _render_page_masthead(
                     <h1 class="page-title">Trade Directly from<br><span class="accent">TradingView.com</span></h1>
                     <div class="page-subtitle">Available exclusively for KRSH Solutions users. Review live setups, connect broker routing, and execute directly from your trading workspace.</div>
                     <div class="hero-search">Connect to trading workflow  |  {symbol}  |  {interval}  |  {strategy}</div>
-                    <div class="hero-chip-row">
-                        <div class="hero-chip"><div class="hero-chip-label">Workspace</div><div class="hero-chip-meta">{workspace}</div></div>
-                        <div class="hero-chip"><div class="hero-chip-label">Strategy</div><div class="hero-chip-meta">{strategy}</div></div>
-                        <div class="hero-chip"><div class="hero-chip-label">Section</div><div class="hero-chip-meta">{content_view}</div></div>
-                        <div class="hero-chip"><div class="hero-chip-label">DhanHQ Ready</div><div class="hero-chip-meta">{risk_text}</div></div>
-                        <div class="hero-chip"><div class="hero-chip-label">Account Status</div><div class="hero-chip-meta">{account_status}</div></div>
-                    </div>
                 </div>
                 <div class="hero-visual">
                     <div class="hero-orb hero-orb-one"></div>
@@ -1683,11 +1676,7 @@ def _render_dhan_feature_sections(
     )
 
     step_cols = st.columns(3)
-    step_data = [
-        ("1. Prepare Your Desk", "Choose symbol, strategy, timeframe, and execution mode before routing orders."),
-        ("2. Review Signals on Charts", "Use dashboard, charts, and candidate previews to validate setups before execution."),
-        ("3. Authorize and Execute", "Send reviewed trades to paper logs or Dhan live routing only when ready."),
-    ]
+    step_data = []
     for col, (title, body) in zip(step_cols, step_data):
         with col:
             st.markdown(
@@ -1699,6 +1688,69 @@ def _render_dhan_feature_sections(
                 """,
                 unsafe_allow_html=True,
             )
+
+
+def _render_prepare_desk_page() -> None:
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">1. Prepare Your Desk</div><div class="section-copy">Choose symbol, strategy, timeframe, and execution mode before routing orders.</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="section-shell" style="min-height:200px; margin-bottom:14px;">
+            <div class="section-heading" style="font-size:18px;">Prepare Before Routing</div>
+            <div class="section-copy" style="font-size:14px; line-height:1.7; margin-bottom:0;">
+                Use this page when you want to focus only on setup readiness. Select the market, choose the strategy, confirm the timeframe, and decide whether the run should stay in PAPER mode or move to LIVE routing after review.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_review_signals_page() -> None:
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">2. Review Signals on Charts</div><div class="section-copy">Use dashboard, charts, and candidate previews to validate setups before execution.</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="section-shell" style="min-height:200px; margin-bottom:14px;">
+            <div class="section-heading" style="font-size:18px;">Review Before Execution</div>
+            <div class="section-copy" style="font-size:14px; line-height:1.7; margin-bottom:0;">
+                Use this page to focus on chart-led confirmation. Review the dashboard, inspect charts, and validate candidate setups before anything moves toward paper logs or live routing.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_authorize_execute_page() -> None:
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">3. Authorize and Execute</div><div class="section-copy">Send reviewed trades to paper logs or Dhan live routing only when ready.</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="section-shell" style="min-height:200px; margin-bottom:14px;">
+            <div class="section-heading" style="font-size:18px;">Execute Only After Review</div>
+            <div class="section-copy" style="font-size:14px; line-height:1.7; margin-bottom:0;">
+                Use this page when you are ready to move reviewed trades into paper execution or Dhan live routing. Keep execution gated until the setup, chart validation, and queue review are complete.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_desk_summary_page(workspace: str, strategy: str, content_view: str, risk_text: str, account_status: str) -> None:
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Desk Summary</div><div class="section-copy">Keep workspace, strategy, section, risk, and account state together on one page.</div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="section-shell" style="margin-bottom:14px;">
+            <div class="hero-chip-row">
+                <div class="hero-chip"><div class="hero-chip-label">Workspace</div><div class="hero-chip-meta">{workspace}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Strategy</div><div class="hero-chip-meta">{strategy}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Section</div><div class="hero-chip-meta">{content_view}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">DhanHQ Ready</div><div class="hero-chip-meta">{risk_text}</div></div>
+                <div class="hero-chip"><div class="hero-chip-label">Account Status</div><div class="hero-chip-meta">{account_status}</div></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 def main() -> None:
     _render_sidebar_shell()
@@ -1724,14 +1776,14 @@ def main() -> None:
         st.caption("Open section")
         content_view = st.segmented_control(
             "Open section",
-            ["Home", "Desk Controls", "Market", "Trades", "Downloads"],
+            ["Home", "Desk Summary", "Prepare Desk", "Review Signals", "Authorize Execute", "Live Status", "Desk Controls", "Market", "Trades", "Downloads"],
             default="Home",
             label_visibility="collapsed",
         )
     show_controls = content_view == "Desk Controls"
 
     if content_view == "Home":
-        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the compact tabs above to open controls, market, trades, or downloads. This default view stays short and clean.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the compact tabs above to open desk summary, prepare desk, review signals, authorize execute, live status, controls, market, trades, or downloads. This default view stays short and clean.</div></div>', unsafe_allow_html=True)
 
     symbol = "^NSEI"
     interval = "1m"
@@ -2021,6 +2073,15 @@ def main() -> None:
             option_bias=option_bias,
             market_status=market_status,
         )
+    if content_view == "Desk Summary":
+        _render_desk_summary_page(str(workspace), str(strategy), str(content_view), risk_text, account_status)
+    if content_view == "Prepare Desk":
+        _render_prepare_desk_page()
+    if content_view == "Review Signals":
+        _render_review_signals_page()
+    if content_view == "Authorize Execute":
+        _render_authorize_execute_page()
+    if content_view == "Live Status":
         _render_capability_band(
             execution_mode=str(execution_mode),
             account_status=account_status,
@@ -2029,6 +2090,7 @@ def main() -> None:
             refresh_seconds=int(refresh_seconds),
             auto_execute=bool(auto_execute_generated),
         )
+    if content_view == "Home":
         _render_dhan_feature_sections(
             symbol=str(symbol),
             strategy=str(strategy),
@@ -2238,6 +2300,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

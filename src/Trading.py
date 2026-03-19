@@ -1176,8 +1176,13 @@ def _render_sidebar_shell() -> None:
         .dhan-hero-subtitle {
             color: #ffffff;
             font-size: 30px;
-            line-height: 1.4;
+            line-height: 1.35;
             margin-top: 6px;
+            max-width: 760px;
+        }
+        .dhan-hero-subtitle .hero-sub-line {
+            display: block;
+            white-space: nowrap;
         }
         .dhan-hero-banner {
             margin-top: 58px;
@@ -1579,7 +1584,7 @@ def _render_page_masthead(
                     <div class="breadcrumb-list"><span>KRSH Solutions</span><span class="breadcrumb-sep">/</span><span>TradingView Connect</span><span class="breadcrumb-sep">/</span><span>{symbol}</span><span class="breadcrumb-sep">/</span><span class="breadcrumb-current">{strategy}</span></div>
                     <div class="dhan-hero-icon">&#9889;</div>
                     <h1 class="dhan-hero-title"><span class="hero-line">Trade Directly from</span><span class="hero-line accent">TradingView.com</span></h1>
-                    <div class="dhan-hero-subtitle">Available exclusively for KRSH Solutions users!</div>
+                    <div class="dhan-hero-subtitle"><span class="hero-sub-line">Available exclusively for</span><span class="hero-sub-line">KRSH Solutions users!</span></div>
                     <div class="dhan-hero-banner">
                         <div class="dhan-hero-badge">1st Time in India</div>
                         <div class="dhan-hero-banner-copy">Now trade in Options from TradingView.com, powered by KRSH desk workflows.</div>

@@ -1592,10 +1592,16 @@ def main() -> None:
         else:
             strategy = str(workspace)
 
-    content_view = st.selectbox("Open section", ["Home", "Desk Controls", "Market", "Trades", "Downloads"], index=0)
+    st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Section Tabs</div><div class="control-ribbon-copy">Switch sections with pill tabs. Keep Home simple, then open controls, market, trades, or downloads only when needed.</div></div>', unsafe_allow_html=True)
+    content_view = st.segmented_control(
+        "Open section",
+        ["Home", "Desk Controls", "Market", "Trades", "Downloads"],
+        default="Home",
+    )
     show_controls = content_view == "Desk Controls"
     if content_view == "Home":
-        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the dropdown to open Desk Controls, Market, Trades, or Downloads. The default view stays short and landing-page focused.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the pill tabs to open Desk Controls, Market, Trades, or Downloads. The default view stays short and landing-page focused.</div></div>', unsafe_allow_html=True)
+
 
 
     with st.expander("Desk Controls", expanded=show_controls):
@@ -2091,6 +2097,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

@@ -1574,23 +1574,28 @@ def main() -> None:
 
     st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Workspace Selection</div><div class="control-ribbon-copy">Choose the workspace and strategy below, then use the trading controls underneath.</div></div>', unsafe_allow_html=True)
 
-    ribbon_left, ribbon_right = st.columns([1.15, 1])
-    with ribbon_left:
-        workspace = st.segmented_control(
-            "Workspace",
-            ["Desk", "Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"],
-            default="Desk",
+    workspace_options = ["Desk", "Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
+    strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
+
+    workspace = st.segmented_control(
+        "Workspace",
+        workspace_options,
+        default="Desk",
+    )
+
+    st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Strategy Selection</div><div class="control-ribbon-copy">Use these strategy pill tabs to choose the live logic for this workspace.</div></div>', unsafe_allow_html=True)
+    if workspace == "Desk":
+        strategy = st.segmented_control(
+            "Strategy Selection",
+            strategy_options,
+            default="Breakout",
         )
-    strategy = "Breakout"
-    with ribbon_right:
-        if workspace == "Desk":
-            strategy = st.segmented_control(
-                "Strategy",
-                ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"],
-                default="Breakout",
-            )
-        else:
-            strategy = str(workspace)
+    else:
+        strategy = st.segmented_control(
+            "Strategy Selection",
+            [str(workspace)],
+            default=str(workspace),
+        )
 
     st.markdown('<div class="control-ribbon"><div class="control-ribbon-title">Section Tabs</div><div class="control-ribbon-copy">Switch sections with pill tabs. Keep Home simple, then open controls, market, trades, or downloads only when needed.</div></div>', unsafe_allow_html=True)
     content_view = st.segmented_control(
@@ -2097,6 +2102,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

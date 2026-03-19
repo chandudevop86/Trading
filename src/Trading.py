@@ -1163,7 +1163,14 @@ def _render_sidebar_shell() -> None:
             margin: 0;
             letter-spacing: -0.03em;
         }
-        .dhan-hero-title span {
+        .dhan-hero-title .hero-line {
+            display: block;
+            white-space: nowrap;
+        }
+        .dhan-hero-title .hero-line + .hero-line {
+            margin-top: 6px;
+        }
+        .dhan-hero-title .hero-line.accent {
             color: #2f66ff;
         }
         .dhan-hero-subtitle {
@@ -1571,7 +1578,7 @@ def _render_page_masthead(
                 <div class="dhan-hero-shell">
                     <div class="breadcrumb-list"><span>KRSH Solutions</span><span class="breadcrumb-sep">/</span><span>TradingView Connect</span><span class="breadcrumb-sep">/</span><span>{symbol}</span><span class="breadcrumb-sep">/</span><span class="breadcrumb-current">{strategy}</span></div>
                     <div class="dhan-hero-icon">&#9889;</div>
-                    <h1 class="dhan-hero-title">Trade Directly from<br><span>TradingView.com</span></h1>
+                    <h1 class="dhan-hero-title"><span class="hero-line">Trade Directly from</span><span class="hero-line accent">TradingView.com</span></h1>
                     <div class="dhan-hero-subtitle">Available exclusively for KRSH Solutions users!</div>
                     <div class="dhan-hero-banner">
                         <div class="dhan-hero-badge">1st Time in India</div>

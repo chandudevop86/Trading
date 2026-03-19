@@ -852,14 +852,14 @@ def _render_sidebar_shell() -> None:
         }
         .top-nav-pill {
             min-width: 0;
-            padding: 0;
-            border-radius: 0;
-            background: transparent;
-            border: none;
-            color: rgba(255,255,255,0.74);
-            font-size: 17px;
+            padding: 12px 16px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.10);
+            color: rgba(255,255,255,0.88);
+            font-size: 15px;
             font-weight: 700;
-            line-height: 1.2;
+            line-height: 1.1;
         }
         .nav-dropdown-shell {
             position: relative;
@@ -870,7 +870,7 @@ def _render_sidebar_shell() -> None:
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            cursor: default;
+            min-height: 42px;
         }
         .nav-dropdown-caret {
             color: rgba(255,255,255,0.78);
@@ -889,29 +889,42 @@ def _render_sidebar_shell() -> None:
             grid-area: search;
             border-radius: 14px;
             background: #171717;
-            border: 1px solid rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.10);
             color: rgba(255,255,255,0.72);
-            padding: 15px 18px;
-            font-size: 15px;
+            padding: 13px 18px;
+            font-size: 14px;
             font-weight: 700;
+            min-height: 42px;
+            display: inline-flex;
+            align-items: center;
         }
         .top-nav-secondary {
             grid-area: login;
-            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.16);
             color: #ffffff;
-            background: transparent;
-            padding: 14px 22px;
-            font-size: 15px;
+            background: rgba(255,255,255,0.02);
+            padding: 13px 22px;
+            font-size: 14px;
             font-weight: 700;
+            min-height: 42px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         .top-nav-cta {
             grid-area: cta;
+            background: #f7a600;
             color: #101010;
             border-radius: 14px;
-            padding: 15px 22px;
-            font-size: 15px;
+            padding: 13px 22px;
+            font-size: 14px;
             font-weight: 800;
             letter-spacing: 0;
+            min-height: 42px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         .mega-panel {
             position: absolute;
@@ -2108,6 +2121,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

@@ -342,6 +342,7 @@ def _order_trade_columns(df: pd.DataFrame) -> pd.DataFrame:
         "option_strike",
         "option_type",
         "option_ltp",
+        "option_ltp_reason",
         "quantity",
         "lots",
         "order_value",
@@ -1927,7 +1928,7 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
     detail_cols[0].metric("Strike", str(latest_signal.get("option_strike", "-")))
     detail_cols[1].metric("Expiry", str(latest_signal.get("option_expiry", "-")))
     detail_cols[2].metric("Lots / Qty", f"{latest_signal.get('lots', '-')} / {latest_signal.get('quantity', '-')}")
-    detail_cols[3].metric("Option LTP", _fmt_num(latest_signal.get("option_ltp")))
+    detail_cols[3].metric("Option LTP", _fmt_num(latest_signal.get("option_ltp")), str(latest_signal.get("option_ltp_reason", "")))
 
     trade_cols = st.columns(4)
     trade_cols[0].metric("Entry", _fmt_num(latest_signal.get("entry_price")))
@@ -1944,6 +1945,7 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
         "option_strike": latest_signal.get("option_strike", "-"),
         "option_expiry": latest_signal.get("option_expiry", "-"),
         "option_ltp": latest_signal.get("option_ltp", "-"),
+        "option_ltp_reason": latest_signal.get("option_ltp_reason", "-"),
         "lots": latest_signal.get("lots", "-"),
         "quantity": latest_signal.get("quantity", "-"),
         "order_value": latest_signal.get("order_value", "-"),
@@ -1960,6 +1962,7 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
         "option_strike",
         "option_expiry",
         "option_ltp",
+        "option_ltp_reason",
         "lots",
         "quantity",
         "order_value",
@@ -2587,6 +2590,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 

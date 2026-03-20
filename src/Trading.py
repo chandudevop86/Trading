@@ -372,7 +372,7 @@ def _render_sidebar_shell() -> None:
             background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(9,14,26,0.96));
             border: 1px solid rgba(148, 163, 184, 0.12);
             border-radius: 18px;
-            padding: 12px 16px;
+            padding: 10px 12px;
             box-shadow: 0 14px 30px rgba(2, 6, 23, 0.22);
         }
         [data-testid="stAppViewContainer"] [data-testid="stDataFrame"] {
@@ -383,7 +383,7 @@ def _render_sidebar_shell() -> None:
         }
         .hero-strip {
             border-radius: 24px;
-            padding: 12px 16px;
+            padding: 10px 12px;
             margin: 10px 0 16px 0;
             box-shadow: 0 24px 48px rgba(2, 6, 23, 0.32);
         }
@@ -433,7 +433,7 @@ def _render_sidebar_shell() -> None:
             background: rgba(15, 23, 42, 0.66);
             border: 1px solid rgba(148, 163, 184, 0.12);
             border-radius: 18px;
-            padding: 12px 16px;
+            padding: 10px 12px;
         }
         .hero-label {
             color: #94a3b8;
@@ -447,7 +447,7 @@ def _render_sidebar_shell() -> None:
             font-size: 18px;
             font-weight: 700;
         }
-        @media (max-width: 1200px) {
+        @media (max-width: 980px) {
             .top-nav {
                 grid-template-columns: 1fr;
                 justify-items: start;
@@ -612,7 +612,7 @@ def _render_sidebar_shell() -> None:
             background: linear-gradient(180deg, rgba(15,23,42,0.96), rgba(8,15,28,0.98));
             border: 1px solid rgba(56, 189, 248, 0.2);
             border-radius: 18px;
-            padding: 12px 16px;
+            padding: 10px 12px;
             margin-bottom: 12px;
             box-shadow: 0 16px 40px rgba(2, 6, 23, 0.35);
         }
@@ -672,7 +672,7 @@ def _render_sidebar_shell() -> None:
             background: rgba(15, 23, 42, 0.9);
             border: 1px solid rgba(148, 163, 184, 0.12);
             border-radius: 14px;
-            padding: 12px 16px;
+            padding: 10px 12px;
         }
         [data-testid="stSidebar"] .status-label {
             color: #94a3b8;
@@ -851,7 +851,7 @@ def _render_sidebar_shell() -> None:
             display: grid;
             grid-template-columns: auto 1fr auto auto auto;
             align-items: center;
-            gap: 14px;
+            gap: 10px;
             border: none;
             border-radius: 0;
             padding: 8px 0 12px 0;
@@ -864,10 +864,10 @@ def _render_sidebar_shell() -> None:
             justify-content: flex-start;
             gap: 12px;
             color: #ffffff;
-            font-size: 30px;
+            font-size: 24px;
             font-weight: 800;
             letter-spacing: 0;
-            white-space: normal;
+            white-space: nowrap;
         }
         .top-nav-logo {
             width: 36px;
@@ -889,7 +889,7 @@ def _render_sidebar_shell() -> None:
             display: flex;
             align-items: center;
             gap: 14px;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             color: rgba(255,255,255,0.72);
             font-size: 17px;
             font-weight: 700;
@@ -897,7 +897,7 @@ def _render_sidebar_shell() -> None:
         }
         .top-nav-pill {
             min-width: 0;
-            padding: 12px 16px;
+            padding: 10px 12px;
             border-radius: 14px;
             background: transparent;
             border: 1px solid transparent;
@@ -944,10 +944,11 @@ def _render_sidebar_shell() -> None:
             padding: 15px 20px;
             font-size: 16px;
             font-weight: 700;
-            min-height: 48px;
+            min-height: 44px;
             display: inline-flex;
             align-items: center;
-            min-width: 320px;
+            min-width: 220px;
+            white-space: nowrap;
         }
         .top-nav-secondary {
             border-radius: 14px;
@@ -1058,7 +1059,7 @@ def _render_sidebar_shell() -> None:
         .markets-tabs {
             display: flex;
             gap: 14px;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             padding: 16px 24px;
             border-bottom: 1px solid #e5e7eb;
             background: #ffffff;
@@ -1187,7 +1188,7 @@ def _render_sidebar_shell() -> None:
         }
         .dhan-hero-title .hero-line {
             display: block;
-            white-space: normal;
+            white-space: nowrap;
         }
         .dhan-hero-title .hero-line + .hero-line {
             margin-top: 2px;
@@ -1204,7 +1205,7 @@ def _render_sidebar_shell() -> None:
         }
         .dhan-hero-subtitle .hero-sub-line {
             display: block;
-            white-space: normal;
+            white-space: nowrap;
         }
         .dhan-hero-banner {
             margin-top: 14px;
@@ -1237,7 +1238,7 @@ def _render_sidebar_shell() -> None:
         }
         .breadcrumb-list {
             display: flex;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             gap: 8px;
             align-items: center;
             margin-bottom: 12px;
@@ -1309,7 +1310,7 @@ def _render_sidebar_shell() -> None:
         .hero-chip-row {
             display: flex;
             gap: 14px;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             margin-top: 22px;
         }
         .hero-chip {
@@ -1503,7 +1504,7 @@ def _render_sidebar_shell() -> None:
             font-size: 17px;
             margin-bottom: 18px;
         }
-        @media (max-width: 1200px) {
+        @media (max-width: 980px) {
             .top-nav {
                 grid-template-columns: 1fr;
                 justify-items: start;
@@ -2458,6 +2459,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

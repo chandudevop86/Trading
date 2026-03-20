@@ -849,7 +849,7 @@ def _render_sidebar_shell() -> None:
             position: relative;
             z-index: 3;
             display: grid;
-            grid-template-columns: auto 1fr auto auto auto;
+            grid-template-columns: auto 1fr;
             align-items: center;
             gap: 10px;
             border: none;
@@ -885,96 +885,50 @@ def _render_sidebar_shell() -> None:
         .top-nav-brand span {
             color: #ffffff;
         }
-        .top-nav-menu {
+        .top-nav-sections {
             display: flex;
             align-items: center;
-            gap: 14px;
-            flex-wrap: nowrap;
-            color: rgba(255,255,255,0.72);
-            font-size: 17px;
-            font-weight: 700;
-            position: relative;
-        }
-        .top-nav-pill {
+            justify-content: flex-start;
+            gap: 12px;
             min-width: 0;
-            padding: 10px 12px;
-            border-radius: 14px;
-            background: transparent;
-            border: 1px solid transparent;
-            color: rgba(255,255,255,0.78);
-            font-size: 17px;
+            overflow: hidden;
+        }
+        .top-nav-sections-label {
+            color: #89a7c7;
+            font-size: 12px;
             font-weight: 700;
-            line-height: 1.1;
-        }
-        .top-nav-pill.active-nav {
-            color: #ffffff;
-        }
-        .nav-dropdown-shell {
-            position: relative;
-            display: inline-flex;
-            align-items: center;
-            padding-bottom: 26px;
-            margin-bottom: -26px;
-        }
-        .nav-dropdown-trigger {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            min-height: 48px;
-            cursor: default;
-        }
-        .nav-dropdown-caret {
-            color: rgba(255,255,255,0.78);
-            font-size: 17px;
-            transform: translateY(-1px);
-        }
-        .top-nav-pill .active,
-        .top-nav-pill-value {
-            color: inherit;
-            display: inline;
-            font-size: inherit;
-            font-weight: inherit;
-            margin-top: 0;
-        }
-        .top-nav-search {
-            border-radius: 14px;
-            background: #171717;
-            border: 1px solid rgba(255,255,255,0.10);
-            color: rgba(255,255,255,0.72);
-            padding: 15px 20px;
-            font-size: 16px;
-            font-weight: 700;
-            min-height: 44px;
-            display: inline-flex;
-            align-items: center;
-            min-width: 220px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
             white-space: nowrap;
         }
-        .top-nav-secondary {
-            border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.16);
-            color: #ffffff;
-            background: rgba(255,255,255,0.02);
-            padding: 14px 24px;
-            font-size: 16px;
-            font-weight: 700;
-            min-height: 48px;
-            display: inline-flex;
+        .top-nav-tab-row {
+            display: flex;
             align-items: center;
-            justify-content: flex-start;
+            gap: 8px;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            scrollbar-width: none;
         }
-        .top-nav-cta {
-            background: #f7a600;
-            color: #101010;
-            border-radius: 14px;
-            padding: 14px 24px;
-            font-size: 16px;
-            font-weight: 800;
-            letter-spacing: 0;
-            min-height: 48px;
+        .top-nav-tab-row::-webkit-scrollbar {
+            display: none;
+        }
+        .top-nav-tab {
             display: inline-flex;
             align-items: center;
-            justify-content: flex-start;
+            min-height: 36px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(118, 164, 210, 0.18);
+            background: rgba(255,255,255,0.04);
+            color: #d8e6f5;
+            font-size: 13px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .top-nav-tab.active {
+            background: linear-gradient(135deg, #ffb84d 0%, #ff8a2a 100%);
+            border-color: transparent;
+            color: #09111d;
         }
         .mega-panel {
             position: absolute;
@@ -1577,54 +1531,18 @@ def _render_page_masthead(
         <div class="page-masthead">
             <div class="top-nav">
                 <div class="top-nav-brand"><div class="top-nav-logo">K</div><div>KRSH<span> Solutions</span></div></div>
-                <div class="top-nav-menu">
-                    <div class="nav-dropdown-shell">
-                        <div class="top-nav-pill nav-dropdown-trigger"><span class="active">Products</span><span class="nav-dropdown-caret">^</span></div>
-                        <div class="mega-panel">
-                            <div class="mega-grid">
-                                <div class="mega-item"><div class="mega-icon">K</div><div><div class="mega-title">KRSH App</div><div class="mega-copy">Strategy-led trading app built for active desk users and disciplined execution workflows.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon dark">W</div><div><div class="mega-title">KRSH Web</div><div class="mega-copy">Web trading platform for users who prefer a bigger live trading screen.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon alt">O</div><div><div class="mega-title">Options Trader App</div><div class="mega-copy">Current instrument mode: {instrument_mode}. Built to evaluate F&O setups with clear sizing.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon blue">T</div><div><div class="mega-title">Connect to TradingView</div><div class="mega-copy">Review {symbol} on {interval}, then route orders with {execution_mode} mode and {account_status} broker status.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon dark">A</div><div><div class="mega-title">DhanHQ Trading APIs</div><div class="mega-copy">Connect apps, review security routing, and keep live desk execution aligned to your broker flow.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon blue">S</div><div><div class="mega-title">Strategy Selection</div><div class="mega-copy">Active strategy: {strategy}. Market read: {symbol} on {interval} / {period} with {execution_mode} workflow.</div><div class="mega-pill-row"><span class="mega-pill active">{strategy}</span><span class="mega-pill">Breakout</span><span class="mega-pill">Demand Supply</span><span class="mega-pill">Indicator</span><span class="mega-pill">One Trade/Day</span><span class="mega-pill">MTF 5m</span></div></div></div>
-                                <div class="mega-item"><div class="mega-icon alt">M</div><div><div class="mega-title">Margin Trading Facility</div><div class="mega-copy">Deploy sizing and risk management with {lots} lots of {lot_size}, backed by {risk_pct:.1f}% risk and {rr_ratio:.1f}R review.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon blue">X</div><div><div class="mega-title">ScanX Stock Screener</div><div class="mega-copy">Track live setup count: {open_trades}. Signal state: {signal_text}. Section focus: {content_view}.</div></div></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="nav-dropdown-shell">
-                        <div class="top-nav-pill nav-dropdown-trigger"><span>Investments</span><span class="nav-dropdown-caret">v</span></div>
-                        <div class="mega-panel investments-panel">
-                            <div class="mega-grid">
-                                <div class="mega-item"><div class="mega-icon">S</div><div><div class="mega-title">Stocks</div><div class="mega-copy">MTF, instant pledge, and stock-market access for broad cash-market investing and active desk review.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon dark">C</div><div><div class="mega-title">Commodity</div><div class="mega-copy">Commodity dashboards, pledge margin visibility, and commodity-chart monitoring from the same workspace.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon alt">O</div><div><div class="mega-title">Options</div><div class="mega-copy">Structured F&O setup review, option strategy preparation, and clearer margin-focused analysis.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon blue">F</div><div><div class="mega-title">Futures</div><div class="mega-copy">Charts, futures-chain style monitoring, and margin-aware futures evaluation linked to your live desk flow.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon blue">E</div><div><div class="mega-title">ETFs</div><div class="mega-copy">SIP, forever-order style tracking, and diversified exposure monitoring with a cleaner index-linked view.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon alt">M</div><div><div class="mega-title">Mutual Funds</div><div class="mega-copy">Top-rated fund tracking, allocation review, and longer-horizon investing panels integrated into the desk.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon">I</div><div><div class="mega-title">IPO</div><div class="mega-copy">Apply upcoming IPO watchlists, open-interest follow-up, and listing-event tracking in one place.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon blue">N</div><div><div class="mega-title">NFO</div><div class="mega-copy">Review new fund offers directly from the investments area without leaving the main platform flow.</div></div></div>
-                            </div>
-                        </div>
-                    <div class="top-nav-pill"><span>Markets</span><span class="nav-dropdown-caret">v</span></div>
-                    <div class="nav-dropdown-shell">
-                        <div class="top-nav-pill nav-dropdown-trigger"><span>More</span><span class="nav-dropdown-caret">v</span></div>
-                        <div class="mega-panel more-panel">
-                            <div class="mega-grid">
-                                <div class="mega-item"><div class="mega-icon alt">P</div><div><div class="mega-title">Pricing</div><div class="mega-copy">Open free demat style onboarding, broker access details, and account-readiness information for your desk.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon blue">B</div><div><div class="mega-title">Become a Partner</div><div class="mega-copy">Extend KRSH Solutions with partner workflows, integrations, and shared execution operations.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon">F</div><div><div class="mega-title">fuzz</div><div class="mega-copy">Ask strategy, finance, and market questions inside your research-led trading workspace.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon dark">S</div><div><div class="mega-title">Dhan Support</div><div class="mega-copy">Browse setup help for broker routing, paper/live mode behavior, and execution readiness.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon alt">B</div><div><div class="mega-title">KRSH Blog</div><div class="mega-copy">Read notes on markets, trading strategies, execution discipline, and desk improvements.</div></div></div>
-                                <div class="mega-item"><div class="mega-icon">I</div><div><div class="mega-title">Indicator by KRSH</div><div class="mega-copy">Review indicator-led market context, insights, and deeper setup visibility.</div></div></div>
-                            </div>
-                        </div>
+                <div class="top-nav-sections">
+                    <div class="top-nav-sections-label">Open section</div>
+                    <div class="top-nav-tab-row">
+                        <span class="top-nav-tab active">{content_view}</span>
+                        <span class="top-nav-tab">Home</span>
+                        <span class="top-nav-tab">Live Signals</span>
+                        <span class="top-nav-tab">Market</span>
+                        <span class="top-nav-tab">Trades</span>
+                        <span class="top-nav-tab">Desk Controls</span>
+                        <span class="top-nav-tab">Downloads</span>
                     </div>
                 </div>
-                <div class="top-nav-search">Search Stocks, Mutual Funds, F&amp;O</div>
-                <div class="top-nav-secondary">Login</div>
-                <div class="top-nav-cta">Open Account</div>
             </div>
         </div>
         """,
@@ -2459,6 +2377,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

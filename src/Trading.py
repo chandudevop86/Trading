@@ -1625,18 +1625,6 @@ def _render_page_masthead(
                 <div class="top-nav-secondary">Login</div>
                 <div class="top-nav-cta">Open Account</div>
             </div>
-            <div class="masthead-grid" style="display:block;padding:46px 24px 24px 24px;">
-                <div class="dhan-hero-shell" style="display:flex;width:min(980px,92%);margin:0 auto;flex-direction:column;align-items:flex-start;justify-content:center;text-align:left;min-height:620px;gap:24px;">
-                    <div class="breadcrumb-list" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-start;"><span>KRSH Solutions</span><span class="breadcrumb-sep">/</span><span>TradingView Connect</span><span class="breadcrumb-sep">/</span><span>{symbol}</span><span class="breadcrumb-sep">/</span><span class="breadcrumb-current">{strategy}</span></div>
-                    <div class="dhan-hero-icon">&#9889;</div>
-                    <h1 class="dhan-hero-title"><span class="hero-line">Trade Directly from</span><span class="hero-line accent">TradingView.com</span></h1>
-                    <div class="dhan-hero-subtitle"><span class="hero-sub-line">Available exclusively for</span><span class="hero-sub-line">KRSH Solutions users!</span></div>
-                    <div class="dhan-hero-banner" style="margin-top:58px;width:min(760px,100%);border-radius:24px;border:1px solid rgba(111,155,255,0.6);background:linear-gradient(180deg, rgba(18,25,38,0.94), rgba(16,22,34,0.94));padding:30px 28px 26px 28px;box-shadow:0 22px 40px rgba(0,0,0,0.28);">
-                        <div class="dhan-hero-badge">1st Time in India</div>
-                        <div class="dhan-hero-banner-copy" style="color:#ffffff;font-size:30px;line-height:1.5;text-align:left;"><span class="hero-banner-line" style="display:block;">Now trade in Options from TradingView.com,</span><span class="hero-banner-line" style="display:block;">powered by KRSH desk workflows.</span></div>
-                    </div>
-                </div>
-            </div>
         </div>
         """,
         unsafe_allow_html=True,

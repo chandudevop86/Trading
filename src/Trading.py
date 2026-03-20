@@ -1769,6 +1769,7 @@ def _render_page_masthead(
         section_tabs,
         default=content_view if content_view in section_tabs else section_tabs[0],
         key="masthead_open_section",
+        width="stretch",
 
         label_visibility="collapsed",
     )
@@ -2128,7 +2129,7 @@ def _render_strategy_page(strategy: str, workspace: str, symbol: str, interval: 
         strategy_options,
         default=strategy if strategy in strategy_options else strategy_options[0],
         label_visibility="collapsed",
-
+        width="stretch",
         key="strategy_page_selector",
     )
     if selected_strategy and str(selected_strategy) != str(strategy):
@@ -2193,7 +2194,7 @@ def main() -> None:
             default="5m" if strategy == "MTF 5m" else interval,
             key="global_interval",
             disabled=(strategy == "MTF 5m"),
-            width="content",
+            width="stretch",
         )
     with review_col3:
         period = st.segmented_control(
@@ -2201,7 +2202,7 @@ def main() -> None:
             ["1d", "5d", "1mo", "3mo"],
             default=period,
             key="global_period",
-            width="content",
+            width="stretch",
         )
     execution_mode = "PAPER"
     instrument_mode = "Options"

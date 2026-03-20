@@ -447,6 +447,28 @@ def _render_sidebar_shell() -> None:
             font-size: 18px;
             font-weight: 700;
         }
+        @media (max-width: 1200px) {
+            .top-nav {
+                grid-template-columns: 1fr;
+                justify-items: start;
+                gap: 14px;
+            }
+            .top-nav-menu {
+                gap: 12px;
+            }
+            .top-nav-search {
+                min-width: 0;
+                width: 100%;
+            }
+            .dhan-hero-shell {
+                width: 100%;
+                min-height: 0;
+                gap: 18px;
+            }
+            .dhan-hero-banner {
+                width: min(560px, 100%);
+            }
+        }
         @media (max-width: 900px) {
             .hero-grid {
                 grid-template-columns: 1fr;
@@ -845,7 +867,7 @@ def _render_sidebar_shell() -> None:
             font-size: 30px;
             font-weight: 800;
             letter-spacing: 0;
-            white-space: nowrap;
+            white-space: normal;
         }
         .top-nav-logo {
             width: 36px;
@@ -1139,25 +1161,25 @@ def _render_sidebar_shell() -> None:
         }
         .dhan-hero-shell {
             display: flex;
-            width: min(980px, 92%);
+            width: min(640px, 100%);
             margin: 0 auto;
             flex-direction: column;
             align-items: flex-start;
             justify-content: center;
             text-align: left;
-            min-height: 620px;
+            min-height: 420px;
             gap: 24px;
         }
         .dhan-hero-icon {
             color: #f7a600;
-            font-size: 102px;
+            font-size: clamp(56px, 5vw, 84px);
             line-height: 1;
             margin-bottom: 12px;
         }
         .dhan-hero-title {
             color: #f3f4f6;
             max-width: 1100px;
-            font-size: clamp(64px, 7vw, 112px);
+            font-size: clamp(38px, 4.4vw, 68px);
             font-weight: 900;
             line-height: 0.98;
             margin: 0;
@@ -1165,7 +1187,7 @@ def _render_sidebar_shell() -> None:
         }
         .dhan-hero-title .hero-line {
             display: block;
-            white-space: nowrap;
+            white-space: normal;
         }
         .dhan-hero-title .hero-line + .hero-line {
             margin-top: 6px;
@@ -1175,39 +1197,39 @@ def _render_sidebar_shell() -> None:
         }
         .dhan-hero-subtitle {
             color: #ffffff;
-            font-size: 30px;
+            font-size: clamp(20px, 2vw, 28px);
             line-height: 1.35;
             margin-top: 6px;
             max-width: 760px;
         }
         .dhan-hero-subtitle .hero-sub-line {
             display: block;
-            white-space: nowrap;
+            white-space: normal;
         }
         .dhan-hero-banner {
-            margin-top: 58px;
-            width: min(760px, 100%);
+            margin-top: 28px;
+            width: min(640px, 100%);
             border-radius: 24px;
             border: 1px solid rgba(111, 155, 255, 0.6);
             background: linear-gradient(180deg, rgba(18,25,38,0.94), rgba(16,22,34,0.94));
-            padding: 30px 28px 26px 28px;
+            padding: 22px 22px 20px 22px;
             box-shadow: 0 22px 40px rgba(0,0,0,0.28);
         }
         .dhan-hero-badge {
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            justify-content: center;
             border-radius: 999px;
             background: #f7a600;
             color: #111827;
             font-size: 16px;
             font-weight: 800;
-            padding: 12px 22px;
             margin-bottom: 18px;
         }
         .dhan-hero-banner-copy {
             color: #ffffff;
-            font-size: 30px;
+            font-size: clamp(18px, 1.8vw, 24px);
             line-height: 1.5;
         }
         .dhan-hero-banner-copy .hero-banner-line {
@@ -1480,6 +1502,28 @@ def _render_sidebar_shell() -> None:
             color: #89a7c7;
             font-size: 17px;
             margin-bottom: 18px;
+        }
+        @media (max-width: 1200px) {
+            .top-nav {
+                grid-template-columns: 1fr;
+                justify-items: start;
+                gap: 14px;
+            }
+            .top-nav-menu {
+                gap: 12px;
+            }
+            .top-nav-search {
+                min-width: 0;
+                width: 100%;
+            }
+            .dhan-hero-shell {
+                width: 100%;
+                min-height: 0;
+                gap: 18px;
+            }
+            .dhan-hero-banner {
+                width: min(560px, 100%);
+            }
         }
         @media (max-width: 900px) {
             .masthead-grid {
@@ -2426,6 +2470,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 
 
 

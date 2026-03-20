@@ -1786,6 +1786,19 @@ def _fmt_num(val: object) -> str:
     out = f"{num:.2f}"
     return out[:-3] if out.endswith(".00") else out
 
+
+def _format_volume_metric(symbol: str, candles: pd.DataFrame) -> tuple[str, str]:
+    if candles is None or candles.empty or "volume" not in candles.columns:
+        return "-", "No volume data"
+    volume_series = pd.to_numeric(candles["volume"], errors="coerce").fillna(0)
+    latest_volume = float(volume_series.iloc[-1]) if not volume_series.empty else 0.0
+    if latest_volume > 0:
+        return f"{int(latest_volume):,}", "Latest candle"
+    symbol_text = str(symbol or "").upper()
+    if symbol_text.startswith("^"):
+        return "-", "Index volume unavailable"
+    return "0", "Latest candle"
+
 def _render_hero_strip(
     symbol: str,
     last_price: object,
@@ -2449,14 +2462,15 @@ def main() -> None:
             latest_close = float(candles["close"].iloc[-1])
             latest_high = float(candles["high"].iloc[-1])
             latest_low = float(candles["low"].iloc[-1])
-            latest_volume = float(candles["volume"].iloc[-1]) if "volume" in candles.columns else 0.0
+            latest_volume_text, latest_volume_note = _format_volume_metric(str(symbol), candles)
         else:
-            latest_close = latest_high = latest_low = latest_volume = 0.0
+            latest_close = latest_high = latest_low = 0.0
+            latest_volume_text, latest_volume_note = "-", "No volume data"
     
         c1.metric("Close", round(latest_close, 2))
         c2.metric("High", round(latest_high, 2))
         c3.metric("Low", round(latest_low, 2))
-        c4.metric("Volume", int(latest_volume))
+        c4.metric("Volume", latest_volume_text, latest_volume_note)
     
         if not candles.empty:
             st.dataframe(candles.tail(6), width="stretch", height=180)

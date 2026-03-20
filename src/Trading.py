@@ -1788,17 +1788,12 @@ def main() -> None:
             default="Breakout" if workspace == "Desk" else str(workspace),
             label_visibility="collapsed",
         )
-    content_options = ["Home", "Live Signals", "Paper & Live", "Routing Status", "Execution Style", "Instrument Focus", "Strategy", "Desk Summary", "Prepare Desk", "Review Signals", "Authorize Execute", "Live Status", "Desk Controls", "Market", "Trades", "Downloads"]
+    content_options = ["Home", "Live Signals", "Market", "Trades", "Desk Controls", "Downloads"]
     if st.session_state.get("content_view") not in content_options:
         st.session_state["content_view"] = "Home"
-    st.caption("Open section")
-    content_view = st.segmented_control(
-        "Open section",
-        content_options,
-        key="content_view",
-        label_visibility="collapsed",
-    )
+    content_view = str(st.session_state["content_view"])
     show_controls = content_view == "Desk Controls"
+
 
     if content_view == "Home":
         st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the compact tabs above or the action buttons below to open live signals, paper & live, routing status, execution style, instrument focus, strategy, desk summary, prepare desk, review signals, authorize execute, live status, controls, market, trades, or downloads. This default view stays short and clean.</div></div>', unsafe_allow_html=True)
@@ -2052,6 +2047,13 @@ def main() -> None:
             last_signal_side=str(last_signal_side),
             open_trades=len(signal_rows),
             account_status=account_status,
+        )
+        st.caption("Open section")
+        content_view = st.segmented_control(
+            "Open section",
+            content_options,
+            key="content_view",
+            label_visibility="collapsed",
         )
 
     hero_last_price = float(candles["close"].iloc[-1]) if not candles.empty else 0.0

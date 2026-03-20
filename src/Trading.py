@@ -1689,32 +1689,31 @@ def _render_page_masthead(
     open_trades: int,
     account_status: str,
 ) -> None:
-    auto_text = "Auto execute ready" if auto_execute else "Review before send"
-    signal_text = str(last_signal_side or "-").upper()
+    section_tabs = ["Home", "Live Signals", "Market", "Trades", "Desk Controls", "Downloads"]
 
     st.markdown(
-        f"""
+        """
         <div class="page-masthead">
             <div class="top-nav" style="display:block;">
                 <div class="top-nav-brand"><div class="top-nav-logo">K</div><div>KRSH<span> Solutions</span></div></div>
-                <div style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-                    <div style="color:#89a7c7;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap;">Open section</div>
-                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;background:linear-gradient(135deg, #ffb84d 0%, #ff8a2a 100%);color:#09111d;font-size:13px;font-weight:700;white-space:nowrap;">{content_view}</span>
-                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Home</span>
-                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Live Signals</span>
-                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Market</span>
-                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Trades</span>
-                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Desk Controls</span>
-                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Downloads</span>
-                    </div>
-                </div>
+                <div style="margin-top:10px;color:#89a7c7;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap;">Open section</div>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
+    tab_cols = st.columns(len(section_tabs))
+    for col, section_name in zip(tab_cols, section_tabs):
+        with col:
+            is_active = section_name == content_view
+            if st.button(
+                section_name,
+                key=f"masthead_tab_{section_name.lower().replace(' ', '_')}",
+                type="primary" if is_active else "secondary",
+                width="stretch",
+            ) and not is_active:
+                st.session_state["content_view"] = section_name
+                st.rerun()
 
 def _fmt_num(val: object) -> str:
     if val is None:
@@ -2099,7 +2098,7 @@ def main() -> None:
             st.markdown('<div class="section-shell" style="min-height:330px;">', unsafe_allow_html=True)
             st.markdown('<div class="section-heading">Market Setup</div><div class="section-copy">Choose what to scan and how the strategy should read the market.</div>', unsafe_allow_html=True)
             symbol = st.text_input("Symbol", symbol)
-            interval = st.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default=interval)
+            interval = st.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default=interval, disabled=(strategy == "MTF 5m"))
             period = st.segmented_control("Period", ["1d", "5d", "1mo", "3mo"], default=period)
             execution_mode = st.segmented_control("Execution mode", ["PAPER", "LIVE"], default=execution_mode)
             instrument_mode = st.segmented_control("Instrument", ["Options", "Futures"], default=instrument_mode)
@@ -2536,28 +2535,43 @@ def main() -> None:
             st.caption("Reviewed trade queue. Only this staged list will be executed.")
             with st.expander(f"Reviewed Queue ({len(staged_candidates)})", expanded=True):
                 st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), width="stretch", height=260)
-    
+
             executed_rows: list[dict[str, object]] = []
-            execute_clicked = st.button("Execute Reviewed Trades", type="primary", width="stretch")
-            if execute_clicked:
-                if execution_mode == "LIVE":
-                    if execute_live_trades is None:
-                        st.error("Live execution module is not available.")
-                    else:
-                        executed_rows = execute_live_trades(staged_candidates, Path(live_log_output), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
-                else:
-                    if execute_paper_trades is None:
-                        st.error("Paper execution module is not available.")
-                    else:
-                        executed_rows = execute_paper_trades(staged_candidates, Path(paper_log_output), deduplicate=True)
-    
-                if executed_rows:
-                    st.success(f"Executed {len(executed_rows)} reviewed trade(s) in {execution_mode} mode.")
-                    st.dataframe(_order_trade_columns(pd.DataFrame(executed_rows)), width="stretch")
+            if st.button("Execute Reviewed Trades", type="primary", width="stretch"):
+                st.session_state["confirm_execute_reviewed"] = True
+
+            if st.session_state.get("confirm_execute_reviewed", False):
+                st.warning(f"Confirm execution of {len(staged_candidates)} reviewed trade(s) in {execution_mode} mode.")
+                confirm_cols = st.columns(2)
+                with confirm_cols[0]:
+                    confirm_execute = st.button("Confirm Execute", type="primary", width="stretch")
+                with confirm_cols[1]:
+                    cancel_execute = st.button("Cancel", width="stretch")
+
+                if cancel_execute:
+                    st.session_state["confirm_execute_reviewed"] = False
+                    st.info("Execution cancelled.")
+
+                if confirm_execute:
+                    st.session_state["confirm_execute_reviewed"] = False
                     if execution_mode == "LIVE":
-                        _render_live_execution_feedback(executed_rows)
-                else:
-                    st.warning("No new reviewed trades were executed. They may already be logged.")
+                        if execute_live_trades is None:
+                            st.error("Live execution module is not available.")
+                        else:
+                            executed_rows = execute_live_trades(staged_candidates, Path(live_log_output), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
+                    else:
+                        if execute_paper_trades is None:
+                            st.error("Paper execution module is not available.")
+                        else:
+                            executed_rows = execute_paper_trades(staged_candidates, Path(paper_log_output), deduplicate=True)
+
+                    if executed_rows:
+                        st.success(f"Executed {len(executed_rows)} reviewed trade(s) in {execution_mode} mode.")
+                        st.dataframe(_order_trade_columns(pd.DataFrame(executed_rows)), width="stretch")
+                        if execution_mode == "LIVE":
+                            _render_live_execution_feedback(executed_rows)
+                    else:
+                        st.warning("No new reviewed trades were executed. They may already be logged.")
         else:
             st.info("Analyze trades first to build a review queue, then execute that reviewed batch later.")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -2590,6 +2604,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

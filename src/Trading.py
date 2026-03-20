@@ -475,7 +475,7 @@ def _render_live_execution_feedback(rows: list[dict[str, object]]) -> None:
         return
     st.markdown('<div class="section-shell" style="margin-top:12px;">', unsafe_allow_html=True)
     st.markdown('<div class="section-heading">Live Execution Feedback</div><div class="section-copy">Latest broker-side execution rows from this run.</div>', unsafe_allow_html=True)
-    st.dataframe(_order_trade_columns(pd.DataFrame(rows)), use_container_width=True, height=220)
+    st.dataframe(_order_trade_columns(pd.DataFrame(rows)), width="stretch", height=220)
     st.markdown('</div>', unsafe_allow_html=True)
 
 def attach_lots(rows: list[dict[str, object]], lot_size: int, lots: int) -> list[dict[str, object]]:
@@ -1838,7 +1838,7 @@ def _render_capability_band(
     status_cols[3].metric("Broker", str(broker_status), paper_status)
     with status_cols[4]:
         st.caption(f"Refresh every {int(refresh_seconds)}s")
-        if st.button("Refresh Now", use_container_width=True):
+        if st.button("Refresh Now", width="stretch"):
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1880,7 +1880,7 @@ def _render_dhan_feature_sections(
     ]
     for col, (label, section_name) in zip(action_cols, actions):
         with col:
-            if st.button(f"Open {label}", key=f"open_{section_name.lower().replace(' ', '_')}", use_container_width=True):
+            if st.button(f"Open {label}", key=f"open_{section_name.lower().replace(' ', '_')}", width="stretch"):
                 st.session_state["content_view"] = section_name
                 st.rerun()
 
@@ -1949,7 +1949,7 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
         "order_value": latest_signal.get("order_value", "-"),
     }
     st.caption("Latest actionable signal")
-    st.dataframe(pd.DataFrame([latest_view]), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame([latest_view]), width="stretch", hide_index=True)
 
     history_cols = [
         "trade_label",
@@ -1967,7 +1967,7 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
     ]
     history_rows = [{k: row.get(k, "") for k in history_cols} for row in signal_rows[-8:]]
     st.caption("Recent actionable signals")
-    st.dataframe(pd.DataFrame(history_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(history_rows), width="stretch", hide_index=True)
 
 def _render_paper_live_page(execution_mode: str, account_status: str) -> None:
     st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Paper & Live</div><div class="section-copy">See the current execution mode and whether the desk is staying in paper review or live-ready routing.</div></div>', unsafe_allow_html=True)
@@ -2136,7 +2136,7 @@ def main() -> None:
                     st.success("Dhan credentials detected")
                 else:
                     st.warning("Add Dhan credentials to .env")
-                if st.button("Check Dhan Live Ready", use_container_width=True):
+                if st.button("Check Dhan Live Ready", width="stretch"):
                     readiness_notes = _run_dhan_readiness_check(symbol, dhan_security_map_path)
                     for note in readiness_notes:
                         if note.startswith("FAIL"):
@@ -2413,7 +2413,7 @@ def main() -> None:
         c4.metric("Volume", int(latest_volume))
     
         if not candles.empty:
-            st.dataframe(candles.tail(6), use_container_width=True, height=240)
+            st.dataframe(candles.tail(6), width="stretch", height=240)
         else:
             st.warning("No candle data available.")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -2458,12 +2458,12 @@ def main() -> None:
             left, right = st.columns([4.4, 1.6])
             with left:
                 chart = build_live_market_chart(candles, output_rows=output_rows)
-                st.altair_chart(chart, use_container_width=True)
+                st.altair_chart(chart, width="stretch")
                 st.caption("Standard candlestick chart with volume and optional BUY/SELL or CE/PE trade markers.")
             with right:
                 st.markdown("**Market Depth View**")
                 depth_df = build_market_depth_summary(candles)
-                st.dataframe(depth_df, use_container_width=True, hide_index=True)
+                st.dataframe(depth_df, width="stretch", hide_index=True)
                 st.caption(f"Price spread between support and resistance bands: {levels['spread']:.2f}")
         else:
             st.info("No chart data available.")
@@ -2474,12 +2474,12 @@ def main() -> None:
         st.markdown('<div class="section-heading">Trade Workspace</div><div class="section-copy">Review live-ready setups, preview broker payloads, and send only the orders you actually want routed.</div>', unsafe_allow_html=True)
         if auto_executed_rows:
             st.caption("Auto-executed trades from this run.")
-            st.dataframe(_order_trade_columns(pd.DataFrame(auto_executed_rows)), use_container_width=True)
+            st.dataframe(_order_trade_columns(pd.DataFrame(auto_executed_rows)), width="stretch")
     
         if output_rows:
             trades_df = pd.DataFrame(output_rows)
             with st.expander(f"Generated Trades ({len(trades_df)})", expanded=False):
-                st.dataframe(trades_df.tail(12), use_container_width=True, height=300)
+                st.dataframe(trades_df.tail(12), width="stretch", height=300)
     
             try:
                 summary = build_trade_summary(output_rows)
@@ -2497,17 +2497,17 @@ def main() -> None:
         if execution_candidates:
             st.caption("Current executable candidates generated from the latest strategy run.")
             with st.expander(f"Execution Candidates ({len(execution_candidates)})", expanded=False):
-                st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), use_container_width=True, height=280)
+                st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), width="stretch", height=280)
             if execution_mode == "LIVE":
                 with st.expander("Dhan Live Payload Preview"):
-                    if st.button("Preview Live Payloads", use_container_width=True):
+                    if st.button("Preview Live Payloads", width="stretch"):
                         st.session_state["dhan_payload_preview"] = _build_dhan_preview_rows(
                             execution_candidates,
                             dhan_security_map_path,
                         )
                     preview_rows = st.session_state.get("dhan_payload_preview", [])
                     if preview_rows:
-                        st.dataframe(pd.DataFrame(preview_rows), use_container_width=True)
+                        st.dataframe(pd.DataFrame(preview_rows), width="stretch")
                     else:
                         st.caption("Preview the exact Dhan live-order payloads here before sending them to the broker.")
         else:
@@ -2515,14 +2515,14 @@ def main() -> None:
     
         c1, c2, c3 = st.columns(3)
         with c1:
-            if st.button("Analyze Current Trades", use_container_width=True):
+            if st.button("Analyze Current Trades", width="stretch"):
                 st.session_state["analyzed_trade_queue"] = analyzed_candidates
                 if analyzed_candidates:
                     st.success(f"Analyzed {len(analyzed_candidates)} executable trade(s). Review them below before execution.")
                 else:
                     st.warning("No BUY/SELL trades were available to analyze.")
         with c2:
-            if st.button("Clear Analyzed Queue", use_container_width=True):
+            if st.button("Clear Analyzed Queue", width="stretch"):
                 st.session_state["analyzed_trade_queue"] = []
                 st.info("Cleared the analyzed trade queue.")
         with c3:
@@ -2532,10 +2532,10 @@ def main() -> None:
         if staged_candidates:
             st.caption("Reviewed trade queue. Only this staged list will be executed.")
             with st.expander(f"Reviewed Queue ({len(staged_candidates)})", expanded=True):
-                st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), use_container_width=True, height=260)
+                st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), width="stretch", height=260)
     
             executed_rows: list[dict[str, object]] = []
-            execute_clicked = st.button("Execute Reviewed Trades", type="primary", use_container_width=True)
+            execute_clicked = st.button("Execute Reviewed Trades", type="primary", width="stretch")
             if execute_clicked:
                 if execution_mode == "LIVE":
                     if execute_live_trades is None:
@@ -2550,7 +2550,7 @@ def main() -> None:
     
                 if executed_rows:
                     st.success(f"Executed {len(executed_rows)} reviewed trade(s) in {execution_mode} mode.")
-                    st.dataframe(_order_trade_columns(pd.DataFrame(executed_rows)), use_container_width=True)
+                    st.dataframe(_order_trade_columns(pd.DataFrame(executed_rows)), width="stretch")
                     if execution_mode == "LIVE":
                         _render_live_execution_feedback(executed_rows)
                 else:
@@ -2575,11 +2575,11 @@ def main() -> None:
         st.markdown('<div class="section-heading">Downloads</div><div class="section-copy">Raw data and debug output are hidden from the page and available only as file downloads.</div>', unsafe_allow_html=True)
         download_cols = st.columns(3)
         with download_cols[0]:
-            st.download_button("Download Raw Candles CSV", data=raw_candles_csv, file_name="krsh_raw_candles.csv", mime="text/csv", use_container_width=True)
+            st.download_button("Download Raw Candles CSV", data=raw_candles_csv, file_name="krsh_raw_candles.csv", mime="text/csv", width="stretch")
         with download_cols[1]:
-            st.download_button("Download Trades CSV", data=_to_csv(output_rows) if output_rows else "", file_name="krsh_trades.csv", mime="text/csv", use_container_width=True)
+            st.download_button("Download Trades CSV", data=_to_csv(output_rows) if output_rows else "", file_name="krsh_trades.csv", mime="text/csv", width="stretch")
         with download_cols[2]:
-            st.download_button("Download Debug JSON", data=json.dumps(debug_payload, indent=2), file_name="krsh_debug.json", mime="application/json", use_container_width=True)
+            st.download_button("Download Debug JSON", data=json.dumps(debug_payload, indent=2), file_name="krsh_debug.json", mime="application/json", width="stretch")
         st.markdown("</div>", unsafe_allow_html=True)
 
     _render_page_footer()
@@ -2587,6 +2587,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

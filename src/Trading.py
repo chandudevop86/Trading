@@ -67,6 +67,25 @@ except Exception:
 
 
 
+
+def _load_local_env(path: Path = Path(".env")) -> None:
+    if not path.exists():
+        return
+    try:
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip("\"'")
+            if key:
+                os.environ.setdefault(key, value)
+    except Exception:
+        return
+
+
+_load_local_env()
 st.set_page_config(page_title="KRSH SOLUTIONS", page_icon="chart", layout="wide")
 
 st.markdown(
@@ -2281,37 +2300,44 @@ def main() -> None:
         analyzed_candidates = build_analysis_queue(execution_candidates)
 
     auto_executed_rows: list[dict[str, object]] = []
-    if auto_execute_generated and execution_candidates:
-        try:
-            if execution_mode == "LIVE":
-                if execute_live_trades is None:
-                    st.error("Live execution module is not available.")
+    reviewed_auto_candidates = st.session_state.get("analyzed_trade_queue", [])
+    if auto_execute_generated:
+        if not reviewed_auto_candidates:
+            st.info("Auto execute is enabled, but it only runs after you analyze trades and stage a reviewed BUY/SELL queue.")
+        else:
+            try:
+                if execution_mode == "LIVE":
+                    if execute_live_trades is None:
+                        st.error("Live execution module is not available.")
+                    else:
+                        auto_executed_rows = execute_live_trades(reviewed_auto_candidates, Path(live_log_output), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
                 else:
-                    auto_executed_rows = execute_live_trades(execution_candidates, Path(live_log_output), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
-            else:
-                if execute_paper_trades is None:
-                    st.error("Paper execution module is not available.")
-                else:
-                    auto_executed_rows = execute_paper_trades(execution_candidates, Path(paper_log_output), deduplicate=True)
-        except Exception as exc:
-            st.error(f"Auto execution failed: {exc}")
-            auto_executed_rows = []
+                    if execute_paper_trades is None:
+                        st.error("Paper execution module is not available.")
+                    else:
+                        auto_executed_rows = execute_paper_trades(reviewed_auto_candidates, Path(paper_log_output), deduplicate=True)
+            except Exception as exc:
+                st.error(f"Auto execution failed: {exc}")
+                auto_executed_rows = []
 
-        if auto_executed_rows:
-            st.success(f"Auto executed {len(auto_executed_rows)} trade(s) in {execution_mode} mode.")
-            if execution_mode == "LIVE":
-                _render_live_execution_feedback(auto_executed_rows)
-            if send_telegram:
-                signal_map = {
-                    f"{row.get('strategy','')}|{row.get('symbol','')}|{row.get('entry_time', row.get('timestamp',''))}|{row.get('side','')}": row
-                    for row in output_rows
-                    if isinstance(row, dict)
-                }
-                for executed in auto_executed_rows:
-                    exec_key = f"{executed.get('strategy','')}|{executed.get('symbol','')}|{executed.get('signal_time','')}|{executed.get('side','')}"
-                    alert_row = dict(signal_map.get(exec_key, {}))
-                    alert_row.update(executed)
-                    send_signal_alert(alert_row, strategy=strategy, symbol=symbol, refresh_seconds=int(refresh_seconds))
+            if auto_executed_rows:
+                st.success(f"Auto executed {len(auto_executed_rows)} reviewed trade(s) in {execution_mode} mode.")
+                st.session_state["analyzed_trade_queue"] = []
+                if execution_mode == "LIVE":
+                    _render_live_execution_feedback(auto_executed_rows)
+                if send_telegram:
+                    signal_map = {
+                        f"{row.get('strategy','')}|{row.get('symbol','')}|{row.get('entry_time', row.get('timestamp',''))}|{row.get('side','')}": row
+                        for row in output_rows
+                        if isinstance(row, dict)
+                    }
+                    for executed in auto_executed_rows:
+                        exec_key = f"{executed.get('strategy','')}|{executed.get('symbol','')}|{executed.get('signal_time','')}|{executed.get('side','')}"
+                        alert_row = dict(signal_map.get(exec_key, {}))
+                        alert_row.update(executed)
+                        send_signal_alert(alert_row, strategy=strategy, symbol=symbol, refresh_seconds=int(refresh_seconds))
+            else:
+                st.info("Reviewed queue is staged for auto execution, but no new trades were executed on this run.")
 
     account_status = "Paper"
     if str(execution_mode).upper() == "LIVE":
@@ -2549,7 +2575,7 @@ def main() -> None:
                 if analyzed_candidates:
                     st.success(f"Analyzed {len(analyzed_candidates)} executable trade(s). Review them below before execution.")
                 else:
-                    st.warning("No BUY/SELL trades were available to analyze.")
+                    st.info("No actionable BUY/SELL signal is available yet. Current output contains analysis/setup rows only.")
         with c2:
             if st.button("Clear Analyzed Queue", width="stretch"):
                 st.session_state["analyzed_trade_queue"] = []
@@ -2559,7 +2585,8 @@ def main() -> None:
     
         staged_candidates = st.session_state.get("analyzed_trade_queue", [])
         if staged_candidates:
-            st.caption("Reviewed trade queue. Only this staged list will be executed.")
+            st.success(f"Reviewed queue ready: {len(staged_candidates)} actionable trade(s) available for execution.")
+            st.caption("Only this staged reviewed queue can be executed manually or by auto execute.")
             with st.expander(f"Reviewed Queue ({len(staged_candidates)})", expanded=True):
                 st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), width="stretch", height=260)
 

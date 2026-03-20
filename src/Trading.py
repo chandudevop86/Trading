@@ -1865,15 +1865,7 @@ def _sidebar_section(title: str, subtitle: str = "") -> None:
 
 
 def _render_page_footer() -> None:
-    st.markdown(
-        """
-        <div style="margin-top:18px;padding:14px 18px;border-radius:18px;background:linear-gradient(90deg, rgba(8,18,32,0.96), rgba(18,48,82,0.92));border:1px solid rgba(118,164,210,0.16);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-            <div style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:0.04em;">KRSH <span style="color:#ffb84d;">SOLUTIONS</span></div>
-            <div style="color:#9bb6d3;font-size:12px;">Research-led trading workspace for live charts, execution review, paper trading, and broker routing.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.caption("KRSH Solutions desk workspace")
 
 
 def _render_capability_band(
@@ -2659,33 +2651,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

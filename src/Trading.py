@@ -1484,8 +1484,20 @@ def _render_page_masthead(
     st.markdown(
         f"""
         <div class="page-masthead">
-            <div class="top-nav">
+            <div class="top-nav" style="display:block;">
                 <div class="top-nav-brand"><div class="top-nav-logo">K</div><div>KRSH<span> Solutions</span></div></div>
+                <div style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                    <div style="color:#89a7c7;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap;">Open section</div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;background:linear-gradient(135deg, #ffb84d 0%, #ff8a2a 100%);color:#09111d;font-size:13px;font-weight:700;white-space:nowrap;">{content_view}</span>
+                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Home</span>
+                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Live Signals</span>
+                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Market</span>
+                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Trades</span>
+                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Desk Controls</span>
+                        <span style="display:inline-flex;align-items:center;min-height:34px;padding:8px 12px;border-radius:999px;border:1px solid rgba(118, 164, 210, 0.18);background:rgba(255,255,255,0.04);color:#d8e6f5;font-size:13px;font-weight:700;white-space:nowrap;">Downloads</span>
+                    </div>
+                </div>
             </div>
         </div>
         """,
@@ -1767,7 +1779,6 @@ def main() -> None:
     st.markdown('<div class="top-tab-shell"><div class="top-tab-title">Desk Navigation</div><div class="top-tab-copy">Use one compact row of side-by-side tabs for workspace, strategy, and page content.</div></div>', unsafe_allow_html=True)
     nav_col1, nav_col2 = st.columns([1.15, 1.35])
     with nav_col1:
-        st.caption("Workspace")
         workspace = st.segmented_control("Workspace", workspace_options, default="Desk", label_visibility="collapsed")
     with nav_col2:
         st.caption("Strategy Selection")
@@ -2319,6 +2330,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

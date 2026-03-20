@@ -1535,12 +1535,6 @@ def _render_page_masthead(
                     <div class="top-nav-sections-label">Open section</div>
                     <div class="top-nav-tab-row">
                         <span class="top-nav-tab active">{content_view}</span>
-                        {"" if str(content_view) == "Home" else "<span class=\"top-nav-tab\">Home</span>"}
-                        <span class="top-nav-tab">Live Signals</span>
-                        <span class="top-nav-tab">Market</span>
-                        <span class="top-nav-tab">Trades</span>
-                        <span class="top-nav-tab">Desk Controls</span>
-                        <span class="top-nav-tab">Downloads</span>
                     </div>
                 </div>
             </div>

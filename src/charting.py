@@ -238,7 +238,7 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
         )
         layers.append(signal_points)
 
-    price_panel = alt.layer(*layers).properties(height=430)
+    price_panel = alt.layer(*layers).properties(height=300)
     volume = alt.Chart(df).mark_bar(opacity=0.78, size=volume_bar_size).encode(
         x=alt.X("timestamp:T", title="", axis=time_axis),
         y=alt.Y("volume:Q", title="Volume", axis=volume_axis, scale=alt.Scale(zero=True, nice=True)),
@@ -247,6 +247,6 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
             alt.Tooltip("timestamp:T", title="Time"),
             alt.Tooltip("volume:Q", format=",.0f", title="Volume"),
         ],
-    ).properties(height=120)
+    ).properties(height=80)
 
-    return alt.vconcat(price_panel, volume, spacing=10).resolve_scale(x="shared").configure_view(stroke=None).configure(background="#0b1220")
+    return alt.vconcat(price_panel, volume, spacing=6).resolve_scale(x="shared").configure_view(stroke=None).configure(background="#0b1220")

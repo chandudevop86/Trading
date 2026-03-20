@@ -471,6 +471,31 @@ def _run_dhan_readiness_check(symbol: str, security_map_path: str) -> list[str]:
     notes.append(f"INFO live symbol context: {symbol}")
     return notes
 
+
+def _render_dhan_status_panel(symbol: str, security_map_path: str, execution_mode: str, reviewed_candidates: list[dict[str, object]]) -> None:
+    client_id_present = bool(os.getenv("DHAN_CLIENT_ID", "").strip())
+    access_token_present = bool(os.getenv("DHAN_ACCESS_TOKEN", "").strip())
+    security_map_exists = Path(str(security_map_path)).exists()
+    builder_ready = build_order_request_from_candidate is not None and load_security_map is not None
+    reviewed_count = len(reviewed_candidates)
+    live_ready = str(execution_mode).upper() == "LIVE" and client_id_present and access_token_present and security_map_exists and builder_ready and reviewed_count > 0
+
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Dhan Status</div><div class="section-copy">Check credentials, security map, payload builder, and whether the current reviewed queue is ready for live routing.</div></div>', unsafe_allow_html=True)
+    cols = st.columns(5)
+    cols[0].metric("Client ID", "Ready" if client_id_present else "Missing")
+    cols[1].metric("Access Token", "Ready" if access_token_present else "Missing")
+    cols[2].metric("Security Map", "Found" if security_map_exists else "Missing")
+    cols[3].metric("Payload Builder", "Ready" if builder_ready else "Unavailable")
+    cols[4].metric("Live Ready", "YES" if live_ready else "NO")
+
+    status_rows = [
+        {"check": "Broker mode", "status": str(execution_mode).upper(), "detail": "LIVE mode is required for Dhan order routing."},
+        {"check": "Reviewed queue", "status": str(reviewed_count), "detail": "Only reviewed actionable trades are eligible for execution."},
+        {"check": "Symbol", "status": str(symbol), "detail": "Current live symbol context."},
+        {"check": "Security map path", "status": str(security_map_path), "detail": "CSV used to map option/future contracts to Dhan security IDs."},
+    ]
+    st.dataframe(pd.DataFrame(status_rows), width="stretch", hide_index=True)
+
 def _render_live_execution_feedback(rows: list[dict[str, object]]) -> None:
     if not rows:
         return
@@ -2495,6 +2520,8 @@ def main() -> None:
             st.info("No trades generated yet.")
     
         st.divider()
+        _render_dhan_status_panel(str(symbol), dhan_security_map_path, str(execution_mode), st.session_state.get("analyzed_trade_queue", []))
+
         st.subheader("Analyze First, Execute Later")
         if execution_candidates:
             st.caption("Current executable candidates generated from the latest strategy run.")
@@ -2604,6 +2631,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 
 
 

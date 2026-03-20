@@ -2220,14 +2220,11 @@ def main() -> None:
     content_view = str(st.session_state["content_view"])
     show_controls = content_view == "Desk Controls"
 
-
-    if content_view == "Home":
-        st.caption("Simple Main Page")
     symbol = str(st.session_state.get("symbol", "^NSEI"))
     interval = str(st.session_state.get("interval", "5m"))
     period = str(st.session_state.get("period", "1d"))
 
-    show_chart_review = content_view not in {"Desk Controls", "Live Signals", "Market"}
+    show_chart_review = content_view not in {"Home", "Desk Controls", "Live Signals", "Market"}
     if show_chart_review:
         st.caption("Chart Review")
         review_col1, review_col2, review_col3 = st.columns([1.2, 1.2, 1.0])
@@ -2532,17 +2529,12 @@ def main() -> None:
     else:
         market_status = "RANGE" if not signal_rows else f"LIVE {last_signal_side}"
     if content_view == "Home":
-        _render_hero_strip(
+        _render_home_intro(
             symbol=str(symbol),
-            last_price=hero_last_price if not candles.empty else "-",
-            day_change=float(hero_day_change),
             strategy=str(strategy),
             execution_mode=str(execution_mode),
-            open_trades=len(signal_rows),
-            support_band=support_band,
-            resistance_band=resistance_band,
-            option_bias=option_bias,
-            market_status=market_status,
+            last_price=hero_last_price if not candles.empty else "-",
+            day_change=float(hero_day_change),
         )
     if content_view == "Live Signals":
         _render_live_signals_page(signal_rows, str(strategy), str(last_signal_side), watchlist_rows)
@@ -2571,15 +2563,6 @@ def main() -> None:
             signal_count=len(signal_rows),
             market_status=market_status,
             refresh_seconds=int(refresh_seconds),
-            auto_execute=bool(auto_execute_generated),
-        )
-    if content_view == "Home":
-        _render_dhan_feature_sections(
-            symbol=str(symbol),
-            strategy=str(strategy),
-            execution_mode=str(execution_mode),
-            account_status=account_status,
-            signal_count=len(signal_rows),
             auto_execute=bool(auto_execute_generated),
         )
     if content_view == "Market":
@@ -2797,3 +2780,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+

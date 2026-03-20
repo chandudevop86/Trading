@@ -1761,18 +1761,17 @@ def _render_page_masthead(
         """,
         unsafe_allow_html=True,
     )
-    tab_cols = st.columns(len(section_tabs))
-    for col, section_name in zip(tab_cols, section_tabs):
-        with col:
-            is_active = section_name == content_view
-            if st.button(
-                section_name,
-                key=f"masthead_tab_{section_name.lower().replace(' ', '_')}",
-                type="primary" if is_active else "secondary",
-                width="stretch",
-            ) and not is_active:
-                st.session_state["content_view"] = section_name
-                st.rerun()
+    selected_section = st.segmented_control(
+        "Open section",
+        section_tabs,
+        default=content_view if content_view in section_tabs else section_tabs[0],
+        key="masthead_open_section",
+        width="content",
+        label_visibility="collapsed",
+    )
+    if selected_section and selected_section != content_view:
+        st.session_state["content_view"] = str(selected_section)
+        st.rerun()
 
 def _fmt_num(val: object) -> str:
     if val is None:

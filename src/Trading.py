@@ -1765,7 +1765,7 @@ def main() -> None:
     strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
 
     st.markdown('<div class="top-tab-shell"><div class="top-tab-title">Desk Navigation</div><div class="top-tab-copy">Use one compact row of side-by-side tabs for workspace, strategy, and page content.</div></div>', unsafe_allow_html=True)
-    nav_col1, nav_col2, nav_col3 = st.columns([1.1, 1.25, 0.95])
+    nav_col1, nav_col2 = st.columns([1.15, 1.35])
     with nav_col1:
         st.caption("Workspace")
         workspace = st.segmented_control("Workspace", workspace_options, default="Desk", label_visibility="collapsed")
@@ -1780,14 +1780,13 @@ def main() -> None:
     content_options = ["Home", "Live Signals", "Paper & Live", "Routing Status", "Execution Style", "Instrument Focus", "Strategy", "Desk Summary", "Prepare Desk", "Review Signals", "Authorize Execute", "Live Status", "Desk Controls", "Market", "Trades", "Downloads"]
     if st.session_state.get("content_view") not in content_options:
         st.session_state["content_view"] = "Home"
-    with nav_col3:
-        st.caption("Open section")
-        content_view = st.segmented_control(
-            "Open section",
-            content_options,
-            key="content_view",
-            label_visibility="collapsed",
-        )
+    st.caption("Open section")
+    content_view = st.segmented_control(
+        "Open section",
+        content_options,
+        key="content_view",
+        label_visibility="collapsed",
+    )
     show_controls = content_view == "Desk Controls"
 
     if content_view == "Home":

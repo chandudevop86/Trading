@@ -1752,7 +1752,7 @@ def _render_page_masthead(
     open_trades: int,
     account_status: str,
 ) -> None:
-    section_tabs = ["Home", "Live Signals", "Market", "Trades", "Desk Controls", "Downloads"]
+    section_tabs = ["Home", "Live Signals", "Market", "Strategy", "Trades", "Desk Controls", "Downloads"]
 
     st.markdown(
         """
@@ -1770,7 +1770,7 @@ def _render_page_masthead(
         section_tabs,
         default=content_view if content_view in section_tabs else section_tabs[0],
         key="masthead_open_section",
-        width="content",
+
         label_visibility="collapsed",
     )
     if selected_section and selected_section != content_view:
@@ -2073,6 +2073,19 @@ def _render_instrument_focus_page(symbol: str, instrument_mode: str, interval: s
 
 
 def _render_strategy_page(strategy: str, workspace: str, symbol: str, interval: str, period: str, execution_mode: str) -> None:
+    strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
+    st.caption("Strategy")
+    selected_strategy = st.segmented_control(
+        "Strategy",
+        strategy_options,
+        default=strategy if strategy in strategy_options else strategy_options[0],
+        label_visibility="collapsed",
+
+        key="strategy_page_selector",
+    )
+    if selected_strategy and str(selected_strategy) != str(strategy):
+        st.session_state["strategy"] = str(selected_strategy)
+        st.rerun()
     strategy_copy = {
         "Breakout": "Focuses on breakout moves after price clears structure and momentum confirms continuation.",
         "Demand Supply": "Tracks reaction zones and setup quality around demand and supply behavior.",
@@ -2106,15 +2119,9 @@ def main() -> None:
 
     workspace = "Desk"
     strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
-    st.caption("Strategy")
-    strategy = st.segmented_control(
-        "Strategy",
-        strategy_options,
-        default="Breakout",
-        label_visibility="collapsed",
-        width="content",
-    )
-    content_options = ["Home", "Live Signals", "Market", "Trades", "Desk Controls", "Downloads"]
+    strategy = str(st.session_state.get("strategy", "Breakout"))
+
+    content_options = ["Home", "Live Signals", "Market", "Strategy", "Trades", "Desk Controls", "Downloads"]
     if st.session_state.get("content_view") not in content_options:
         st.session_state["content_view"] = "Home"
     content_view = str(st.session_state["content_view"])

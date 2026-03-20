@@ -200,6 +200,28 @@ def _format_expiry(expiry: object) -> str:
     return text
 
 
+def _format_ts_ist(ts: object) -> str:
+    if ts is None:
+        return "-"
+    try:
+        dt = pd.to_datetime(ts, errors="coerce")
+    except Exception:
+        dt = None
+    if dt is None or pd.isna(dt):
+        return str(ts)
+
+    if isinstance(dt, pd.Timestamp):
+        py = dt.to_pydatetime()
+    else:
+        py = dt
+
+    if getattr(py, "tzinfo", None) is None:
+        py = py.replace(tzinfo=ZoneInfo("UTC"))
+
+    ist = py.astimezone(ZoneInfo("Asia/Kolkata"))
+    return ist.strftime("%Y-%m-%d %H:%M:%S IST")
+
+
 def _estimate_weekly_expiry(symbol: str, now: datetime | None = None) -> str:
     s = (symbol or "").strip().upper()
     if s in {"^NSEI", "NIFTY", "NIFTY 50", "NIFTY50"}:
@@ -218,16 +240,21 @@ def _attach_option_metrics(rows: list[dict[str, object]], symbol: str, fetch_opt
         return rows
 
     metrics_map: dict[tuple[int, str], dict[str, object]] = {}
+    status = "DISABLED"
     if fetch_option_metrics and fetch_option_chain and extract_option_records and build_metrics_map and normalize_index_symbol:
         try:
             sym = normalize_index_symbol(symbol)
             payload = fetch_option_chain(sym, timeout=10.0)
             records = extract_option_records(payload)
             metrics_map = build_metrics_map(records)
+            status = "FETCH_OK"
         except Exception:
             metrics_map = {}
+            status = "FETCH_FAILED"
 
     enriched: list[dict[str, object]] = []
+    any_nse_match = False
+    any_estimated_expiry = False
     for item in rows:
         row = dict(item)
         strike_raw = row.get("strike_price", row.get("option_strike", ""))
@@ -240,6 +267,7 @@ def _attach_option_metrics(rows: list[dict[str, object]], symbol: str, fetch_opt
         metrics = metrics_map.get((strike, option_type), {}) if strike and option_type else {}
         if isinstance(metrics, dict) and metrics:
             row.update(metrics)
+            any_nse_match = True
             if metrics.get("option_expiry"):
                 row["option_expiry_source"] = "NSE"
 
@@ -248,12 +276,51 @@ def _attach_option_metrics(rows: list[dict[str, object]], symbol: str, fetch_opt
             if est:
                 row["option_expiry"] = est
                 row["option_expiry_source"] = "EST"
+                any_estimated_expiry = True
 
         if row.get("option_expiry"):
             row["option_expiry"] = _format_expiry(row.get("option_expiry"))
         enriched.append(row)
+
+    final_status = status
+    if status == "FETCH_OK" and not any_nse_match and any_estimated_expiry:
+        final_status = "ESTIMATED_EXPIRY_ONLY"
+    elif status == "FETCH_OK" and not any_nse_match:
+        final_status = "NO_MATCH"
+    elif status == "FETCH_OK" and any_nse_match:
+        final_status = "NSE_OK"
+
+    for row in enriched:
+        row["_option_metrics_status"] = final_status
     return enriched
 
+
+def _attach_indicator_trade_levels(rows: list[dict[str, object]], rr_ratio: float, trailing_sl_pct: float) -> list[dict[str, object]]:
+    out: list[dict[str, object]] = []
+    sl_frac = max(0.0, float(trailing_sl_pct) / 100.0)
+    if sl_frac <= 0:
+        sl_frac = 0.002
+    for r in rows:
+        row = dict(r)
+        side = str(row.get("side", "") or "").upper()
+        try:
+            entry = float(row.get("close", row.get("price", row.get("entry_price", 0.0))) or 0.0)
+        except Exception:
+            entry = 0.0
+        if entry > 0 and side in {"BUY", "SELL"}:
+            row["entry_price"] = round(entry, 2)
+            if side == "BUY":
+                sl = entry * (1.0 - sl_frac)
+                tp = entry + (entry - sl) * float(rr_ratio)
+            else:
+                sl = entry * (1.0 + sl_frac)
+                tp = entry - (sl - entry) * float(rr_ratio)
+            row["stop_loss"] = round(sl, 2)
+            row["target_price"] = round(tp, 2)
+        if "timestamp" in row:
+            row["timestamp"] = str(row["timestamp"])
+        out.append(row)
+    return out
 
 def _order_trade_columns(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
@@ -305,13 +372,66 @@ def attach_futures_contracts(trades: list[dict[str, object]], symbol: str) -> li
 def send_signal_alert(row: dict[str, object], *, strategy: str, symbol: str, refresh_seconds: int) -> None:
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         return
+
+    side = str(row.get("side", "-") or "-")
+    entry = _fmt_num(row.get("entry_price", row.get("entry", "-")))
+    sl = _fmt_num(row.get("stop_loss", row.get("sl", "-")))
+    target = _fmt_num(row.get("target_price", row.get("target", "-")))
+    option = str(row.get("option_strike", "") or "").strip()
+
+    opt_ltp = _fmt_num(row.get("option_ltp"))
+    opt_oi = _fmt_num(row.get("option_oi"))
+    opt_vol = _fmt_num(row.get("option_vol"))
+    opt_iv = _fmt_num(row.get("option_iv"))
+    opt_expiry = _format_expiry(row.get("option_expiry"))
+    opt_expiry_source = str(row.get("option_expiry_source", "") or "").upper()
+    if opt_expiry and opt_expiry_source == "EST":
+        opt_expiry = opt_expiry + " (est)"
+
+    lots = str(row.get("lots", "") or "").strip()
+    qty = str(row.get("quantity", "") or "").strip()
+    value = _fmt_num(row.get("order_value"))
+    ts = _format_ts_ist(row.get("timestamp") or row.get("entry_time"))
+
+    extra = ""
+    if refresh_seconds >= 60:
+        extra = f" (next update in {refresh_seconds // 60} min)"
+    elif refresh_seconds > 0:
+        extra = f" (next update in {refresh_seconds} sec)"
+
+    parts: list[str] = [
+        "Trade Signal",
+        "",
+        f"Strategy: {strategy}",
+        f"Symbol: {symbol}",
+        f"Side: {side}",
+    ]
+    if entry != "-":
+        parts.append(f"Entry: {entry}")
+    if sl != "-":
+        parts.append(f"SL: {sl}")
+    if target != "-":
+        parts.append(f"Target: {target}")
+    if option:
+        parts.append(f"Option: {option}")
+    if opt_expiry:
+        parts.append(f"Expiry: {opt_expiry}")
+    if opt_ltp != "-":
+        parts.append(f"LTP: {opt_ltp}")
+    if opt_oi != "-":
+        parts.append(f"OI: {opt_oi}")
+    if opt_vol != "-":
+        parts.append(f"Vol: {opt_vol}")
+    if opt_iv != "-":
+        parts.append(f"IV: {opt_iv}")
+    if lots and qty:
+        parts.append(f"Lots: {lots} (Qty: {qty})")
+    if value != "-":
+        parts.append(f"Value: {value}")
+    parts.append(f"Time: {ts}{extra}")
+
     try:
-        payload = dict(row)
-        payload.setdefault("strategy", strategy)
-        payload.setdefault("symbol", symbol)
-        payload.setdefault("refresh_seconds", refresh_seconds)
-        summary = build_trade_summary([payload])
-        send_telegram_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, summary)
+        send_telegram_message(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, "`n".join(parts))
     except Exception:
         return
 
@@ -400,13 +520,14 @@ def run_strategy(*, strategy: str, candles: pd.DataFrame, capital: float, risk_p
             item.setdefault("timestamp", item.get("timestamp", ""))
             item.setdefault("strategy", "INDICATOR")
             mapped.append(item)
-        rows = mapped
+        rows = _attach_indicator_trade_levels(mapped, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct))
     elif strategy_name == "One Trade/Day":
         rows = generate_one_trade_day_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), config=IndicatorConfig(), trailing_sl_pct=float(trailing_sl_pct))
     elif strategy_name == "MTF 5m":
         rows = generate_mtf_trade_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct), ema_period=int(mtf_ema_period), setup_mode=str(mtf_setup_mode), require_retest_strength=bool(mtf_retest_strength), max_trades_per_day=int(mtf_max_trades_per_day))
     else:
         rows = generate_breakout_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct))
+
     normalized: list[dict[str, object]] = []
     for idx, row in enumerate(rows, start=1):
         item = dict(row)
@@ -416,10 +537,30 @@ def run_strategy(*, strategy: str, candles: pd.DataFrame, capital: float, risk_p
         item.setdefault("trade_label", f"Trade {idx}")
         item.setdefault("entry_time", item.get("timestamp", ""))
         normalized.append(item)
-    actionable = [r for r in normalized if str(r.get("side", "")).upper() in {"BUY", "SELL"}]
-    if actionable:
-        normalized = attach_option_strikes(actionable, strike_step=int(strike_step), moneyness=str(moneyness), steps=int(strike_steps))
-    return normalized
+
+    actionable = [dict(r) for r in normalized if str(r.get("side", "")).upper() in {"BUY", "SELL"}]
+    if not actionable:
+        return normalized
+
+    actionable = attach_option_strikes(actionable, strike_step=int(strike_step), moneyness=str(moneyness), steps=int(strike_steps))
+    actionable = _attach_option_metrics(actionable, symbol=str(symbol), fetch_option_metrics=bool(fetch_option_metrics))
+    keyed_actionable = {
+        f"{row.get('trade_no', '')}|{row.get('entry_time', row.get('timestamp', ''))}|{row.get('side', '')}": row
+        for row in actionable
+    }
+
+    merged: list[dict[str, object]] = []
+    for row in normalized:
+        key = f"{row.get('trade_no', '')}|{row.get('entry_time', row.get('timestamp', ''))}|{row.get('side', '')}"
+        enriched = keyed_actionable.get(key)
+        if enriched is not None:
+            updated = dict(row)
+            updated.update(enriched)
+            merged.append(updated)
+        else:
+            merged.append(row)
+    return merged
+
 def _render_sidebar_shell() -> None:
     st.markdown(
         """
@@ -1769,7 +1910,7 @@ def _render_desk_summary_page(workspace: str, strategy: str, content_view: str, 
 
 
 def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: str, last_signal_side: str) -> None:
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Live Signals</div><div class="section-copy">Review the current live setup count and the latest strategy signal state with contract details.</div></div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Live Signals</div><div class="section-copy">Review current setup count, latest signal, and option contract details.</div></div>', unsafe_allow_html=True)
     signal_count = len(signal_rows)
     latest_signal = dict(signal_rows[-1]) if signal_rows else {}
 
@@ -2446,6 +2587,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

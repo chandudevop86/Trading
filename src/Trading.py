@@ -639,6 +639,13 @@ def _render_sidebar_shell() -> None:
             padding-top: 0.55rem;
             padding-left: 0.75rem;
             padding-right: 0.75rem;
+            transform-origin: top left;
+        }
+        @media (min-width: 1200px) {
+            [data-testid="stAppViewContainer"] .main .block-container {
+                zoom: 0.75;
+                width: 125%;
+            }
         }
         [data-testid="stAppViewContainer"] [data-testid="stMetric"] {
             background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(9,14,26,0.96));
@@ -988,10 +995,16 @@ def _render_sidebar_shell() -> None:
         }
         [data-testid="stAppViewContainer"] .main .block-container {
             max-width: none;
-            max-width: 1480px;
             padding-top: 0.55rem;
             padding-left: 0.75rem;
             padding-right: 0.75rem;
+            transform-origin: top left;
+        }
+        @media (min-width: 1200px) {
+            [data-testid="stAppViewContainer"] .main .block-container {
+                zoom: 0.75;
+                width: 125%;
+            }
         }
         h1, h2, h3, h4, h5, h6, p, label, span, div {
             color: #e5eef8;
@@ -1803,6 +1816,52 @@ def _format_volume_metric(symbol: str, candles: pd.DataFrame) -> tuple[str, str]
         return "-", "Index volume unavailable"
     return "0", "Latest candle"
 
+
+def _build_watchlist_candidates(candles: pd.DataFrame, strategy: str, symbol: str, limit: int = 3) -> list[dict[str, object]]:
+    if candles is None or candles.empty:
+        return []
+
+    df = candles.copy().tail(max(limit * 6, 12)).reset_index(drop=True)
+    for col in ["open", "high", "low", "close"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.dropna(subset=["open", "high", "low", "close"])
+    if df.empty:
+        return []
+
+    df["range"] = (df["high"] - df["low"]).abs()
+    df["body"] = (df["close"] - df["open"]).abs()
+    df["score"] = (df["body"] * 1.4) + df["range"]
+    ranked = df.sort_values(["score", "timestamp"], ascending=[False, False]).head(limit)
+
+    watchlist: list[dict[str, object]] = []
+    for idx, row in enumerate(ranked.itertuples(index=False), start=1):
+        close_price = float(getattr(row, "close", 0.0) or 0.0)
+        open_price = float(getattr(row, "open", 0.0) or 0.0)
+        high_price = float(getattr(row, "high", 0.0) or 0.0)
+        low_price = float(getattr(row, "low", 0.0) or 0.0)
+        side = "BUY" if close_price >= open_price else "SELL"
+        stop_loss = low_price if side == "BUY" else high_price
+        risk = abs(close_price - stop_loss)
+        if risk <= 0:
+            risk = max(close_price * 0.002, 1.0)
+            stop_loss = close_price - risk if side == "BUY" else close_price + risk
+        target_price = close_price + (risk * 2.0) if side == "BUY" else close_price - (risk * 2.0)
+        watchlist.append(
+            {
+                "trade_label": f"Setup {idx}",
+                "strategy": str(strategy).upper().replace(" ", "_"),
+                "symbol": symbol,
+                "entry_time": str(getattr(row, "timestamp", "")),
+                "side": side,
+                "entry_price": round(close_price, 2),
+                "stop_loss": round(float(stop_loss), 2),
+                "target_price": round(float(target_price), 2),
+                "setup_status": "WATCHLIST",
+                "setup_reason": "Recent high-momentum candle from current market data.",
+                "execution_ready": "NO",
+            }
+        )
+    return watchlist
 def _render_hero_strip(
     symbol: str,
     last_price: object,
@@ -1976,7 +2035,7 @@ def _render_desk_summary_page(workspace: str, strategy: str, content_view: str, 
     cols[4].metric("Account", str(account_status))
 
 
-def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: str, last_signal_side: str) -> None:
+def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: str, last_signal_side: str, watchlist_rows: list[dict[str, object]] | None = None) -> None:
     st.caption("Live Signals: current setup count, latest signal, and contract details.")
     signal_count = len(signal_rows)
     latest_signal = dict(signal_rows[-1]) if signal_rows else {}
@@ -1988,6 +2047,9 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
 
     if not latest_signal:
         st.info("No actionable BUY/SELL signal is available yet for the selected strategy.")
+        if watchlist_rows:
+            st.caption("Top setup ideas from current market data")
+            st.dataframe(pd.DataFrame(watchlist_rows), width="stretch", hide_index=True, height=180)
         return
 
     detail_cols = st.columns(4)
@@ -2130,9 +2192,31 @@ def main() -> None:
 
     if content_view == "Home":
         st.caption("Simple Main Page")
-    symbol = "^NSEI"
-    interval = "1m"
-    period = "1d"
+    symbol = str(st.session_state.get("symbol", "^NSEI"))
+    interval = str(st.session_state.get("interval", "5m"))
+    period = str(st.session_state.get("period", "1d"))
+
+    st.caption("Chart Review")
+    review_col1, review_col2, review_col3 = st.columns([1.2, 1.2, 1.0])
+    with review_col1:
+        symbol = st.text_input("Symbol", symbol, key="global_symbol")
+    with review_col2:
+        interval = st.segmented_control(
+            "Timeframe",
+            ["1m", "5m", "15m", "30m", "1h"],
+            default="5m" if strategy == "MTF 5m" else interval,
+            key="global_interval",
+            disabled=(strategy == "MTF 5m"),
+            width="content",
+        )
+    with review_col3:
+        period = st.segmented_control(
+            "Period",
+            ["1d", "5d", "1mo", "3mo"],
+            default=period,
+            key="global_period",
+            width="content",
+        )
     execution_mode = "PAPER"
     instrument_mode = "Options"
     lot_size = 65
@@ -2302,6 +2386,7 @@ def main() -> None:
 
     latest_sidebar_price = candles["close"].iloc[-1] if not candles.empty else "-"
     signal_rows = [r for r in output_rows if str(r.get("side", "")).upper() in {"BUY", "SELL"}]
+    watchlist_rows = _build_watchlist_candidates(candles, str(strategy), str(symbol), limit=3) if not signal_rows else []
     last_signal_side = str(signal_rows[-1].get("side", "-")) if signal_rows else "-"
     if send_telegram and output_rows and not auto_execute_generated:
         latest = None
@@ -2427,7 +2512,7 @@ def main() -> None:
             market_status=market_status,
         )
     if content_view == "Live Signals":
-        _render_live_signals_page(signal_rows, str(strategy), str(last_signal_side))
+        _render_live_signals_page(signal_rows, str(strategy), str(last_signal_side), watchlist_rows)
     if content_view == "Paper & Live":
         _render_paper_live_page(str(execution_mode), account_status)
     if content_view == "Routing Status":
@@ -2585,6 +2670,9 @@ def main() -> None:
                         st.caption("Preview the exact Dhan live-order payloads here before sending them to the broker.")
         else:
             st.info("No execution candidates are available for the current strategy output.")
+            if watchlist_rows:
+                st.caption("Top setup ideas from current market data")
+                st.dataframe(pd.DataFrame(watchlist_rows), width="stretch", hide_index=True, height=180)
     
         c1, c2, c3 = st.columns(3)
         with c1:

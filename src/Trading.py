@@ -1139,12 +1139,12 @@ def _render_sidebar_shell() -> None:
         }
         .dhan-hero-shell {
             display: flex;
-            width: min(1180px, 96%);
+            width: min(980px, 92%);
             margin: 0 auto;
             flex-direction: column;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
-            text-align: center;
+            text-align: left;
             min-height: 620px;
             gap: 24px;
         }
@@ -1186,7 +1186,7 @@ def _render_sidebar_shell() -> None:
         }
         .dhan-hero-banner {
             margin-top: 58px;
-            width: min(900px, 92%);
+            width: min(760px, 100%);
             border-radius: 24px;
             border: 1px solid rgba(111, 155, 255, 0.6);
             background: linear-gradient(180deg, rgba(18,25,38,0.94), rgba(16,22,34,0.94));
@@ -1210,6 +1210,8 @@ def _render_sidebar_shell() -> None:
             font-size: 30px;
             line-height: 1.5;
         }
+        .dhan-hero-banner-copy .hero-banner-line {
+            display: block;
         }
         .breadcrumb-list {
             display: flex;

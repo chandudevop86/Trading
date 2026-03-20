@@ -1587,7 +1587,7 @@ def _render_page_masthead(
                     <div class="dhan-hero-subtitle"><span class="hero-sub-line">Available exclusively for</span><span class="hero-sub-line">KRSH Solutions users!</span></div>
                     <div class="dhan-hero-banner">
                         <div class="dhan-hero-badge">1st Time in India</div>
-                        <div class="dhan-hero-banner-copy">Now trade in Options from TradingView.com, powered by KRSH desk workflows.</div>
+                        <div class="dhan-hero-banner-copy"><span class="hero-banner-line">Now trade in Options from TradingView.com,</span><span class="hero-banner-line">powered by KRSH desk workflows.</span></div>
                     </div>
                 </div>
             </div>
@@ -2424,4 +2424,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 

@@ -528,14 +528,14 @@ def _render_dhan_status_panel(symbol: str, security_map_path: str, execution_mod
         {"check": "Symbol", "status": str(symbol), "detail": "Current live symbol context."},
         {"check": "Security map path", "status": str(security_map_path), "detail": "CSV used to map option/future contracts to Dhan security IDs."},
     ]
-    st.dataframe(pd.DataFrame(status_rows), width="stretch", hide_index=True, height=120)
+    st.dataframe(pd.DataFrame(status_rows), width="stretch", hide_index=True)
 
 def _render_live_execution_feedback(rows: list[dict[str, object]]) -> None:
     if not rows:
         return
     st.markdown('<div class="section-shell" style="margin-top:6px;">', unsafe_allow_html=True)
     st.markdown('<div class="section-heading">Live Execution Feedback</div><div class="section-copy">Latest broker-side execution rows from this run.</div>', unsafe_allow_html=True)
-    st.dataframe(_order_trade_columns(pd.DataFrame(rows)), width="stretch", height=150)
+    st.dataframe(_order_trade_columns(pd.DataFrame(rows)), width="stretch")
     st.markdown('</div>', unsafe_allow_html=True)
 
 def attach_lots(rows: list[dict[str, object]], lot_size: int, lots: int) -> list[dict[str, object]]:
@@ -2049,7 +2049,7 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
         st.info("No actionable BUY/SELL signal is available yet for the selected strategy.")
         if watchlist_rows:
             st.caption("Top setup ideas from current market data")
-            st.dataframe(pd.DataFrame(watchlist_rows), width="stretch", hide_index=True, height=130)
+            st.dataframe(pd.DataFrame(watchlist_rows), width="stretch", hide_index=True)
         return
 
     detail_cols = st.columns(4)
@@ -2079,7 +2079,7 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
         "order_value": latest_signal.get("order_value", "-"),
     }
     st.caption("Latest actionable signal")
-    st.dataframe(pd.DataFrame([latest_view]), width="stretch", hide_index=True, height=90)
+    st.dataframe(pd.DataFrame([latest_view]), width="stretch", hide_index=True)
 
     history_cols = [
         "trade_label",
@@ -2098,7 +2098,7 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
     ]
     history_rows = [{k: row.get(k, "") for k in history_cols} for row in signal_rows[-8:]]
     st.caption("Recent actionable signals")
-    st.dataframe(pd.DataFrame(history_rows), width="stretch", hide_index=True, height=130)
+    st.dataframe(pd.DataFrame(history_rows), width="stretch", hide_index=True)
 
 def _render_paper_live_page(execution_mode: str, account_status: str) -> None:
     st.caption("Paper & Live: current execution mode and desk readiness.")
@@ -2569,7 +2569,7 @@ def main() -> None:
         c4.metric("Volume", latest_volume_text, latest_volume_note)
     
         if not candles.empty:
-            st.dataframe(candles.tail(6), width="stretch", height=130)
+            st.dataframe(candles.tail(6), width="stretch")
         else:
             st.warning("No candle data available.")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -2619,7 +2619,7 @@ def main() -> None:
             with right:
                 st.markdown("**Market Depth View**")
                 depth_df = build_market_depth_summary(candles)
-                st.dataframe(depth_df, width="stretch", hide_index=True, height=110)
+                st.dataframe(depth_df, width="stretch", hide_index=True)
                 st.caption(f"Price spread between support and resistance bands: {levels['spread']:.2f}")
         else:
             st.info("No chart data available.")
@@ -2637,7 +2637,7 @@ def main() -> None:
         if output_rows:
             trades_df = pd.DataFrame(output_rows)
             with st.expander(f"Generated Trades ({len(trades_df)})", expanded=False):
-                st.dataframe(trades_df.tail(12), width="stretch", height=150)
+                st.dataframe(trades_df.tail(12), width="stretch")
 
             with st.expander("Trade Summary", expanded=False):
                 try:
@@ -2655,7 +2655,7 @@ def main() -> None:
         if execution_candidates:
             st.caption("Current executable candidates generated from the latest strategy run.")
             with st.expander(f"Execution Candidates ({len(execution_candidates)})", expanded=False):
-                st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), width="stretch", height=150)
+                st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), width="stretch")
             if execution_mode == "LIVE":
                 with st.expander("Dhan Live Payload Preview"):
                     if st.button("Preview Live Payloads", width="stretch"):
@@ -2672,7 +2672,7 @@ def main() -> None:
             st.info("No execution candidates are available for the current strategy output.")
             if watchlist_rows:
                 st.caption("Top setup ideas from current market data")
-                st.dataframe(pd.DataFrame(watchlist_rows), width="stretch", hide_index=True, height=130)
+                st.dataframe(pd.DataFrame(watchlist_rows), width="stretch", hide_index=True)
     
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -2694,7 +2694,7 @@ def main() -> None:
             st.success(f"Reviewed queue ready: {len(staged_candidates)} actionable trade(s) available for execution.")
             st.caption("Only this staged reviewed queue can be executed manually or by auto execute.")
             with st.expander(f"Reviewed Queue ({len(staged_candidates)})", expanded=True):
-                st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), width="stretch", height=110)
+                st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), width="stretch")
 
             executed_rows: list[dict[str, object]] = []
             if st.button("Execute Reviewed Trades", type="primary", width="stretch"):

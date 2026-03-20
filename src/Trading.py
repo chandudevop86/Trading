@@ -1751,7 +1751,7 @@ def _render_page_masthead(
     open_trades: int,
     account_status: str,
 ) -> None:
-    section_tabs = ["Home", "Live Signals", "Market", "Strategy", "Trades", "Desk Controls", "Downloads"]
+    section_tabs = ["Home", "Live Signals", "Paper & Live", "Routing Status", "Execution Style", "Instrument Focus", "Market", "Strategy", "Trades", "Desk Controls", "Downloads"]
 
     st.markdown(
         """
@@ -2156,7 +2156,7 @@ def main() -> None:
     strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
     strategy = str(st.session_state.get("strategy", "Breakout"))
 
-    content_options = ["Home", "Live Signals", "Market", "Strategy", "Trades", "Desk Controls", "Downloads"]
+    content_options = ["Home", "Live Signals", "Paper & Live", "Routing Status", "Execution Style", "Instrument Focus", "Market", "Strategy", "Trades", "Desk Controls", "Downloads"]
     if st.session_state.get("content_view") not in content_options:
         st.session_state["content_view"] = "Home"
     content_view = str(st.session_state["content_view"])

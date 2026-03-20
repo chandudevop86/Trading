@@ -835,7 +835,7 @@ def _render_sidebar_shell() -> None:
             background: linear-gradient(180deg, #050505 0%, #090909 100%);
             border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: 0;
-            padding: 24px 28px 30px 28px;
+            padding: 16px 20px 20px 20px;
             margin-bottom: 18px;
             box-shadow: 0 24px 50px rgba(0, 0, 0, 0.34);
             overflow: hidden;
@@ -1157,7 +1157,7 @@ def _render_sidebar_shell() -> None:
             position: relative;
             z-index: 2;
             display: block;
-            padding: 46px 24px 24px 24px;
+            padding: 18px 8px 8px 8px;
         }
         .dhan-hero-shell {
             display: flex;
@@ -1167,7 +1167,7 @@ def _render_sidebar_shell() -> None:
             align-items: flex-start;
             justify-content: center;
             text-align: left;
-            min-height: 420px;
+            min-height: 260px;
             gap: 24px;
         }
         .dhan-hero-icon {
@@ -1915,7 +1915,7 @@ def main() -> None:
     strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
 
     st.markdown('<div class="top-tab-shell"><div class="top-tab-title">Desk Navigation</div><div class="top-tab-copy">Use one compact row of side-by-side tabs for workspace, strategy, and page content.</div></div>', unsafe_allow_html=True)
-    nav_col1, nav_col2, nav_col3 = st.columns([1.1, 1.45, 1.2])
+    nav_col1, nav_col2, nav_col3 = st.columns([1.1, 1.25, 0.95])
     with nav_col1:
         st.caption("Workspace")
         workspace = st.segmented_control("Workspace", workspace_options, default="Desk", label_visibility="collapsed")
@@ -1932,7 +1932,7 @@ def main() -> None:
         st.session_state["content_view"] = "Home"
     with nav_col3:
         st.caption("Open section")
-        content_view = st.segmented_control(
+        content_view = st.selectbox(
             "Open section",
             content_options,
             key="content_view",
@@ -2470,6 +2470,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

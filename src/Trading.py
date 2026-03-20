@@ -2519,15 +2519,15 @@ def main() -> None:
             h3.metric("Support Band", f"{levels['support_low']:.2f}-{levels['support_high']:.2f}")
             h4.metric("Resistance Band", f"{levels['resistance_low']:.2f}-{levels['resistance_high']:.2f}")
     
-            left, right = st.columns([4.4, 1.6])
+            left, right = st.columns([5.6, 1.0])
             with left:
                 chart = build_live_market_chart(candles, output_rows=output_rows)
-                st.altair_chart(chart, width="stretch", height=360)
+                st.altair_chart(chart, width="stretch", height=420)
                 st.caption("Standard candlestick chart with volume and optional BUY/SELL or CE/PE trade markers.")
             with right:
                 st.markdown("**Market Depth View**")
                 depth_df = build_market_depth_summary(candles)
-                st.dataframe(depth_df, width="stretch", hide_index=True, height=180)
+                st.dataframe(depth_df, width="stretch", hide_index=True, height=140)
                 st.caption(f"Price spread between support and resistance bands: {levels['spread']:.2f}")
         else:
             st.info("No chart data available.")

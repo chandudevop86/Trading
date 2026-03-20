@@ -639,13 +639,6 @@ def _render_sidebar_shell() -> None:
             padding-top: 0.20rem;
             padding-left: 0.35rem;
             padding-right: 0.35rem;
-            transform-origin: top left;
-        }
-        @media (min-width: 1200px) {
-            [data-testid="stAppViewContainer"] .main .block-container {
-                zoom: 0.60;
-                width: 168%;
-            }
         }
         [data-testid="stAppViewContainer"] [data-testid="stMetric"] {
             background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(9,14,26,0.96));
@@ -998,13 +991,6 @@ def _render_sidebar_shell() -> None:
             padding-top: 0.20rem;
             padding-left: 0.35rem;
             padding-right: 0.35rem;
-            transform-origin: top left;
-        }
-        @media (min-width: 1200px) {
-            [data-testid="stAppViewContainer"] .main .block-container {
-                zoom: 0.60;
-                width: 168%;
-            }
         }
         h1, h2, h3, h4, h5, h6, p, label, span, div {
             color: #e5eef8;

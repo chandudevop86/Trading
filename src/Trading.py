@@ -636,15 +636,15 @@ def _render_sidebar_shell() -> None:
         }
         [data-testid="stAppViewContainer"] .main .block-container {
             max-width: none;
-            padding-top: 0.55rem;
-            padding-left: 0.75rem;
-            padding-right: 0.75rem;
+            padding-top: 0.20rem;
+            padding-left: 0.35rem;
+            padding-right: 0.35rem;
             transform-origin: top left;
         }
         @media (min-width: 1200px) {
             [data-testid="stAppViewContainer"] .main .block-container {
-                zoom: 0.70;
-                width: 132%;
+                zoom: 0.60;
+                width: 168%;
             }
         }
         [data-testid="stAppViewContainer"] [data-testid="stMetric"] {
@@ -995,15 +995,15 @@ def _render_sidebar_shell() -> None:
         }
         [data-testid="stAppViewContainer"] .main .block-container {
             max-width: none;
-            padding-top: 0.55rem;
-            padding-left: 0.75rem;
-            padding-right: 0.75rem;
+            padding-top: 0.20rem;
+            padding-left: 0.35rem;
+            padding-right: 0.35rem;
             transform-origin: top left;
         }
         @media (min-width: 1200px) {
             [data-testid="stAppViewContainer"] .main .block-container {
-                zoom: 0.70;
-                width: 132%;
+                zoom: 0.60;
+                width: 168%;
             }
         }
         h1, h2, h3, h4, h5, h6, p, label, span, div {
@@ -2589,14 +2589,14 @@ def main() -> None:
             move_prefix = "+" if latest_move > 0 else ""
             st.markdown(
                 f"""
-                <div style=\"background:#f8fafc;border:1px solid #dbe4ee;border-radius:18px;padding:10px 12px;margin-bottom:8px;box-shadow:0 10px 24px rgba(15,23,42,0.05);\"> 
+                <div style=\"background:#f8fafc;border:1px solid #dbe4ee;border-radius:18px;padding:6px 8px;margin-bottom:4px;box-shadow:0 10px 24px rgba(15,23,42,0.05);\"> 
                     <div style=\"display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;\">
                         <div>
                             <div style=\"color:#64748b;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;\">Live Price</div>
-                            <div style=\"color:#0f172a;font-size:18px;font-weight:700;line-height:1.05;\">{levels['last_price']:.2f}</div>
+                            <div style=\"color:#0f172a;font-size:14px;font-weight:700;line-height:1.05;\">{levels['last_price']:.2f}</div>
                         </div>
                         <div style=\"text-align:right;\">
-                            <div style=\"color:{move_color};font-size:18px;font-weight:700;\">{move_prefix}{latest_move:.2f}</div>
+                            <div style=\"color:{move_color};font-size:14px;font-weight:700;\">{move_prefix}{latest_move:.2f}</div>
                             <div style=\"color:#64748b;font-size:12px;\">vs previous candle close</div>
                         </div>
                     </div>
@@ -2614,7 +2614,7 @@ def main() -> None:
             left, right = st.columns([5.6, 1.0])
             with left:
                 chart = build_live_market_chart(candles, output_rows=output_rows)
-                st.altair_chart(chart, width="stretch", height=320)
+                st.altair_chart(chart, width="stretch", height=240)
                 st.caption("Standard candlestick chart with volume and optional BUY/SELL or CE/PE trade markers.")
             with right:
                 st.markdown("**Market Depth View**")

@@ -1966,36 +1966,22 @@ def _render_dhan_feature_sections(
     auto_execute: bool,
 ) -> None:
     auto_text = "Auto execution enabled" if auto_execute else "Manual review before send"
-    st.markdown(
-        f"""
-        <div class="section-shell" style="margin-bottom:14px;">
-            <div class="section-heading">Experience the True Potential of Charts</div>
-            <div class="section-copy">Chart-first execution inspired by Dhan's connect layout, mapped to your live KRSH SOLUTIONS data.</div>
-            <div class="hero-chip-row">
-                <div class="hero-chip"><div class="hero-chip-label">Live Signals</div><div class="hero-chip-meta">{int(signal_count)} setups from {strategy}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Paper & Live</div><div class="hero-chip-meta">Current mode: {execution_mode}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Routing Status</div><div class="hero-chip-meta">{account_status}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Execution Style</div><div class="hero-chip-meta">{auto_text}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Instrument Focus</div><div class="hero-chip-meta">{symbol}</div></div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.caption("Quick Sections")
 
-    action_cols = st.columns(5)
     actions = [
-        ("Live Signals", "Live Signals"),
-        ("Paper & Live", "Paper & Live"),
-        ("Routing Status", "Routing Status"),
-        ("Execution Style", "Execution Style"),
-        ("Instrument Focus", "Instrument Focus"),
+        ("Live Signals", f"{int(signal_count)} setups from {strategy}", "Live Signals"),
+        ("Paper & Live", f"Current mode: {execution_mode}", "Paper & Live"),
+        ("Routing Status", f"{account_status}", "Routing Status"),
+        ("Execution Style", auto_text, "Execution Style"),
+        ("Instrument Focus", f"{symbol}", "Instrument Focus"),
     ]
-    for col, (label, section_name) in zip(action_cols, actions):
+    action_cols = st.columns(5)
+    for col, (label, meta, section_name) in zip(action_cols, actions):
         with col:
-            if st.button(f"Open {label}", key=f"open_{section_name.lower().replace(' ', '_')}", width="stretch"):
+            if st.button(label, key=f"home_tile_{section_name.lower().replace(' ', '_')}", width="stretch"):
                 st.session_state["content_view"] = section_name
                 st.rerun()
+            st.caption(meta)
 
 
 

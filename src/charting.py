@@ -165,12 +165,38 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
     df = _prepare_price_frame(candles)
     if df.empty:
         return alt.Chart(pd.DataFrame({"timestamp": [], "close": []})).mark_line()
+
     df["candle_color"] = df.apply(lambda row: UP_COLOR if row["close"] >= row["open"] else DOWN_COLOR, axis=1)
     signal_df = _signal_frame(output_rows)
 
-    base = alt.Chart(df).encode(
-        x=alt.X("timestamp:T", title="Time", axis=alt.Axis(labelColor="#cbd5e1", titleColor="#cbd5e1", grid=False))
+    time_axis = alt.Axis(
+        labelColor="#cbd5e1",
+        titleColor="#cbd5e1",
+        grid=False,
+        format="%H:%M",
+        tickCount=8,
+        labelAngle=0,
+        labelOverlap="greedy",
     )
+    price_axis = alt.Axis(
+        labelColor="#cbd5e1",
+        titleColor="#cbd5e1",
+        gridColor="#1e293b",
+        format=",.2f",
+        tickCount=8,
+    )
+    volume_axis = alt.Axis(
+        labelColor="#94a3b8",
+        titleColor="#94a3b8",
+        gridColor="#172033",
+        format=",.0f",
+        tickCount=6,
+    )
+
+    base = alt.Chart(df).encode(
+        x=alt.X("timestamp:T", title="Time", axis=time_axis)
+    )
+
     wick = base.mark_rule(strokeWidth=1.2).encode(
         y=alt.Y("low:Q", title="Price", axis=price_axis, scale=alt.Scale(zero=False, nice=True)),
         y2="high:Q",
@@ -184,6 +210,7 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
             alt.Tooltip("volume:Q", format=",.0f", title="Volume"),
         ],
     )
+
     body = base.mark_bar(size=10).encode(
         y=alt.Y("open:Q", scale=alt.Scale(zero=False, nice=True)),
         y2="close:Q",
@@ -193,8 +220,8 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
     layers: list[alt.Chart] = [wick, body]
     if not signal_df.empty:
         signal_points = alt.Chart(signal_df).mark_point(filled=True, size=100).encode(
-            x="timestamp:T",
-            y="price:Q",
+            x=alt.X("timestamp:T", axis=time_axis),
+            y=alt.Y("price:Q", axis=price_axis, scale=alt.Scale(zero=False, nice=True)),
             shape=alt.Shape("marker:N", scale=alt.Scale(domain=["BUY", "SELL", "CE", "PE"], range=["triangle-up", "triangle-down", "diamond", "square"]), legend=None),
             color=alt.Color("marker:N", scale=alt.Scale(domain=["BUY", "SELL", "CE", "PE"], range=[BUY_COLOR, SELL_COLOR, CE_COLOR, PE_COLOR]), legend=None),
             tooltip=[
@@ -209,10 +236,13 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
 
     price_panel = alt.layer(*layers).properties(height=430)
     volume = alt.Chart(df).mark_bar(opacity=0.78).encode(
-        x=alt.X("timestamp:T", title=""),
-        y=alt.Y("volume:Q", title="Volume", axis=alt.Axis(labelColor="#94a3b8", titleColor="#94a3b8", gridColor="#172033")),
+        x=alt.X("timestamp:T", title="", axis=time_axis),
+        y=alt.Y("volume:Q", title="Volume", axis=volume_axis, scale=alt.Scale(zero=True, nice=True)),
         color=alt.Color("candle_color:N", scale=None, legend=None),
-        tooltip=[alt.Tooltip("timestamp:T", title="Time"), alt.Tooltip("volume:Q", format=",.0f", title="Volume")],
+        tooltip=[
+            alt.Tooltip("timestamp:T", title="Time"),
+            alt.Tooltip("volume:Q", format=",.0f", title="Volume"),
+        ],
     ).properties(height=120)
-    return alt.vconcat(price_panel, volume, spacing=10).resolve_scale(x="shared").configure_view(stroke=None).configure(background="#0b1220")
 
+    return alt.vconcat(price_panel, volume, spacing=10).resolve_scale(x="shared").configure_view(stroke=None).configure(background="#0b1220")

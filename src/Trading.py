@@ -186,6 +186,75 @@ def _to_csv(rows: list[dict]) -> str:
     writer.writerows(rows)
     return buffer.getvalue()
 
+def _format_expiry(expiry: object) -> str:
+    if expiry is None:
+        return ""
+    text = str(expiry).strip()
+    if not text or text in {"-", "N/A"}:
+        return ""
+    for fmt in ("%Y-%m-%d", "%d-%b-%Y"):
+        try:
+            return datetime.strptime(text, fmt).date().isoformat()
+        except Exception:
+            pass
+    return text
+
+
+def _estimate_weekly_expiry(symbol: str, now: datetime | None = None) -> str:
+    s = (symbol or "").strip().upper()
+    if s in {"^NSEI", "NIFTY", "NIFTY 50", "NIFTY50"}:
+        tz = ZoneInfo("Asia/Kolkata")
+        dt = now or datetime.now(tz)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz)
+        days_ahead = (3 - dt.weekday()) % 7
+        expiry = dt.date() + timedelta(days=days_ahead)
+        return expiry.isoformat()
+    return ""
+
+
+def _attach_option_metrics(rows: list[dict[str, object]], symbol: str, fetch_option_metrics: bool) -> list[dict[str, object]]:
+    if not rows:
+        return rows
+
+    metrics_map: dict[tuple[int, str], dict[str, object]] = {}
+    if fetch_option_metrics and fetch_option_chain and extract_option_records and build_metrics_map and normalize_index_symbol:
+        try:
+            sym = normalize_index_symbol(symbol)
+            payload = fetch_option_chain(sym, timeout=10.0)
+            records = extract_option_records(payload)
+            metrics_map = build_metrics_map(records)
+        except Exception:
+            metrics_map = {}
+
+    enriched: list[dict[str, object]] = []
+    for item in rows:
+        row = dict(item)
+        strike_raw = row.get("strike_price", row.get("option_strike", ""))
+        option_type = str(row.get("option_type", "") or "").upper()
+        try:
+            strike = int(float(strike_raw))
+        except Exception:
+            strike = 0
+
+        metrics = metrics_map.get((strike, option_type), {}) if strike and option_type else {}
+        if isinstance(metrics, dict) and metrics:
+            row.update(metrics)
+            if metrics.get("option_expiry"):
+                row["option_expiry_source"] = "NSE"
+
+        if not row.get("option_expiry") and row.get("option_strike"):
+            est = _estimate_weekly_expiry(symbol)
+            if est:
+                row["option_expiry"] = est
+                row["option_expiry_source"] = "EST"
+
+        if row.get("option_expiry"):
+            row["option_expiry"] = _format_expiry(row.get("option_expiry"))
+        enriched.append(row)
+    return enriched
+
+
 def _order_trade_columns(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return df
@@ -2087,7 +2156,7 @@ def main() -> None:
             market_status=market_status,
         )
     if content_view == "Live Signals":
-        _render_live_signals_page(len(signal_rows), str(strategy), str(last_signal_side))
+        _render_live_signals_page(signal_rows, str(strategy), str(last_signal_side))
     if content_view == "Paper & Live":
         _render_paper_live_page(str(execution_mode), account_status)
     if content_view == "Routing Status":
@@ -2325,6 +2394,10 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
 
 

@@ -1984,6 +1984,15 @@ def _render_home_intro(symbol: str, strategy: str, execution_mode: str, last_pri
         """,
         unsafe_allow_html=True,
     )
+    action_cols = st.columns(2)
+    with action_cols[0]:
+        if st.button("Open Market Chart", key="home_open_market", width="stretch"):
+            st.session_state["content_view"] = "Market"
+            st.rerun()
+    with action_cols[1]:
+        if st.button("Open Desk Controls", key="home_open_controls", width="stretch"):
+            st.session_state["content_view"] = "Desk Controls"
+            st.rerun()
 
 def _render_page_footer() -> None:
     st.caption("KRSH Solutions desk workspace")
@@ -2780,6 +2789,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
 
 
 

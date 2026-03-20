@@ -514,7 +514,7 @@ def _render_dhan_status_panel(symbol: str, security_map_path: str, execution_mod
     reviewed_count = len(reviewed_candidates)
     live_ready = str(execution_mode).upper() == "LIVE" and client_id_present and access_token_present and security_map_exists and builder_ready and reviewed_count > 0
 
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Dhan Status</div><div class="section-copy">Check credentials, security map, payload builder, and whether the current reviewed queue is ready for live routing.</div></div>', unsafe_allow_html=True)
+    st.caption("Dhan Status: credentials, security map, payload builder, and reviewed queue readiness.")
     cols = st.columns(5)
     cols[0].metric("Client ID", "Ready" if client_id_present else "Missing")
     cols[1].metric("Access Token", "Ready" if access_token_present else "Missing")
@@ -528,12 +528,12 @@ def _render_dhan_status_panel(symbol: str, security_map_path: str, execution_mod
         {"check": "Symbol", "status": str(symbol), "detail": "Current live symbol context."},
         {"check": "Security map path", "status": str(security_map_path), "detail": "CSV used to map option/future contracts to Dhan security IDs."},
     ]
-    st.dataframe(pd.DataFrame(status_rows), width="stretch", hide_index=True)
+    st.dataframe(pd.DataFrame(status_rows), width="stretch", hide_index=True, height=160)
 
 def _render_live_execution_feedback(rows: list[dict[str, object]]) -> None:
     if not rows:
         return
-    st.markdown('<div class="section-shell" style="margin-top:12px;">', unsafe_allow_html=True)
+    st.markdown('<div class="section-shell" style="margin-top:6px;">', unsafe_allow_html=True)
     st.markdown('<div class="section-heading">Live Execution Feedback</div><div class="section-copy">Latest broker-side execution rows from this run.</div>', unsafe_allow_html=True)
     st.dataframe(_order_trade_columns(pd.DataFrame(rows)), width="stretch", height=220)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -636,13 +636,13 @@ def _render_sidebar_shell() -> None:
         }
         [data-testid="stAppViewContainer"] .main .block-container {
             max-width: 1600px;
-            padding-top: 1.2rem;
+            padding-top: 0.55rem;
         }
         [data-testid="stAppViewContainer"] [data-testid="stMetric"] {
             background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(9,14,26,0.96));
             border: 1px solid rgba(148, 163, 184, 0.12);
-            border-radius: 18px;
-            padding: 10px 12px;
+            border-radius: 14px;
+            padding: 7px 9px;
             box-shadow: 0 14px 30px rgba(2, 6, 23, 0.22);
         }
         [data-testid="stAppViewContainer"] [data-testid="stDataFrame"] {
@@ -653,8 +653,8 @@ def _render_sidebar_shell() -> None:
         }
         .hero-strip {
             border-radius: 24px;
-            padding: 10px 12px;
-            margin: 10px 0 16px 0;
+            padding: 7px 9px;
+            margin: 6px 0 10px 0;
             box-shadow: 0 24px 48px rgba(2, 6, 23, 0.32);
         }
         .hero-strip.hero-bull {
@@ -674,47 +674,47 @@ def _render_sidebar_shell() -> None:
             font-size: 11px;
             letter-spacing: 0.2em;
             text-transform: uppercase;
-            margin-bottom: 12px;
+            margin-bottom: 5px;
         }
         .hero-symbol {
             color: #f8fafc;
-            font-size: 34px;
+            font-size: 26px;
             font-weight: 800;
             line-height: 1.05;
             margin-bottom: 4px;
         }
         .hero-price {
             color: #e0f2fe;
-            font-size: 28px;
+            font-size: 22px;
             font-weight: 700;
         }
         .hero-change {
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 700;
             margin-top: 2px;
         }
         .hero-grid {
             display: grid;
             grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(120px, 1fr));
-            gap: 12px;
+            gap: 8px;
             align-items: stretch;
         }
         .hero-tile {
             background: rgba(15, 23, 42, 0.66);
             border: 1px solid rgba(148, 163, 184, 0.12);
-            border-radius: 18px;
-            padding: 10px 12px;
+            border-radius: 14px;
+            padding: 7px 9px;
         }
         .hero-label {
             color: #94a3b8;
             font-size: 11px;
             letter-spacing: 0.14em;
             text-transform: uppercase;
-            margin-bottom: 12px;
+            margin-bottom: 5px;
         }
         .hero-value {
             color: #f8fafc;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 700;
         }
         @media (max-width: 980px) {
@@ -724,7 +724,7 @@ def _render_sidebar_shell() -> None:
                 gap: 14px;
             }
             .top-nav-menu {
-                gap: 12px;
+                gap: 8px;
             }
             .top-nav-search {
                 min-width: 0;
@@ -745,12 +745,12 @@ def _render_sidebar_shell() -> None:
             }
         }
         [data-testid="stTabs"] [role="tablist"] {
-            gap: 12px;
+            gap: 8px;
             background: rgba(15, 23, 42, 0.56);
             border: 1px solid rgba(148, 163, 184, 0.10);
-            border-radius: 18px;
+            border-radius: 14px;
             padding: 8px;
-            margin-bottom: 12px;
+            margin-bottom: 5px;
         }
         [data-testid="stTabs"] [role="tab"] {
             background: rgba(15, 23, 42, 0.82);
@@ -797,7 +797,7 @@ def _render_sidebar_shell() -> None:
         }
         [data-testid="stExpander"] {
             border: 1px solid rgba(148, 163, 184, 0.10);
-            border-radius: 18px;
+            border-radius: 14px;
             background: rgba(15, 23, 42, 0.62);
         }
         [data-testid="stVerticalBlock"] [data-testid="stAltairChart"],
@@ -809,23 +809,23 @@ def _render_sidebar_shell() -> None:
             border: 1px solid rgba(148, 163, 184, 0.10);
             border-radius: 20px;
             padding: 10px 12px 4px 12px;
-            margin-bottom: 12px;
+            margin-bottom: 5px;
             box-shadow: 0 20px 40px rgba(2, 6, 23, 0.24);
         }
         .section-shell {
             background: linear-gradient(180deg, rgba(15,23,42,0.82), rgba(8,15,28,0.90));
             border: 1px solid rgba(148, 163, 184, 0.12);
             border-radius: 24px;
-            padding: 12px 14px;
-            margin-bottom: 12px;
+            padding: 9px 11px;
+            margin-bottom: 5px;
             box-shadow: 0 20px 38px rgba(2, 6, 23, 0.20);
         }
         .live-panel {
             background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(8,15,28,0.96));
             border: 1px solid rgba(56, 189, 248, 0.18);
             border-radius: 24px;
-            padding: 12px 14px;
-            margin-bottom: 12px;
+            padding: 9px 11px;
+            margin-bottom: 5px;
             box-shadow: 0 20px 42px rgba(2, 6, 23, 0.24);
         }
         .live-kicker {
@@ -833,15 +833,15 @@ def _render_sidebar_shell() -> None:
             font-size: 11px;
             letter-spacing: 0.18em;
             text-transform: uppercase;
-            margin-bottom: 12px;
+            margin-bottom: 5px;
             font-weight: 700;
         }
         .live-title {
             color: #f8fafc;
-            font-size: 30px;
+            font-size: 24px;
             font-weight: 800;
             line-height: 1.05;
-            margin-bottom: 8px;
+            margin-bottom: 5px;
         }
         .live-sub {
             color: #94a3b8;
@@ -853,20 +853,20 @@ def _render_sidebar_shell() -> None:
             background: linear-gradient(180deg, rgba(12,32,57,0.90), rgba(9,24,44,0.96));
             border: 1px solid rgba(118, 164, 210, 0.16);
             border-radius: 20px;
-            padding: 14px 16px 8px 16px;
-            margin-bottom: 12px;
+            padding: 10px 12px 6px 12px;
+            margin-bottom: 5px;
             box-shadow: 0 18px 34px rgba(2, 12, 27, 0.18);
         }
         .control-ribbon-title {
             color: #f8fafc;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 700;
             margin-bottom: 4px;
         }
         .control-ribbon-copy {
             color: #94a3b8;
-            font-size: 17px;
-            margin-bottom: 10px;
+            font-size: 14px;
+            margin-bottom: 6px;
         }
         [data-testid="stSidebar"] {
             display: none;
@@ -881,9 +881,9 @@ def _render_sidebar_shell() -> None:
         [data-testid="stSidebar"] .live-panel {
             background: linear-gradient(180deg, rgba(15,23,42,0.96), rgba(8,15,28,0.98));
             border: 1px solid rgba(56, 189, 248, 0.2);
-            border-radius: 18px;
-            padding: 10px 12px;
-            margin-bottom: 12px;
+            border-radius: 14px;
+            padding: 7px 9px;
+            margin-bottom: 5px;
             box-shadow: 0 16px 40px rgba(2, 6, 23, 0.35);
         }
         [data-testid="stSidebar"] .live-kicker {
@@ -898,7 +898,7 @@ def _render_sidebar_shell() -> None:
             font-size: 24px;
             font-weight: 700;
             line-height: 1.1;
-            margin-bottom: 8px;
+            margin-bottom: 5px;
         }
         [data-testid="stSidebar"] .live-sub {
             color: #94a3b8;
@@ -942,7 +942,7 @@ def _render_sidebar_shell() -> None:
             background: rgba(15, 23, 42, 0.9);
             border: 1px solid rgba(148, 163, 184, 0.12);
             border-radius: 14px;
-            padding: 10px 12px;
+            padding: 7px 9px;
         }
         [data-testid="stSidebar"] .status-label {
             color: #94a3b8;
@@ -953,7 +953,7 @@ def _render_sidebar_shell() -> None:
         }
         [data-testid="stSidebar"] .status-value {
             color: #f8fafc;
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 700;
             line-height: 1.2;
         }
@@ -987,7 +987,7 @@ def _render_sidebar_shell() -> None:
         [data-testid="stAppViewContainer"] .main .block-container {
             max-width: 1600px;
             max-width: 1480px;
-            padding-top: 1.1rem;
+            padding-top: 0.55rem;
         }
         h1, h2, h3, h4, h5, h6, p, label, span, div {
             color: #e5eef8;
@@ -1106,7 +1106,7 @@ def _render_sidebar_shell() -> None:
             border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: 0;
             padding: 8px 14px 10px 14px;
-            margin-bottom: 8px;
+            margin-bottom: 5px;
             box-shadow: 0 24px 50px rgba(0, 0, 0, 0.34);
             overflow: hidden;
             position: relative;
@@ -1132,7 +1132,7 @@ def _render_sidebar_shell() -> None:
             display: inline-flex;
             align-items: center;
             justify-content: flex-start;
-            gap: 12px;
+            gap: 8px;
             color: #ffffff;
             font-size: 24px;
             font-weight: 800;
@@ -1148,7 +1148,7 @@ def _render_sidebar_shell() -> None:
             justify-content: flex-start;
             background: #1fba81;
             color: #ffffff;
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 900;
             box-shadow: none;
         }
@@ -1206,7 +1206,7 @@ def _render_sidebar_shell() -> None:
             display: flex;
             align-items: center;
             justify-content: flex-start;
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 800;
             color: #ffffff;
             background: linear-gradient(135deg, #14b87a 0%, #0f9f6c 100%);
@@ -1222,7 +1222,7 @@ def _render_sidebar_shell() -> None:
         }
         .mega-title {
             color: #121826;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 800;
             margin-bottom: 4px;
         }
@@ -1272,7 +1272,7 @@ def _render_sidebar_shell() -> None:
             justify-content: space-between;
             align-items: center;
             padding: 16px 24px;
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 700;
             color: #9ca3af;
         }
@@ -1282,7 +1282,7 @@ def _render_sidebar_shell() -> None:
         }
         .markets-arrow {
             color: #f59e0b;
-            font-size: 18px;
+            font-size: 16px;
         }
         .markets-list-wrap {
             display: grid;
@@ -1294,9 +1294,9 @@ def _render_sidebar_shell() -> None:
         .market-link {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 8px;
             color: #1f2937;
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 700;
         }
         .market-dot {
@@ -1405,7 +1405,7 @@ def _render_sidebar_shell() -> None:
             color: #111827;
             font-size: 16px;
             font-weight: 800;
-            margin-bottom: 12px;
+            margin-bottom: 5px;
         }
         .dhan-hero-banner-copy {
             color: #ffffff;
@@ -1420,7 +1420,7 @@ def _render_sidebar_shell() -> None:
             flex-wrap: nowrap;
             gap: 8px;
             align-items: center;
-            margin-bottom: 12px;
+            margin-bottom: 5px;
             color: rgba(255,255,255,0.72);
             font-size: 12px;
             font-weight: 700;
@@ -1438,7 +1438,7 @@ def _render_sidebar_shell() -> None:
             font-size: 11px;
             letter-spacing: 0.22em;
             text-transform: uppercase;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
         }
         .page-title {
             color: #ffffff;
@@ -1464,11 +1464,11 @@ def _render_sidebar_shell() -> None:
             bottom: 22px;
             background: #ffffff;
             border: 1px solid rgba(0,0,0,0.08);
-            border-radius: 18px;
+            border-radius: 14px;
             color: #111827;
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 700;
-            padding: 12px 14px;
+            padding: 9px 11px;
             box-shadow: none;
         }
         .masthead-pills {
@@ -1477,11 +1477,11 @@ def _render_sidebar_shell() -> None:
         .hero-search {
             margin-top: 24px;
             max-width: 520px;
-            border-radius: 18px;
+            border-radius: 14px;
             background: #ffffff;
             color: #4b5563;
             padding: 16px 20px;
-            font-size: 30px;
+            font-size: 24px;
             font-weight: 700;
             box-shadow: none;
             border: 1px solid rgba(0,0,0,0.08);
@@ -1502,7 +1502,7 @@ def _render_sidebar_shell() -> None:
         }
         .hero-chip-label {
             color: #ffffff;
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 800;
         }
         .hero-chip-meta {
@@ -1524,7 +1524,7 @@ def _render_sidebar_shell() -> None:
             position: absolute;
             inset: auto 22px 26px 22px;
             height: 92px;
-            border-radius: 18px;
+            border-radius: 14px;
             background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
             border: 1px solid rgba(255,255,255,0.06);
         }
@@ -1534,7 +1534,7 @@ def _render_sidebar_shell() -> None:
             top: 28px;
             left: 28px;
             color: rgba(255,255,255,0.92);
-            font-size: 30px;
+            font-size: 24px;
             font-weight: 800;
             letter-spacing: 0.02em;
         }
@@ -1598,10 +1598,10 @@ def _render_sidebar_shell() -> None:
             grid-template-columns: 1.2fr 0.8fr;
             gap: 16px;
             align-items: center;
-            padding: 12px 14px;
+            padding: 9px 11px;
             background: linear-gradient(180deg, rgba(19,19,19,0.90), rgba(19,19,19,0.82));
             border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 18px;
+            border-radius: 14px;
         }
         .hero-preview-copy {
             color: rgba(255,255,255,0.78);
@@ -1611,20 +1611,20 @@ def _render_sidebar_shell() -> None:
         }
         .hero-preview-title {
             color: #ffffff;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 800;
-            margin-bottom: 12px;
+            margin-bottom: 5px;
         }
         .hero-preview-metrics {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
+            gap: 8px;
         }
         .hero-preview-metric {
             border-radius: 14px;
             background: rgba(255,255,255,0.06);
             border: 1px solid rgba(255,255,255,0.08);
-            padding: 12px 14px;
+            padding: 9px 11px;
         }
         .hero-preview-label {
             color: rgba(255,255,255,0.62);
@@ -1634,7 +1634,7 @@ def _render_sidebar_shell() -> None:
         }
         .hero-preview-value {
             color: #ffffff;
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 800;
             margin-top: 4px;
         }
@@ -1680,8 +1680,8 @@ def _render_sidebar_shell() -> None:
         }
         .section-copy {
             color: #89a7c7;
-            font-size: 17px;
-            margin-bottom: 12px;
+            font-size: 14px;
+            margin-bottom: 5px;
         }
         @media (max-width: 980px) {
             .top-nav {
@@ -1690,7 +1690,7 @@ def _render_sidebar_shell() -> None:
                 gap: 14px;
             }
             .top-nav-menu {
-                gap: 12px;
+                gap: 8px;
             }
             .top-nav-search {
                 min-width: 0;
@@ -2008,7 +2008,7 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
         "order_value": latest_signal.get("order_value", "-"),
     }
     st.caption("Latest actionable signal")
-    st.dataframe(pd.DataFrame([latest_view]), width="stretch", hide_index=True)
+    st.dataframe(pd.DataFrame([latest_view]), width="stretch", hide_index=True, height=90)
 
     history_cols = [
         "trade_label",
@@ -2027,7 +2027,7 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
     ]
     history_rows = [{k: row.get(k, "") for k in history_cols} for row in signal_rows[-8:]]
     st.caption("Recent actionable signals")
-    st.dataframe(pd.DataFrame(history_rows), width="stretch", hide_index=True)
+    st.dataframe(pd.DataFrame(history_rows), width="stretch", hide_index=True, height=180)
 
 def _render_paper_live_page(execution_mode: str, account_status: str) -> None:
     st.caption("Paper & Live: current execution mode and desk readiness.")
@@ -2118,7 +2118,7 @@ def main() -> None:
 
 
     if content_view == "Home":
-        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the compact tabs above or the action buttons below to open live signals, paper & live, routing status, execution style, instrument focus, strategy, desk summary, prepare desk, review signals, authorize execute, live status, controls, market, trades, or downloads. This default view stays short and clean.</div></div>', unsafe_allow_html=True)
+        st.caption("Simple Main Page")
     symbol = "^NSEI"
     interval = "1m"
     period = "1d"
@@ -2149,7 +2149,7 @@ def main() -> None:
     mtf_max_trades_per_day = 3
 
     if show_controls:
-        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Desk Controls</div><div class="section-copy">Configure market inputs, sizing, and routing only when you need them.</div></div>', unsafe_allow_html=True)
+        st.caption("Desk Controls")
         market_col, position_col, access_col = st.columns([1.15, 1.15, 1.1])
 
         with market_col:
@@ -2517,12 +2517,12 @@ def main() -> None:
             left, right = st.columns([4.4, 1.6])
             with left:
                 chart = build_live_market_chart(candles, output_rows=output_rows)
-                st.altair_chart(chart, width="stretch")
+                st.altair_chart(chart, width="stretch", height=360)
                 st.caption("Standard candlestick chart with volume and optional BUY/SELL or CE/PE trade markers.")
             with right:
                 st.markdown("**Market Depth View**")
                 depth_df = build_market_depth_summary(candles)
-                st.dataframe(depth_df, width="stretch", hide_index=True)
+                st.dataframe(depth_df, width="stretch", hide_index=True, height=180)
                 st.caption(f"Price spread between support and resistance bands: {levels['spread']:.2f}")
         else:
             st.info("No chart data available.")

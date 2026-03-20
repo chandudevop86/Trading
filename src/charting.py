@@ -197,6 +197,10 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
         x=alt.X("timestamp:T", title="Time", axis=time_axis)
     )
 
+    candle_count = max(len(df), 1)
+    candle_size = max(3, min(8, int(900 / candle_count)))
+    volume_bar_size = max(2, min(7, candle_size - 1))
+
     wick = base.mark_rule(strokeWidth=1.2).encode(
         y=alt.Y("low:Q", title="Price", axis=price_axis, scale=alt.Scale(zero=False, nice=True)),
         y2="high:Q",
@@ -211,7 +215,7 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
         ],
     )
 
-    body = base.mark_bar(size=10).encode(
+    body = base.mark_bar(size=candle_size).encode(
         y=alt.Y("open:Q", scale=alt.Scale(zero=False, nice=True)),
         y2="close:Q",
         color=alt.Color("candle_color:N", scale=None, legend=None),
@@ -235,7 +239,7 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
         layers.append(signal_points)
 
     price_panel = alt.layer(*layers).properties(height=430)
-    volume = alt.Chart(df).mark_bar(opacity=0.78).encode(
+    volume = alt.Chart(df).mark_bar(opacity=0.78, size=volume_bar_size).encode(
         x=alt.X("timestamp:T", title="", axis=time_axis),
         y=alt.Y("volume:Q", title="Volume", axis=volume_axis, scale=alt.Scale(zero=True, nice=True)),
         color=alt.Color("candle_color:N", scale=None, legend=None),

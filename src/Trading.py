@@ -421,7 +421,7 @@ def _render_sidebar_shell() -> None:
         .hero-change {
             font-size: 17px;
             font-weight: 700;
-            margin-top: 6px;
+            margin-top: 2px;
         }
         .hero-grid {
             display: grid;
@@ -835,8 +835,8 @@ def _render_sidebar_shell() -> None:
             background: linear-gradient(180deg, #050505 0%, #090909 100%);
             border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: 0;
-            padding: 16px 20px 20px 20px;
-            margin-bottom: 18px;
+            padding: 10px 16px 14px 16px;
+            margin-bottom: 8px;
             box-shadow: 0 24px 50px rgba(0, 0, 0, 0.34);
             overflow: hidden;
             position: relative;
@@ -851,11 +851,11 @@ def _render_sidebar_shell() -> None:
             display: grid;
             grid-template-columns: auto 1fr auto auto auto;
             align-items: center;
-            gap: 24px;
+            gap: 14px;
             border: none;
             border-radius: 0;
-            padding: 14px 0 24px 0;
-            margin-bottom: 18px;
+            padding: 8px 0 12px 0;
+            margin-bottom: 6px;
             backdrop-filter: none;
         }
         .top-nav-brand {
@@ -875,7 +875,7 @@ def _render_sidebar_shell() -> None:
             border-radius: 999px;
             display: inline-flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             background: #1fba81;
             color: #ffffff;
             font-size: 17px;
@@ -888,7 +888,7 @@ def _render_sidebar_shell() -> None:
         .top-nav-menu {
             display: flex;
             align-items: center;
-            gap: 24px;
+            gap: 14px;
             flex-wrap: wrap;
             color: rgba(255,255,255,0.72);
             font-size: 17px;
@@ -960,7 +960,7 @@ def _render_sidebar_shell() -> None:
             min-height: 48px;
             display: inline-flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
         }
         .top-nav-cta {
             background: #f7a600;
@@ -973,7 +973,7 @@ def _render_sidebar_shell() -> None:
             min-height: 48px;
             display: inline-flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
         }
         .mega-panel {
             position: absolute;
@@ -1025,7 +1025,7 @@ def _render_sidebar_shell() -> None:
             border-radius: 10px;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             font-size: 17px;
             font-weight: 800;
             color: #ffffff;
@@ -1057,7 +1057,7 @@ def _render_sidebar_shell() -> None:
         }
         .markets-tabs {
             display: flex;
-            gap: 24px;
+            gap: 14px;
             flex-wrap: wrap;
             padding: 16px 24px;
             border-bottom: 1px solid #e5e7eb;
@@ -1125,7 +1125,7 @@ def _render_sidebar_shell() -> None:
             border-radius: 999px;
             display: inline-flex;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             color: #ffffff;
             font-size: 11px;
             font-weight: 800;
@@ -1165,16 +1165,16 @@ def _render_sidebar_shell() -> None:
             margin: 0 auto;
             flex-direction: column;
             align-items: flex-start;
-            justify-content: center;
+            justify-content: flex-start;
             text-align: left;
-            min-height: 260px;
-            gap: 24px;
+            min-height: 0;
+            gap: 14px;
         }
         .dhan-hero-icon {
             color: #f7a600;
             font-size: clamp(56px, 5vw, 84px);
             line-height: 1;
-            margin-bottom: 12px;
+            margin-bottom: 2px;
         }
         .dhan-hero-title {
             color: #f3f4f6;
@@ -1190,7 +1190,7 @@ def _render_sidebar_shell() -> None:
             white-space: normal;
         }
         .dhan-hero-title .hero-line + .hero-line {
-            margin-top: 6px;
+            margin-top: 2px;
         }
         .dhan-hero-title .hero-line.accent {
             color: #2f66ff;
@@ -1199,7 +1199,7 @@ def _render_sidebar_shell() -> None:
             color: #ffffff;
             font-size: clamp(20px, 2vw, 28px);
             line-height: 1.35;
-            margin-top: 6px;
+            margin-top: 2px;
             max-width: 760px;
         }
         .dhan-hero-subtitle .hero-sub-line {
@@ -1207,19 +1207,19 @@ def _render_sidebar_shell() -> None:
             white-space: normal;
         }
         .dhan-hero-banner {
-            margin-top: 28px;
+            margin-top: 14px;
             width: min(640px, 100%);
             border-radius: 24px;
             border: 1px solid rgba(111, 155, 255, 0.6);
             background: linear-gradient(180deg, rgba(18,25,38,0.94), rgba(16,22,34,0.94));
-            padding: 22px 22px 20px 22px;
+            padding: 16px 18px 16px 18px;
             box-shadow: 0 22px 40px rgba(0,0,0,0.28);
         }
         .dhan-hero-badge {
             display: inline-flex;
             align-items: center;
-            justify-content: center;
-            justify-content: center;
+            justify-content: flex-start;
+            justify-content: flex-start;
             border-radius: 999px;
             background: #f7a600;
             color: #111827;
@@ -1308,7 +1308,7 @@ def _render_sidebar_shell() -> None:
         }
         .hero-chip-row {
             display: flex;
-            gap: 24px;
+            gap: 14px;
             flex-wrap: wrap;
             margin-top: 22px;
         }
@@ -2470,6 +2470,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

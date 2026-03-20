@@ -635,8 +635,10 @@ def _render_sidebar_shell() -> None:
             background: rgba(2, 6, 23, 0.72);
         }
         [data-testid="stAppViewContainer"] .main .block-container {
-            max-width: 1600px;
+            max-width: none;
             padding-top: 0.55rem;
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
         }
         [data-testid="stAppViewContainer"] [data-testid="stMetric"] {
             background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(9,14,26,0.96));
@@ -985,9 +987,11 @@ def _render_sidebar_shell() -> None:
             border-bottom: 1px solid rgba(118, 164, 210, 0.10);
         }
         [data-testid="stAppViewContainer"] .main .block-container {
-            max-width: 1600px;
+            max-width: none;
             max-width: 1480px;
             padding-top: 0.55rem;
+            padding-left: 0.75rem;
+            padding-right: 0.75rem;
         }
         h1, h2, h3, h4, h5, h6, p, label, span, div {
             color: #e5eef8;

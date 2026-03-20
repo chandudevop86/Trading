@@ -885,51 +885,6 @@ def _render_sidebar_shell() -> None:
         .top-nav-brand span {
             color: #ffffff;
         }
-        .top-nav-sections {
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 12px;
-            min-width: 0;
-            overflow: hidden;
-        }
-        .top-nav-sections-label {
-            color: #89a7c7;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            white-space: nowrap;
-        }
-        .top-nav-tab-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            scrollbar-width: none;
-        }
-        .top-nav-tab-row::-webkit-scrollbar {
-            display: none;
-        }
-        .top-nav-tab {
-            display: inline-flex;
-            align-items: center;
-            min-height: 36px;
-            padding: 8px 12px;
-            border-radius: 999px;
-            border: 1px solid rgba(118, 164, 210, 0.18);
-            background: rgba(255,255,255,0.04);
-            color: #d8e6f5;
-            font-size: 13px;
-            font-weight: 700;
-            white-space: nowrap;
-        }
-        .top-nav-tab.active {
-            background: linear-gradient(135deg, #ffb84d 0%, #ff8a2a 100%);
-            border-color: transparent;
-            color: #09111d;
-        }
         .mega-panel {
             position: absolute;
             z-index: 8;
@@ -1531,12 +1486,6 @@ def _render_page_masthead(
         <div class="page-masthead">
             <div class="top-nav">
                 <div class="top-nav-brand"><div class="top-nav-logo">K</div><div>KRSH<span> Solutions</span></div></div>
-                <div class="top-nav-sections">
-                    <div class="top-nav-sections-label">Open section</div>
-                    <div class="top-nav-tab-row">
-                        <span class="top-nav-tab active">{content_view}</span>
-                    </div>
-                </div>
             </div>
         </div>
         """,

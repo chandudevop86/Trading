@@ -1943,7 +1943,7 @@ def _render_home_intro(symbol: str, strategy: str, execution_mode: str, last_pri
                         <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(148,163,184,0.12); border-radius:16px; padding:12px 14px;">
                             <div style="font-size:12px; color:#8eb8e8; text-transform:uppercase; letter-spacing:0.10em; margin-bottom:6px;">Market Focus</div>
                             <div style="font-size:20px; font-weight:700; color:#ffffff;">{symbol}</div>
-                            <div style="font-size:13px; color:#b8c9dc; margin-top:4px;">Spot {price_text} • {change_prefix}{day_change:.2f}</div>
+                            <div style="font-size:13px; color:#b8c9dc; margin-top:4px;">Spot {price_text} | {change_prefix}{day_change:.2f}</div>
                         </div>
                         <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(148,163,184,0.12); border-radius:16px; padding:12px 14px;">
                             <div style="font-size:12px; color:#8eb8e8; text-transform:uppercase; letter-spacing:0.10em; margin-bottom:6px;">Current Strategy</div>

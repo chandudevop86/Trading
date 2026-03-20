@@ -1782,7 +1782,7 @@ def main() -> None:
         st.session_state["content_view"] = "Home"
     with nav_col3:
         st.caption("Open section")
-        content_view = st.selectbox(
+        content_view = st.segmented_control(
             "Open section",
             content_options,
             key="content_view",

@@ -319,7 +319,7 @@ def run_strategy(*, strategy: str, candles: pd.DataFrame, capital: float, risk_p
     if strategy_name == "Breakout":
         rows = generate_breakout_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct))
     elif strategy_name == "Demand Supply":
-        rows = generate_demand_supply_trades(candles) if generate_demand_supply_trades is not None else []
+        rows = generate_demand_supply_trades(candles, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio)) if generate_demand_supply_trades is not None else []
     elif strategy_name == "Indicator":
         indicator_rows = generate_indicator_rows(candle_rows, config=IndicatorConfig())
         mapped: list[dict[str, object]] = []
@@ -2325,6 +2325,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 
 
 

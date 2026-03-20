@@ -1947,19 +1947,19 @@ def _render_dhan_feature_sections(
 
 
 def _render_prepare_desk_page() -> None:
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">1. Prepare Your Desk</div><div class="section-copy">Choose symbol, strategy, timeframe, and execution mode before routing orders.</div></div>', unsafe_allow_html=True)
+    st.caption("Prepare Desk: choose symbol, strategy, timeframe, and execution mode.")
 
 
 def _render_review_signals_page() -> None:
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">2. Review Signals on Charts</div><div class="section-copy">Use dashboard, charts, and candidate previews to validate setups before execution.</div></div>', unsafe_allow_html=True)
+    st.caption("Review Signals: validate setups on charts before execution.")
 
 
 def _render_authorize_execute_page() -> None:
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">3. Authorize and Execute</div><div class="section-copy">Send reviewed trades to paper logs or Dhan live routing only when ready.</div></div>', unsafe_allow_html=True)
+    st.caption("Authorize Execute: send only reviewed trades when ready.")
 
 
 def _render_desk_summary_page(workspace: str, strategy: str, content_view: str, risk_text: str, account_status: str) -> None:
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Desk Summary</div><div class="section-copy">Keep workspace, strategy, section, risk, and account state together on one page.</div></div>', unsafe_allow_html=True)
+    st.caption("Desk Summary: workspace, strategy, section, risk, and account state.")
     cols = st.columns(5)
     cols[0].metric("Workspace", str(workspace))
     cols[1].metric("Strategy", str(strategy))
@@ -1969,7 +1969,7 @@ def _render_desk_summary_page(workspace: str, strategy: str, content_view: str, 
 
 
 def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: str, last_signal_side: str) -> None:
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Live Signals</div><div class="section-copy">Review current setup count, latest signal, and option contract details.</div></div>', unsafe_allow_html=True)
+    st.caption("Live Signals: current setup count, latest signal, and contract details.")
     signal_count = len(signal_rows)
     latest_signal = dict(signal_rows[-1]) if signal_rows else {}
 
@@ -2031,14 +2031,14 @@ def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: st
     st.dataframe(pd.DataFrame(history_rows), width="stretch", hide_index=True)
 
 def _render_paper_live_page(execution_mode: str, account_status: str) -> None:
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Paper & Live</div><div class="section-copy">See the current execution mode and whether the desk is staying in paper review or live-ready routing.</div></div>', unsafe_allow_html=True)
+    st.caption("Paper & Live: current execution mode and desk readiness.")
     cols = st.columns(2)
     cols[0].metric("Current Mode", str(execution_mode))
     cols[1].metric("Account Status", str(account_status))
 
 
 def _render_routing_status_page(account_status: str, execution_mode: str, broker_label: str) -> None:
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Routing Status</div><div class="section-copy">Track where reviewed trades will be routed and whether broker connectivity is ready.</div></div>', unsafe_allow_html=True)
+    st.caption("Routing Status: broker connectivity and reviewed trade routing.")
     cols = st.columns(3)
     cols[0].metric("Routing", str(account_status))
     cols[1].metric("Mode", str(execution_mode))
@@ -2048,7 +2048,7 @@ def _render_routing_status_page(account_status: str, execution_mode: str, broker
 def _render_execution_style_page(auto_execute: bool, refresh_seconds: int, send_telegram: bool) -> None:
     auto_text = "Auto execution enabled" if auto_execute else "Manual review before send"
     telegram_text = "Telegram alerts ON" if send_telegram else "Telegram alerts OFF"
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Execution Style</div><div class="section-copy">See whether execution is manual or automatic and how the desk is currently refreshing and alerting.</div></div>', unsafe_allow_html=True)
+    st.caption("Execution Style: manual or auto, refresh cadence, and alerts.")
     cols = st.columns(3)
     cols[0].metric("Style", auto_text)
     cols[1].metric("Refresh", f"Every {int(refresh_seconds)}s")
@@ -2056,7 +2056,7 @@ def _render_execution_style_page(auto_execute: bool, refresh_seconds: int, send_
 
 
 def _render_instrument_focus_page(symbol: str, instrument_mode: str, interval: str, period: str) -> None:
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Instrument Focus</div><div class="section-copy">Keep the current symbol, instrument mode, and scan window together on one focused page.</div></div>', unsafe_allow_html=True)
+    st.caption("Instrument Focus: symbol, instrument, and scan window.")
     cols = st.columns(3)
     cols[0].metric("Symbol", str(symbol))
     cols[1].metric("Instrument", str(instrument_mode))
@@ -2072,7 +2072,7 @@ def _render_strategy_page(strategy: str, workspace: str, symbol: str, interval: 
         "One Trade/Day": "Keeps execution disciplined by limiting the flow to a single high-conviction setup each day.",
         "MTF 5m": "Uses 5m execution with higher timeframe filters to improve structure and confirmation quality.",
     }.get(str(strategy), "Review the currently selected strategy before running the desk.")
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Strategy</div><div class="section-copy">See the active strategy and its current market context in one place.</div></div>', unsafe_allow_html=True)
+    st.caption("Strategy: active model and current market context.")
     st.markdown(
         f"""
         <div class="section-shell" style="margin-bottom:14px;">
@@ -2455,16 +2455,8 @@ def main() -> None:
             auto_execute=bool(auto_execute_generated),
         )
     if content_view == "Market":
-        st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
-        st.markdown('<div class="section-heading">Platform Sections</div><div class="section-copy">Explore the desk as a landing flow: market overview first, charts next, and trading actions last.</div>', unsafe_allow_html=True)
-        section_cols = st.columns(3)
-        section_cols[0].markdown("**01**  Market Overview")
-        section_cols[1].markdown("**02**  Market Chart")
-        section_cols[2].markdown("**03**  Trade Workspace")
-        st.markdown("</div>", unsafe_allow_html=True)
-    
         st.markdown('<div class="section-shell">', unsafe_allow_html=True)
-        st.markdown('<div class="section-heading">Market Overview</div><div class="section-copy">Live market snapshot with the latest price, volume, and recent candles.</div>', unsafe_allow_html=True)
+        st.caption("Market Overview: latest price, range, and recent candles.")
         c1, c2, c3, c4 = st.columns(4)
     
         if not candles.empty:
@@ -2487,7 +2479,7 @@ def main() -> None:
         st.markdown("</div>", unsafe_allow_html=True)
     
         st.markdown('<div class="chart-shell">', unsafe_allow_html=True)
-        st.markdown('<div class="section-heading">Market Chart</div><div class="section-copy">Intraday candlestick view with support, resistance, and market depth context.</div>', unsafe_allow_html=True)
+        st.caption("Market Chart: intraday candles with levels and depth.")
         if not candles.empty:
             latest_move = 0.0
             if len(candles) >= 2:
@@ -2539,31 +2531,31 @@ def main() -> None:
     
     if content_view == "Trades":
         st.markdown('<div class="section-shell">', unsafe_allow_html=True)
-        st.markdown('<div class="section-heading">Trade Workspace</div><div class="section-copy">Review live-ready setups, preview broker payloads, and send only the orders you actually want routed.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-heading">Trade Workspace</div><div class="section-copy">Review live-ready setups, broker readiness, and only the reviewed orders you actually want routed.</div>', unsafe_allow_html=True)
+        _render_dhan_status_panel(str(symbol), dhan_security_map_path, str(execution_mode), st.session_state.get("analyzed_trade_queue", []))
+
         if auto_executed_rows:
-            st.caption("Auto-executed trades from this run.")
-            st.dataframe(_order_trade_columns(pd.DataFrame(auto_executed_rows)), width="stretch")
-    
+            with st.expander(f"Auto-executed trades ({len(auto_executed_rows)})", expanded=False):
+                st.dataframe(_order_trade_columns(pd.DataFrame(auto_executed_rows)), width="stretch")
+
         if output_rows:
             trades_df = pd.DataFrame(output_rows)
             with st.expander(f"Generated Trades ({len(trades_df)})", expanded=False):
                 st.dataframe(trades_df.tail(12), width="stretch", height=220)
-    
-            try:
-                summary = build_trade_summary(output_rows)
-                st.text(summary)
-            except Exception as exc:
-                st.warning(f"Could not build trade summary: {exc}")
-    
+
+            with st.expander("Trade Summary", expanded=False):
+                try:
+                    summary = build_trade_summary(output_rows)
+                    st.text(summary)
+                except Exception as exc:
+                    st.warning(f"Could not build trade summary: {exc}")
+
             csv_data = _to_csv(output_rows)
             st.download_button("Download CSV", data=csv_data, file_name="trades.csv", mime="text/csv")
         else:
-            st.info("No trades generated yet.")
-    
-        st.divider()
-        _render_dhan_status_panel(str(symbol), dhan_security_map_path, str(execution_mode), st.session_state.get("analyzed_trade_queue", []))
+            st.caption("No trades generated yet.")
 
-        st.subheader("Analyze First, Execute Later")
+        st.markdown('<div class="section-copy" style="margin-top:8px; margin-bottom:8px;">Analyze First, Execute Later</div>', unsafe_allow_html=True)
         if execution_candidates:
             st.caption("Current executable candidates generated from the latest strategy run.")
             with st.expander(f"Execution Candidates ({len(execution_candidates)})", expanded=False):

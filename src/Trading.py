@@ -2048,13 +2048,6 @@ def main() -> None:
             open_trades=len(signal_rows),
             account_status=account_status,
         )
-        st.caption("Open section")
-        content_view = st.segmented_control(
-            "Open section",
-            content_options,
-            key="content_view",
-            label_visibility="collapsed",
-        )
 
     hero_last_price = float(candles["close"].iloc[-1]) if not candles.empty else 0.0
     if not candles.empty and len(candles) >= 2:

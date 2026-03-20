@@ -1752,82 +1752,85 @@ def _render_dhan_feature_sections(
         unsafe_allow_html=True,
     )
 
-    step_cols = st.columns(3)
-    step_data = []
-    for col, (title, body) in zip(step_cols, step_data):
+    action_cols = st.columns(5)
+    actions = [
+        ("Live Signals", "Live Signals"),
+        ("Paper & Live", "Paper & Live"),
+        ("Routing Status", "Routing Status"),
+        ("Execution Style", "Execution Style"),
+        ("Instrument Focus", "Instrument Focus"),
+    ]
+    for col, (label, section_name) in zip(action_cols, actions):
         with col:
-            st.markdown(
-                f"""
-                <div class="section-shell" style="min-height:170px; margin-bottom:14px;">
-                    <div class="section-heading" style="font-size:18px;">{title}</div>
-                    <div class="section-copy" style="font-size:14px; line-height:1.6; margin-bottom:0;">{body}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            if st.button(f"Open {label}", key=f"open_{section_name.lower().replace(' ', '_')}", use_container_width=True):
+                st.session_state["content_view"] = section_name
+                st.rerun()
+
+
 
 
 def _render_prepare_desk_page() -> None:
     st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">1. Prepare Your Desk</div><div class="section-copy">Choose symbol, strategy, timeframe, and execution mode before routing orders.</div></div>', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="section-shell" style="min-height:200px; margin-bottom:14px;">
-            <div class="section-heading" style="font-size:18px;">Prepare Before Routing</div>
-            <div class="section-copy" style="font-size:14px; line-height:1.7; margin-bottom:0;">
-                Use this page when you want to focus only on setup readiness. Select the market, choose the strategy, confirm the timeframe, and decide whether the run should stay in PAPER mode or move to LIVE routing after review.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def _render_review_signals_page() -> None:
     st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">2. Review Signals on Charts</div><div class="section-copy">Use dashboard, charts, and candidate previews to validate setups before execution.</div></div>', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="section-shell" style="min-height:200px; margin-bottom:14px;">
-            <div class="section-heading" style="font-size:18px;">Review Before Execution</div>
-            <div class="section-copy" style="font-size:14px; line-height:1.7; margin-bottom:0;">
-                Use this page to focus on chart-led confirmation. Review the dashboard, inspect charts, and validate candidate setups before anything moves toward paper logs or live routing.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def _render_authorize_execute_page() -> None:
     st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">3. Authorize and Execute</div><div class="section-copy">Send reviewed trades to paper logs or Dhan live routing only when ready.</div></div>', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <div class="section-shell" style="min-height:200px; margin-bottom:14px;">
-            <div class="section-heading" style="font-size:18px;">Execute Only After Review</div>
-            <div class="section-copy" style="font-size:14px; line-height:1.7; margin-bottom:0;">
-                Use this page when you are ready to move reviewed trades into paper execution or Dhan live routing. Keep execution gated until the setup, chart validation, and queue review are complete.
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def _render_desk_summary_page(workspace: str, strategy: str, content_view: str, risk_text: str, account_status: str) -> None:
     st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Desk Summary</div><div class="section-copy">Keep workspace, strategy, section, risk, and account state together on one page.</div></div>', unsafe_allow_html=True)
-    st.markdown(
-        f"""
-        <div class="section-shell" style="margin-bottom:14px;">
-            <div class="hero-chip-row">
-                <div class="hero-chip"><div class="hero-chip-label">Workspace</div><div class="hero-chip-meta">{workspace}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Strategy</div><div class="hero-chip-meta">{strategy}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Section</div><div class="hero-chip-meta">{content_view}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">DhanHQ Ready</div><div class="hero-chip-meta">{risk_text}</div></div>
-                <div class="hero-chip"><div class="hero-chip-label">Account Status</div><div class="hero-chip-meta">{account_status}</div></div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    cols = st.columns(5)
+    cols[0].metric("Workspace", str(workspace))
+    cols[1].metric("Strategy", str(strategy))
+    cols[2].metric("Section", str(content_view))
+    cols[3].metric("Risk", str(risk_text))
+    cols[4].metric("Account", str(account_status))
+
+
+def _render_live_signals_page(signal_count: int, strategy: str, last_signal_side: str) -> None:
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Live Signals</div><div class="section-copy">Review the current live setup count and the latest strategy signal state.</div></div>', unsafe_allow_html=True)
+    cols = st.columns(3)
+    cols[0].metric("Setups", int(signal_count))
+    cols[1].metric("Latest Signal", str(last_signal_side))
+    cols[2].metric("Strategy", str(strategy))
+
+
+def _render_paper_live_page(execution_mode: str, account_status: str) -> None:
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Paper & Live</div><div class="section-copy">See the current execution mode and whether the desk is staying in paper review or live-ready routing.</div></div>', unsafe_allow_html=True)
+    cols = st.columns(2)
+    cols[0].metric("Current Mode", str(execution_mode))
+    cols[1].metric("Account Status", str(account_status))
+
+
+def _render_routing_status_page(account_status: str, execution_mode: str, broker_label: str) -> None:
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Routing Status</div><div class="section-copy">Track where reviewed trades will be routed and whether broker connectivity is ready.</div></div>', unsafe_allow_html=True)
+    cols = st.columns(3)
+    cols[0].metric("Routing", str(account_status))
+    cols[1].metric("Mode", str(execution_mode))
+    cols[2].metric("Broker", str(broker_label))
+
+
+def _render_execution_style_page(auto_execute: bool, refresh_seconds: int, send_telegram: bool) -> None:
+    auto_text = "Auto execution enabled" if auto_execute else "Manual review before send"
+    telegram_text = "Telegram alerts ON" if send_telegram else "Telegram alerts OFF"
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Execution Style</div><div class="section-copy">See whether execution is manual or automatic and how the desk is currently refreshing and alerting.</div></div>', unsafe_allow_html=True)
+    cols = st.columns(3)
+    cols[0].metric("Style", auto_text)
+    cols[1].metric("Refresh", f"Every {int(refresh_seconds)}s")
+    cols[2].metric("Alerts", telegram_text)
+
+
+def _render_instrument_focus_page(symbol: str, instrument_mode: str, interval: str, period: str) -> None:
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Instrument Focus</div><div class="section-copy">Keep the current symbol, instrument mode, and scan window together on one focused page.</div></div>', unsafe_allow_html=True)
+    cols = st.columns(3)
+    cols[0].metric("Symbol", str(symbol))
+    cols[1].metric("Instrument", str(instrument_mode))
+    cols[2].metric("Scan Window", f"{interval} / {period}")
+
 
 
 def _render_strategy_page(strategy: str, workspace: str, symbol: str, interval: str, period: str, execution_mode: str) -> None:
@@ -1878,19 +1881,21 @@ def main() -> None:
             default="Breakout" if workspace == "Desk" else str(workspace),
             label_visibility="collapsed",
         )
+    content_options = ["Home", "Live Signals", "Paper & Live", "Routing Status", "Execution Style", "Instrument Focus", "Strategy", "Desk Summary", "Prepare Desk", "Review Signals", "Authorize Execute", "Live Status", "Desk Controls", "Market", "Trades", "Downloads"]
+    if st.session_state.get("content_view") not in content_options:
+        st.session_state["content_view"] = "Home"
     with nav_col3:
         st.caption("Open section")
         content_view = st.segmented_control(
             "Open section",
-            ["Home", "Strategy", "Desk Summary", "Prepare Desk", "Review Signals", "Authorize Execute", "Live Status", "Desk Controls", "Market", "Trades", "Downloads"],
-            default="Home",
+            content_options,
+            key="content_view",
             label_visibility="collapsed",
         )
     show_controls = content_view == "Desk Controls"
 
     if content_view == "Home":
-        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the compact tabs above to open strategy, desk summary, prepare desk, review signals, authorize execute, live status, controls, market, trades, or downloads. This default view stays short and clean.</div></div>', unsafe_allow_html=True)
-
+        st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Simple Main Page</div><div class="section-copy">Use the compact tabs above or the action buttons below to open live signals, paper & live, routing status, execution style, instrument focus, strategy, desk summary, prepare desk, review signals, authorize execute, live status, controls, market, trades, or downloads. This default view stays short and clean.</div></div>', unsafe_allow_html=True)
     symbol = "^NSEI"
     interval = "1m"
     period = "1d"
@@ -2122,6 +2127,7 @@ def main() -> None:
     if str(execution_mode).upper() == "LIVE":
         account_status = "Dhan Ready" if dhan_client_id and dhan_token_present else "Dhan Missing"
 
+    risk_text = f"{float(risk_pct):.1f}% risk / {float(rr_ratio):.1f}R"
     with masthead_slot.container():
         _render_page_masthead(
             symbol=str(symbol),
@@ -2179,6 +2185,16 @@ def main() -> None:
             option_bias=option_bias,
             market_status=market_status,
         )
+    if content_view == "Live Signals":
+        _render_live_signals_page(len(signal_rows), str(strategy), str(last_signal_side))
+    if content_view == "Paper & Live":
+        _render_paper_live_page(str(execution_mode), account_status)
+    if content_view == "Routing Status":
+        _render_routing_status_page(account_status, str(execution_mode), "Dhan" if str(execution_mode).upper() == "LIVE" else "Paper")
+    if content_view == "Execution Style":
+        _render_execution_style_page(bool(auto_execute_generated), int(refresh_seconds), bool(send_telegram))
+    if content_view == "Instrument Focus":
+        _render_instrument_focus_page(str(symbol), str(instrument_mode), str(interval), str(period))
     if content_view == "Strategy":
         _render_strategy_page(str(strategy), str(workspace), str(symbol), str(interval), str(period), str(execution_mode))
     if content_view == "Desk Summary":
@@ -2408,3 +2424,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

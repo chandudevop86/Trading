@@ -172,7 +172,7 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
         x=alt.X("timestamp:T", title="Time", axis=alt.Axis(labelColor="#cbd5e1", titleColor="#cbd5e1", grid=False))
     )
     wick = base.mark_rule(strokeWidth=1.2).encode(
-        y=alt.Y("low:Q", title="Price", axis=alt.Axis(labelColor="#cbd5e1", titleColor="#cbd5e1", gridColor="#1e293b")),
+        y=alt.Y("low:Q", title="Price", axis=price_axis, scale=alt.Scale(zero=False, nice=True)),
         y2="high:Q",
         color=alt.Color("candle_color:N", scale=None, legend=None),
         tooltip=[
@@ -185,7 +185,7 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
         ],
     )
     body = base.mark_bar(size=10).encode(
-        y="open:Q",
+        y=alt.Y("open:Q", scale=alt.Scale(zero=False, nice=True)),
         y2="close:Q",
         color=alt.Color("candle_color:N", scale=None, legend=None),
     )
@@ -215,3 +215,4 @@ def build_live_market_chart(candles: pd.DataFrame, output_rows: list[dict[str, o
         tooltip=[alt.Tooltip("timestamp:T", title="Time"), alt.Tooltip("volume:Q", format=",.0f", title="Volume")],
     ).properties(height=120)
     return alt.vconcat(price_panel, volume, spacing=10).resolve_scale(x="shared").configure_view(stroke=None).configure(background="#0b1220")
+

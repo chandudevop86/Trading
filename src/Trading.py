@@ -2095,21 +2095,16 @@ def main() -> None:
     _render_sidebar_shell()
     masthead_slot = st.empty()
 
-    workspace_options = ["Desk", "Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
+    workspace = "Desk"
     strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
-
-    st.markdown('<div class="top-tab-shell"><div class="top-tab-title">Desk Navigation</div><div class="top-tab-copy">Use one compact row of side-by-side tabs for workspace, strategy, and page content.</div></div>', unsafe_allow_html=True)
-    nav_col1, nav_col2 = st.columns([1.15, 1.35])
-    with nav_col1:
-        workspace = st.segmented_control("Workspace", workspace_options, default="Desk", label_visibility="collapsed")
-    with nav_col2:
-        st.caption("Strategy Selection")
-        strategy = st.segmented_control(
-            "Strategy Selection",
-            strategy_options if workspace == "Desk" else [str(workspace)],
-            default="Breakout" if workspace == "Desk" else str(workspace),
-            label_visibility="collapsed",
-        )
+    st.caption("Strategy")
+    strategy = st.segmented_control(
+        "Strategy",
+        strategy_options,
+        default="Breakout",
+        label_visibility="collapsed",
+        width="content",
+    )
     content_options = ["Home", "Live Signals", "Market", "Trades", "Desk Controls", "Downloads"]
     if st.session_state.get("content_view") not in content_options:
         st.session_state["content_view"] = "Home"

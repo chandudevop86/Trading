@@ -750,7 +750,7 @@ def _render_sidebar_shell() -> None:
             border: 1px solid rgba(148, 163, 184, 0.10);
             border-radius: 18px;
             padding: 8px;
-            margin-bottom: 18px;
+            margin-bottom: 12px;
         }
         [data-testid="stTabs"] [role="tab"] {
             background: rgba(15, 23, 42, 0.82);
@@ -808,7 +808,7 @@ def _render_sidebar_shell() -> None:
             background: linear-gradient(180deg, rgba(15,23,42,0.88), rgba(8,15,28,0.92));
             border: 1px solid rgba(148, 163, 184, 0.10);
             border-radius: 20px;
-            padding: 12px 14px 6px 14px;
+            padding: 10px 12px 4px 12px;
             margin-bottom: 12px;
             box-shadow: 0 20px 40px rgba(2, 6, 23, 0.24);
         }
@@ -816,15 +816,15 @@ def _render_sidebar_shell() -> None:
             background: linear-gradient(180deg, rgba(15,23,42,0.82), rgba(8,15,28,0.90));
             border: 1px solid rgba(148, 163, 184, 0.12);
             border-radius: 24px;
-            padding: 16px 18px;
-            margin-bottom: 18px;
+            padding: 12px 14px;
+            margin-bottom: 12px;
             box-shadow: 0 20px 38px rgba(2, 6, 23, 0.20);
         }
         .live-panel {
             background: linear-gradient(180deg, rgba(15,23,42,0.92), rgba(8,15,28,0.96));
             border: 1px solid rgba(56, 189, 248, 0.18);
             border-radius: 24px;
-            padding: 18px 20px;
+            padding: 12px 14px;
             margin-bottom: 12px;
             box-shadow: 0 20px 42px rgba(2, 6, 23, 0.24);
         }
@@ -854,7 +854,7 @@ def _render_sidebar_shell() -> None:
             border: 1px solid rgba(118, 164, 210, 0.16);
             border-radius: 20px;
             padding: 14px 16px 8px 16px;
-            margin-bottom: 18px;
+            margin-bottom: 12px;
             box-shadow: 0 18px 34px rgba(2, 12, 27, 0.18);
         }
         .control-ribbon-title {
@@ -1105,7 +1105,7 @@ def _render_sidebar_shell() -> None:
             background: linear-gradient(180deg, #050505 0%, #090909 100%);
             border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: 0;
-            padding: 10px 16px 14px 16px;
+            padding: 8px 14px 10px 14px;
             margin-bottom: 8px;
             box-shadow: 0 24px 50px rgba(0, 0, 0, 0.34);
             overflow: hidden;
@@ -1124,8 +1124,8 @@ def _render_sidebar_shell() -> None:
             gap: 10px;
             border: none;
             border-radius: 0;
-            padding: 8px 0 12px 0;
-            margin-bottom: 6px;
+            padding: 4px 0 8px 0;
+            margin-bottom: 4px;
             backdrop-filter: none;
         }
         .top-nav-brand {
@@ -1337,7 +1337,7 @@ def _render_sidebar_shell() -> None:
             position: relative;
             z-index: 2;
             display: block;
-            padding: 18px 8px 8px 8px;
+            padding: 10px 6px 4px 6px;
         }
         .dhan-hero-shell {
             display: flex;
@@ -1405,7 +1405,7 @@ def _render_sidebar_shell() -> None:
             color: #111827;
             font-size: 16px;
             font-weight: 800;
-            margin-bottom: 18px;
+            margin-bottom: 12px;
         }
         .dhan-hero-banner-copy {
             color: #ffffff;
@@ -1468,7 +1468,7 @@ def _render_sidebar_shell() -> None:
             color: #111827;
             font-size: 17px;
             font-weight: 700;
-            padding: 16px 18px;
+            padding: 12px 14px;
             box-shadow: none;
         }
         .masthead-pills {
@@ -1512,18 +1512,18 @@ def _render_sidebar_shell() -> None:
         }
         .hero-visual {
             position: relative;
-            min-height: 430px;
+            min-height: 300px;
             border-radius: 24px;
             background: radial-gradient(circle at 18% 18%, rgba(76, 180, 255, 0.20), transparent 22%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
             border: 1px solid rgba(255,255,255,0.08);
             overflow: hidden;
-            padding: 28px;
+            padding: 18px;
         }
         .hero-visual::before {
             content: "";
             position: absolute;
             inset: auto 22px 26px 22px;
-            height: 132px;
+            height: 92px;
             border-radius: 18px;
             background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
             border: 1px solid rgba(255,255,255,0.06);
@@ -1545,15 +1545,15 @@ def _render_sidebar_shell() -> None:
             opacity: 0.85;
         }
         .hero-orb-one {
-            width: 160px;
-            height: 160px;
+            width: 96px;
+            height: 120px;
             right: 40px;
             top: 54px;
             background: radial-gradient(circle, rgba(255,193,92,0.85) 0%, rgba(255,193,92,0.08) 72%);
         }
         .hero-orb-two {
-            width: 190px;
-            height: 190px;
+            width: 140px;
+            height: 140px;
             right: 110px;
             bottom: 90px;
             background: radial-gradient(circle, rgba(53,168,255,0.55) 0%, rgba(53,168,255,0.06) 72%);
@@ -1568,7 +1568,7 @@ def _render_sidebar_shell() -> None:
             right: -8px;
             top: 110px;
             width: 340px;
-            height: 180px;
+            height: 130px;
             border-color: rgba(43, 170, 255, 0.72);
             transform: rotate(-4deg);
         }
@@ -1576,7 +1576,7 @@ def _render_sidebar_shell() -> None:
             right: 34px;
             top: 150px;
             width: 300px;
-            height: 170px;
+            height: 120px;
             border-color: rgba(102, 222, 255, 0.44);
             transform: rotate(8deg);
         }
@@ -1584,7 +1584,7 @@ def _render_sidebar_shell() -> None:
             right: 76px;
             top: 208px;
             width: 240px;
-            height: 120px;
+            height: 96px;
             border-color: rgba(110, 103, 255, 0.45);
             transform: rotate(-12deg);
         }
@@ -1598,7 +1598,7 @@ def _render_sidebar_shell() -> None:
             grid-template-columns: 1.2fr 0.8fr;
             gap: 16px;
             align-items: center;
-            padding: 18px 20px;
+            padding: 12px 14px;
             background: linear-gradient(180deg, rgba(19,19,19,0.90), rgba(19,19,19,0.82));
             border: 1px solid rgba(255,255,255,0.08);
             border-radius: 18px;
@@ -1681,7 +1681,7 @@ def _render_sidebar_shell() -> None:
         .section-copy {
             color: #89a7c7;
             font-size: 17px;
-            margin-bottom: 18px;
+            margin-bottom: 12px;
         }
         @media (max-width: 980px) {
             .top-nav {
@@ -2154,7 +2154,7 @@ def main() -> None:
         market_col, position_col, access_col = st.columns([1.15, 1.15, 1.1])
 
         with market_col:
-            st.markdown('<div class="section-shell" style="min-height:330px;">', unsafe_allow_html=True)
+            st.markdown('<div class="section-shell" style="min-height:250px;">', unsafe_allow_html=True)
             st.markdown('<div class="section-heading">Market Setup</div><div class="section-copy">Choose what to scan and how the strategy should read the market.</div>', unsafe_allow_html=True)
             symbol = st.text_input("Symbol", symbol)
             interval = st.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default=interval, disabled=(strategy == "MTF 5m"))
@@ -2164,7 +2164,7 @@ def main() -> None:
             st.markdown('</div>', unsafe_allow_html=True)
 
         with position_col:
-            st.markdown('<div class="section-shell" style="min-height:330px;">', unsafe_allow_html=True)
+            st.markdown('<div class="section-shell" style="min-height:250px;">', unsafe_allow_html=True)
             st.markdown('<div class="section-heading">Position & Risk</div><div class="section-copy">Define capital, sizing, and protection logic before trades are generated.</div>', unsafe_allow_html=True)
             lot_size = st.number_input("Lot size", min_value=1, value=lot_size, step=1)
             lots = st.slider("Lots", 1, 10, lots)
@@ -2176,7 +2176,7 @@ def main() -> None:
             st.markdown('</div>', unsafe_allow_html=True)
 
         with access_col:
-            st.markdown('<div class="section-shell" style="min-height:330px;">', unsafe_allow_html=True)
+            st.markdown('<div class="section-shell" style="min-height:250px;">', unsafe_allow_html=True)
             st.markdown('<div class="section-heading">Execution Access</div><div class="section-copy">Switch between paper and live routing, set refresh behavior, and verify broker readiness.</div>', unsafe_allow_html=True)
             live_update = st.checkbox("Auto refresh", value=live_update)
             refresh_seconds = st.slider("Refresh every (seconds)", 2, 120, refresh_seconds)
@@ -2481,7 +2481,7 @@ def main() -> None:
         c4.metric("Volume", int(latest_volume))
     
         if not candles.empty:
-            st.dataframe(candles.tail(6), width="stretch", height=240)
+            st.dataframe(candles.tail(6), width="stretch", height=180)
         else:
             st.warning("No candle data available.")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -2547,7 +2547,7 @@ def main() -> None:
         if output_rows:
             trades_df = pd.DataFrame(output_rows)
             with st.expander(f"Generated Trades ({len(trades_df)})", expanded=False):
-                st.dataframe(trades_df.tail(12), width="stretch", height=300)
+                st.dataframe(trades_df.tail(12), width="stretch", height=220)
     
             try:
                 summary = build_trade_summary(output_rows)
@@ -2567,7 +2567,7 @@ def main() -> None:
         if execution_candidates:
             st.caption("Current executable candidates generated from the latest strategy run.")
             with st.expander(f"Execution Candidates ({len(execution_candidates)})", expanded=False):
-                st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), width="stretch", height=280)
+                st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), width="stretch", height=210)
             if execution_mode == "LIVE":
                 with st.expander("Dhan Live Payload Preview"):
                     if st.button("Preview Live Payloads", width="stretch"):
@@ -2603,7 +2603,7 @@ def main() -> None:
             st.success(f"Reviewed queue ready: {len(staged_candidates)} actionable trade(s) available for execution.")
             st.caption("Only this staged reviewed queue can be executed manually or by auto execute.")
             with st.expander(f"Reviewed Queue ({len(staged_candidates)})", expanded=True):
-                st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), width="stretch", height=260)
+                st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), width="stretch", height=200)
 
             executed_rows: list[dict[str, object]] = []
             if st.button("Execute Reviewed Trades", type="primary", width="stretch"):

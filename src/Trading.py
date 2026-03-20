@@ -2237,18 +2237,18 @@ def main() -> None:
         market_col, position_col, access_col = st.columns([1.15, 1.15, 1.1])
 
         with market_col:
-            st.markdown('<div class="section-shell" style="min-height:250px;">', unsafe_allow_html=True)
-            st.markdown('<div class="section-heading">Market Setup</div><div class="section-copy">Choose what to scan and how the strategy should read the market.</div>', unsafe_allow_html=True)
+            st.caption("Market Setup")
+            st.caption("Choose what to scan and how the strategy should read the market.")
             symbol = st.text_input("Symbol", symbol)
             interval = st.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default=interval, disabled=(strategy == "MTF 5m"))
             period = st.segmented_control("Period", ["1d", "5d", "1mo", "3mo"], default=period)
             execution_mode = st.segmented_control("Execution mode", ["PAPER", "LIVE"], default=execution_mode)
             instrument_mode = st.segmented_control("Instrument", ["Options", "Futures"], default=instrument_mode)
-            st.markdown('</div>', unsafe_allow_html=True)
+
 
         with position_col:
-            st.markdown('<div class="section-shell" style="min-height:250px;">', unsafe_allow_html=True)
-            st.markdown('<div class="section-heading">Position & Risk</div><div class="section-copy">Define capital, sizing, and protection logic before trades are generated.</div>', unsafe_allow_html=True)
+            st.caption("Position & Risk")
+            st.caption("Define capital, sizing, and protection logic before trades are generated.")
             lot_size = st.number_input("Lot size", min_value=1, value=lot_size, step=1)
             lots = st.slider("Lots", 1, 10, lots)
             capital = st.number_input("Capital (INR)", min_value=1000, value=capital, step=1000)
@@ -2256,11 +2256,11 @@ def main() -> None:
             rr_ratio = st.slider("Risk / Reward", 1.0, 10.0, rr_ratio)
             trailing_sl_pct = st.slider("Trailing stop loss %", 0.1, 10.0, trailing_sl_pct, 0.1)
             auto_execute_generated = st.toggle("Auto execute", value=auto_execute_generated)
-            st.markdown('</div>', unsafe_allow_html=True)
+
 
         with access_col:
-            st.markdown('<div class="section-shell" style="min-height:250px;">', unsafe_allow_html=True)
-            st.markdown('<div class="section-heading">Execution Access</div><div class="section-copy">Switch between paper and live routing, set refresh behavior, and verify broker readiness.</div>', unsafe_allow_html=True)
+            st.caption("Execution Access")
+            st.caption("Switch between paper and live routing, set refresh behavior, and verify broker readiness.")
             live_update = st.checkbox("Auto refresh", value=live_update)
             refresh_seconds = st.slider("Refresh every (seconds)", 2, 120, refresh_seconds)
             send_telegram = st.checkbox("Send Telegram alert", value=send_telegram)
@@ -2291,7 +2291,7 @@ def main() -> None:
                             st.success(note)
                         else:
                             st.info(note)
-            st.markdown('</div>', unsafe_allow_html=True)
+
 
         if instrument_mode == "Options":
             st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
@@ -2305,7 +2305,7 @@ def main() -> None:
                 strike_steps = st.slider("ITM / OTM steps", 0, 5, strike_steps)
             with option_cols[3]:
                 fetch_option_metrics = st.checkbox("Fetch option chain metrics", value=fetch_option_metrics)
-            st.markdown('</div>', unsafe_allow_html=True)
+
         else:
             st.caption("Futures mode uses the monthly futures contract automatically.")
 
@@ -2322,7 +2322,7 @@ def main() -> None:
                 mtf_retest_strength = st.checkbox("Require strong 5m retest candle", value=mtf_retest_strength)
             with mtf_cols[3]:
                 mtf_max_trades_per_day = int(st.segmented_control("Max trades/day", [1, 2, 3], default=mtf_max_trades_per_day))
-            st.markdown('</div>', unsafe_allow_html=True)
+
     if live_update:
         components.html(
             f"""<script>

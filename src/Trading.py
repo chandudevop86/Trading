@@ -68,7 +68,7 @@ except Exception:
 
 
 
-def _load_local_env(path: Path = Path(".env")) -> None:
+def _load_local_env(path: Path) -> None:
     if not path.exists():
         return
     try:
@@ -85,7 +85,22 @@ def _load_local_env(path: Path = Path(".env")) -> None:
         return
 
 
-_load_local_env()
+def _bootstrap_env() -> None:
+    env_candidates = [
+        Path.cwd() / ".env",
+        Path(__file__).resolve().parent.parent / ".env",
+        Path(__file__).resolve().parent / ".env",
+    ]
+    seen: set[Path] = set()
+    for env_path in env_candidates:
+        resolved = env_path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        _load_local_env(resolved)
+
+
+_bootstrap_env()
 st.set_page_config(page_title="KRSH SOLUTIONS", page_icon="chart", layout="wide")
 
 st.markdown(
@@ -108,8 +123,8 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
-TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "")
+TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "") or os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "") or os.getenv("TELEGRAM_CHAT_ID", "")
 
 
 def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:

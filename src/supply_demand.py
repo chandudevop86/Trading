@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from math import floor
 from typing import Any
 
 import pandas as pd
@@ -70,10 +71,94 @@ def _append_zone(
     zones.append(zone)
 
 
+def _calc_qty(capital: float, risk_pct: float, entry: float, stop: float) -> int:
+    risk_per_unit = abs(entry - stop)
+    if risk_per_unit <= 0:
+        return 0
+    if capital <= 0 or risk_pct <= 0:
+        return 1
+    return max(1, floor((capital * risk_pct) / risk_per_unit))
+
+
+def _build_signal_from_zone(
+    *,
+    candle: pd.Series,
+    zone: dict[str, Any],
+    rr_ratio: float,
+    capital: float,
+    risk_pct: float,
+) -> dict[str, Any] | None:
+    open_price = float(candle["open"])
+    high = float(candle["high"])
+    low = float(candle["low"])
+    close = float(candle["close"])
+    zone_low = float(zone["zone_low"])
+    zone_high = float(zone["zone_high"])
+    zone_mid = (zone_low + zone_high) / 2.0
+    zone_type = str(zone["type"]).strip().lower()
+
+    side = ""
+    touched = False
+    rejection_ok = False
+    stop = 0.0
+
+    touch_buffer = max(close * 0.003, 0.3)
+
+    if zone_type == "demand":
+        touched = low <= (zone_high + touch_buffer) and high >= (zone_low - touch_buffer)
+        rejection_ok = close > open_price and close >= zone_mid
+        stop = min(low, zone_low) - max(close * 0.001, 0.05)
+        side = "BUY"
+    elif zone_type == "supply":
+        touched = high >= (zone_low - touch_buffer) and low <= (zone_high + touch_buffer)
+        rejection_ok = close < open_price and close <= zone_mid
+        stop = max(high, zone_high) + max(close * 0.001, 0.05)
+        side = "SELL"
+    else:
+        return None
+
+    if not touched or not rejection_ok:
+        return None
+
+    entry = close
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return None
+
+    if side == "BUY":
+        target = entry + (risk * rr_ratio)
+    else:
+        target = entry - (risk * rr_ratio)
+
+    quantity = _calc_qty(capital, risk_pct, entry, stop)
+    timestamp = candle.get("timestamp", "")
+
+    return {
+        "strategy": "DEMAND_SUPPLY",
+        "timestamp": timestamp,
+        "entry_time": timestamp,
+        "side": side,
+        "entry_price": round(entry, 4),
+        "stop_loss": round(stop, 4),
+        "trailing_stop_loss": round(stop, 4),
+        "target_price": round(target, 4),
+        "quantity": int(quantity),
+        "signal": f"{zone_type.upper()}_RETEST",
+        "zone_type": zone_type,
+        "zone_low": round(zone_low, 4),
+        "zone_high": round(zone_high, 4),
+        "zone_source": zone.get("source", ""),
+        "structure_level": zone.get("structure_level", ""),
+    }
+
+
 def generate_trades(
     df: Any,
     include_fvg: bool = True,
     include_bos: bool = True,
+    capital: float = 100000.0,
+    risk_pct: float = 0.01,
+    rr_ratio: float = 2.0,
     **_: Any,
 ) -> list[dict[str, Any]]:
     candles = _coerce_candles(df)
@@ -196,4 +281,30 @@ def generate_trades(
                         structure_level=last_swing_low,
                     )
 
-    return sorted(zones, key=lambda zone: int(zone["index"]))
+    ordered_zones = sorted(zones, key=lambda zone: int(zone["index"]))
+    signals: list[dict[str, Any]] = []
+
+    for i in range(1, len(candles)):
+        candle = candles.iloc[i]
+        prior_zones = [zone for zone in ordered_zones if int(zone["index"]) < i]
+        if not prior_zones:
+            continue
+
+        for zone in reversed(prior_zones[-6:]):
+            signal = _build_signal_from_zone(
+                candle=candle,
+                zone=zone,
+                rr_ratio=float(rr_ratio),
+                capital=float(capital),
+                risk_pct=float(risk_pct),
+            )
+            if signal is None:
+                continue
+            signal["zone_index"] = int(zone["index"])
+            signal["zone_price"] = zone.get("price", "")
+            signals.append(signal)
+            break
+
+    return signals
+
+

@@ -1768,13 +1768,65 @@ def _render_desk_summary_page(workspace: str, strategy: str, content_view: str, 
     cols[4].metric("Account", str(account_status))
 
 
-def _render_live_signals_page(signal_count: int, strategy: str, last_signal_side: str) -> None:
-    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Live Signals</div><div class="section-copy">Review the current live setup count and the latest strategy signal state.</div></div>', unsafe_allow_html=True)
-    cols = st.columns(3)
-    cols[0].metric("Setups", int(signal_count))
-    cols[1].metric("Latest Signal", str(last_signal_side))
-    cols[2].metric("Strategy", str(strategy))
+def _render_live_signals_page(signal_rows: list[dict[str, object]], strategy: str, last_signal_side: str) -> None:
+    st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Live Signals</div><div class="section-copy">Review the current live setup count and the latest strategy signal state with contract details.</div></div>', unsafe_allow_html=True)
+    signal_count = len(signal_rows)
+    latest_signal = dict(signal_rows[-1]) if signal_rows else {}
 
+    top_cols = st.columns(3)
+    top_cols[0].metric("Setups", int(signal_count))
+    top_cols[1].metric("Latest Signal", str(last_signal_side))
+    top_cols[2].metric("Strategy", str(strategy))
+
+    if not latest_signal:
+        st.info("No actionable BUY/SELL signal is available yet for the selected strategy.")
+        return
+
+    detail_cols = st.columns(4)
+    detail_cols[0].metric("Strike", str(latest_signal.get("option_strike", "-")))
+    detail_cols[1].metric("Expiry", str(latest_signal.get("option_expiry", "-")))
+    detail_cols[2].metric("Lots / Qty", f"{latest_signal.get('lots', '-')} / {latest_signal.get('quantity', '-')}")
+    detail_cols[3].metric("Option LTP", _fmt_num(latest_signal.get("option_ltp")))
+
+    trade_cols = st.columns(4)
+    trade_cols[0].metric("Entry", _fmt_num(latest_signal.get("entry_price")))
+    trade_cols[1].metric("Stop Loss", _fmt_num(latest_signal.get("stop_loss")))
+    trade_cols[2].metric("Target", _fmt_num(latest_signal.get("target_price")))
+    trade_cols[3].metric("Order Value", _fmt_num(latest_signal.get("order_value")))
+
+    latest_view = {
+        "time": latest_signal.get("entry_time", latest_signal.get("timestamp", "-")),
+        "side": latest_signal.get("side", "-"),
+        "entry_price": latest_signal.get("entry_price", "-"),
+        "stop_loss": latest_signal.get("stop_loss", "-"),
+        "target_price": latest_signal.get("target_price", "-"),
+        "option_strike": latest_signal.get("option_strike", "-"),
+        "option_expiry": latest_signal.get("option_expiry", "-"),
+        "option_ltp": latest_signal.get("option_ltp", "-"),
+        "lots": latest_signal.get("lots", "-"),
+        "quantity": latest_signal.get("quantity", "-"),
+        "order_value": latest_signal.get("order_value", "-"),
+    }
+    st.caption("Latest actionable signal")
+    st.dataframe(pd.DataFrame([latest_view]), use_container_width=True, hide_index=True)
+
+    history_cols = [
+        "trade_label",
+        "side",
+        "entry_price",
+        "stop_loss",
+        "target_price",
+        "option_strike",
+        "option_expiry",
+        "option_ltp",
+        "lots",
+        "quantity",
+        "order_value",
+        "entry_time",
+    ]
+    history_rows = [{k: row.get(k, "") for k in history_cols} for row in signal_rows[-8:]]
+    st.caption("Recent actionable signals")
+    st.dataframe(pd.DataFrame(history_rows), use_container_width=True, hide_index=True)
 
 def _render_paper_live_page(execution_mode: str, account_status: str) -> None:
     st.markdown('<div class="section-shell" style="margin-bottom:14px;"><div class="section-heading">Paper & Live</div><div class="section-copy">See the current execution mode and whether the desk is staying in paper review or live-ready routing.</div></div>', unsafe_allow_html=True)

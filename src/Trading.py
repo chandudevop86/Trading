@@ -2183,27 +2183,29 @@ def main() -> None:
     interval = str(st.session_state.get("interval", "5m"))
     period = str(st.session_state.get("period", "1d"))
 
-    st.caption("Chart Review")
-    review_col1, review_col2, review_col3 = st.columns([1.2, 1.2, 1.0])
-    with review_col1:
-        symbol = st.text_input("Symbol", symbol, key="global_symbol")
-    with review_col2:
-        interval = st.segmented_control(
-            "Timeframe",
-            ["1m", "5m", "15m", "30m", "1h"],
-            default="5m" if strategy == "MTF 5m" else interval,
-            key="global_interval",
-            disabled=(strategy == "MTF 5m"),
-            width="stretch",
-        )
-    with review_col3:
-        period = st.segmented_control(
-            "Period",
-            ["1d", "5d", "1mo", "3mo"],
-            default=period,
-            key="global_period",
-            width="stretch",
-        )
+    show_chart_review = content_view not in {"Desk Controls", "Live Signals", "Market"}
+    if show_chart_review:
+        st.caption("Chart Review")
+        review_col1, review_col2, review_col3 = st.columns([1.2, 1.2, 1.0])
+        with review_col1:
+            symbol = st.text_input("Symbol", symbol, key="global_symbol")
+        with review_col2:
+            interval = st.segmented_control(
+                "Timeframe",
+                ["1m", "5m", "15m", "30m", "1h"],
+                default="5m" if strategy == "MTF 5m" else interval,
+                key="global_interval",
+                disabled=(strategy == "MTF 5m"),
+                width="stretch",
+            )
+        with review_col3:
+            period = st.segmented_control(
+                "Period",
+                ["1d", "5d", "1mo", "3mo"],
+                default=period,
+                key="global_period",
+                width="stretch",
+            )
     execution_mode = "PAPER"
     instrument_mode = "Options"
     lot_size = 65

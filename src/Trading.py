@@ -1927,6 +1927,64 @@ def _sidebar_section(title: str, subtitle: str = "") -> None:
 
 
 
+
+def _render_home_intro(symbol: str, strategy: str, execution_mode: str, last_price: object, day_change: float) -> None:
+    price_text = _fmt_num(last_price)
+    change_prefix = "+" if day_change > 0 else ""
+    st.markdown(
+        f"""
+        <div class="section-shell" style="padding:18px 20px; margin-bottom:14px; overflow:hidden;">
+            <div style="display:grid; grid-template-columns:1.3fr 1fr; gap:18px; align-items:stretch;">
+                <div style="padding:10px 4px 6px 4px;">
+                    <div style="color:#8eb8e8; font-size:12px; letter-spacing:0.16em; text-transform:uppercase; margin-bottom:10px;">KRSH Solutions</div>
+                    <div style="font-size:38px; font-weight:800; line-height:1.04; color:#ffffff; margin-bottom:10px; max-width:720px;">Research-led trading workspace built for chart review, strategy monitoring, and controlled execution.</div>
+                    <div style="font-size:15px; line-height:1.7; color:#b8c9dc; max-width:760px; margin-bottom:16px;">This website brings market data, strategy context, review workflows, and broker-ready routing into one compact desk. Use the top tabs to move between live signals, market structure, strategy notes, trades, controls, and downloads.</div>
+                    <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; max-width:820px;">
+                        <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(148,163,184,0.12); border-radius:16px; padding:12px 14px;">
+                            <div style="font-size:12px; color:#8eb8e8; text-transform:uppercase; letter-spacing:0.10em; margin-bottom:6px;">Market Focus</div>
+                            <div style="font-size:20px; font-weight:700; color:#ffffff;">{symbol}</div>
+                            <div style="font-size:13px; color:#b8c9dc; margin-top:4px;">Spot {price_text} • {change_prefix}{day_change:.2f}</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(148,163,184,0.12); border-radius:16px; padding:12px 14px;">
+                            <div style="font-size:12px; color:#8eb8e8; text-transform:uppercase; letter-spacing:0.10em; margin-bottom:6px;">Current Strategy</div>
+                            <div style="font-size:20px; font-weight:700; color:#ffffff;">{strategy}</div>
+                            <div style="font-size:13px; color:#b8c9dc; margin-top:4px;">Mode: {execution_mode}</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(148,163,184,0.12); border-radius:16px; padding:12px 14px;">
+                            <div style="font-size:12px; color:#8eb8e8; text-transform:uppercase; letter-spacing:0.10em; margin-bottom:6px;">Project Goal</div>
+                            <div style="font-size:20px; font-weight:700; color:#ffffff;">Review First</div>
+                            <div style="font-size:13px; color:#b8c9dc; margin-top:4px;">Signals, charts, controls, execution</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-rows:1fr 1fr; gap:14px;">
+                    <div style="border-radius:22px; border:1px solid rgba(118,164,210,0.16); background:radial-gradient(circle at top left, rgba(56,189,248,0.24), transparent 28%), linear-gradient(180deg, rgba(10,22,40,0.96), rgba(10,26,47,0.96)); padding:18px; min-height:180px; position:relative; overflow:hidden;">
+                        <div style="font-size:12px; color:#8eb8e8; text-transform:uppercase; letter-spacing:0.12em; margin-bottom:10px;">Website Overview</div>
+                        <div style="font-size:22px; font-weight:700; color:#ffffff; margin-bottom:8px;">One desk for market, strategy, and execution.</div>
+                        <div style="font-size:13px; line-height:1.6; color:#c6d5e5; max-width:320px;">Charts, option context, reviewed trades, and broker readiness stay together so the workflow remains short and clear.</div>
+                        <div style="position:absolute; right:18px; bottom:16px; width:112px; height:112px; border-radius:18px; background:linear-gradient(135deg, rgba(34,197,94,0.28), rgba(14,165,233,0.24)); border:1px solid rgba(255,255,255,0.12);"></div>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                        <div style="border-radius:20px; border:1px solid rgba(148,163,184,0.12); background:linear-gradient(180deg, rgba(15,23,42,0.92), rgba(11,20,35,0.96)); padding:16px; min-height:150px;">
+                            <div style="font-size:12px; color:#8eb8e8; text-transform:uppercase; letter-spacing:0.12em; margin-bottom:8px;">Image 1</div>
+                            <div style="height:74px; border-radius:14px; background:linear-gradient(135deg, rgba(245,158,11,0.22), rgba(239,68,68,0.18)); border:1px solid rgba(255,255,255,0.10); margin-bottom:10px;"></div>
+                            <div style="font-size:14px; color:#ffffff; font-weight:700;">Chart-first workflow</div>
+                            <div style="font-size:12px; color:#b8c9dc; margin-top:4px;">Move from price structure to reviewed execution.</div>
+                        </div>
+                        <div style="border-radius:20px; border:1px solid rgba(148,163,184,0.12); background:linear-gradient(180deg, rgba(15,23,42,0.92), rgba(11,20,35,0.96)); padding:16px; min-height:150px;">
+                            <div style="font-size:12px; color:#8eb8e8; text-transform:uppercase; letter-spacing:0.12em; margin-bottom:8px;">Image 2</div>
+                            <div style="height:74px; border-radius:14px; background:linear-gradient(135deg, rgba(34,197,94,0.22), rgba(59,130,246,0.18)); border:1px solid rgba(255,255,255,0.10); margin-bottom:10px;"></div>
+                            <div style="font-size:14px; color:#ffffff; font-weight:700;">Controlled routing</div>
+                            <div style="font-size:12px; color:#b8c9dc; margin-top:4px;">Keep paper, live, and broker checks in one place.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def _render_page_footer() -> None:
     st.caption("KRSH Solutions desk workspace")
 

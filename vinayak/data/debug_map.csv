@@ -1,0 +1,2 @@
+alias,security_id,exchange_segment,product_type,order_type,trading_symbol
+^NSEI,IDXNIFTY,NSE_FNO,INTRADAY,MARKET,NIFTY 50

@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>04_broker_integration_flow</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; color: #111; line-height: 1.5; font-size: 14px; }
+h1 { font-size: 24px; margin-bottom: 24px; }
+.section { margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<h1>04_broker_integration_flow</h1>
+<div class="section">TRADING APP BROKER INTEGRATION FLOW<br/>
+<br/>
+Current State<br/>
+The platform already supports signal generation, quantity preparation, and execution logging.<br/>
+Paper trading is active and live integration is prepared as the next extension point.<br/>
+<br/>
+Future Broker Flow<br/>
+1. Strategy generates BUY or SELL signal.<br/>
+2. Contract layer maps the signal to options or futures.<br/>
+3. Execution engine prepares order payload.<br/>
+4. Broker adapter validates symbol, quantity, and product type.<br/>
+5. Order is sent to broker API.<br/>
+6. Response is stored in execution log.<br/>
+7. Telegram notification is sent if enabled.<br/>
+<br/>
+Integration Targets<br/>
+Dhan API.<br/>
+Zerodha API.<br/>
+Angel One API.<br/>
+Other REST or WebSocket brokers.<br/>
+<br/>
+Operational Requirement<br/>
+Broker APIs should be attached only after stable paper-trading validation and proper secret management.</div>
+</body>
+</html>

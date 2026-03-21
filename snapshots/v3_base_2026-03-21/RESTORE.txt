@@ -1,0 +1,14 @@
+KRSH Solutions Trading Project Snapshot
+Version: v3 base
+Saved on: 2026-03-21 Asia/Calcutta
+Source workspace: F:\Trading
+Git commit: 4c4003b9b8fe05bcd7572c543816887411d884ca
+
+Restore options:
+1. Use the git tag: v3-base-2026-03-21
+2. Or copy files back from:
+   F:\Trading\snapshots\v3_base_2026-03-21\project
+
+Notes:
+- Snapshot excludes .git, .codex, .edge-profile, .mypy_cache, __pycache__, and snapshots.
+- This snapshot is intended as the safe rollback baseline before future UI/logic updates.

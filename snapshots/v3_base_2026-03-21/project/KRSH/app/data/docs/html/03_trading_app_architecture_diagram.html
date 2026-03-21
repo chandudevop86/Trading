@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>03_trading_app_architecture_diagram</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; color: #111; line-height: 1.5; font-size: 14px; }
+h1 { font-size: 24px; margin-bottom: 24px; }
+.section { margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<h1>03_trading_app_architecture_diagram</h1>
+<div class="section">TRADING APP ARCHITECTURE DIAGRAM DOCUMENTATION<br/>
+<br/>
+High Level Component View<br/>
+<br/>
+USER<br/>
+  |<br/>
+  v<br/>
+STREAMLIT DASHBOARD<br/>
+  |<br/>
+  v<br/>
+APPLICATION LOGIC LAYER<br/>
+  |<br/>
+  +--&gt; MARKET DATA CONNECTORS<br/>
+  |      +--&gt; Yahoo Finance OHLCV<br/>
+  |      +--&gt; NSE Option Chain<br/>
+  |      +--&gt; NSE Futures Data<br/>
+  |<br/>
+  +--&gt; STRATEGY ENGINES<br/>
+  |      +--&gt; Breakout Strategy<br/>
+  |      +--&gt; Demand Supply Strategy<br/>
+  |      +--&gt; Indicator Strategy<br/>
+  |      +--&gt; One Trade Day Strategy<br/>
+  |      +--&gt; MTF 5m Strategy<br/>
+  |<br/>
+  +--&gt; CONTRACT MAPPING LAYER<br/>
+  |      +--&gt; Option Strike Selection<br/>
+  |      +--&gt; Futures Contract Attachment<br/>
+  |<br/>
+  +--&gt; EXECUTION ENGINE<br/>
+  |      +--&gt; Paper Execution<br/>
+  |      +--&gt; Live Ready Execution<br/>
+  |<br/>
+  +--&gt; NOTIFICATION LAYER<br/>
+  |      +--&gt; Telegram Alerts<br/>
+  |<br/>
+  +--&gt; REPORTING LAYER<br/>
+         +--&gt; CSV Outputs<br/>
+         +--&gt; HTML Reports<br/>
+         +--&gt; PDF Reports<br/>
+<br/>
+STORAGE LAYER<br/>
+  +--&gt; CSV Files<br/>
+  +--&gt; YAML Rules<br/>
+  +--&gt; HTML Files<br/>
+  +--&gt; PDF Files<br/>
+  +--&gt; Optional S3 Upload<br/>
+<br/>
+Communication Notes<br/>
+The dashboard does not directly execute trades by itself.<br/>
+It passes user-selected settings into the application logic layer.<br/>
+The application logic layer fetches market data, runs strategies, maps contracts, and prepares execution rows.<br/>
+The execution engine stores output into log files.<br/>
+The reporting layer converts those outputs into readable summaries.<br/>
+The notification layer shares important signals through Telegram.<br/>
+<br/>
+Security Notes<br/>
+UI can be exposed with controlled access.<br/>
+Execution internals and secrets should remain protected.<br/>
+Broker integrations should be attached only inside secure backend flow.<br/>
+</div>
+</body>
+</html>

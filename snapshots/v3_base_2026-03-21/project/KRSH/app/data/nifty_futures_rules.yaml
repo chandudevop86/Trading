@@ -1,0 +1,9 @@
+- name: liquid_future
+  field: openInterest
+  op: ">="
+  value: 100000
+
+- name: active_contract
+  field: numberOfContractsTraded
+  op: ">="
+  value: 10000

@@ -1,0 +1,5 @@
+SIGNAL_GENERATED = "signal.generated"
+TRADE_REVIEWED = "trade.reviewed"
+TRADE_EXECUTE_REQUESTED = "trade.execute.requested"
+TRADE_EXECUTED = "trade.executed"
+TELEGRAM_ALERT_REQUESTED = "telegram.alert.requested"

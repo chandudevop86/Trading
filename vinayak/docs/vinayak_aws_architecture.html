@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vinayak AWS Architecture Guide</title>
+  <style>
+    @page { size: A4; margin: 18mm; }
+    body { font-family: Arial, sans-serif; color: #102033; line-height: 1.5; }
+    h1, h2, h3 { margin: 0 0 8px 0; color: #0f2742; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 18px; margin-top: 22px; border-bottom: 2px solid #d9e4f2; padding-bottom: 6px; }
+    h3 { font-size: 14px; margin-top: 14px; }
+    p { margin: 6px 0; }
+    ul, ol { margin: 8px 0 8px 20px; }
+    li { margin: 4px 0; }
+    .hero { padding: 18px 20px; border-radius: 18px; background: linear-gradient(135deg, #0e233b, #173b63); color: #fff; margin-bottom: 16px; }
+    .hero p { color: #d9e8f7; }
+    .badge-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+    .badge { background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 6px 10px; font-size: 12px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .card { border: 1px solid #d8e2ee; border-radius: 14px; padding: 14px; background: #f9fbfd; }
+    .diagram-wrap { border: 1px solid #d8e2ee; border-radius: 16px; padding: 14px; background: #fcfdff; }
+    .note { background: #eef6ff; border-left: 4px solid #2f80ed; padding: 10px 12px; border-radius: 8px; }
+    .small { font-size: 12px; color: #53657a; }
+    svg text { font-family: Arial, sans-serif; fill: #0f2742; }
+    .page-break { page-break-before: always; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #d8e2ee; padding: 8px 10px; text-align: left; vertical-align: top; font-size: 13px; }
+    th { background: #eef4fb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Vinayak AWS Architecture Guide</h1>
+    <p>Project transformation roadmap from the current KRSH trading application into a production-ready AWS multi-tier platform for interview discussion and real deployment planning.</p>
+    <div class="badge-row">
+      <div class="badge">Web Tier</div>
+      <div class="badge">App Tier</div>
+      <div class="badge">DB Tier</div>
+      <div class="badge">Cache</div>
+      <div class="badge">Messaging</div>
+      <div class="badge">Security</div>
+      <div class="badge">Observability</div>
+    </div>
+  </div>
+
+  <h2>1. Current Starting Point</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Current Project Reality</h3>
+      <ul>
+        <li>Streamlit-based trading workspace UI</li>
+        <li>Python strategy and execution logic in the same application</li>
+        <li>Dhan broker integration and Telegram notifications</li>
+        <li>NSE and market-data fetch integrations</li>
+        <li>Nginx and Docker deployment guidance already present</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Why AWS Fits</h3>
+      <ul>
+        <li>Easy path from a single EC2 app to multi-tier architecture</li>
+        <li>Natural use of RDS, ElastiCache, S3, ALB, Route 53, IAM</li>
+        <li>Good interview story: monolith to cloud-native design</li>
+        <li>Strong base for DevOps, cloud, and solution-architecture discussions</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>2. Target AWS Architecture</h2>
+  <div class="diagram-wrap">
+    <svg width="100%" height="560" viewBox="0 0 980 560">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L9,3 z" fill="#4a6f96"></path>
+        </marker>
+      </defs>
+
+      <rect x="24" y="18" width="932" height="520" rx="18" fill="#f7fbff" stroke="#d9e7f5" />
+
+      <rect x="56" y="44" width="170" height="64" rx="14" fill="#fff7e8" stroke="#f3c26b" />
+      <text x="141" y="70" text-anchor="middle" font-size="18" font-weight="700">Users / Browser</text>
+      <text x="141" y="91" text-anchor="middle" font-size="12">Traders, admin, reviewers</text>
+
+      <rect x="278" y="44" width="170" height="64" rx="14" fill="#eef6ff" stroke="#7fb0ea" />
+      <text x="363" y="70" text-anchor="middle" font-size="18" font-weight="700">Route 53 + ACM</text>
+      <text x="363" y="91" text-anchor="middle" font-size="12">DNS and TLS</text>
+
+      <rect x="500" y="44" width="170" height="64" rx="14" fill="#eef6ff" stroke="#7fb0ea" />
+      <text x="585" y="70" text-anchor="middle" font-size="18" font-weight="700">ALB / Nginx</text>
+      <text x="585" y="91" text-anchor="middle" font-size="12">Public web tier</text>
+
+      <rect x="722" y="44" width="188" height="64" rx="14" fill="#eef6ff" stroke="#7fb0ea" />
+      <text x="816" y="70" text-anchor="middle" font-size="18" font-weight="700">Web UI</text>
+      <text x="816" y="91" text-anchor="middle" font-size="12">Streamlit now, React later</text>
+
+      <rect x="110" y="174" width="320" height="108" rx="16" fill="#edf9f0" stroke="#7ec08f" />
+      <text x="270" y="202" text-anchor="middle" font-size="20" font-weight="700">App Tier</text>
+      <text x="270" y="226" text-anchor="middle" font-size="13">FastAPI / Python services</text>
+      <text x="270" y="246" text-anchor="middle" font-size="13">Strategies, signal review, execution, broker adapters</text>
+      <text x="270" y="266" text-anchor="middle" font-size="13">Telegram notifications and health endpoints</text>
+
+      <rect x="500" y="174" width="188" height="108" rx="16" fill="#f4efff" stroke="#a48ce8" />
+      <text x="594" y="202" text-anchor="middle" font-size="20" font-weight="700">Redis</text>
+      <text x="594" y="226" text-anchor="middle" font-size="13">Option-chain cache</text>
+      <text x="594" y="246" text-anchor="middle" font-size="13">Live state and hot reads</text>
+      <text x="594" y="266" text-anchor="middle" font-size="13">Fast signal context</text>
+
+      <rect x="722" y="174" width="188" height="108" rx="16" fill="#f4efff" stroke="#a48ce8" />
+      <text x="816" y="202" text-anchor="middle" font-size="20" font-weight="700">RabbitMQ / SQS</text>
+      <text x="816" y="226" text-anchor="middle" font-size="13">Async alerts</text>
+      <text x="816" y="246" text-anchor="middle" font-size="13">Trade execution requests</text>
+      <text x="816" y="266" text-anchor="middle" font-size="13">Background processing</text>
+
+      <rect x="110" y="350" width="320" height="108" rx="16" fill="#fff1f2" stroke="#e5929d" />
+      <text x="270" y="378" text-anchor="middle" font-size="20" font-weight="700">RDS PostgreSQL</text>
+      <text x="270" y="402" text-anchor="middle" font-size="13">Signals, trades, executions</text>
+      <text x="270" y="422" text-anchor="middle" font-size="13">Payload logs, settings, audit trail</text>
+      <text x="270" y="442" text-anchor="middle" font-size="13">Primary system of record</text>
+
+      <rect x="500" y="350" width="188" height="108" rx="16" fill="#fff7e8" stroke="#f3c26b" />
+      <text x="594" y="378" text-anchor="middle" font-size="20" font-weight="700">S3</text>
+      <text x="594" y="402" text-anchor="middle" font-size="13">Exports and reports</text>
+      <text x="594" y="422" text-anchor="middle" font-size="13">Backups and snapshots</text>
+      <text x="594" y="442" text-anchor="middle" font-size="13">Static artifacts</text>
+
+      <rect x="722" y="350" width="188" height="108" rx="16" fill="#eef6ff" stroke="#7fb0ea" />
+      <text x="816" y="378" text-anchor="middle" font-size="20" font-weight="700">External Integrations</text>
+      <text x="816" y="402" text-anchor="middle" font-size="13">Dhan Broker</text>
+      <text x="816" y="422" text-anchor="middle" font-size="13">NSE / yfinance feeds</text>
+      <text x="816" y="442" text-anchor="middle" font-size="13">Telegram bot</text>
+
+      <line x1="226" y1="76" x2="278" y2="76" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+      <line x1="448" y1="76" x2="500" y2="76" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+      <line x1="670" y1="76" x2="722" y2="76" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+      <line x1="816" y1="108" x2="816" y2="144" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+      <line x1="430" y1="228" x2="500" y2="228" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+      <line x1="430" y1="252" x2="722" y2="252" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+      <line x1="270" y1="282" x2="270" y2="350" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+      <line x1="430" y1="404" x2="500" y2="404" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+      <line x1="688" y1="404" x2="722" y2="404" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+    </svg>
+  </div>
+  <p class="small">Public entry should stop at the web tier. The app tier should sit in private subnets, with the database and cache fully private.</p>
+
+  <h2>3. Tier-by-Tier Mapping</h2>
+  <table>
+    <thead>
+      <tr><th>Tier</th><th>AWS Services</th><th>Vinayak Responsibility</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Web Tier</td><td>Route 53, ACM, ALB, EC2 or ECS with Nginx</td><td>Browser access, HTTPS, routing, static UI delivery</td></tr>
+      <tr><td>App Tier</td><td>EC2, ECS, or EKS</td><td>Trading logic, APIs, execution flow, broker integration</td></tr>
+      <tr><td>DB Tier</td><td>RDS PostgreSQL</td><td>Signals, reviewed trades, executions, settings, audit logs</td></tr>
+      <tr><td>Cache Tier</td><td>ElastiCache Redis</td><td>Fast reads for market context, option-chain cache, live state</td></tr>
+      <tr><td>Messaging</td><td>SQS or Amazon MQ</td><td>Async alerts, execution requests, non-blocking workflows</td></tr>
+      <tr><td>Storage</td><td>S3</td><td>Reports, CSV exports, backups, deployment artifacts</td></tr>
+      <tr><td>Monitoring</td><td>CloudWatch, CloudTrail</td><td>Logs, metrics, alarms, audit visibility</td></tr>
+    </tbody>
+  </table>
+
+  <div class="page-break"></div>
+
+  <h2>4. Migration Stages</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>Stage 1: Lift and Shift</h3>
+      <ul>
+        <li>Deploy current app on EC2</li>
+        <li>Put Nginx in front of Streamlit</li>
+        <li>Attach Route 53 domain and ACM certificate</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Stage 2: Separate App Logic</h3>
+      <ul>
+        <li>Move business logic into `vinayak/api` and `vinayak/strategies`</li>
+        <li>Add FastAPI endpoints and health checks</li>
+        <li>Keep UI and service logic clearly separated</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Stage 3: Persistent Data</h3>
+      <ul>
+        <li>Introduce PostgreSQL schema for signals and executions</li>
+        <li>Move critical state from session/file to database</li>
+        <li>Add S3 for reports and archives</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Stage 4: Performance and Async</h3>
+      <ul>
+        <li>Add Redis for hot-cache data</li>
+        <li>Add queue-based processing for notifications and execution requests</li>
+        <li>Reduce blocking behavior in live workflows</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>5. Security Design</h2>
+  <ul>
+    <li>Public internet access should terminate at ALB or Nginx only.</li>
+    <li>App tier should run in private subnets and talk to RDS/Redis privately.</li>
+    <li>Dhan, Telegram, and DB secrets should live in Secrets Manager or SSM Parameter Store.</li>
+    <li>Use IAM roles for EC2/ECS instead of hardcoding AWS credentials.</li>
+    <li>Security groups should tightly allow only required tier-to-tier traffic.</li>
+  </ul>
+
+  <div class="note">
+    Interview line: "I would not expose the app tier or DB tier directly to the internet. Only the web tier should be public, while internal services stay private inside the VPC."
+  </div>
+
+  <h2>6. Resume and Interview Positioning</h2>
+  <p>Present the project as a realistic migration path:</p>
+  <ol>
+    <li>Started with a Python trading monolith.</li>
+    <li>Added a reverse-proxied web tier.</li>
+    <li>Designed a target AWS multi-tier architecture.</li>
+    <li>Planned the move to RDS, Redis, queues, and containerized deployment.</li>
+  </ol>
+
+  <h2>7. Recommended AWS Service Choices</h2>
+  <table>
+    <thead>
+      <tr><th>Need</th><th>Recommended</th><th>Reason</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>First deployment</td><td>EC2 + Nginx</td><td>Simple, interview-friendly, easy to explain</td></tr>
+      <tr><td>Managed database</td><td>RDS PostgreSQL</td><td>Fits trade, signal, and execution records</td></tr>
+      <tr><td>Cache</td><td>ElastiCache Redis</td><td>Best fit for hot reads and short-lived state</td></tr>
+      <tr><td>Artifacts</td><td>S3</td><td>Cheap and durable report/export storage</td></tr>
+      <tr><td>Containers later</td><td>ECS first, EKS later</td><td>ECS is easier; EKS is good for advanced Kubernetes stories</td></tr>
+      <tr><td>Async</td><td>SQS first</td><td>Managed and simpler than self-running RabbitMQ</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

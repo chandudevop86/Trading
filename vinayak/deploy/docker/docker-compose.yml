@@ -1,0 +1,65 @@
+﻿version: "3.9"
+
+services:
+  vinayak-api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: vinayak-api
+    env_file:
+      - ../../.env
+    environment:
+      APP_ENV: docker
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      VINAYAK_DATABASE_URL: postgresql+psycopg2://postgres:postgres@vinayak-postgres:5432/vinayak
+      POSTGRES_URL: postgresql://postgres:postgres@vinayak-postgres:5432/vinayak
+      REDIS_URL: redis://vinayak-redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@vinayak-rabbitmq:5672/
+    ports:
+      - "8000:8000"
+    depends_on:
+      - vinayak-postgres
+      - vinayak-redis
+      - vinayak-rabbitmq
+    volumes:
+      - ../../data:/app/data
+      - ../../vinayak/data:/app/vinayak/data
+    restart: unless-stopped
+
+  vinayak-postgres:
+    image: postgres:16-alpine
+    container_name: vinayak-postgres
+    environment:
+      POSTGRES_DB: vinayak
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - vinayak_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  vinayak-redis:
+    image: redis:7-alpine
+    container_name: vinayak-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - vinayak_redis_data:/data
+    restart: unless-stopped
+
+  vinayak-rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: vinayak-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - vinayak_rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+
+volumes:
+  vinayak_postgres_data:
+  vinayak_redis_data:
+  vinayak_rabbitmq_data:

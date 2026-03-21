@@ -1,0 +1,66 @@
+﻿TRADING APP DEPLOYMENT DOCUMENTATION
+
+Overview
+This document explains how the Trading App can be deployed for local use, server use, and production-style access.
+
+LOCAL DEPLOYMENT
+The project can run locally using Python and Streamlit.
+Install dependencies from requirements.txt.
+Launch the dashboard using Streamlit.
+This mode is suitable for development, testing, and strategy review.
+
+APPLICATION ENTRY POINTS
+Main UI entry point is Trading.py.
+Other entry points include auto_backtest.py, auto_run.py, nifty50.py, nifty_options.py, and nifty_futures.py.
+These scripts support automation, scoring, and reporting outside the UI.
+
+WEB ACCESS LAYER
+For production-style deployment, Streamlit can be placed behind Nginx.
+Nginx can work as reverse proxy for domain-based access.
+This improves routing and gives a cleaner public endpoint.
+
+SERVER RECOMMENDATION
+Recommended server setup:
+1. Linux or Windows VM.
+2. Python runtime.
+3. Streamlit service.
+4. Optional Nginx reverse proxy.
+5. Secure secrets storage for tokens and credentials.
+
+CONFIGURATION REQUIREMENTS
+Required configuration may include Telegram bot token, Telegram chat ID, broker credentials for future live trading, and optional AWS S3 configuration.
+These values should be stored in environment variables, secrets, or protected config files.
+
+DATA AND FILE PATHS
+Application reads and writes under the data folder.
+Make sure the deployment host has read and write permission for logs, report files, and snapshots.
+If using persistent server deployment, this folder should be backed up or mounted on persistent storage.
+
+SECURITY RECOMMENDATIONS
+Only UI tier should be internet-facing.
+App and execution internals should remain private.
+Do not expose secrets inside source files.
+Use HTTPS when publishing through a domain.
+Protect broker APIs and notification credentials.
+
+AUTOMATION OPTIONS
+The project already supports scheduled or repeated runs using scripts and scheduler folders.
+Auto backtests and reporting tasks can be scheduled using Windows Task Scheduler, cron, or container orchestration.
+
+DEPLOYMENT MODES
+Development Mode:
+Run Streamlit locally for testing.
+
+Internal Server Mode:
+Run Streamlit on internal network for team use.
+
+Production Mode:
+Run Streamlit behind Nginx with restricted access, secrets management, and scheduled automation.
+
+FUTURE EXTENSIONS
+The deployment design allows addition of:
+Broker API execution.
+Container deployment.
+Kubernetes deployment.
+Cloud object storage for reports.
+Monitoring and alerting.

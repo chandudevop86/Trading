@@ -1,0 +1,147 @@
+# Vinayak Trading Platform
+
+`Vinayak` is the next-stage architecture base for the KRSH trading workspace.
+
+This folder is intentionally separate from the current live project so we can:
+
+- keep `v3` stable
+- build `v4` architecture in parallel
+- roll back safely if a future update gets worse
+
+## Architecture
+
+### Web Tier
+
+- Nginx reverse proxy
+- Web UI entrypoint
+- future React/frontend expansion
+
+### App Tier
+
+- Python API and services
+- strategy engine
+- execution engine
+- broker integrations
+- Telegram notifications
+
+### DB Tier
+
+- PostgreSQL for signals, trades, executions, settings
+- Redis for cache and fast live state
+
+### Messaging Tier
+
+- RabbitMQ event flow for signals, routing, and alerts
+
+## Initial Layout
+
+```text
+vinayak/
+  web/
+  api/
+  strategies/
+  execution/
+  notifications/
+  db/
+  cache/
+  queue/
+  data/
+  deploy/
+  tests/
+```
+
+## Recommended Build Order
+
+1. Stabilize API routes and health checks.
+2. Move existing strategy logic into `strategies/`.
+3. Add execution adapters under `execution/`.
+4. Add PostgreSQL models and repositories.
+5. Add Redis cache helpers.
+6. Add RabbitMQ events and workers.
+7. Put Nginx and Docker deployment in front.
+
+## v3 Baseline
+
+Current stable rollback snapshot:
+
+- `F:\Trading\snapshots\v3_base_2026-03-21\project`
+- git tag: `v3-base-2026-03-21`
+
+## Local Run
+
+### Python Run
+
+1. Copy `.env.example` to `.env`
+2. Install dependencies:
+   - `py -3 -m pip install -r requirements.txt`
+3. Start the API:
+   - `py -3 -m uvicorn vinayak.api.main:app --host 0.0.0.0 --port 8000`
+4. Open:
+   - API root: `http://localhost:8000`
+   - Admin console: `http://localhost:8000/admin`
+
+### Docker Compose Run
+
+`Vinayak` now includes a local compose stack for the app, PostgreSQL, Redis, and RabbitMQ.
+
+1. Copy `.env.example` to `.env`
+2. Start the stack:
+   - `docker compose -f deploy/docker/docker-compose.yml up --build`
+3. Open:
+   - API root: `http://localhost:8000`
+   - Admin console: `http://localhost:8000/admin`
+   - RabbitMQ UI: `http://localhost:15672`
+
+Default local service endpoints:
+
+- PostgreSQL: `localhost:5432`
+- Redis: `localhost:6379`
+- RabbitMQ: `localhost:5672`
+
+## Database Migrations
+
+`Vinayak` now includes an Alembic base for schema-managed deployments.
+
+### Run the first migration
+
+- `py -3 -m alembic -c alembic.ini upgrade head`
+
+### Create a new migration later
+
+- `py -3 -m alembic -c alembic.ini revision -m "describe_change"`
+
+### Current migration files
+
+- config: `alembic.ini`
+- env: `vinayak/db/migrations/env.py`
+- first revision: `vinayak/db/migrations/versions/0001_initial.py`
+
+## Health and Readiness
+
+`Vinayak` now exposes deployment-friendly endpoints for local checks, Docker health probes, and AWS load balancer targets.
+
+- `GET /health`
+- `GET /health/live`
+- `GET /health/ready`
+
+Readiness includes:
+
+- database connectivity status
+- database engine type
+- broker credential readiness summary
+
+## Demo Notes
+
+- For local/demo use, `VINAYAK_DATABASE_URL` can stay on SQLite.
+- For Docker, the compose file switches the app to PostgreSQL automatically.
+- Live Dhan routing requires:
+  - `DHAN_CLIENT_ID`
+  - `DHAN_ACCESS_TOKEN`
+  - `DHAN_SECURITY_MAP`
+
+## Next Hardening Steps
+
+1. Move secrets to AWS Systems Manager or Secrets Manager.
+2. Put Nginx or ALB in front of the app for production ingress.
+3. Add CI to run tests and migrations before deployment.
+4. Add ECS or EC2 deployment automation for AWS rollout.

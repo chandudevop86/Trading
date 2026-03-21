@@ -1,0 +1,18 @@
+TRADING APP CLIENT DEPLOYMENT SUMMARY
+
+Deployment Style
+The platform can run locally for development, on an internal server for team usage, or behind Nginx for controlled production-style access.
+
+Recommended Stack
+Python runtime.
+Streamlit application server.
+Optional Nginx reverse proxy.
+Persistent storage for logs and reports.
+Secure secret storage for tokens and credentials.
+
+Operational Readiness
+The design already supports scheduled jobs, repeatable backtests, report generation, and phased extension toward broker integrations.
+
+Security Guidance
+Only the user interface should be internet-facing.
+Execution internals, credentials, and broker integrations should remain protected.

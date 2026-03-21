@@ -1,0 +1,20 @@
+TRADING APP CLIENT ARCHITECTURE
+
+User Interface Layer
+The application uses a Streamlit dashboard as the main user-facing layer.
+Users can select symbols, intervals, strategies, risk settings, execution mode, and contract type from a single interface.
+
+Application Layer
+The backend logic is implemented in Python modules that manage market data processing, strategy execution, signal preparation, contract conversion, and trade output generation.
+
+Market Data Layer
+The system consumes Yahoo Finance OHLCV data, NSE option-chain data, NSE futures data, and uploaded CSV datasets.
+
+Execution Layer
+The application currently supports paper execution and is structured for future broker API integration.
+
+Reporting Layer
+The system generates CSV outputs, HTML summaries, PDF documents, and Telegram notifications.
+
+Storage Layer
+Operational files are stored in structured folders so logs, snapshots, reports, and rule files remain accessible and auditable.

@@ -8,6 +8,222 @@ from vinayak.api.dependencies.admin_auth import COOKIE_NAME, admin_password, adm
 
 router = APIRouter(tags=['web'])
 
+HOME_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vinayak Trading Platform</title>
+  <style>
+    :root {
+      --bg: #07111d;
+      --panel: #102338;
+      --panel-2: #0c1b2d;
+      --text: #eef4ff;
+      --muted: #91a7c5;
+      --line: #28435f;
+      --accent: #ff9f3f;
+      --accent-2: #ffcb76;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Segoe UI, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(255, 159, 63, 0.16), transparent 28%),
+        radial-gradient(circle at top right, rgba(69, 165, 255, 0.14), transparent 30%),
+        linear-gradient(180deg, #0d2035 0%, var(--bg) 62%);
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 56px; }
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 42px;
+    }
+    .brand { font-size: 24px; font-weight: 800; letter-spacing: 0.02em; }
+    .nav-links { display: flex; gap: 12px; flex-wrap: wrap; }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.9fr;
+      gap: 22px;
+      align-items: stretch;
+      margin-bottom: 22px;
+    }
+    .card {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 28px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.22);
+    }
+    .eyebrow {
+      display: inline-flex;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.04);
+      color: var(--accent-2);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 16px 0 14px;
+      font-size: clamp(36px, 6vw, 58px);
+      line-height: 1.04;
+    }
+    .lead {
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.6;
+      max-width: 720px;
+    }
+    .actions { display: flex; gap: 14px; flex-wrap: wrap; }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 48px;
+      padding: 12px 18px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      text-decoration: none;
+      font-weight: 800;
+    }
+    .button.primary {
+      color: #111;
+      background: linear-gradient(135deg, #ffb45f, var(--accent));
+    }
+    .button.secondary {
+      color: var(--text);
+      background: rgba(255,255,255,0.03);
+    }
+    .status-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .status-box {
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.03);
+    }
+    .status-label {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .status-value {
+      margin-top: 10px;
+      font-size: 24px;
+      font-weight: 800;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 18px;
+    }
+    .feature h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+    .feature p, .footer-note {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .footer-note {
+      margin-top: 18px;
+      font-size: 14px;
+    }
+    code {
+      color: var(--accent-2);
+      background: rgba(255,255,255,0.04);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+    @media (max-width: 980px) {
+      .hero, .feature-grid, .status-grid { grid-template-columns: 1fr; }
+      .nav { align-items: start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="nav">
+      <div class="brand">Vinayak</div>
+      <div class="nav-links">
+        <a class="button secondary" href="/health">Health</a>
+        <a class="button secondary" href="/health/ready">Readiness</a>
+        <a class="button primary" href="/admin">Open Admin</a>
+      </div>
+    </div>
+
+    <div class="hero">
+      <section class="card">
+        <div class="eyebrow">Trading Operations Platform</div>
+        <h1>Run strategy review, execution flow, and broker checks from one console.</h1>
+        <p class="lead">Vinayak is your next-stage trading platform foundation for strategy workflows, reviewed trades, paper or live execution, and audit-ready operational control.</p>
+        <div class="actions">
+          <a class="button primary" href="/admin">Launch Admin Console</a>
+          <a class="button secondary" href="/health">Check API Health</a>
+        </div>
+        <p class="footer-note">Current API entrypoints stay available under <code>/health</code>, <code>/reviewed-trades</code>, <code>/executions</code>, and <code>/dashboard</code>.</p>
+      </section>
+
+      <aside class="card">
+        <div class="status-grid">
+          <div class="status-box">
+            <div class="status-label">Main UI</div>
+            <div class="status-value">/admin</div>
+          </div>
+          <div class="status-box">
+            <div class="status-label">Health</div>
+            <div class="status-value">/health</div>
+          </div>
+          <div class="status-box">
+            <div class="status-label">Executions</div>
+            <div class="status-value">/executions</div>
+          </div>
+          <div class="status-box">
+            <div class="status-label">Reviewed Trades</div>
+            <div class="status-value">/reviewed-trades</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="feature-grid">
+      <section class="card feature">
+        <h2>Admin Workflow</h2>
+        <p>Approve reviewed trades, switch between paper and live execution, and open audit logs from the built-in operations console.</p>
+      </section>
+      <section class="card feature">
+        <h2>Execution Visibility</h2>
+        <p>Track internal execution IDs, broker status, and payload snapshots without dropping back to the terminal.</p>
+      </section>
+      <section class="card feature">
+        <h2>Deployment Ready</h2>
+        <p>Use the same FastAPI app for direct Linux runs now and put Nginx, Docker, or your domain in front of it later.</p>
+      </section>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
+
 
 LOGIN_HTML = """
 <!DOCTYPE html>
@@ -451,6 +667,11 @@ ADMIN_HTML = """
 def _render_login(error_message: str | None = None) -> HTMLResponse:
     error_block = f'<div class="error">{error_message}</div>' if error_message else ''
     return HTMLResponse(LOGIN_HTML.replace('__ERROR_BLOCK__', error_block))
+
+
+@router.get('/', response_class=HTMLResponse)
+def home_page() -> HTMLResponse:
+    return HTMLResponse(HOME_HTML)
 
 
 @router.get('/admin', response_class=HTMLResponse)

@@ -18,7 +18,3 @@ app.include_router(dashboard_router)
 app.include_router(strategies_router)
 app.include_router(web_router)
 
-
-@app.get('/')
-def root() -> dict[str, str]:
-    return {'app': 'Vinayak Trading Platform', 'status': 'bootstrapped'}

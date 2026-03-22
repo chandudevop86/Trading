@@ -2317,7 +2317,8 @@ def main() -> None:
             symbol = st.text_input("Symbol", symbol)
             interval = st.segmented_control("Interval", ["1m", "5m", "15m", "30m", "1h"], default=interval, disabled=(strategy == "MTF 5m"))
             period = st.segmented_control("Period", ["1d", "5d", "1mo", "3mo"], default=period)
-            execution_mode = st.segmented_control("Execution mode", ["PAPER", "LIVE"], default=execution_mode)
+            live_mode_enabled = st.toggle("Paper / Live", value=(str(execution_mode).upper() == "LIVE"))
+            execution_mode = "LIVE" if live_mode_enabled else "PAPER"
             instrument_mode = st.segmented_control("Instrument", ["Options", "Futures"], default=instrument_mode)
 
 

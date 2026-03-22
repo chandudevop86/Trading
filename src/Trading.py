@@ -526,7 +526,6 @@ def _run_dhan_readiness_check(symbol: str, security_map_path: str) -> list[str]:
 
 
 def _render_dhan_status_panel(symbol: str, security_map_path: str, execution_mode: str, reviewed_candidates: list[dict[str, object]]) -> None:
-def _render_dhan_status_panel(symbol: str, security_map_path: str, execution_mode: str, reviewed_candidates: list[dict[str, object]]) -> None:
     client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
     access_token = os.getenv("DHAN_ACCESS_TOKEN", "").strip()
     client_id_present = bool(client_id)

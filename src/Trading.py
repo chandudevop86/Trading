@@ -2520,8 +2520,10 @@ def main() -> None:
                 st.info("Reviewed queue is staged for auto execution, but no new trades were executed on this run.")
 
     account_status = "Paper"
+    live_client_id_present = bool(os.getenv("DHAN_CLIENT_ID", "").strip())
+    live_token_present = bool(os.getenv("DHAN_ACCESS_TOKEN", "").strip())
     if str(execution_mode).upper() == "LIVE":
-        account_status = "Dhan Ready" if dhan_client_id and dhan_token_present else "Dhan Missing"
+        account_status = "Dhan Ready" if live_client_id_present and live_token_present else "Dhan Missing"
 
     risk_text = f"{float(risk_pct):.1f}% risk / {float(rr_ratio):.1f}R"
     with masthead_slot.container():

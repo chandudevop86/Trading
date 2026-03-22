@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import io
@@ -58,7 +58,6 @@ except Exception:
     extract_option_records = None
     fetch_option_chain = None
     normalize_index_symbol = None
-
 try:
     from src.dhan_api import build_order_request_from_candidate, load_security_map
 except Exception:
@@ -66,12 +65,14 @@ except Exception:
     load_security_map = None
 
 
+ENV_BOOTSTRAP_SOURCES: list[Path] = []
 
 
-def _load_local_env(path: Path) -> None:
+def _load_local_env(path: Path) -> bool:
     if not path.exists():
-        return
+        return False
     try:
+        loaded_any = False
         for raw_line in path.read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()
             if not line or line.startswith("#") or "=" not in line:
@@ -79,28 +80,46 @@ def _load_local_env(path: Path) -> None:
             key, value = line.split("=", 1)
             key = key.strip()
             value = value.strip().strip("\"'")
-            if key:
-                os.environ.setdefault(key, value)
+            if key and key not in os.environ:
+                os.environ[key] = value
+                loaded_any = True
+        return loaded_any
     except Exception:
-        return
+        return False
 
 
-def _bootstrap_env() -> None:
+def _bootstrap_env() -> list[Path]:
+    file_dir = Path(__file__).resolve().parent
+    repo_dir = file_dir.parent
     env_candidates = [
         Path.cwd() / ".env",
-        Path(__file__).resolve().parent.parent / ".env",
-        Path(__file__).resolve().parent / ".env",
+        repo_dir / ".env",
+        file_dir / ".env",
+        repo_dir.parent / ".env",
     ]
     seen: set[Path] = set()
+    loaded_sources: list[Path] = []
     for env_path in env_candidates:
         resolved = env_path.resolve()
         if resolved in seen:
             continue
         seen.add(resolved)
-        _load_local_env(resolved)
+        if _load_local_env(resolved):
+            loaded_sources.append(resolved)
+    return loaded_sources
 
 
-_bootstrap_env()
+def _mask_env_value(value: str, *, prefix: int = 3, suffix: int = 2) -> str:
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return "Missing"
+    if len(cleaned) <= prefix + suffix:
+        return "*" * len(cleaned)
+    return f"{cleaned[:prefix]}{'*' * max(4, len(cleaned) - prefix - suffix)}{cleaned[-suffix:]}"
+
+
+ENV_BOOTSTRAP_SOURCES = _bootstrap_env()
+
 st.set_page_config(page_title="KRSH SOLUTIONS", page_icon="chart", layout="wide")
 
 st.markdown(
@@ -507,17 +526,21 @@ def _run_dhan_readiness_check(symbol: str, security_map_path: str) -> list[str]:
 
 
 def _render_dhan_status_panel(symbol: str, security_map_path: str, execution_mode: str, reviewed_candidates: list[dict[str, object]]) -> None:
-    client_id_present = bool(os.getenv("DHAN_CLIENT_ID", "").strip())
-    access_token_present = bool(os.getenv("DHAN_ACCESS_TOKEN", "").strip())
+def _render_dhan_status_panel(symbol: str, security_map_path: str, execution_mode: str, reviewed_candidates: list[dict[str, object]]) -> None:
+    client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
+    access_token = os.getenv("DHAN_ACCESS_TOKEN", "").strip()
+    client_id_present = bool(client_id)
+    access_token_present = bool(access_token)
     security_map_exists = Path(str(security_map_path)).exists()
     builder_ready = build_order_request_from_candidate is not None and load_security_map is not None
     reviewed_count = len(reviewed_candidates)
+    env_sources = ", ".join(str(path) for path in ENV_BOOTSTRAP_SOURCES) or "process environment only"
     live_ready = str(execution_mode).upper() == "LIVE" and client_id_present and access_token_present and security_map_exists and builder_ready and reviewed_count > 0
 
     st.caption("Dhan Status: credentials, security map, payload builder, and reviewed queue readiness.")
     cols = st.columns(5)
-    cols[0].metric("Client ID", "Ready" if client_id_present else "Missing")
-    cols[1].metric("Access Token", "Ready" if access_token_present else "Missing")
+    cols[0].metric("Client ID", _mask_env_value(client_id))
+    cols[1].metric("Access Token", _mask_env_value(access_token))
     cols[2].metric("Security Map", "Found" if security_map_exists else "Missing")
     cols[3].metric("Payload Builder", "Ready" if builder_ready else "Unavailable")
     cols[4].metric("Live Ready", "YES" if live_ready else "NO")
@@ -525,9 +548,12 @@ def _render_dhan_status_panel(symbol: str, security_map_path: str, execution_mod
     status_rows = [
         {"check": "Broker mode", "status": str(execution_mode).upper(), "detail": "LIVE mode is required for Dhan order routing."},
         {"check": "Reviewed queue", "status": str(reviewed_count), "detail": "Only reviewed actionable trades are eligible for execution."},
+        {"check": "Client ID source", "status": "Loaded" if client_id_present else "Missing", "detail": env_sources},
+        {"check": "Access token source", "status": "Loaded" if access_token_present else "Missing", "detail": env_sources},
         {"check": "Symbol", "status": str(symbol), "detail": "Current live symbol context."},
         {"check": "Security map path", "status": str(security_map_path), "detail": "CSV used to map option/future contracts to Dhan security IDs."},
     ]
+
     st.dataframe(pd.DataFrame(status_rows), width="stretch", hide_index=True)
 
 def _render_live_execution_feedback(rows: list[dict[str, object]]) -> None:
@@ -2272,7 +2298,7 @@ def main() -> None:
     live_log_output = "data/live_trading_logs_all.csv"
     dhan_client_id = ""
     dhan_token_present = False
-    dhan_security_map_path = "data/dhan_security_map.csv"
+    dhan_security_map_path = os.getenv("DHAN_SECURITY_MAP", "data/dhan_security_map.csv").strip() or "data/dhan_security_map.csv"
     strike_step = 50
     moneyness = "ATM"
     strike_steps = 0
@@ -2325,11 +2351,15 @@ def main() -> None:
                 dhan_security_map_path = st.text_input("Security map path", value=dhan_security_map_path)
                 st.info("Broker: Dhan")
                 dhan_client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
-                dhan_token_present = bool(os.getenv("DHAN_ACCESS_TOKEN", "").strip())
+                dhan_access_token = os.getenv("DHAN_ACCESS_TOKEN", "").strip()
+                dhan_token_present = bool(dhan_access_token)
+                env_sources = ", ".join(str(path) for path in ENV_BOOTSTRAP_SOURCES) or "process environment"
                 if dhan_client_id and dhan_token_present:
-                    st.success("Dhan credentials detected")
+                    st.success(f"Dhan credentials loaded from {env_sources}")
+                    st.caption(f"Client ID: {_mask_env_value(dhan_client_id)}")
+                    st.caption(f"Access Token: {_mask_env_value(dhan_access_token)}")
                 else:
-                    st.warning("Add Dhan credentials to .env")
+                    st.warning(f"Add Dhan credentials to .env or service environment. Sources checked: {env_sources}")
                 if st.button("Check Dhan Live Ready", width="stretch"):
                     readiness_notes = _run_dhan_readiness_check(symbol, dhan_security_map_path)
                     for note in readiness_notes:

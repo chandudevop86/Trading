@@ -2281,7 +2281,7 @@ def main() -> None:
                 key="global_period",
                 width="stretch",
             )
-    execution_mode = "PAPER"
+    execution_mode = str(st.session_state.get("execution_mode", "PAPER"))
     instrument_mode = "Options"
     lot_size = 65
     lots = 2
@@ -2319,6 +2319,7 @@ def main() -> None:
             period = st.segmented_control("Period", ["1d", "5d", "1mo", "3mo"], default=period)
             live_mode_enabled = st.toggle("Paper / Live", value=(str(execution_mode).upper() == "LIVE"))
             execution_mode = "LIVE" if live_mode_enabled else "PAPER"
+            st.session_state["execution_mode"] = execution_mode
             instrument_mode = st.segmented_control("Instrument", ["Options", "Futures"], default=instrument_mode)
 
 

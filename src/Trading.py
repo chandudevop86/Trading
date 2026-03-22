@@ -2292,7 +2292,7 @@ def main() -> None:
     auto_execute_generated = False
     live_update = False
     refresh_seconds = 10
-    send_telegram = False
+    send_telegram = bool(st.session_state.get("send_telegram", False))
     paper_log_output = "data/paper_trading_logs_all.csv"
     live_log_output = "data/live_trading_logs_all.csv"
     dhan_client_id = ""
@@ -2341,6 +2341,7 @@ def main() -> None:
             live_update = st.checkbox("Auto refresh", value=live_update)
             refresh_seconds = st.slider("Refresh every (seconds)", 2, 120, refresh_seconds)
             send_telegram = st.checkbox("Send Telegram alert", value=send_telegram)
+            st.session_state["send_telegram"] = send_telegram
             st.caption("Use Auto execute only after reviewing generated trades and payload previews.")
             st.markdown('<div class="section-copy" style="margin-top:8px; margin-bottom:8px;">Trade integration</div>', unsafe_allow_html=True)
             if execution_mode == "PAPER":

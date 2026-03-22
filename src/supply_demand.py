@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections.abc import Sequence
 from math import floor
@@ -42,6 +42,31 @@ def _coerce_candles(data: Any) -> pd.DataFrame:
     return df.dropna(subset=["open", "high", "low", "close"]).reset_index(drop=True)
 
 
+def _body_low(candle: pd.Series) -> float:
+    return float(min(float(candle["open"]), float(candle["close"])))
+
+
+def _body_high(candle: pd.Series) -> float:
+    return float(max(float(candle["open"]), float(candle["close"])))
+
+
+def _base_bounds(candles: pd.DataFrame, start_index: int, end_index: int) -> tuple[float, float]:
+    start = max(0, int(start_index))
+    end = min(len(candles) - 1, int(end_index))
+    window = candles.iloc[start : end + 1]
+    if window.empty:
+        return 0.0, 0.0
+
+    body_lows = window.apply(_body_low, axis=1)
+    body_highs = window.apply(_body_high, axis=1)
+    zone_low = float(body_lows.min())
+    zone_high = float(body_highs.max())
+    if zone_high <= zone_low:
+        zone_low = float(window["low"].min())
+        zone_high = float(window["high"].max())
+    return zone_low, zone_high
+
+
 def _append_zone(
     zones: list[dict[str, Any]],
     seen: set[tuple[str, int, float, float, str]],
@@ -53,6 +78,7 @@ def _append_zone(
     zone_high: float,
     source: str,
     structure_level: float | None = None,
+    boundary_mode: str = "BASE",
 ) -> None:
     key = (zone_type, index, round(price, 6), round(zone_low, 6), source)
     if key in seen:
@@ -65,6 +91,7 @@ def _append_zone(
         "zone_low": round(float(zone_low), 4),
         "zone_high": round(float(zone_high), 4),
         "source": source,
+        "boundary_mode": boundary_mode,
     }
     if structure_level is not None:
         zone["structure_level"] = round(float(structure_level), 4)
@@ -80,13 +107,171 @@ def _calc_qty(capital: float, risk_pct: float, entry: float, stop: float) -> int
     return max(1, floor((capital * risk_pct) / risk_per_unit))
 
 
+def _touch_buffer(price: float) -> float:
+    return max(float(price) * 0.0015, 0.15)
+
+
+def _zone_touched(candle: pd.Series, zone_low: float, zone_high: float, buffer_size: float) -> bool:
+    high = float(candle["high"])
+    low = float(candle["low"])
+    return low <= (zone_high + buffer_size) and high >= (zone_low - buffer_size)
+
+
+def _zone_is_fresh(candles: pd.DataFrame, zone: dict[str, Any], current_index: int, buffer_size: float) -> bool:
+    zone_index = int(zone["index"])
+    if current_index - zone_index < 2:
+        return False
+
+    zone_low = float(zone["zone_low"])
+    zone_high = float(zone["zone_high"])
+    for idx in range(zone_index + 1, current_index):
+        if _zone_touched(candles.iloc[idx], zone_low, zone_high, buffer_size):
+            return False
+    return True
+
+
+def _avg_range(candles: pd.DataFrame, current_index: int, lookback: int = 5) -> float:
+    start = max(0, current_index - lookback)
+    window = candles.iloc[start:current_index]
+    if window.empty:
+        return 0.0
+    ranges = (window["high"] - window["low"]).astype(float)
+    if ranges.empty:
+        return 0.0
+    return float(ranges.mean())
+
+
+def _departure_strength(candles: pd.DataFrame, zone: dict[str, Any]) -> bool:
+    zone_index = int(zone["index"])
+    zone_type = str(zone["type"]).strip().lower()
+    start = zone_index + 1
+    end = min(len(candles), zone_index + 4)
+    if start >= end:
+        return False
+
+    departure = candles.iloc[start:end]
+    before_start = max(0, zone_index - 4)
+    before = candles.iloc[before_start:zone_index]
+    departure_avg_range = float((departure["high"] - departure["low"]).mean()) if not departure.empty else 0.0
+    prior_avg_range = float((before["high"] - before["low"]).mean()) if not before.empty else 0.0
+    if departure_avg_range <= 0:
+        return False
+
+    if zone_type == "demand":
+        move_ok = float(departure["close"].max()) > float(zone["zone_high"]) + (departure_avg_range * 0.35)
+    else:
+        move_ok = float(departure["close"].min()) < float(zone["zone_low"]) - (departure_avg_range * 0.35)
+
+    range_ok = prior_avg_range <= 0 or departure_avg_range >= (prior_avg_range * 1.2)
+    return bool(move_ok and range_ok)
+
+
+def _compact_zone(candles: pd.DataFrame, zone: dict[str, Any]) -> bool:
+    zone_index = int(zone["index"])
+    avg_range = _avg_range(candles, zone_index + 1)
+    zone_width = abs(float(zone["zone_high"]) - float(zone["zone_low"]))
+    if zone_width <= 0:
+        return True
+    if avg_range <= 0:
+        return zone_width <= max(abs(float(zone["price"])) * 0.004, 0.5)
+    return zone_width <= (avg_range * 1.2)
+
+
+def _higher_timeframe_bias(candles: pd.DataFrame, current_index: int, group_size: int = 3) -> str:
+    if current_index < (group_size * 5):
+        return "NEUTRAL"
+
+    closes = candles["close"].iloc[: current_index + 1].astype(float).reset_index(drop=True)
+    grouped: list[float] = []
+    for start in range(0, len(closes), group_size):
+        chunk = closes.iloc[start : start + group_size]
+        if len(chunk) < group_size:
+            continue
+        grouped.append(float(chunk.iloc[-1]))
+
+    if len(grouped) < 5:
+        return "NEUTRAL"
+
+    series = pd.Series(grouped, dtype="float64")
+    fast = series.ewm(span=3, adjust=False).mean().iloc[-1]
+    slow = series.ewm(span=5, adjust=False).mean().iloc[-1]
+    slope = series.iloc[-1] - series.iloc[-3]
+
+    if fast > slow and slope > 0:
+        return "BULLISH"
+    if fast < slow and slope < 0:
+        return "BEARISH"
+    return "NEUTRAL"
+
+
+def _zone_score(candles: pd.DataFrame, zone: dict[str, Any], current_index: int, buffer_size: float) -> tuple[int, list[str]]:
+    score = 0
+    reasons: list[str] = []
+    source = str(zone.get("source", "")).lower()
+
+    if _zone_is_fresh(candles, zone, current_index, buffer_size):
+        score += 1
+        reasons.append("fresh")
+    if _compact_zone(candles, zone):
+        score += 1
+        reasons.append("compact")
+    if _departure_strength(candles, zone):
+        score += 1
+        reasons.append("strong_departure")
+    if source in {"bos", "fvg"}:
+        score += 1
+        reasons.append(source)
+    if zone.get("structure_level") not in {None, ""}:
+        score += 1
+        reasons.append("structure_break")
+
+    return score, reasons
+
+
+def _next_opposing_zone_price(
+    ordered_zones: list[dict[str, Any]],
+    current_zone: dict[str, Any],
+    candle_index: int,
+) -> float | None:
+    current_type = str(current_zone["type"]).strip().lower()
+    opposite_type = "supply" if current_type == "demand" else "demand"
+    candidates: list[float] = []
+
+    for zone in ordered_zones:
+        zone_index = int(zone["index"])
+        if zone_index >= candle_index:
+            continue
+        if zone_index == int(current_zone["index"]):
+            continue
+        if str(zone.get("type", "")).strip().lower() != opposite_type:
+            continue
+        if opposite_type == "supply":
+            candidates.append(float(zone["zone_low"]))
+        else:
+            candidates.append(float(zone["zone_high"]))
+
+    if not candidates:
+        return None
+
+    entry_reference = float(current_zone["zone_high"] if current_type == "demand" else current_zone["zone_low"])
+    if current_type == "demand":
+        above = [price for price in candidates if price > entry_reference]
+        return min(above) if above else None
+    below = [price for price in candidates if price < entry_reference]
+    return max(below) if below else None
+
+
 def _build_signal_from_zone(
     *,
+    candles: pd.DataFrame,
+    candle_index: int,
     candle: pd.Series,
     zone: dict[str, Any],
+    ordered_zones: list[dict[str, Any]],
     rr_ratio: float,
     capital: float,
     risk_pct: float,
+    min_zone_score: int = 3,
 ) -> dict[str, Any] | None:
     open_price = float(candle["open"])
     high = float(candle["high"])
@@ -101,17 +286,43 @@ def _build_signal_from_zone(
     touched = False
     rejection_ok = False
     stop = 0.0
+    candle_range = max(high - low, 0.0)
+    body = abs(close - open_price)
+    lower_wick = max(min(open_price, close) - low, 0.0)
+    upper_wick = max(high - max(open_price, close), 0.0)
+    close_location = 0.5 if candle_range <= 0 else (close - low) / candle_range
+    buffer_size = _touch_buffer(close)
+    average_range = _avg_range(candles, candle_index)
+    zone_score, zone_reasons = _zone_score(candles, zone, candle_index, buffer_size)
+    higher_tf_bias = _higher_timeframe_bias(candles, candle_index)
 
-    touch_buffer = max(close * 0.003, 0.3)
+    if zone_score < int(min_zone_score):
+        return None
+    if average_range > 0 and candle_range < (average_range * 0.8):
+        return None
 
     if zone_type == "demand":
-        touched = low <= (zone_high + touch_buffer) and high >= (zone_low - touch_buffer)
-        rejection_ok = close > open_price and close >= zone_mid
+        if higher_tf_bias == "BEARISH":
+            return None
+        touched = _zone_touched(candle, zone_low, zone_high, buffer_size)
+        rejection_ok = (
+            close > open_price
+            and close >= zone_mid
+            and lower_wick >= max(body, candle_range * 0.2)
+            and close_location >= 0.55
+        )
         stop = min(low, zone_low) - max(close * 0.001, 0.05)
         side = "BUY"
     elif zone_type == "supply":
-        touched = high >= (zone_low - touch_buffer) and low <= (zone_high + touch_buffer)
-        rejection_ok = close < open_price and close <= zone_mid
+        if higher_tf_bias == "BULLISH":
+            return None
+        touched = _zone_touched(candle, zone_low, zone_high, buffer_size)
+        rejection_ok = (
+            close < open_price
+            and close <= zone_mid
+            and upper_wick >= max(body, candle_range * 0.2)
+            and close_location <= 0.45
+        )
         stop = max(high, zone_high) + max(close * 0.001, 0.05)
         side = "SELL"
     else:
@@ -129,6 +340,15 @@ def _build_signal_from_zone(
         target = entry + (risk * rr_ratio)
     else:
         target = entry - (risk * rr_ratio)
+
+    opposing_zone_price = _next_opposing_zone_price(ordered_zones, zone, candle_index)
+    if opposing_zone_price is not None:
+        if side == "BUY":
+            available_room = opposing_zone_price - entry
+        else:
+            available_room = entry - opposing_zone_price
+        if available_room < (risk * rr_ratio):
+            return None
 
     quantity = _calc_qty(capital, risk_pct, entry, stop)
     timestamp = candle.get("timestamp", "")
@@ -148,7 +368,13 @@ def _build_signal_from_zone(
         "zone_low": round(zone_low, 4),
         "zone_high": round(zone_high, 4),
         "zone_source": zone.get("source", ""),
+        "zone_boundary_mode": zone.get("boundary_mode", "BASE"),
         "structure_level": zone.get("structure_level", ""),
+        "zone_fresh": "YES",
+        "zone_score": int(zone_score),
+        "zone_reasons": ",".join(zone_reasons),
+        "higher_tf_bias": higher_tf_bias,
+        "opposing_zone_price": round(opposing_zone_price, 4) if opposing_zone_price is not None else "",
     }
 
 
@@ -179,28 +405,32 @@ def generate_trades(
 
         if high > prev_high and high > next_high:
             swing_highs.append((i, high))
+            zone_low, zone_high = _base_bounds(candles, i - 1, i)
             _append_zone(
                 zones,
                 seen,
                 zone_type="supply",
                 index=i,
-                price=high,
-                zone_low=high,
-                zone_high=high,
+                price=(zone_low + zone_high) / 2.0,
+                zone_low=zone_low,
+                zone_high=zone_high,
                 source="pivot",
+                boundary_mode="BASE_BODY",
             )
 
         if low < prev_low and low < next_low:
             swing_lows.append((i, low))
+            zone_low, zone_high = _base_bounds(candles, i - 1, i)
             _append_zone(
                 zones,
                 seen,
                 zone_type="demand",
                 index=i,
-                price=low,
-                zone_low=low,
-                zone_high=low,
+                price=(zone_low + zone_high) / 2.0,
+                zone_low=zone_low,
+                zone_high=zone_high,
                 source="pivot",
+                boundary_mode="BASE_BODY",
             )
 
     if include_fvg:
@@ -222,6 +452,7 @@ def generate_trades(
                     zone_low=zone_low,
                     zone_high=zone_high,
                     source="fvg",
+                    boundary_mode="GAP",
                 )
 
             if prev_low > next_high:
@@ -236,6 +467,7 @@ def generate_trades(
                     zone_low=zone_low,
                     zone_high=zone_high,
                     source="fvg",
+                    boundary_mode="GAP",
                 )
 
     if include_bos:
@@ -252,37 +484,40 @@ def generate_trades(
             if prior_swing_highs:
                 last_swing_high = prior_swing_highs[-1]
                 if close > last_swing_high and prev_close <= last_swing_high:
-                    zone_high = max(open_price, close)
+                    zone_low, zone_high = _base_bounds(candles, i - 1, i)
                     _append_zone(
                         zones,
                         seen,
                         zone_type="demand",
                         index=i,
-                        price=zone_high,
-                        zone_low=low,
+                        price=(zone_low + zone_high) / 2.0,
+                        zone_low=zone_low,
                         zone_high=zone_high,
                         source="bos",
                         structure_level=last_swing_high,
+                        boundary_mode="BASE_BODY",
                     )
 
             if prior_swing_lows:
                 last_swing_low = prior_swing_lows[-1]
                 if close < last_swing_low and prev_close >= last_swing_low:
-                    zone_low = min(open_price, close)
+                    zone_low, zone_high = _base_bounds(candles, i - 1, i)
                     _append_zone(
                         zones,
                         seen,
                         zone_type="supply",
                         index=i,
-                        price=zone_low,
+                        price=(zone_low + zone_high) / 2.0,
                         zone_low=zone_low,
-                        zone_high=high,
+                        zone_high=zone_high,
                         source="bos",
                         structure_level=last_swing_low,
+                        boundary_mode="BASE_BODY",
                     )
 
     ordered_zones = sorted(zones, key=lambda zone: int(zone["index"]))
     signals: list[dict[str, Any]] = []
+    used_zone_keys: set[tuple[int, str, str]] = set()
 
     for i in range(1, len(candles)):
         candle = candles.iloc[i]
@@ -291,9 +526,15 @@ def generate_trades(
             continue
 
         for zone in reversed(prior_zones[-6:]):
+            zone_key = (int(zone["index"]), str(zone["type"]), str(zone.get("source", "")))
+            if zone_key in used_zone_keys:
+                continue
             signal = _build_signal_from_zone(
+                candles=candles,
+                candle_index=i,
                 candle=candle,
                 zone=zone,
+                ordered_zones=ordered_zones,
                 rr_ratio=float(rr_ratio),
                 capital=float(capital),
                 risk_pct=float(risk_pct),
@@ -303,8 +544,7 @@ def generate_trades(
             signal["zone_index"] = int(zone["index"])
             signal["zone_price"] = zone.get("price", "")
             signals.append(signal)
+            used_zone_keys.add(zone_key)
             break
 
     return signals
-
-

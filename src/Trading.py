@@ -402,6 +402,13 @@ def _order_trade_columns(df: pd.DataFrame) -> pd.DataFrame:
         "signal_time",
         "entry_time",
         "timestamp",
+        "zone_type",
+        "zone_source",
+        "zone_score",
+        "zone_reasons",
+        "higher_tf_bias",
+        "opposing_zone_price",
+        "zone_fresh",
         "analysis_status",
         "execution_ready",
         "execution_type",
@@ -410,6 +417,49 @@ def _order_trade_columns(df: pd.DataFrame) -> pd.DataFrame:
     ordered = [c for c in preferred if c in df.columns]
     ordered.extend([c for c in df.columns if c not in ordered])
     return df.loc[:, ordered]
+
+def _style_order_trade_table(df: pd.DataFrame) -> object:
+    formatted = _order_trade_columns(df)
+    if formatted is None or formatted.empty:
+        return formatted
+
+    def _cell_style(value: object, column: str) -> str:
+        text = str(value or "").strip().upper()
+        if column == "side":
+            if text == "BUY":
+                return "background-color: rgba(34,197,94,0.18); color: #dcfce7; font-weight: 600;"
+            if text == "SELL":
+                return "background-color: rgba(239,68,68,0.18); color: #fee2e2; font-weight: 600;"
+        if column == "higher_tf_bias":
+            if text == "BULLISH":
+                return "background-color: rgba(34,197,94,0.14); color: #bbf7d0; font-weight: 600;"
+            if text == "BEARISH":
+                return "background-color: rgba(239,68,68,0.14); color: #fecaca; font-weight: 600;"
+        if column == "zone_fresh" and text == "YES":
+            return "background-color: rgba(56,189,248,0.16); color: #dbeafe; font-weight: 600;"
+        if column == "execution_status":
+            if text in {"EXECUTED", "FILLED", "SENT"}:
+                return "background-color: rgba(34,197,94,0.14); color: #dcfce7; font-weight: 600;"
+            if text in {"ERROR", "BLOCKED", "REJECTED"}:
+                return "background-color: rgba(239,68,68,0.14); color: #fee2e2; font-weight: 600;"
+        if column == "zone_score":
+            try:
+                score = int(float(value))
+            except Exception:
+                return ""
+            if score >= 4:
+                return "background-color: rgba(34,197,94,0.16); color: #dcfce7; font-weight: 700;"
+            if score == 3:
+                return "background-color: rgba(250,204,21,0.16); color: #fef3c7; font-weight: 700;"
+            return "background-color: rgba(239,68,68,0.14); color: #fee2e2; font-weight: 700;"
+        return ""
+
+    styler = formatted.style
+    for col in ["side", "higher_tf_bias", "zone_fresh", "execution_status", "zone_score"]:
+        if col in formatted.columns:
+            styler = styler.map(lambda v, c=col: _cell_style(v, c), subset=[col])
+    return styler
+
 
 
 def attach_futures_contracts(trades: list[dict[str, object]], symbol: str) -> list[dict[str, object]]:
@@ -560,7 +610,7 @@ def _render_live_execution_feedback(rows: list[dict[str, object]]) -> None:
         return
     st.markdown('<div class="section-shell" style="margin-top:6px;">', unsafe_allow_html=True)
     st.markdown('<div class="section-heading">Live Execution Feedback</div><div class="section-copy">Latest broker-side execution rows from this run.</div>', unsafe_allow_html=True)
-    st.dataframe(_order_trade_columns(pd.DataFrame(rows)), width="stretch")
+    st.dataframe(_style_order_trade_table(pd.DataFrame(rows)), width="stretch")
     st.markdown('</div>', unsafe_allow_html=True)
 
 def attach_lots(rows: list[dict[str, object]], lot_size: int, lots: int) -> list[dict[str, object]]:
@@ -2330,7 +2380,10 @@ def main() -> None:
             lots = st.slider("Lots", 1, 10, lots)
             capital = st.number_input("Capital (INR)", min_value=1000, value=capital, step=1000)
             risk_pct = st.slider("Risk per trade (%)", 0.1, 10.0, risk_pct)
-            rr_ratio = st.slider("Risk / Reward", 1.0, 10.0, rr_ratio)
+            rr_ratio = st.slider("Risk / Reward (3.0 = 1:3)", 1.0, 10.0, rr_ratio)
+            st.caption(f"Target formula: BUY = Entry + Risk x {float(rr_ratio):.1f} | SELL = Entry - Risk x {float(rr_ratio):.1f}")
+            if strategy == "Demand Supply":
+                st.info("Supply-Demand on NIFTY: avoid blind touch entries. Prefer fresh zones plus confirmation like a bullish/bearish rejection candle or break of structure (BOS).")
             trailing_sl_pct = st.slider("Trailing stop loss %", 0.1, 10.0, trailing_sl_pct, 0.1)
             auto_execute_generated = st.toggle("Auto execute", value=auto_execute_generated)
 
@@ -2691,12 +2744,12 @@ def main() -> None:
 
         if auto_executed_rows:
             with st.expander(f"Auto-executed trades ({len(auto_executed_rows)})", expanded=False):
-                st.dataframe(_order_trade_columns(pd.DataFrame(auto_executed_rows)), width="stretch")
+                st.dataframe(_style_order_trade_table(pd.DataFrame(auto_executed_rows)), width="stretch")
 
         if output_rows:
             trades_df = pd.DataFrame(output_rows)
             with st.expander(f"Generated Trades ({len(trades_df)})", expanded=False):
-                st.dataframe(trades_df.tail(12), width="stretch")
+                st.dataframe(_style_order_trade_table(trades_df.tail(12)), width="stretch")
 
             with st.expander("Trade Summary", expanded=False):
                 try:
@@ -2714,7 +2767,7 @@ def main() -> None:
         if execution_candidates:
             st.caption("Current executable candidates generated from the latest strategy run.")
             with st.expander(f"Execution Candidates ({len(execution_candidates)})", expanded=False):
-                st.dataframe(_order_trade_columns(pd.DataFrame(execution_candidates)), width="stretch")
+                st.dataframe(_style_order_trade_table(pd.DataFrame(execution_candidates)), width="stretch")
             if execution_mode == "LIVE":
                 with st.expander("Dhan Live Payload Preview"):
                     if st.button("Preview Live Payloads", width="stretch"):
@@ -2753,7 +2806,7 @@ def main() -> None:
             st.success(f"Reviewed queue ready: {len(staged_candidates)} actionable trade(s) available for execution.")
             st.caption("Only this staged reviewed queue can be executed manually or by auto execute.")
             with st.expander(f"Reviewed Queue ({len(staged_candidates)})", expanded=True):
-                st.dataframe(_order_trade_columns(pd.DataFrame(staged_candidates)), width="stretch")
+                st.dataframe(_style_order_trade_table(pd.DataFrame(staged_candidates)), width="stretch")
 
             executed_rows: list[dict[str, object]] = []
             if st.button("Execute Reviewed Trades", type="primary", width="stretch"):
@@ -2786,7 +2839,7 @@ def main() -> None:
 
                     if executed_rows:
                         st.success(f"Executed {len(executed_rows)} reviewed trade(s) in {execution_mode} mode.")
-                        st.dataframe(_order_trade_columns(pd.DataFrame(executed_rows)), width="stretch")
+                        st.dataframe(_style_order_trade_table(pd.DataFrame(executed_rows)), width="stretch")
                         if execution_mode == "LIVE":
                             _render_live_execution_feedback(executed_rows)
                     else:
@@ -2823,6 +2876,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

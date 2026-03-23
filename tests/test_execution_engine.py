@@ -1,4 +1,4 @@
-import os
+﻿import os
 import tempfile
 import unittest
 from datetime import UTC, datetime
@@ -352,5 +352,102 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertIn('2026-01-31', unlock_date)
 
 
+    def test_execute_live_trades_resolves_dhan_security_metadata(self):
+        broker = _StubBrokerClient()
+        security_map = {
+            "NIFTY": {
+                "security_id": "1001",
+                "trading_symbol": "NIFTY",
+                "exchange_segment": "IDX_I",
+                "instrument_type": "INDEX",
+                "underlying_symbol": "NIFTY",
+            },
+            "__meta__": {
+                "by_security_id": {
+                    "1001": {
+                        "security_id": "1001",
+                        "trading_symbol": "NIFTY",
+                        "exchange_segment": "IDX_I",
+                        "instrument_type": "INDEX",
+                        "underlying_symbol": "NIFTY",
+                    },
+                    "2001": {
+                        "security_id": "2001",
+                        "trading_symbol": "NIFTY 2026-03-26 22500 CE",
+                        "exchange_segment": "NSE_FNO",
+                        "instrument_type": "OPTIDX",
+                        "underlying_symbol": "NIFTY",
+                        "expiry_date": "2026-03-26",
+                        "strike_price": "22500",
+                        "option_type": "CE",
+                        "product_type": "INTRADAY",
+                        "order_type": "MARKET",
+                    },
+                },
+                "by_underlying": {
+                    "NIFTY": [
+                        {
+                            "security_id": "1001",
+                            "trading_symbol": "NIFTY",
+                            "exchange_segment": "IDX_I",
+                            "instrument_type": "INDEX",
+                            "underlying_symbol": "NIFTY",
+                        },
+                        {
+                            "security_id": "2001",
+                            "trading_symbol": "NIFTY 2026-03-26 22500 CE",
+                            "exchange_segment": "NSE_FNO",
+                            "instrument_type": "OPTIDX",
+                            "underlying_symbol": "NIFTY",
+                            "expiry_date": "2026-03-26",
+                            "strike_price": "22500",
+                            "option_type": "CE",
+                            "product_type": "INTRADAY",
+                            "order_type": "MARKET",
+                        },
+                    ]
+                },
+                "option_index": {
+                    ("NIFTY", "2026-03-26", "22500", "CE"): {
+                        "security_id": "2001",
+                        "trading_symbol": "NIFTY 2026-03-26 22500 CE",
+                        "exchange_segment": "NSE_FNO",
+                        "instrument_type": "OPTIDX",
+                        "underlying_symbol": "NIFTY",
+                        "expiry_date": "2026-03-26",
+                        "strike_price": "22500",
+                        "option_type": "CE",
+                        "product_type": "INTRADAY",
+                        "order_type": "MARKET",
+                    }
+                },
+            },
+        }
+        candidates = [
+            {
+                'strategy': 'BREAKOUT',
+                'symbol': '^NSEI',
+                'signal_time': '2026-03-06 10:00:00',
+                'side': 'BUY',
+                'price': 100.0,
+                'quantity': 75,
+                'option_expiry': '2026-03-26',
+                'strike_price': 22500,
+                'option_type': 'CE',
+            }
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'live.csv'
+            rows = execute_live_trades(candidates, out, broker_client=broker, broker_name='DHAN', security_map=security_map)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]['execution_status'], 'SENT')
+            self.assertEqual(rows[0]['data_symbol'], '^NSEI')
+            self.assertEqual(rows[0]['trade_symbol'], 'NIFTY')
+            self.assertEqual(rows[0]['security_id'], '2001')
+            self.assertEqual(rows[0]['exchange_segment'], 'NSE_FNO')
+            self.assertEqual(rows[0]['instrument_type'], 'OPTIDX')
+            self.assertEqual(rows[0]['option_expiry'], '2026-03-26')
+            self.assertEqual(rows[0]['broker_order_id'], 'ORD123')
 if __name__ == '__main__':
     unittest.main()
+

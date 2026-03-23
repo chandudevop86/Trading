@@ -8,15 +8,17 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from src.csv_io import read_csv_rows
 try:
-    from src.dhan_api import DhanClient, build_order_request_from_candidate, load_security_map
+    from src.dhan_api import DhanClient, DhanExecutionError, build_order_request_from_candidate, load_security_map, resolve_security
 except Exception:
     DhanClient = None  # type: ignore
+    DhanExecutionError = ValueError  # type: ignore
     build_order_request_from_candidate = None  # type: ignore
     load_security_map = None  # type: ignore
+    resolve_security = None  # type: ignore
 
 DEFAULT_LOT_SIZES = {
     "NIFTY": 65,
@@ -61,11 +63,18 @@ EXECUTION_SCHEMA = [
     "validation_error",
     "strategy",
     "symbol",
+    "data_symbol",
+    "trade_symbol",
+    "trading_symbol",
+    "security_id",
+    "exchange_segment",
+    "instrument_type",
     "signal_time",
     "side",
     "price",
     "share_price",
     "strike_price",
+    "option_expiry",
     "option_type",
     "option_strike",
     "quantity",
@@ -434,7 +443,7 @@ def _apply_live_broker_result(record: dict[str, object], broker_name: str, resul
     if isinstance(result, dict):
         record["broker_order_id"] = result.get("orderId", result.get("order_id", ""))
         record["broker_status"] = result.get("orderStatus", result.get("status", "SENT"))
-        record["broker_message"] = result.get("message", result.get("remarks", ""))
+        record["broker_message"] = result.get("message", result.get("remarks", result.get("omsErrorDescription", "")))
         try:
             record["broker_response_json"] = json.dumps(result, ensure_ascii=True)
         except Exception:
@@ -667,18 +676,47 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             _append_written_row(result, live_row)
             continue
 
+        live_row.setdefault("data_symbol", live_row.get("symbol", ""))
+        live_row.setdefault("trade_symbol", live_row.get("trading_symbol", live_row.get("symbol", "")))
         if resolved_broker_client is None:
-            live_row["trade_status"] = TRADE_STATUS_PENDING_EXECUTION
-            live_row["execution_status"] = "SENT"
+            live_row["trade_status"] = TRADE_STATUS_ERROR
+            live_row["execution_status"] = "ERROR"
+            live_row["validation_error"] = "BROKER_CLIENT_NOT_CONFIGURED"
             live_row["broker_name"] = resolved_broker_name
             live_row["broker_status"] = "NOT_CONFIGURED"
             live_row["broker_message"] = "Live broker client not configured; row logged only."
         else:
             try:
-                if build_order_request_from_candidate is None:
+                if resolve_security is None or build_order_request_from_candidate is None:
                     raise RuntimeError("Broker payload builder unavailable")
+                resolution = resolve_security(
+                    live_row,
+                    resolved_security_map,
+                    broker_client=resolved_broker_client,
+                    validate_with_option_chain=True,
+                )
+                for key in (
+                    "data_symbol",
+                    "trade_symbol",
+                    "trading_symbol",
+                    "security_id",
+                    "exchange_segment",
+                    "instrument_type",
+                    "option_expiry",
+                    "option_type",
+                    "strike_price",
+                ):
+                    value = resolution.get(key)
+                    if value not in {None, ""}:
+                        live_row[key] = value
                 client_id = getattr(resolved_broker_client, "client_id", "")
-                order_request = build_order_request_from_candidate(live_row, client_id=str(client_id), security_map=resolved_security_map)
+                order_request = build_order_request_from_candidate(
+                    live_row,
+                    client_id=str(client_id),
+                    security_map=resolved_security_map,
+                    resolved_security=resolution,
+                    broker_client=resolved_broker_client,
+                )
                 broker_result = resolved_broker_client.place_order(order_request)
                 _apply_live_broker_result(live_row, resolved_broker_name, broker_result)
                 if _normalize_text(live_row.get("broker_status", "SENT")) in {"REJECTED", "FAILED", "ERROR"}:
@@ -688,6 +726,18 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
                 else:
                     live_row["trade_status"] = TRADE_STATUS_PENDING_EXECUTION
                     live_row["execution_status"] = "SENT"
+            except DhanExecutionError as exc:
+                live_row["trade_status"] = TRADE_STATUS_ERROR
+                live_row["execution_status"] = "ERROR"
+                live_row["validation_error"] = getattr(exc, "code", SKIP_REASON_BROKER_ERROR)
+                live_row["broker_name"] = resolved_broker_name
+                live_row["broker_status"] = getattr(exc, "code", "ERROR")
+                live_row["broker_message"] = str(exc)
+                metadata = getattr(exc, "metadata", {})
+                if isinstance(metadata, dict):
+                    for key, value in metadata.items():
+                        if value not in {None, ""}:
+                            live_row[key] = value
             except Exception as exc:
                 live_row["trade_status"] = TRADE_STATUS_ERROR
                 live_row["execution_status"] = "ERROR"
@@ -1108,6 +1158,11 @@ def close_paper_trades(
         writer.writerows(updated_rows)
 
     return closed_now
+
+
+
+
+
 
 
 

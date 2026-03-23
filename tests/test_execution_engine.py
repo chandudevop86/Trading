@@ -14,8 +14,10 @@ from src.execution_engine import (
     filter_unlogged_candidates,
     live_kill_switch_enabled,
     live_trading_unlock_status,
+    load_open_trades,
     make_trade_id,
     make_trade_key,
+    manual_close_paper_trades,
     normalize_order_quantity,
     reconcile_live_positions,
     reconcile_live_trades,
@@ -182,6 +184,23 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(len(skipped), 1)
             self.assertEqual(skipped[0]['signal_time'], '2026-03-06 10:00:00')
 
+    def test_manual_close_paper_trades_closes_selected_trade(self):
+        candidates = [
+            {'strategy': 'MANUAL', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'manual'}
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            result = execute_paper_trades(candidates, out)
+            open_rows = load_open_trades(out, 'PAPER')
+            self.assertEqual(len(open_rows), 1)
+            closed = manual_close_paper_trades(out, [open_rows[0]['trade_id']], exit_price=102.0)
+            self.assertEqual(len(closed), 1)
+            self.assertEqual(closed[0]['execution_status'], 'CLOSED')
+            self.assertEqual(closed[0]['trade_status'], 'CLOSED')
+            self.assertEqual(closed[0]['position_status'], 'CLOSED')
+            remaining_open = load_open_trades(out, 'PAPER')
+            self.assertEqual(len(remaining_open), 0)
     def test_execute_paper_trades_blocks_after_daily_trade_limit(self):
         candidates = [
             {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},

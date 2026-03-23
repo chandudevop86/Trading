@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import hashlib
@@ -140,18 +140,25 @@ def _extract_share_and_strike(row: dict[str, object]) -> tuple[object, object]:
 
 
 def _parse_dt(text: object) -> Optional[datetime]:
+    def _normalize(dt: datetime) -> datetime:
+        # Normalize offset-aware values to naive UTC so CSV/log timestamps and
+        # market-data timestamps remain directly comparable.
+        if dt.tzinfo is not None:
+            return dt.astimezone(UTC).replace(tzinfo=None)
+        return dt
+
     raw = str(text or "").strip()
     if not raw:
         return None
 
     try:
-        return datetime.fromisoformat(raw)
+        return _normalize(datetime.fromisoformat(raw))
     except ValueError:
         pass
 
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
         try:
-            return datetime.strptime(raw, fmt)
+            return _normalize(datetime.strptime(raw, fmt))
         except ValueError:
             continue
 
@@ -1101,5 +1108,6 @@ def close_paper_trades(
         writer.writerows(updated_rows)
 
     return closed_now
+
 
 

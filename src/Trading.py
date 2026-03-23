@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import io
@@ -2799,16 +2799,21 @@ def main() -> None:
                 st.dataframe(_style_order_trade_table(pd.DataFrame(execution_candidates)), width="stretch")
             if execution_mode == "LIVE":
                 with st.expander("Dhan Live Payload Preview"):
+                    preview_candidates = st.session_state.get("analyzed_trade_queue", []) or analyzed_candidates
                     if st.button("Preview Live Payloads", width="stretch"):
                         st.session_state["dhan_payload_preview"] = _build_dhan_preview_rows(
-                            execution_candidates,
+                            preview_candidates,
                             dhan_security_map_path,
                         )
                     preview_rows = st.session_state.get("dhan_payload_preview", [])
                     if preview_rows:
+                        st.caption(f"Previewing {len(preview_candidates)} actionable reviewed/analyzed trade(s) for Dhan execution.")
                         st.dataframe(pd.DataFrame(preview_rows), width="stretch")
                     else:
-                        st.caption("Preview the exact Dhan live-order payloads here before sending them to the broker.")
+                        if preview_candidates:
+                            st.caption("Preview the exact Dhan live-order payloads here before sending them to the broker.")
+                        else:
+                            st.caption("No actionable BUY/SELL trades are ready for Dhan preview yet. Analyze the current trades first.")
         else:
             st.info("No execution candidates are available for the current strategy output.")
             if watchlist_rows:
@@ -2995,6 +3000,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 
 

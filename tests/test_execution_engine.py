@@ -9,6 +9,7 @@ from src.execution_engine import (
     build_execution_candidates,
     default_quantity_for_symbol,
     execute_live_trades,
+    filter_unlogged_candidates,
     execute_paper_trades,
     live_kill_switch_enabled,
     live_trading_unlock_status,
@@ -135,6 +136,21 @@ class TestExecutionEngine(unittest.TestCase):
             second = execute_paper_trades(candidates, out, deduplicate=True)
             self.assertEqual(len(first), 1)
             self.assertEqual(len(second), 0)
+
+    def test_filter_unlogged_candidates_skips_already_logged_rows(self):
+        candidates = [
+            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},
+            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:05:00', 'side': 'SELL', 'price': 99, 'quantity': 65, 'reason': 'y'},
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            execute_paper_trades([candidates[0]], out, deduplicate=True)
+            fresh, skipped = filter_unlogged_candidates(candidates, out)
+            self.assertEqual(len(fresh), 1)
+            self.assertEqual(fresh[0]['signal_time'], '2026-03-06 10:05:00')
+            self.assertEqual(len(skipped), 1)
+            self.assertEqual(skipped[0]['signal_time'], '2026-03-06 10:00:00')
 
     def test_execute_paper_trades_blocks_after_daily_trade_limit(self):
         candidates = [

@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Auto backtest all bots and write paper logs with timeframe metadata')
     parser.add_argument('--symbol', default='^NSEI')
     parser.add_argument('--interval', default='5m', choices=['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h', '1d', '5d', '1wk', '1mo', '3mo'])
-    parser.add_argument('--period', default='5d')
+    parser.add_argument('--period', default='3mo')
     parser.add_argument('--capital', type=float, default=100000.0)
     parser.add_argument('--risk-pct', type=float, default=0.01)
     parser.add_argument('--rr-ratio', type=float, default=2.0)
@@ -190,7 +190,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     execution_type = str(getattr(args, 'execution_type', 'PAPER') or 'PAPER').strip().upper()
     executed_log_path = args.paper_log_output
     paper_rows: list[dict[str, object]] = []
-
+ 
     if execution_type == 'NONE':
         paper_rows = []
     elif execution_type == 'LIVE':

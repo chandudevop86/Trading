@@ -179,9 +179,27 @@ def _existing_keys(path: Path) -> set[str]:
         return set()
     keys: set[str] = set()
     for row in read_csv_rows(path):
-        keys.add(f"{row.get('strategy','')}|{row.get('symbol','')}|{row.get('signal_time','')}|{row.get('side','')}")
+        keys.add(execution_candidate_key(row))
     return keys
 
+
+def execution_candidate_key(record: dict[str, object]) -> str:
+    return f"{record.get('strategy','')}|{record.get('symbol','')}|{record.get('signal_time','')}|{record.get('side','')}"
+
+
+def filter_unlogged_candidates(
+    candidates: list[dict[str, object]],
+    output_path: Path,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    seen = _existing_keys(output_path)
+    fresh: list[dict[str, object]] = []
+    skipped: list[dict[str, object]] = []
+    for candidate in candidates:
+        if execution_candidate_key(candidate) in seen:
+            skipped.append(candidate)
+        else:
+            fresh.append(candidate)
+    return fresh, skipped
 
 
 def _trade_day_key(record: dict[str, object], fallback_day: str) -> str:
@@ -320,7 +338,7 @@ def execute_paper_trades(
     daily_state = _load_daily_execution_state(output_path, "PAPER")
 
     for c in executable:
-        key = f"{c.get('strategy','')}|{c.get('symbol','')}|{c.get('signal_time','')}|{c.get('side','')}"
+        key = execution_candidate_key(c)
         if deduplicate and key in seen:
             continue
 
@@ -400,7 +418,7 @@ def execute_live_trades(
     resolved_security_map = security_map if security_map is not None else _default_security_map()
 
     for c in executable:
-        key = f"{c.get('strategy','')}|{c.get('symbol','')}|{c.get('signal_time','')}|{c.get('side','')}"
+        key = execution_candidate_key(c)
         if deduplicate and key in seen:
             continue
 

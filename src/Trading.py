@@ -34,12 +34,14 @@ try:
         build_execution_candidates,
         execute_live_trades,
         execute_paper_trades,
+        filter_unlogged_candidates,
     )
 except Exception:
     build_analysis_queue = None
     build_execution_candidates = None
     execute_live_trades = None
     execute_paper_trades = None
+    filter_unlogged_candidates = None
 
 try:
     from src.supply_demand import generate_trades as generate_demand_supply_trades
@@ -181,6 +183,18 @@ def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:
 
     df["unix"] = df["timestamp"].astype("int64") // 10**9
     return df
+
+
+def _filter_reviewed_queue_against_log(
+    candidates: list[dict[str, object]],
+    log_path: Path,
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    if filter_unlogged_candidates is None:
+        return list(candidates), []
+    try:
+        return filter_unlogged_candidates(candidates, log_path)
+    except Exception:
+        return list(candidates), []
 
 
 def _df_to_candles(df: pd.DataFrame) -> list[Candle]:
@@ -2535,28 +2549,39 @@ def main() -> None:
 
     auto_executed_rows: list[dict[str, object]] = []
     reviewed_auto_candidates = st.session_state.get("analyzed_trade_queue", [])
+    reviewed_log_path = Path(live_log_output if execution_mode == "LIVE" else paper_log_output)
+    reviewed_auto_candidates, skipped_auto_candidates = _filter_reviewed_queue_against_log(reviewed_auto_candidates, reviewed_log_path)
+    if skipped_auto_candidates:
+        st.session_state["analyzed_trade_queue"] = reviewed_auto_candidates
     if auto_execute_generated:
+        if skipped_auto_candidates:
+            st.info(f"Removed {len(skipped_auto_candidates)} reviewed trade(s) from the queue because they were already logged in {execution_mode} mode.")
         if not reviewed_auto_candidates:
             st.info("Auto execute is enabled, but it only runs after you analyze trades and stage a reviewed BUY/SELL queue.")
         else:
+            auto_execution_attempted = False
             try:
                 if execution_mode == "LIVE":
                     if execute_live_trades is None:
                         st.error("Live execution module is not available.")
                     else:
-                        auto_executed_rows = execute_live_trades(reviewed_auto_candidates, Path(live_log_output), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
+                        auto_execution_attempted = True
+                        auto_executed_rows = execute_live_trades(reviewed_auto_candidates, reviewed_log_path, deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
                 else:
                     if execute_paper_trades is None:
                         st.error("Paper execution module is not available.")
                     else:
-                        auto_executed_rows = execute_paper_trades(reviewed_auto_candidates, Path(paper_log_output), deduplicate=True)
+                        auto_execution_attempted = True
+                        auto_executed_rows = execute_paper_trades(reviewed_auto_candidates, reviewed_log_path, deduplicate=True)
             except Exception as exc:
                 st.error(f"Auto execution failed: {exc}")
                 auto_executed_rows = []
 
+            if auto_execution_attempted:
+                st.session_state["analyzed_trade_queue"] = []
+
             if auto_executed_rows:
                 st.success(f"Auto executed {len(auto_executed_rows)} reviewed trade(s) in {execution_mode} mode.")
-                st.session_state["analyzed_trade_queue"] = []
                 if execution_mode == "LIVE":
                     _render_live_execution_feedback(auto_executed_rows)
                 if send_telegram:
@@ -2570,9 +2595,8 @@ def main() -> None:
                         alert_row = dict(signal_map.get(exec_key, {}))
                         alert_row.update(executed)
                         send_signal_alert(alert_row, strategy=strategy, symbol=symbol, refresh_seconds=int(refresh_seconds))
-            else:
-                st.info("Reviewed queue is staged for auto execution, but no new trades were executed on this run.")
-
+            elif auto_execution_attempted:
+                st.info("Reviewed queue was cleared because its staged trades were already logged or could not produce a new execution row.")
     account_status = "Paper"
     live_client_id_present = bool(os.getenv("DHAN_CLIENT_ID", "").strip())
     live_token_present = bool(os.getenv("DHAN_ACCESS_TOKEN", "").strip())
@@ -2802,6 +2826,11 @@ def main() -> None:
             st.caption(f"Execution mode: {execution_mode}")
     
         staged_candidates = st.session_state.get("analyzed_trade_queue", [])
+        staged_log_path = Path(live_log_output if execution_mode == "LIVE" else paper_log_output)
+        staged_candidates, skipped_staged_candidates = _filter_reviewed_queue_against_log(staged_candidates, staged_log_path)
+        if skipped_staged_candidates:
+            st.session_state["analyzed_trade_queue"] = staged_candidates
+            st.info(f"Removed {len(skipped_staged_candidates)} reviewed trade(s) from the queue because they were already logged in {execution_mode} mode.")
         if staged_candidates:
             st.success(f"Reviewed queue ready: {len(staged_candidates)} actionable trade(s) available for execution.")
             st.caption("Only this staged reviewed queue can be executed manually or by auto execute.")
@@ -2809,6 +2838,7 @@ def main() -> None:
                 st.dataframe(_style_order_trade_table(pd.DataFrame(staged_candidates)), width="stretch")
 
             executed_rows: list[dict[str, object]] = []
+            execution_attempted = False
             if st.button("Execute Reviewed Trades", type="primary", width="stretch"):
                 st.session_state["confirm_execute_reviewed"] = True
 
@@ -2830,20 +2860,25 @@ def main() -> None:
                         if execute_live_trades is None:
                             st.error("Live execution module is not available.")
                         else:
-                            executed_rows = execute_live_trades(staged_candidates, Path(live_log_output), deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
+                            execution_attempted = True
+                            executed_rows = execute_live_trades(staged_candidates, staged_log_path, deduplicate=True, **_resolve_live_execution_kwargs(dhan_security_map_path))
                     else:
                         if execute_paper_trades is None:
                             st.error("Paper execution module is not available.")
                         else:
-                            executed_rows = execute_paper_trades(staged_candidates, Path(paper_log_output), deduplicate=True)
+                            execution_attempted = True
+                            executed_rows = execute_paper_trades(staged_candidates, staged_log_path, deduplicate=True)
+
+                    if execution_attempted:
+                        st.session_state["analyzed_trade_queue"] = []
 
                     if executed_rows:
                         st.success(f"Executed {len(executed_rows)} reviewed trade(s) in {execution_mode} mode.")
                         st.dataframe(_style_order_trade_table(pd.DataFrame(executed_rows)), width="stretch")
                         if execution_mode == "LIVE":
                             _render_live_execution_feedback(executed_rows)
-                    else:
-                        st.warning("No new reviewed trades were executed. They may already be logged.")
+                    elif execution_attempted:
+                        st.info("Reviewed queue was cleared because its staged trades were already logged or could not produce a new execution row.")
         else:
             st.info("Analyze trades first to build a review queue, then execute that reviewed batch later.")
         st.markdown("</div>", unsafe_allow_html=True)

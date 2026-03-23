@@ -52,7 +52,7 @@ class DhanExecutionError(ValueError):
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        super().__init__(self.message)
+        ValueError.__init__(self, self.message)
 
     def as_dict(self) -> dict[str, Any]:
         payload = {"code": self.code, "message": self.message}
@@ -752,3 +752,4 @@ def build_order_request_from_candidate(candidate: dict[str, object], *, client_i
         drv_option_type=OPTION_TYPE_MAP.get(option_type, ""),
         drv_strike_price=float(strike_price) if strike_price else None,
     )
+

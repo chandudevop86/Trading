@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import io
@@ -342,7 +342,7 @@ def _attach_option_metrics(rows: list[dict[str, object]], symbol: str, fetch_opt
             est = _estimate_weekly_expiry(symbol)
             if est:
                 row["option_expiry"] = est
-                row["option_expiry_source"] = "EST"
+                row["option_expiry_source"] = "ESTIMATED"
                 any_estimated_expiry = True
 
         if row.get("option_expiry"):
@@ -350,7 +350,7 @@ def _attach_option_metrics(rows: list[dict[str, object]], symbol: str, fetch_opt
         enriched.append(row)
 
     final_status = status
-    if status == "FETCH_OK" and not any_nse_match and any_estimated_expiry:
+    if any_estimated_expiry and not any_nse_match:
         final_status = "ESTIMATED_EXPIRY_ONLY"
     elif status == "FETCH_OK" and not any_nse_match:
         final_status = "NO_MATCH"
@@ -456,6 +456,18 @@ def _style_order_trade_table(df: pd.DataFrame) -> object:
                 return "background-color: rgba(34,197,94,0.14); color: #dcfce7; font-weight: 600;"
             if text in {"ERROR", "BLOCKED", "REJECTED"}:
                 return "background-color: rgba(239,68,68,0.14); color: #fee2e2; font-weight: 600;"
+        if column == "option_expiry_source":
+            if text == "NSE":
+                return "background-color: rgba(34,197,94,0.14); color: #dcfce7; font-weight: 600;"
+            if text in {"EST", "ESTIMATED"}:
+                return "background-color: rgba(250,204,21,0.16); color: #fef3c7; font-weight: 600;"
+        if column == "_option_metrics_status":
+            if text == "NSE_OK":
+                return "background-color: rgba(34,197,94,0.14); color: #dcfce7; font-weight: 600;"
+            if text == "ESTIMATED_EXPIRY_ONLY":
+                return "background-color: rgba(250,204,21,0.16); color: #fef3c7; font-weight: 600;"
+            if text == "DISABLED":
+                return "background-color: rgba(56,189,248,0.12); color: #dbeafe; font-weight: 600;"
         if column == "zone_score":
             try:
                 score = int(float(value))
@@ -469,7 +481,7 @@ def _style_order_trade_table(df: pd.DataFrame) -> object:
         return ""
 
     styler = formatted.style
-    for col in ["side", "higher_tf_bias", "zone_fresh", "execution_status", "zone_score"]:
+    for col in ["side", "higher_tf_bias", "zone_fresh", "execution_status", "option_expiry_source", "_option_metrics_status", "zone_score"]:
         if col in formatted.columns:
             styler = styler.map(lambda v, c=col: _cell_style(v, c), subset=[col])
     return styler
@@ -503,7 +515,7 @@ def send_signal_alert(row: dict[str, object], *, strategy: str, symbol: str, ref
     opt_iv = _fmt_num(row.get("option_iv"))
     opt_expiry = _format_expiry(row.get("option_expiry"))
     opt_expiry_source = str(row.get("option_expiry_source", "") or "").upper()
-    if opt_expiry and opt_expiry_source == "EST":
+    if opt_expiry and opt_expiry_source in {"EST", "ESTIMATED"}:
         opt_expiry = opt_expiry + " (est)"
 
     lots = str(row.get("lots", "") or "").strip()

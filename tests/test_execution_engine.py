@@ -1,4 +1,4 @@
-﻿import os
+import os
 import tempfile
 import unittest
 from datetime import UTC, datetime
@@ -9,10 +9,13 @@ from src.execution_engine import (
     build_execution_candidates,
     default_quantity_for_symbol,
     execute_live_trades,
-    filter_unlogged_candidates,
     execute_paper_trades,
+    execution_result_summary,
+    filter_unlogged_candidates,
     live_kill_switch_enabled,
     live_trading_unlock_status,
+    make_trade_id,
+    make_trade_key,
     normalize_order_quantity,
     reconcile_live_positions,
     reconcile_live_trades,
@@ -92,6 +95,33 @@ class TestExecutionEngine(unittest.TestCase):
         self.assertEqual(candidates[0]['trade_no'], 2)
         self.assertEqual(candidates[0]['trade_label'], 'Trade 2')
 
+    def test_make_trade_identity_is_stable(self):
+        candidate = {
+            'strategy': 'BREAKOUT',
+            'symbol': 'NIFTY',
+            'signal_time': '2026-03-06 10:00:00',
+            'side': 'BUY',
+            'price': 100.0,
+            'option_strike': '22550CE',
+        }
+        self.assertEqual(make_trade_id(candidate), make_trade_id(candidate))
+        self.assertEqual(make_trade_key(candidate), make_trade_key(candidate))
+
+    def test_execute_paper_trades_returns_structured_summary(self):
+        candidates = [
+            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},
+            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:05:00', 'side': 'HOLD', 'price': 101, 'quantity': 65, 'reason': 'y'},
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            result = execute_paper_trades(candidates, out)
+            self.assertEqual(result.executed_count, 1)
+            self.assertEqual(result.skipped_count, 1)
+            self.assertEqual(result.error_count, 0)
+            messages = execution_result_summary(result)
+            self.assertTrue(any('1 trade executed' in message for _, message in messages))
+            self.assertTrue(any('invalid side' in message for _, message in messages))
     def test_normalize_order_quantity_nifty(self):
         self.assertEqual(normalize_order_quantity('NIFTY', 10), 65)
         self.assertEqual(normalize_order_quantity('NIFTY', 129), 65)
@@ -185,7 +215,7 @@ class TestExecutionEngine(unittest.TestCase):
             out = Path(td) / 'live.csv'
             out.write_text(
                 'strategy,symbol,signal_time,side,price,quantity,execution_type,execution_status,executed_at_utc,pnl\n'
-                'BREAKOUT,NIFTY,2026-03-06 09:30:00,BUY,100,65,LIVE,SENT,2026-03-06 09:30:00,-1500\n',
+                'BREAKOUT,NIFTY,2026-03-06 09:30:00,SELL,100,65,LIVE,SENT,2026-03-06 09:30:00,-1500\n',
                 encoding='utf-8',
             )
             rows = execute_live_trades(

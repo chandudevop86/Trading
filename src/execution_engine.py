@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
+import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Optional, Tuple
@@ -14,12 +17,100 @@ except Exception:
     DhanClient = None  # type: ignore
     build_order_request_from_candidate = None  # type: ignore
     load_security_map = None  # type: ignore
+
 DEFAULT_LOT_SIZES = {
     "NIFTY": 65,
     "NIFTY FUT": 65,
     "NIFTY FUTURES": 65,
     "NIFTYFUT": 65,
 }
+
+TRADE_STATUS_NEW = "NEW"
+TRADE_STATUS_REVIEWED = "REVIEWED"
+TRADE_STATUS_PENDING_EXECUTION = "PENDING_EXECUTION"
+TRADE_STATUS_EXECUTED = "EXECUTED"
+TRADE_STATUS_BLOCKED = "BLOCKED"
+TRADE_STATUS_OPEN = "OPEN"
+TRADE_STATUS_CLOSED = "CLOSED"
+TRADE_STATUS_ERROR = "ERROR"
+
+SKIP_REASON_DUPLICATE_ACTIVE_TRADE = "DUPLICATE_ACTIVE_TRADE"
+SKIP_REASON_DUPLICATE_EXECUTED_TRADE = "DUPLICATE_EXECUTED_TRADE"
+SKIP_REASON_INVALID_SIDE = "INVALID_SIDE"
+SKIP_REASON_MAX_TRADES_PER_DAY = "MAX_TRADES_PER_DAY"
+SKIP_REASON_MAX_DAILY_LOSS = "MAX_DAILY_LOSS"
+SKIP_REASON_MISSING_PRICE = "MISSING_PRICE"
+SKIP_REASON_MISSING_QUANTITY = "MISSING_QUANTITY"
+SKIP_REASON_BROKER_ERROR = "BROKER_ERROR"
+SKIP_REASON_KILL_SWITCH = "KILL_SWITCH_ENABLED"
+
+ACTIVE_TRADE_STATUSES = {
+    TRADE_STATUS_REVIEWED,
+    TRADE_STATUS_PENDING_EXECUTION,
+    TRADE_STATUS_EXECUTED,
+    TRADE_STATUS_OPEN,
+}
+EXECUTION_SUCCESS_STATUSES = {"EXECUTED", "SENT", "FILLED"}
+EXECUTION_SCHEMA = [
+    "trade_id",
+    "trade_key",
+    "trade_status",
+    "position_status",
+    "duplicate_reason",
+    "blocked_reason",
+    "validation_error",
+    "strategy",
+    "symbol",
+    "signal_time",
+    "side",
+    "price",
+    "share_price",
+    "strike_price",
+    "option_type",
+    "option_strike",
+    "quantity",
+    "execution_type",
+    "execution_status",
+    "executed_at_utc",
+    "reviewed_at_utc",
+    "analyzed_at_utc",
+    "broker_name",
+    "broker_order_id",
+    "broker_status",
+    "broker_message",
+    "broker_response_json",
+    "risk_limit_reason",
+    "pnl",
+    "exit_time",
+    "exit_price",
+    "exit_reason",
+]
+
+
+@dataclass
+class ExecutionResult:
+    rows: list[dict[str, object]] = field(default_factory=list)
+    executed_rows: list[dict[str, object]] = field(default_factory=list)
+    blocked_rows: list[dict[str, object]] = field(default_factory=list)
+    skipped_rows: list[dict[str, object]] = field(default_factory=list)
+    error_rows: list[dict[str, object]] = field(default_factory=list)
+    executed_count: int = 0
+    blocked_count: int = 0
+    skipped_count: int = 0
+    duplicate_count: int = 0
+    error_count: int = 0
+
+    def __iter__(self):
+        return iter(self.rows)
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __getitem__(self, index: int) -> dict[str, object]:
+        return self.rows[index]
+
+    def __bool__(self) -> bool:
+        return bool(self.rows)
 
 
 def default_quantity_for_symbol(symbol: str) -> int:
@@ -32,10 +123,10 @@ def normalize_order_quantity(symbol: str, quantity: object) -> int:
     try:
         qty = int(float(quantity))
     except (TypeError, ValueError):
-        qty = lot
+        qty = 0
 
     if qty <= 0:
-        return lot
+        return 0
     if lot <= 1:
         return qty
 
@@ -67,30 +158,87 @@ def _parse_dt(text: object) -> Optional[datetime]:
     return None
 
 
+def _safe_float(value: object) -> float:
+    try:
+        if value is None or str(value).strip() == "":
+            return 0.0
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _normalize_text(value: object) -> str:
+    return str(value or "").strip().upper()
+
+
+def _price_value(record: dict[str, object]) -> float:
+    for key in ("entry_price", "price", "share_price", "close", "spot_ltp"):
+        value = _safe_float(record.get(key))
+        if value > 0:
+            return value
+    return 0.0
+
+
+def make_trade_key(record: dict[str, object]) -> str:
+    strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
+    symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
+    side = _normalize_text(record.get("side"))
+    instrument = _normalize_text(
+        record.get("trading_symbol")
+        or record.get("contract_symbol")
+        or record.get("option_strike")
+        or record.get("strike_price")
+        or symbol
+    )
+    payload = "|".join([strategy, symbol, side, instrument])
+    return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:20]
+
+
+def make_trade_id(record: dict[str, object]) -> str:
+    existing = str(record.get("trade_id", "") or "").strip()
+    if existing:
+        return existing
+    strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
+    symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
+    signal_time = str(record.get("signal_time", record.get("entry_time", record.get("timestamp", ""))) or "").strip()
+    side = _normalize_text(record.get("side"))
+    entry_price = f"{_price_value(record):.6f}"
+    option_key = _normalize_text(record.get("option_strike") or record.get("trading_symbol") or record.get("strike_price"))
+    payload = "|".join([strategy, symbol, signal_time, side, entry_price, option_key])
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, payload))
+
+
+def execution_candidate_key(record: dict[str, object]) -> str:
+    return make_trade_key(record)
+
+
+def _ensure_trade_identity(record: dict[str, object], *, default_status: str | None = None) -> dict[str, object]:
+    normalized = dict(record)
+    normalized.setdefault("strategy", str(normalized.get("strategy", "TRADE_BOT") or "TRADE_BOT"))
+    normalized.setdefault("symbol", str(normalized.get("symbol", "UNKNOWN") or "UNKNOWN"))
+    normalized["trade_key"] = str(normalized.get("trade_key", "") or make_trade_key(normalized))
+    normalized["trade_id"] = make_trade_id(normalized)
+    if default_status and not str(normalized.get("trade_status", "") or "").strip():
+        normalized["trade_status"] = default_status
+    return normalized
+
+
 def build_execution_candidates(strategy: str, output_rows: list[dict[str, object]], symbol: str) -> list[dict[str, object]]:
     symbol = symbol.strip() or "UNKNOWN"
     candidates: list[dict[str, object]] = []
-
     if not output_rows:
         return candidates
 
     if strategy == "Indicator (RSI/ADX/MACD+VWAP)":
         last = output_rows[-1]
         signal = str(last.get("market_signal", "NEUTRAL")).strip().upper()
-
         side = "HOLD"
         if signal in {"BULLISH_TREND", "OVERSOLD", "LONG", "BUY"}:
             side = "BUY"
         elif signal in {"BEARISH_TREND", "OVERBOUGHT", "SHORT", "SELL"}:
             side = "SELL"
-
-        close_val = last.get("close", last.get("price", 0.0))
-        try:
-            close_price = float(close_val)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            close_price = 0.0
-
-        trade = {
+        close_price = _price_value(last)
+        candidates.append(_ensure_trade_identity({
             "strategy": "INDICATOR",
             "symbol": symbol,
             "signal_time": str(last.get("timestamp", "")),
@@ -100,14 +248,11 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
             "strike_price": last.get("strike_price"),
             "quantity": default_quantity_for_symbol(symbol),
             "reason": signal,
-        }
-
-        candidates.append(trade)
+        }, default_status=TRADE_STATUS_NEW))
         return candidates
 
     for row in output_rows:
         share_price, strike_price = _extract_share_and_strike(row)
-
         option_type = str(row.get("option_type", "")).strip().upper()
         if not option_type:
             side_val = str(row.get("side", "")).strip().upper()
@@ -115,90 +260,107 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
                 option_type = "CE"
             elif side_val == "SELL":
                 option_type = "PE"
-
         option_strike = str(row.get("option_strike", "")).strip()
         if not option_strike and option_type and strike_price not in {None, ""}:
             try:
-                strike_int = int(float(str(strike_price)))
-                option_strike = f"{strike_int}{option_type}"
+                option_strike = f"{int(float(str(strike_price)))}{option_type}"
             except Exception:
                 option_strike = f"{strike_price}{option_type}"
-
-        candidates.append(
-            {
-                "strategy": str(row.get("strategy", "TRADE_BOT")),
-                "symbol": symbol,
-                "signal_time": str(row.get("entry_time", row.get("timestamp", ""))),
-                "side": str(row.get("side", "HOLD")),
-                "price": row.get("entry_price", row.get("close", "")),
-                "share_price": share_price,
-                "strike_price": strike_price,
-                "option_type": option_type,
-                "option_strike": option_strike,
-                "trade_no": row.get("trade_no", ""),
-                "trade_label": row.get("trade_label", ""),
-                "target_1": row.get("target_1", ""),
-                "target_2": row.get("target_2", ""),
-                "target_3": row.get("target_3", ""),
-                "spot_ltp": row.get("spot_ltp", row.get("close", row.get("share_price", ""))),
-                "option_ltp": row.get("option_ltp", ""),
-                "lots": row.get("lots", ""),
-                "order_value": row.get("order_value", ""),
-                "stop_loss": row.get("stop_loss", ""),
-                "trailing_stop_loss": row.get("trailing_stop_loss", ""),
-                "target_price": row.get("target_price", ""),
-                "quantity": normalize_order_quantity(symbol, row.get("quantity", default_quantity_for_symbol(symbol))),
-                "reason": f"SL:{row.get('stop_loss', '')} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', '')}",
-            }
-        )
-
+        candidates.append(_ensure_trade_identity({
+            "strategy": str(row.get("strategy", "TRADE_BOT")),
+            "symbol": symbol,
+            "signal_time": str(row.get("entry_time", row.get("timestamp", ""))),
+            "side": str(row.get("side", "HOLD")),
+            "price": row.get("entry_price", row.get("close", "")),
+            "share_price": share_price,
+            "strike_price": strike_price,
+            "option_type": option_type,
+            "option_strike": option_strike,
+            "trade_no": row.get("trade_no", ""),
+            "trade_label": row.get("trade_label", ""),
+            "target_1": row.get("target_1", ""),
+            "target_2": row.get("target_2", ""),
+            "target_3": row.get("target_3", ""),
+            "spot_ltp": row.get("spot_ltp", row.get("close", row.get("share_price", ""))),
+            "option_ltp": row.get("option_ltp", ""),
+            "lots": row.get("lots", ""),
+            "order_value": row.get("order_value", ""),
+            "stop_loss": row.get("stop_loss", ""),
+            "trailing_stop_loss": row.get("trailing_stop_loss", ""),
+            "target_price": row.get("target_price", ""),
+            "quantity": row.get("quantity", default_quantity_for_symbol(symbol)),
+            "reason": f"SL:{row.get('stop_loss', '')} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', '')}",
+        }, default_status=TRADE_STATUS_NEW))
     return candidates
 
 
-def build_analysis_queue(
-    candidates: list[dict[str, object]],
-    analyzed_at_utc: Optional[str] = None,
-) -> list[dict[str, object]]:
-    actionable = [c for c in candidates if str(c.get("side", "")).upper() in {"BUY", "SELL"}]
+def build_analysis_queue(candidates: list[dict[str, object]], analyzed_at_utc: Optional[str] = None) -> list[dict[str, object]]:
+    actionable = [c for c in candidates if _normalize_text(c.get("side")) in {"BUY", "SELL"}]
     if not actionable:
         return []
-
     stamp = analyzed_at_utc or datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
     analyzed: list[dict[str, object]] = []
     for candidate in actionable:
-        row = dict(candidate)
+        row = _ensure_trade_identity(candidate, default_status=TRADE_STATUS_REVIEWED)
         row["analysis_status"] = "ANALYZED"
         row["analyzed_at_utc"] = stamp
+        row["reviewed_at_utc"] = stamp
         row["execution_ready"] = "YES"
+        row["trade_status"] = TRADE_STATUS_REVIEWED
         analyzed.append(row)
     return analyzed
 
 
-def _existing_keys(path: Path) -> set[str]:
+def _read_trade_rows(path: Path) -> list[dict[str, object]]:
     if not path.exists():
-        return set()
+        return []
+    return [dict(row) for row in read_csv_rows(path)]
+
+
+def _row_is_closed(row: dict[str, object]) -> bool:
+    return _normalize_text(row.get("trade_status")) == TRADE_STATUS_CLOSED or _normalize_text(row.get("position_status")) == TRADE_STATUS_CLOSED or _normalize_text(row.get("execution_status")) in {"CLOSED", "EXITED"}
+
+
+def _row_is_active(row: dict[str, object]) -> bool:
+    if _row_is_closed(row):
+        return False
+    if _normalize_text(row.get("trade_status")) in ACTIVE_TRADE_STATUSES:
+        return True
+    return _normalize_text(row.get("execution_status")) in {"EXECUTED", "SENT", "FILLED"}
+
+
+def load_active_trade_keys(path: Path, execution_type: str | None = None) -> set[str]:
     keys: set[str] = set()
-    for row in read_csv_rows(path):
-        keys.add(execution_candidate_key(row))
+    for row in _read_trade_rows(path):
+        if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
+            continue
+        if not _row_is_active(row):
+            continue
+        keys.add(str(row.get("trade_key", "") or make_trade_key(row)))
     return keys
 
 
-def execution_candidate_key(record: dict[str, object]) -> str:
-    return f"{record.get('strategy','')}|{record.get('symbol','')}|{record.get('signal_time','')}|{record.get('side','')}"
+def _load_historical_trade_ids(path: Path, execution_type: str | None = None) -> set[str]:
+    ids: set[str] = set()
+    for row in _read_trade_rows(path):
+        if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
+            continue
+        ids.add(str(row.get("trade_id", "") or make_trade_id(row)))
+    return ids
 
 
-def filter_unlogged_candidates(
-    candidates: list[dict[str, object]],
-    output_path: Path,
-) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-    seen = _existing_keys(output_path)
+def filter_unlogged_candidates(candidates: list[dict[str, object]], output_path: Path) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    active_keys = load_active_trade_keys(output_path)
     fresh: list[dict[str, object]] = []
     skipped: list[dict[str, object]] = []
     for candidate in candidates:
-        if execution_candidate_key(candidate) in seen:
-            skipped.append(candidate)
+        row = _ensure_trade_identity(candidate)
+        if str(row.get("trade_key", "")) in active_keys:
+            flagged = dict(row)
+            flagged["duplicate_reason"] = SKIP_REASON_DUPLICATE_ACTIVE_TRADE
+            skipped.append(flagged)
         else:
-            fresh.append(candidate)
+            fresh.append(row)
     return fresh, skipped
 
 
@@ -209,22 +371,14 @@ def _trade_day_key(record: dict[str, object], fallback_day: str) -> str:
     return ts.strftime("%Y-%m-%d")
 
 
-def _safe_float(value: object) -> float:
-    try:
-        if value is None or str(value).strip() == "":
-            return 0.0
-        return float(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return 0.0
-
-
 def _load_daily_execution_state(path: Path, execution_type: str) -> dict[str, dict[str, float]]:
     state: dict[str, dict[str, float]] = {}
-    if not path.exists():
-        return state
-
-    for row in read_csv_rows(path):
-        if str(row.get("execution_type", "")).upper() != execution_type.upper():
+    for row in _read_trade_rows(path):
+        if _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
+            continue
+        if _row_is_closed(row):
+            continue
+        if _normalize_text(row.get("execution_status")) not in EXECUTION_SUCCESS_STATUSES and _normalize_text(row.get("trade_status")) not in {TRADE_STATUS_EXECUTED, TRADE_STATUS_OPEN, TRADE_STATUS_PENDING_EXECUTION}:
             continue
         day_key = _trade_day_key(row, str(row.get("executed_at_utc", ""))[:10])
         bucket = state.setdefault(day_key, {"count": 0.0, "realized_pnl": 0.0})
@@ -251,7 +405,6 @@ def _default_live_broker_client() -> tuple[object | None, str]:
     broker_name = str(os.getenv("LIVE_BROKER", "DHAN") or "DHAN").strip().upper()
     if broker_name != "DHAN" or DhanClient is None:
         return None, broker_name
-
     try:
         client = DhanClient.from_env()
     except Exception:
@@ -262,7 +415,6 @@ def _default_live_broker_client() -> tuple[object | None, str]:
 def _default_security_map() -> dict[str, dict[str, str]]:
     if load_security_map is None:
         return {}
-
     raw_path = str(os.getenv("DHAN_SECURITY_MAP", "data/dhan_security_map.csv") or "data/dhan_security_map.csv").strip()
     try:
         return load_security_map(Path(raw_path))
@@ -284,221 +436,277 @@ def _apply_live_broker_result(record: dict[str, object], broker_name: str, resul
         record["broker_status"] = "SENT"
         record["broker_message"] = ""
 
-def _first_execution_time(path: Path, execution_type: str) -> Optional[datetime]:
-    if not path.exists():
-        return None
 
+def _first_execution_time(path: Path, execution_type: str) -> Optional[datetime]:
     earliest: Optional[datetime] = None
-    for row in read_csv_rows(path):
-            if str(row.get("execution_type", "")).upper() != execution_type.upper():
-                continue
-            raw = str(row.get("executed_at_utc", "")).strip()
-            if not raw:
-                continue
-            try:
-                ts = datetime.strptime(raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
-            except ValueError:
-                continue
-            earliest = ts if earliest is None else min(earliest, ts)
+    for row in _read_trade_rows(path):
+        if _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
+            continue
+        raw = str(row.get("executed_at_utc", "")).strip()
+        if not raw:
+            continue
+        try:
+            ts = datetime.strptime(raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+        except ValueError:
+            continue
+        earliest = ts if earliest is None else min(earliest, ts)
     return earliest
 
 
-def live_trading_unlock_status(
-    paper_log_path: Path,
-    min_days: int = 30,
-    now_utc: Optional[datetime] = None,
-) -> Tuple[bool, int, str]:
+def live_trading_unlock_status(paper_log_path: Path, min_days: int = 30, now_utc: Optional[datetime] = None) -> Tuple[bool, int, str]:
     start = _first_execution_time(paper_log_path, "PAPER")
     if start is None:
         return False, 0, ""
-
     now = now_utc or datetime.now(UTC)
     days = max(0, (now - start).days)
     unlock_date = start.replace(microsecond=0) + timedelta(days=min_days)
     return days >= min_days, days, unlock_date.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def execute_paper_trades(
-    candidates: list[dict[str, object]],
-    output_path: Path,
-    deduplicate: bool = True,
-    *,
-    max_trades_per_day: int | None = None,
-    max_daily_loss: float | None = None,
-) -> list[dict[str, object]]:
-    executable = [c for c in candidates if str(c.get("side", "")).upper() in {"BUY", "SELL"}]
-    if not executable:
-        return []
+def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[str, object]]:
+    record = _ensure_trade_identity(candidate)
+    side = _normalize_text(record.get("side"))
+    if side not in {"BUY", "SELL"}:
+        record["validation_error"] = SKIP_REASON_INVALID_SIDE
+        return False, SKIP_REASON_INVALID_SIDE, record
+    price = _price_value(record)
+    if price <= 0:
+        record["validation_error"] = SKIP_REASON_MISSING_PRICE
+        return False, SKIP_REASON_MISSING_PRICE, record
+    record["price"] = price
+    record.setdefault("share_price", price)
+    record.setdefault("strike_price", record.get("option_strike", record.get("strike", "")))
+    raw_quantity = record.get("quantity")
+    if raw_quantity is None or str(raw_quantity).strip() == "":
+        record["validation_error"] = SKIP_REASON_MISSING_QUANTITY
+        return False, SKIP_REASON_MISSING_QUANTITY, record
+    quantity = normalize_order_quantity(str(record.get("symbol", "")), raw_quantity)
+    if quantity <= 0:
+        record["validation_error"] = SKIP_REASON_MISSING_QUANTITY
+        return False, SKIP_REASON_MISSING_QUANTITY, record
+    record["quantity"] = quantity
+    return True, "", record
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    rows_to_write: list[dict[str, object]] = []
-    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
-    today_key = now[:10]
-    seen = _existing_keys(output_path) if deduplicate else set()
-    daily_state = _load_daily_execution_state(output_path, "PAPER")
 
-    for c in executable:
-        key = execution_candidate_key(c)
-        if deduplicate and key in seen:
-            continue
+def _make_result_row(candidate: dict[str, object], *, execution_type: str, processed_at_utc: str) -> dict[str, object]:
+    row = _ensure_trade_identity(candidate)
+    row.setdefault("execution_type", execution_type)
+    row.setdefault("executed_at_utc", processed_at_utc)
+    row.setdefault("position_status", "")
+    return row
 
-        record = dict(c)
-        record.setdefault("share_price", record.get("price", ""))
-        record.setdefault("strike_price", record.get("option_strike", record.get("strike", "")))
-        record["quantity"] = normalize_order_quantity(str(record.get("symbol", "")), record.get("quantity"))
-        record["execution_type"] = "PAPER"
-        record["executed_at_utc"] = now
 
-        day_key = _trade_day_key(record, today_key)
-        state = daily_state.setdefault(day_key, {"count": 0.0, "realized_pnl": 0.0})
-        trade_limit_hit = max_trades_per_day is not None and int(max_trades_per_day) > 0 and int(state["count"]) >= int(max_trades_per_day)
-        loss_limit_hit = max_daily_loss is not None and float(max_daily_loss) > 0 and float(state["realized_pnl"]) <= -abs(float(max_daily_loss))
-        if trade_limit_hit or loss_limit_hit:
-            record["execution_status"] = "BLOCKED"
-            record["risk_limit_reason"] = _risk_limit_message(max_trades_per_day, max_daily_loss)
-            rows_to_write.append(record)
-            continue
+def _mark_skipped(result: ExecutionResult, row: dict[str, object], reason: str) -> None:
+    skipped = dict(row)
+    if reason.startswith("DUPLICATE_"):
+        skipped["duplicate_reason"] = reason
+        result.duplicate_count += 1
+    else:
+        skipped["validation_error"] = reason
+    result.skipped_rows.append(skipped)
+    result.skipped_count += 1
 
-        record["execution_status"] = "EXECUTED"
-        rows_to_write.append(record)
-        state["count"] += 1.0
-        state["realized_pnl"] += _safe_float(record.get("pnl"))
-        seen.add(key)
 
+def _append_written_row(result: ExecutionResult, row: dict[str, object]) -> None:
+    result.rows.append(row)
+    execution_status = _normalize_text(row.get("execution_status"))
+    if execution_status in {"EXECUTED", "SENT", "FILLED"}:
+        result.executed_rows.append(row)
+        result.executed_count += 1
+    elif execution_status == "BLOCKED":
+        result.blocked_rows.append(row)
+        result.blocked_count += 1
+    elif execution_status == "ERROR":
+        result.error_rows.append(row)
+        result.error_count += 1
+
+
+def _stable_fieldnames(rows: list[dict[str, object]], existing_rows: list[dict[str, object]] | None = None) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for key in EXECUTION_SCHEMA:
+        if key not in seen:
+            ordered.append(key)
+            seen.add(key)
+    for source in (existing_rows or []) + rows:
+        for key in source.keys():
+            if key not in seen:
+                ordered.append(key)
+                seen.add(key)
+    return ordered
+
+
+def _write_execution_rows(path: Path, rows_to_write: list[dict[str, object]]) -> None:
     if not rows_to_write:
-        return []
-
-    fieldnames: list[str] = []
-    for row in rows_to_write:
-        for key in row.keys():
-            if key not in fieldnames:
-                fieldnames.append(key)
-
-    file_exists = output_path.exists()
-    with output_path.open("a", newline="", encoding="utf-8") as f:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing_rows = _read_trade_rows(path)
+    fieldnames = _stable_fieldnames(rows_to_write, existing_rows)
+    file_exists = path.exists()
+    with path.open("a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         if not file_exists:
             writer.writeheader()
         writer.writerows(rows_to_write)
 
-    return rows_to_write
+
+def execution_result_summary(result: ExecutionResult) -> list[tuple[str, str]]:
+    messages: list[tuple[str, str]] = []
+    if result.executed_count:
+        label = "trade" if result.executed_count == 1 else "trades"
+        messages.append(("success", f"{result.executed_count} {label} executed"))
+    if result.blocked_count:
+        reason_counts: dict[str, int] = {}
+        for row in result.blocked_rows:
+            reason = str(row.get("blocked_reason") or row.get("risk_limit_reason") or "BLOCKED").strip()
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        for reason, count in reason_counts.items():
+            label = "trade" if count == 1 else "trades"
+            messages.append(("warning", f"{count} {label} blocked by {reason.replace('_', ' ').lower()}"))
+    if result.skipped_count:
+        reason_counts: dict[str, int] = {}
+        for row in result.skipped_rows:
+            reason = str(row.get("duplicate_reason") or row.get("validation_error") or "SKIPPED").strip()
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+        for reason, count in reason_counts.items():
+            label = "trade" if count == 1 else "trades"
+            messages.append(("info", f"{count} {label} skipped because {reason.replace('_', ' ').lower()}"))
+    if result.error_count:
+        label = "trade" if result.error_count == 1 else "trades"
+        messages.append(("error", f"{result.error_count} {label} failed with broker or execution errors"))
+    return messages
 
 
-def execute_live_trades(
-    candidates: list[dict[str, object]],
-    output_path: Path,
-    deduplicate: bool = True,
-    *,
-    broker_client: object | None = None,
-    broker_name: str | None = None,
-    security_map: dict[str, dict[str, str]] | None = None,
-    max_trades_per_day: int | None = None,
-    max_daily_loss: float | None = None,
-) -> list[dict[str, object]]:
-    executable = [c for c in candidates if str(c.get("side", "")).upper() in {"BUY", "SELL"}]
-    if not executable:
-        return []
-
+def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, *, execution_type: str, deduplicate: bool, max_trades_per_day: int | None, max_daily_loss: float | None, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None) -> ExecutionResult:
+    result = ExecutionResult()
+    if not candidates:
+        return result
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    rows_to_write: list[dict[str, object]] = []
     now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
     today_key = now[:10]
-    seen = _existing_keys(output_path) if deduplicate else set()
-    daily_state = _load_daily_execution_state(output_path, "LIVE")
+    historical_trade_ids = _load_historical_trade_ids(output_path, execution_type)
+    active_trade_keys = load_active_trade_keys(output_path, execution_type)
+    daily_state = _load_daily_execution_state(output_path, execution_type)
+    rows_to_write: list[dict[str, object]] = []
 
     resolved_broker_client = broker_client
     resolved_broker_name = str(broker_name or "").strip().upper()
-    if resolved_broker_client is None:
-        resolved_broker_client, inferred_name = _default_live_broker_client()
+    resolved_security_map = security_map if security_map is not None else {}
+    if execution_type == "LIVE":
+        if resolved_broker_client is None:
+            resolved_broker_client, inferred_name = _default_live_broker_client()
+            if not resolved_broker_name:
+                resolved_broker_name = inferred_name
         if not resolved_broker_name:
-            resolved_broker_name = inferred_name
-    if not resolved_broker_name:
-        resolved_broker_name = "LIVE"
+            resolved_broker_name = "LIVE"
+        if not resolved_security_map:
+            resolved_security_map = _default_security_map()
 
-    resolved_security_map = security_map if security_map is not None else _default_security_map()
-
-    for c in executable:
-        key = execution_candidate_key(c)
-        if deduplicate and key in seen:
+    for candidate in candidates:
+        ok, validation_reason, validated = validate_candidate(candidate)
+        base_row = _make_result_row(validated, execution_type=execution_type, processed_at_utc=now)
+        trade_id = str(base_row.get("trade_id", ""))
+        trade_key = str(base_row.get("trade_key", ""))
+        if not ok:
+            _mark_skipped(result, base_row, validation_reason)
+            continue
+        if deduplicate and trade_id in historical_trade_ids:
+            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_EXECUTED_TRADE)
+            continue
+        if deduplicate and trade_key in active_trade_keys:
+            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_ACTIVE_TRADE)
             continue
 
-        record = dict(c)
-        record.setdefault("share_price", record.get("price", ""))
-        record.setdefault("strike_price", record.get("option_strike", record.get("strike", "")))
-        record["quantity"] = normalize_order_quantity(str(record.get("symbol", "")), record.get("quantity"))
-        record["execution_type"] = "LIVE"
-        record["executed_at_utc"] = now
-
-        day_key = _trade_day_key(record, today_key)
+        day_key = _trade_day_key(base_row, today_key)
         state = daily_state.setdefault(day_key, {"count": 0.0, "realized_pnl": 0.0})
-        if live_kill_switch_enabled():
-            record["execution_status"] = "BLOCKED"
-            record["broker_name"] = resolved_broker_name
-            record["broker_status"] = "KILL_SWITCH"
-            record["broker_message"] = "Live execution blocked by LIVE_TRADING_KILL_SWITCH."
-            rows_to_write.append(record)
-            continue
-
         trade_limit_hit = max_trades_per_day is not None and int(max_trades_per_day) > 0 and int(state["count"]) >= int(max_trades_per_day)
         loss_limit_hit = max_daily_loss is not None and float(max_daily_loss) > 0 and float(state["realized_pnl"]) <= -abs(float(max_daily_loss))
         if trade_limit_hit or loss_limit_hit:
-            record["execution_status"] = "BLOCKED"
-            record["broker_name"] = resolved_broker_name
-            record["broker_status"] = "RISK_LIMIT"
-            record["broker_message"] = f"Live execution blocked by {_risk_limit_message(max_trades_per_day, max_daily_loss)}"
-            rows_to_write.append(record)
+            blocked = dict(base_row)
+            blocked["trade_status"] = TRADE_STATUS_BLOCKED
+            blocked["execution_status"] = "BLOCKED"
+            blocked["blocked_reason"] = SKIP_REASON_MAX_TRADES_PER_DAY if trade_limit_hit else SKIP_REASON_MAX_DAILY_LOSS
+            blocked["risk_limit_reason"] = _risk_limit_message(max_trades_per_day, max_daily_loss)
+            if execution_type == "LIVE":
+                blocked["broker_name"] = resolved_broker_name
+                blocked["broker_status"] = "RISK_LIMIT"
+                blocked["broker_message"] = f"Live execution blocked by {_risk_limit_message(max_trades_per_day, max_daily_loss)}"
+            rows_to_write.append(blocked)
+            _append_written_row(result, blocked)
+            continue
+
+        if execution_type == "PAPER":
+            executed = dict(base_row)
+            executed["trade_status"] = TRADE_STATUS_EXECUTED
+            executed["position_status"] = TRADE_STATUS_OPEN
+            executed["execution_status"] = "EXECUTED"
+            rows_to_write.append(executed)
+            _append_written_row(result, executed)
+            state["count"] += 1.0
+            state["realized_pnl"] += _safe_float(executed.get("pnl"))
+            historical_trade_ids.add(trade_id)
+            active_trade_keys.add(trade_key)
+            continue
+
+        live_row = dict(base_row)
+        if live_kill_switch_enabled():
+            live_row["trade_status"] = TRADE_STATUS_BLOCKED
+            live_row["execution_status"] = "BLOCKED"
+            live_row["blocked_reason"] = SKIP_REASON_KILL_SWITCH
+            live_row["broker_name"] = resolved_broker_name
+            live_row["broker_status"] = "KILL_SWITCH"
+            live_row["broker_message"] = "Live execution blocked by LIVE_TRADING_KILL_SWITCH."
+            rows_to_write.append(live_row)
+            _append_written_row(result, live_row)
             continue
 
         if resolved_broker_client is None:
-            record["execution_status"] = "SENT"
-            record["broker_name"] = resolved_broker_name
-            record["broker_status"] = "NOT_CONFIGURED"
-            record["broker_message"] = "Live broker client not configured; row logged only."
+            live_row["trade_status"] = TRADE_STATUS_PENDING_EXECUTION
+            live_row["execution_status"] = "SENT"
+            live_row["broker_name"] = resolved_broker_name
+            live_row["broker_status"] = "NOT_CONFIGURED"
+            live_row["broker_message"] = "Live broker client not configured; row logged only."
         else:
             try:
                 if build_order_request_from_candidate is None:
                     raise RuntimeError("Broker payload builder unavailable")
                 client_id = getattr(resolved_broker_client, "client_id", "")
-                order_request = build_order_request_from_candidate(
-                    record,
-                    client_id=str(client_id),
-                    security_map=resolved_security_map,
-                )
-                result = resolved_broker_client.place_order(order_request)
-                _apply_live_broker_result(record, resolved_broker_name, result)
-                broker_status = str(record.get("broker_status", "SENT") or "SENT").upper()
-                record["execution_status"] = "SENT" if broker_status not in {"REJECTED", "FAILED", "ERROR"} else "ERROR"
+                order_request = build_order_request_from_candidate(live_row, client_id=str(client_id), security_map=resolved_security_map)
+                broker_result = resolved_broker_client.place_order(order_request)
+                _apply_live_broker_result(live_row, resolved_broker_name, broker_result)
+                if _normalize_text(live_row.get("broker_status", "SENT")) in {"REJECTED", "FAILED", "ERROR"}:
+                    live_row["trade_status"] = TRADE_STATUS_ERROR
+                    live_row["execution_status"] = "ERROR"
+                    live_row["validation_error"] = SKIP_REASON_BROKER_ERROR
+                else:
+                    live_row["trade_status"] = TRADE_STATUS_PENDING_EXECUTION
+                    live_row["execution_status"] = "SENT"
             except Exception as exc:
-                record["execution_status"] = "ERROR"
-                record["broker_name"] = resolved_broker_name
-                record["broker_status"] = "ERROR"
-                record["broker_message"] = str(exc)
+                live_row["trade_status"] = TRADE_STATUS_ERROR
+                live_row["execution_status"] = "ERROR"
+                live_row["validation_error"] = SKIP_REASON_BROKER_ERROR
+                live_row["broker_name"] = resolved_broker_name
+                live_row["broker_status"] = "ERROR"
+                live_row["broker_message"] = str(exc)
 
-        rows_to_write.append(record)
-        if str(record.get("execution_status", "")).upper() != "BLOCKED":
+        rows_to_write.append(live_row)
+        _append_written_row(result, live_row)
+        if _normalize_text(live_row.get("execution_status")) == "SENT":
             state["count"] += 1.0
-            state["realized_pnl"] += _safe_float(record.get("pnl"))
-            seen.add(key)
+            state["realized_pnl"] += _safe_float(live_row.get("pnl"))
+            historical_trade_ids.add(trade_id)
+            active_trade_keys.add(trade_key)
 
-    if not rows_to_write:
-        return []
-
-    fieldnames: list[str] = []
-    for row in rows_to_write:
-        for key in row.keys():
-            if key not in fieldnames:
-                fieldnames.append(key)
-
-    file_exists = output_path.exists()
-    with output_path.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerows(rows_to_write)
-
-    return rows_to_write
+    _write_execution_rows(output_path, rows_to_write)
+    return result
 
 
+def execute_paper_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, max_trades_per_day: int | None = None, max_daily_loss: float | None = None) -> ExecutionResult:
+    return _execute_candidates(candidates, output_path, execution_type="PAPER", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss)
+
+
+def execute_live_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, max_trades_per_day: int | None = None, max_daily_loss: float | None = None) -> ExecutionResult:
+    return _execute_candidates(candidates, output_path, execution_type="LIVE", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, broker_client=broker_client, broker_name=broker_name, security_map=security_map)
 def _reconcile_execution_status(broker_status: str) -> str:
     normalized = str(broker_status or "").strip().upper()
     if normalized in {"TRADED", "FILLED", "COMPLETED", "EXECUTED", "SUCCESS"}:
@@ -593,6 +801,8 @@ def reconcile_live_trades(
             result = resolved_broker_client.get_order_by_id(order_id)
             _apply_live_broker_result(record, resolved_broker_name, result)
             record["execution_status"] = _reconcile_execution_status(str(record.get("broker_status", "")))
+            record["trade_status"] = TRADE_STATUS_OPEN if str(record.get("execution_status", "")).upper() == "FILLED" else TRADE_STATUS_ERROR
+            record["position_status"] = TRADE_STATUS_OPEN if str(record.get("execution_status", "")).upper() == "FILLED" else record.get("position_status", "")
             record["reconciliation_status"] = "RECONCILED"
             record["reconciled_at_utc"] = reconciled_at
             reconciled_rows.append(record)
@@ -792,6 +1002,8 @@ def close_paper_trades(
 
         r2 = dict(r)
         r2["execution_status"] = "CLOSED"
+        r2["trade_status"] = TRADE_STATUS_CLOSED
+        r2["position_status"] = TRADE_STATUS_CLOSED
         r2["exit_time"] = exit_time.isoformat(sep=" ")
         r2["exit_price"] = round(float(exit_price), 4)
         r2["exit_reason"] = exit_reason

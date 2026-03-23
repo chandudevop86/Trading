@@ -290,6 +290,8 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
             "price": row.get("entry_price", row.get("close", "")),
             "share_price": share_price,
             "strike_price": strike_price,
+            "option_expiry": row.get("option_expiry", row.get("expiry_date", "")),
+            "option_expiry_source": row.get("option_expiry_source", ""),
             "option_type": option_type,
             "option_strike": option_strike,
             "trade_no": row.get("trade_no", ""),
@@ -1158,6 +1160,7 @@ def close_paper_trades(
         writer.writerows(updated_rows)
 
     return closed_now
+
 
 
 

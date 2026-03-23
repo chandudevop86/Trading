@@ -203,6 +203,56 @@ class DhanClient:
             },
         )
 
+    def get_historical_data(
+        self,
+        *,
+        security_id: str | int,
+        exchange_segment: str,
+        instrument: str,
+        from_date: str,
+        to_date: str,
+        expiry_code: int = 0,
+        oi: bool = False,
+    ) -> Any:
+        return self._request(
+            "POST",
+            "/charts/historical",
+            {
+                "securityId": str(security_id),
+                "exchangeSegment": _clean(exchange_segment).upper(),
+                "instrument": _clean(instrument).upper(),
+                "expiryCode": int(expiry_code),
+                "oi": bool(oi),
+                "fromDate": _clean(from_date),
+                "toDate": _clean(to_date),
+            },
+        )
+
+    def get_intraday_data(
+        self,
+        *,
+        security_id: str | int,
+        exchange_segment: str,
+        instrument: str,
+        interval: int,
+        from_date: str,
+        to_date: str,
+        oi: bool = False,
+    ) -> Any:
+        return self._request(
+            "POST",
+            "/charts/intraday",
+            {
+                "securityId": str(security_id),
+                "exchangeSegment": _clean(exchange_segment).upper(),
+                "instrument": _clean(instrument).upper(),
+                "interval": int(interval),
+                "oi": bool(oi),
+                "fromDate": _clean(from_date),
+                "toDate": _clean(to_date),
+            },
+        )
+
 
 def _clean(value: object) -> str:
     return str(value or "").strip()
@@ -598,6 +648,32 @@ def find_option_instrument(security_map: dict[str, Any] | None, underlying: str,
         return record
     return None
 
+
+def infer_option_expiry(security_map: dict[str, Any] | None, underlying: str, strike: float | int | str, option_type: str, *, exchange_segment: str | None = "NSE_FNO") -> str:
+    if not security_map:
+        return ""
+    meta = _security_map_meta(security_map)
+    candidates = list(meta.get("by_underlying", {}).get(normalize_trading_symbol(underlying), []))
+    if not candidates:
+        return ""
+
+    strike_key = _format_strike(strike)
+    option_key = _normalize_option_type(option_type)
+    segment_key = _clean(exchange_segment).upper()
+    expiries: list[str] = []
+    for record in candidates:
+        if strike_key and _format_strike(record.get("strike_price")) != strike_key:
+            continue
+        if option_key and _normalize_option_type(record.get("option_type")) != option_key:
+            continue
+        if segment_key and _clean(record.get("exchange_segment")).upper() != segment_key:
+            continue
+        expiry = normalize_expiry(record.get("expiry_date"))
+        if expiry:
+            expiries.append(expiry)
+    return min(expiries) if expiries else ""
+
+
 def _extract_option_contract(candidate: dict[str, object]) -> tuple[str, str]:
     option_type = _normalize_option_type(candidate.get("option_type") or candidate.get("drv_option_type"))
     strike = _format_strike(candidate.get("strike_price") or candidate.get("drv_strike_price"))
@@ -648,13 +724,16 @@ def resolve_security(candidate: dict[str, object], security_map: dict[str, Any] 
         expiry = normalize_expiry(candidate.get("option_expiry") or candidate.get("expiry") or candidate.get("expiry_date") or candidate.get("drv_expiry_date"))
         is_option_request = bool(strike or option_type or expiry or _clean(candidate.get("option_strike")))
         if is_option_request:
-            if not expiry:
-                raise DhanExecutionError(INVALID_EXPIRY, f"Option expiry is required for {trade_symbol}")
             if not strike:
                 raise DhanExecutionError(INVALID_STRIKE, f"Option strike is required for {trade_symbol}")
             if not option_type:
                 raise DhanExecutionError(OPTION_RESOLUTION_FAILED, f"Option type is required for {trade_symbol}")
-            record = find_option_instrument(security_map, trade_symbol, expiry, strike, option_type, exchange_segment=_clean(candidate.get("exchange_segment") or "NSE_FNO") or "NSE_FNO")
+            exchange_segment = _clean(candidate.get("exchange_segment") or "NSE_FNO") or "NSE_FNO"
+            if not expiry:
+                expiry = infer_option_expiry(security_map, trade_symbol, strike, option_type, exchange_segment=exchange_segment)
+            if not expiry:
+                raise DhanExecutionError(INVALID_EXPIRY, f"Option expiry is required for {trade_symbol}")
+            record = find_option_instrument(security_map, trade_symbol, expiry, strike, option_type, exchange_segment=exchange_segment)
             if record is None and validate_with_option_chain:
                 underlying_record = find_cash_instrument(security_map, trade_symbol)
                 if underlying_record and _clean(underlying_record.get("security_id")):
@@ -773,6 +852,9 @@ def build_order_request_from_candidate(candidate: dict[str, object], *, client_i
         drv_option_type=OPTION_TYPE_MAP.get(option_type, ""),
         drv_strike_price=float(strike_price) if strike_price else None,
     )
+
+
+
 
 
 

@@ -1169,3 +1169,111 @@ def close_paper_trades(
 
 
 
+
+
+def _order_update_value(event: object, key: str, default: object = '') -> object:
+    if isinstance(event, dict):
+        return event.get(key, default)
+    return getattr(event, key, default)
+
+
+def _apply_live_order_update_row(record: dict[str, object], event: object) -> dict[str, object]:
+    updated = dict(record)
+    status = _normalize_text(_order_update_value(event, 'status'))
+    filled_qty = int(_safe_float(_order_update_value(event, 'filled_qty', 0)))
+    remaining_qty = int(_safe_float(_order_update_value(event, 'remaining_qty', 0)))
+    average_price = _safe_float(_order_update_value(event, 'average_price', 0.0))
+    traded_price = _safe_float(_order_update_value(event, 'traded_price', 0.0))
+    update_time = str(_order_update_value(event, 'update_time', '') or '')
+    message = str(_order_update_value(event, 'message', '') or '')
+    order_id = str(_order_update_value(event, 'order_id', '') or '')
+    correlation_id = str(_order_update_value(event, 'correlation_id', '') or '')
+
+    if order_id:
+        updated['broker_order_id'] = order_id
+    if correlation_id:
+        updated['correlation_id'] = correlation_id
+    if status:
+        updated['broker_status'] = status
+    if message:
+        updated['broker_message'] = message
+    if update_time:
+        updated['reconciled_at_utc'] = update_time
+    if average_price > 0:
+        updated['average_price'] = round(average_price, 4)
+        updated['price'] = round(average_price, 4)
+    if traded_price > 0:
+        updated['traded_price'] = round(traded_price, 4)
+    updated['filled_qty'] = filled_qty
+    updated['remaining_qty'] = remaining_qty
+
+    if status in {'TRADED', 'FILLED', 'COMPLETED', 'EXECUTED', 'SUCCESS'} or (filled_qty > 0 and remaining_qty == 0):
+        updated['execution_status'] = 'FILLED'
+        updated['trade_status'] = TRADE_STATUS_OPEN
+        updated['position_status'] = TRADE_STATUS_OPEN
+    elif status in {'PARTIAL', 'PARTIALLY_FILLED', 'PARTTRADED'} or (filled_qty > 0 and remaining_qty > 0):
+        updated['execution_status'] = 'PARTIAL'
+        updated['trade_status'] = TRADE_STATUS_PENDING_EXECUTION
+        updated['position_status'] = updated.get('position_status', '') or ''
+    elif status in {'REJECTED', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED', 'EXPIRED'}:
+        updated['execution_status'] = 'ERROR'
+        updated['trade_status'] = TRADE_STATUS_ERROR
+    else:
+        updated['execution_status'] = updated.get('execution_status', 'SENT')
+        if not str(updated.get('trade_status', '')).strip():
+            updated['trade_status'] = TRADE_STATUS_PENDING_EXECUTION
+
+    return updated
+
+
+def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: list[object]) -> list[dict[str, object]]:
+    path = Path(live_log_path)
+    if not path.exists() or not order_updates:
+        return []
+
+    existing_rows = _read_trade_rows(path)
+    if not existing_rows:
+        return []
+
+    updated_rows: list[dict[str, object]] = []
+    changed_rows: list[dict[str, object]] = []
+
+    for raw in existing_rows:
+        record = dict(raw)
+        if _normalize_text(record.get('execution_type')) != 'LIVE':
+            updated_rows.append(record)
+            continue
+
+        matched = record
+        applied = False
+        for event in order_updates:
+            event_order_id = str(_order_update_value(event, 'order_id', '') or '').strip()
+            event_trade_id = str(_order_update_value(event, 'trade_id', '') or '').strip()
+            event_correlation_id = str(_order_update_value(event, 'correlation_id', '') or '').strip()
+            if event_order_id and event_order_id == str(record.get('broker_order_id', '') or '').strip():
+                matched = _apply_live_order_update_row(record, event)
+                applied = True
+                break
+            if event_trade_id and event_trade_id == str(record.get('trade_id', '') or '').strip():
+                matched = _apply_live_order_update_row(record, event)
+                applied = True
+                break
+            if event_correlation_id and event_correlation_id == str(record.get('correlation_id', '') or '').strip():
+                matched = _apply_live_order_update_row(record, event)
+                applied = True
+                break
+
+        updated_rows.append(matched)
+        if applied:
+            changed_rows.append(matched)
+
+    if not changed_rows:
+        return []
+
+    fieldnames = _stable_fieldnames(updated_rows)
+    with path.open('w', newline='', encoding='utf-8') as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(updated_rows)
+
+    return changed_rows

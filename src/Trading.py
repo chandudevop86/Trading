@@ -17,7 +17,6 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-import yfinance as yf
 
 from src.breakout_bot import Candle
 from src.charting import build_live_market_chart, build_market_depth_summary, compute_market_levels
@@ -27,6 +26,8 @@ from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
 from src.strike_selector import attach_option_strikes, pick_option_strike
 from src.telegram_notifier import build_trade_summary, send_telegram_message
+from src.live_ohlcv import fetch_live_ohlcv
+from src.strategy_service import StrategyContext, run_strategy_workflow
 
 try:
     from src.execution_engine import (
@@ -225,16 +226,10 @@ def _df_to_candles(df: pd.DataFrame) -> list[Candle]:
 
 
 def fetch_ohlcv_data(symbol: str, interval: str = "1m", period: str = "1d") -> pd.DataFrame:
-    data = yf.download(
-        tickers=symbol,
-        interval=interval,
-        period=period,
-        auto_adjust=False,
-        progress=False,
-    )
-    if data is None or data.empty:
+    rows = fetch_live_ohlcv(symbol, interval, period)
+    if not rows:
         return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
-    return prepare_trading_data(data)
+    return prepare_trading_data(pd.DataFrame(rows))
 
 
 def _to_csv(rows: list[dict]) -> str:
@@ -653,67 +648,36 @@ def attach_lots(rows: list[dict[str, object]], lot_size: int, lots: int) -> list
         out.append(row)
     return out
 
-
 def run_strategy(*, strategy: str, candles: pd.DataFrame, capital: float, risk_pct: float, rr_ratio: float, trailing_sl_pct: float, symbol: str, strike_step: int, moneyness: str, strike_steps: int, fetch_option_metrics: bool, mtf_ema_period: int, mtf_setup_mode: str, mtf_retest_strength: bool, mtf_max_trades_per_day: int) -> list[dict[str, object]]:
-    candle_rows = _df_to_candles(candles)
-    strategy_name = str(strategy or "Breakout").strip()
-    risk_fraction = float(risk_pct) / 100.0
-    rows: list[dict[str, object]] = []
-    if strategy_name == "Breakout":
-        rows = generate_breakout_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct))
-    elif strategy_name == "Demand Supply":
-        rows = generate_demand_supply_trades(candles, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio)) if generate_demand_supply_trades is not None else []
-    elif strategy_name == "Indicator":
-        indicator_rows = generate_indicator_rows(candle_rows, config=IndicatorConfig())
-        mapped: list[dict[str, object]] = []
-        for row in indicator_rows:
-            item = dict(row)
-            signal = str(item.get("market_signal", "")).upper()
-            item["side"] = "BUY" if signal in {"BULLISH_TREND", "OVERSOLD", "BUY", "LONG"} else "SELL" if signal in {"BEARISH_TREND", "OVERBOUGHT", "SELL", "SHORT"} else ""
-            item.setdefault("entry_price", item.get("close", item.get("price", 0.0)))
-            item.setdefault("timestamp", item.get("timestamp", ""))
-            item.setdefault("strategy", "INDICATOR")
-            mapped.append(item)
-        rows = _attach_indicator_trade_levels(mapped, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct))
-    elif strategy_name == "One Trade/Day":
-        rows = generate_one_trade_day_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), config=IndicatorConfig(), trailing_sl_pct=float(trailing_sl_pct))
-    elif strategy_name == "MTF 5m":
-        rows = generate_mtf_trade_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct), ema_period=int(mtf_ema_period), setup_mode=str(mtf_setup_mode), require_retest_strength=bool(mtf_retest_strength), max_trades_per_day=int(mtf_max_trades_per_day))
-    else:
-        rows = generate_breakout_trades(candle_rows, capital=float(capital), risk_pct=risk_fraction, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct))
-
-    normalized: list[dict[str, object]] = []
-    for idx, row in enumerate(rows, start=1):
-        item = dict(row)
-        item.setdefault("strategy", strategy_name.upper().replace(" ", "_"))
-        item.setdefault("symbol", symbol)
-        item.setdefault("trade_no", idx)
-        item.setdefault("trade_label", f"Trade {idx}")
-        item.setdefault("entry_time", item.get("timestamp", ""))
-        normalized.append(item)
-
-    actionable = [dict(r) for r in normalized if str(r.get("side", "")).upper() in {"BUY", "SELL"}]
-    if not actionable:
-        return normalized
-
-    actionable = attach_option_strikes(actionable, strike_step=int(strike_step), moneyness=str(moneyness), steps=int(strike_steps))
-    actionable = _attach_option_metrics(actionable, symbol=str(symbol), fetch_option_metrics=bool(fetch_option_metrics))
-    keyed_actionable = {
-        f"{row.get('trade_no', '')}|{row.get('entry_time', row.get('timestamp', ''))}|{row.get('side', '')}": row
-        for row in actionable
-    }
-
-    merged: list[dict[str, object]] = []
-    for row in normalized:
-        key = f"{row.get('trade_no', '')}|{row.get('entry_time', row.get('timestamp', ''))}|{row.get('side', '')}"
-        enriched = keyed_actionable.get(key)
-        if enriched is not None:
-            updated = dict(row)
-            updated.update(enriched)
-            merged.append(updated)
-        else:
-            merged.append(row)
-    return merged
+    context = StrategyContext(
+        strategy=strategy,
+        candles=candles,
+        candle_rows=_df_to_candles(candles),
+        capital=float(capital),
+        risk_pct=float(risk_pct),
+        rr_ratio=float(rr_ratio),
+        trailing_sl_pct=float(trailing_sl_pct),
+        symbol=str(symbol),
+        strike_step=int(strike_step),
+        moneyness=str(moneyness),
+        strike_steps=int(strike_steps),
+        fetch_option_metrics=bool(fetch_option_metrics),
+        mtf_ema_period=int(mtf_ema_period),
+        mtf_setup_mode=str(mtf_setup_mode),
+        mtf_retest_strength=bool(mtf_retest_strength),
+        mtf_max_trades_per_day=int(mtf_max_trades_per_day),
+    )
+    return run_strategy_workflow(
+        context,
+        breakout_generator=generate_breakout_trades,
+        demand_supply_generator=generate_demand_supply_trades,
+        indicator_generator=generate_indicator_rows,
+        one_trade_generator=generate_one_trade_day_trades,
+        mtf_generator=generate_mtf_trade_trades,
+        attach_levels_fn=_attach_indicator_trade_levels,
+        attach_option_strikes_fn=attach_option_strikes,
+        attach_option_metrics_fn=_attach_option_metrics,
+    )
 
 def _render_sidebar_shell() -> None:
     st.markdown(
@@ -3000,6 +2964,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
 
 
 

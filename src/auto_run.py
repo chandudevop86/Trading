@@ -39,7 +39,6 @@ def write_text_pdf(path: Path, title: str, lines: list[str]) -> None:
     content_lines.append('ET')
     stream = '\n'.join(content_lines).encode('latin-1', errors='replace')
 
-    # Build PDF objects.
     objects: list[bytes] = []
     objects.append(b'1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n')
     objects.append(b'2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n')
@@ -52,7 +51,6 @@ def write_text_pdf(path: Path, title: str, lines: list[str]) -> None:
         b'5 0 obj<< /Length ' + str(len(stream)).encode() + b' >>stream\n' + stream + b'\nendstream\nendobj\n'
     )
 
-    # Write with xref.
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open('wb') as f:
         f.write(b'%PDF-1.4\n')
@@ -71,7 +69,22 @@ def write_text_pdf(path: Path, title: str, lines: list[str]) -> None:
 
 def write_html_report(path: Path, title: str, summary_rows: list[dict[str, Any]], extra_lines: list[str]) -> None:
     rows_html = ''.join(
-        f"<tr><td>{r.get('strategy','')}</td><td>{r.get('trades','')}</td><td>{r.get('wins','')}</td><td>{r.get('losses','')}</td><td>{r.get('win_rate_pct','')}</td><td>{r.get('total_pnl','')}</td></tr>"
+        (
+            '<tr>'
+            f"<td>{r.get('strategy', '')}</td>"
+            f"<td>{r.get('trades', '')}</td>"
+            f"<td>{r.get('wins', '')}</td>"
+            f"<td>{r.get('losses', '')}</td>"
+            f"<td>{r.get('win_rate_pct', '')}</td>"
+            f"<td>{r.get('avg_win', '')}</td>"
+            f"<td>{r.get('avg_loss', '')}</td>"
+            f"<td>{r.get('profit_factor', '')}</td>"
+            f"<td>{r.get('max_drawdown', '')}</td>"
+            f"<td>{r.get('max_drawdown_pct', '')}</td>"
+            f"<td>{r.get('ending_equity', '')}</td>"
+            f"<td>{r.get('total_pnl', '')}</td>"
+            '</tr>'
+        )
         for r in summary_rows
     )
     extras = ''.join(f"<li>{line}</li>" for line in extra_lines)
@@ -82,7 +95,7 @@ def write_html_report(path: Path, title: str, summary_rows: list[dict[str, Any]]
 <h1>{title}</h1>
 <h2>Backtest Summary</h2>
 <table>
-<tr><th>Strategy</th><th>Trades</th><th>Wins</th><th>Losses</th><th>Win %</th><th>Total PnL</th></tr>
+<tr><th>Strategy</th><th>Trades</th><th>Wins</th><th>Losses</th><th>Win %</th><th>Avg Win</th><th>Avg Loss</th><th>Profit Factor</th><th>Max DD</th><th>Max DD %</th><th>Ending Equity</th><th>Total PnL</th></tr>
 {rows_html}
 </table>
 <h2>Notes</h2>
@@ -136,10 +149,15 @@ def main() -> None:
         trailing_sl_pct=float(args.trailing_sl_pct) / 100.0,
         pivot_window=2,
         entry_cutoff='11:30',
+        cost_bps=0.0,
+        fixed_cost_per_trade=0.0,
+        max_daily_loss=0.0,
+        max_trades_per_day=1,
         execution_symbol=args.execution_symbol,
         data_output=Path('data/live_ohlcv.csv'),
         summary_output=Path('data/backtest_results_all.csv'),
         summary_history_output=Path('data/backtest_results_history.csv'),
+        equity_curve_output=Path('data/backtest_equity_curves.csv'),
         paper_log_output=args.paper_log_output,
         execution_type=execution_type,
         live_log_output=args.live_log_output,
@@ -160,18 +178,23 @@ def main() -> None:
     signal_summary = build_trade_summary(recent) if recent else 'No recent rows in execution log.'
 
     summary_lines = [
-        f"{r.get('strategy')}: trades={r.get('trades')} pnl={r.get('total_pnl')} win%={r.get('win_rate_pct')}"
+        (
+            f"{r.get('strategy')}: trades={r.get('trades')} pnl={r.get('total_pnl')} "
+            f"win%={r.get('win_rate_pct')} pf={r.get('profit_factor')} "
+            f"max_dd={r.get('max_drawdown')} ({r.get('max_drawdown_pct')}%)"
+        )
         for r in (out.get('summary_rows') or [])
     ]
 
     extra_lines = [
         f"Run at: {run_at}",
         f"Data points: {out.get('data_points')}",
-        f"Data range: {out.get('data_start')} → {out.get('data_end')}",
+        f"Data range: {out.get('data_start')} -> {out.get('data_end')}",
         f"Execution requested: {requested_execution}",
         f"Execution used: {out.get('execution_type')}",
         f"Executed rows: {out.get('executed_rows_count')}",
         f"Log: {out.get('executed_log_path')}",
+        f"Equity curves: {out.get('equity_curve_output')}",
     ]
 
     if execution_note:
@@ -206,4 +229,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-

@@ -315,6 +315,27 @@ def _csv_value(row: dict[str, str], *keys: str) -> str:
     return ""
 
 
+def _infer_underlying_symbol(underlying_symbol: str, symbol_name: str, display_name: str, trading_symbol: str, instrument_name: str) -> str:
+    explicit = normalize_trading_symbol(underlying_symbol)
+    if explicit:
+        return explicit
+
+    instrument_norm = _clean(instrument_name).upper()
+    for raw in (trading_symbol, display_name, symbol_name):
+        text = _clean(raw)
+        if not text:
+            continue
+        if instrument_norm.startswith("OPT") or instrument_norm.startswith("FUT"):
+            if "-" in text:
+                return normalize_trading_symbol(text.split("-", 1)[0])
+            parts = text.split()
+            if parts:
+                return normalize_trading_symbol(parts[0])
+        normalized = normalize_trading_symbol(text)
+        if normalized:
+            return normalized
+    return ""
+
 def _infer_exchange_segment(exchange: str, segment: str, instrument_name: str, instrument_type: str, symbol_name: str) -> str:
     exchange_norm = _clean(exchange).upper()
     segment_norm = _clean(segment).upper()
@@ -342,10 +363,10 @@ def _standardize_security_row(row: dict[str, str]) -> dict[str, Any]:
     trading_symbol = _csv_value(row, "trading_symbol", "tradingSymbol", "SEM_TRADING_SYMBOL", "DISPLAY_NAME", "SEM_CUSTOM_SYMBOL")
     display_name = _csv_value(row, "display_name", "DISPLAY_NAME", "SEM_CUSTOM_SYMBOL") or trading_symbol
     symbol_name = _csv_value(row, "symbol", "symbol_name", "SM_SYMBOL_NAME", "SYMBOL_NAME") or display_name or trading_symbol
-    underlying_symbol = _csv_value(row, "underlying", "underlying_symbol", "UNDERLYING_SYMBOL")
     exchange = _csv_value(row, "exchange", "EXCH_ID", "SEM_EXM_EXCH_ID")
     segment = _csv_value(row, "segment", "SEGMENT", "SEM_SEGMENT")
     instrument_name = _csv_value(row, "instrument", "INSTRUMENT", "SEM_INSTRUMENT_NAME")
+    underlying_symbol = _infer_underlying_symbol(_csv_value(row, "underlying", "underlying_symbol", "UNDERLYING_SYMBOL"), symbol_name, display_name, trading_symbol, instrument_name)
     instrument_type = _csv_value(row, "instrument_type", "INSTRUMENT_TYPE", "SEM_EXCH_INSTRUMENT_TYPE") or instrument_name
     exchange_segment = _csv_value(row, "exchange_segment", "exchangeSegment") or _infer_exchange_segment(exchange, segment, instrument_name, instrument_type, underlying_symbol or symbol_name)
     expiry_date = normalize_expiry(_csv_value(row, "expiry_date", "SM_EXPIRY_DATE", "SEM_EXPIRY_DATE", "drv_expiry_date"))
@@ -752,4 +773,7 @@ def build_order_request_from_candidate(candidate: dict[str, object], *, client_i
         drv_option_type=OPTION_TYPE_MAP.get(option_type, ""),
         drv_strike_price=float(strike_price) if strike_price else None,
     )
+
+
+
 

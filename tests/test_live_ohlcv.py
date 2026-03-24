@@ -8,6 +8,7 @@ from unittest.mock import patch
 from src.dhan_api import load_security_map
 from src.live_ohlcv import (
     _to_rows,
+    _validate_dhan_ohlcv_rows,
     build_candle_cache_path,
     fetch_live_ohlcv,
     fetch_dhan_ohlcv,
@@ -116,6 +117,42 @@ class TestLiveOhlcv(unittest.TestCase):
         self.assertEqual(rows[0]['symbol'], 'NIFTY')
         self.assertEqual(rows[0]['open_interest'], 25)
 
+    def test_validate_dhan_ohlcv_rows_rejects_missing_timestamp(self):
+        payload = {
+            'open': [100.0],
+            'high': [101.0],
+            'low': [99.5],
+            'close': [100.5],
+            'volume': [500],
+            'timestamp': [None],
+        }
+        with self.assertRaisesRegex(ValueError, 'missing or invalid timestamp'):
+            _validate_dhan_ohlcv_rows(payload, symbol='NIFTY', interval='1m', source='DHAN_HISTORICAL')
+
+    def test_validate_dhan_ohlcv_rows_rejects_invalid_ohlc(self):
+        payload = {
+            'open': [100.0],
+            'high': [99.0],
+            'low': [98.0],
+            'close': [100.5],
+            'volume': [500],
+            'timestamp': [1710926100],
+        }
+        with self.assertRaisesRegex(ValueError, 'invalid OHLC range'):
+            _validate_dhan_ohlcv_rows(payload, symbol='NIFTY', interval='1m', source='DHAN_HISTORICAL')
+
+    def test_validate_dhan_ohlcv_rows_rejects_duplicate_timestamp(self):
+        payload = {
+            'open': [100.0, 101.0],
+            'high': [101.0, 102.0],
+            'low': [99.5, 100.5],
+            'close': [100.5, 101.5],
+            'volume': [500, 600],
+            'timestamp': [1710926100, 1710926100],
+        }
+        with self.assertRaisesRegex(ValueError, 'duplicate candle'):
+            _validate_dhan_ohlcv_rows(payload, symbol='NIFTY', interval='1m', source='DHAN_HISTORICAL')
+
     def test_cache_round_trip(self):
         with tempfile.TemporaryDirectory() as td:
             cache_path = build_candle_cache_path(
@@ -179,6 +216,33 @@ class TestLiveOhlcv(unittest.TestCase):
             self.assertEqual(len(fake_client.intraday_calls), 1)
             self.assertEqual(first[0]['provider'], 'DHAN')
             self.assertEqual(first[0]['source'], 'DHAN_HISTORICAL')
+
+    def test_fetch_dhan_ohlcv_rejects_invalid_payload_before_strategy_use(self):
+        security_map = self._load_security_map()
+
+        class BrokenDhanClient(FakeDhanClient):
+            def get_intraday_data(self, **kwargs):
+                return {
+                    'open': [100.0, 101.0],
+                    'high': [101.0, 102.0],
+                    'low': [99.5, 100.5],
+                    'close': [100.5, 101.5],
+                    'volume': [100, 110],
+                    'timestamp': [1710926100, 1710926100],
+                    'open_interest': [10, 11],
+                }
+
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaisesRegex(ValueError, 'duplicate candle'):
+                fetch_dhan_ohlcv(
+                    'NIFTY',
+                    '5m',
+                    '1d',
+                    security_map=security_map,
+                    broker_client=BrokenDhanClient(),
+                    cache_dir=Path(td),
+                    force_refresh=True,
+                )
 
     def test_fetch_live_ohlcv_auto_prefers_yahoo_before_dhan(self):
         yahoo_rows = [{'timestamp': '2026-03-24 09:15:00', 'provider': 'YAHOO'}]

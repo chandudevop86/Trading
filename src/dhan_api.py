@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import json
@@ -137,11 +137,14 @@ class DhanClient:
 
     @classmethod
     def from_env(cls) -> "DhanClient":
+        from src.dhan_auth import DhanAuthManager
+
+        config = DhanAuthManager.load_from_env()
         return cls(
-            client_id=os.getenv("DHAN_CLIENT_ID", ""),
-            access_token=os.getenv("DHAN_ACCESS_TOKEN", ""),
-            base_url=os.getenv("DHAN_BASE_URL", DEFAULT_DHAN_API_URL),
-            timeout=_safe_int(os.getenv("DHAN_TIMEOUT", "30"), default=30),
+            client_id=config.client_id,
+            access_token=config.access_token,
+            base_url=config.base_url or DEFAULT_DHAN_API_URL,
+            timeout=int(config.timeout),
         )
 
     def _headers(self) -> dict[str, str]:

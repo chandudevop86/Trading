@@ -387,6 +387,69 @@ def _resolve_dhan_instrument(symbol: str, security_map: dict[str, Any] | None = 
         'instrument': instrument,
     }
 
+def _normalize_dhan_epoch_timestamp(value: object) -> str:
+    try:
+        epoch = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f'invalid timestamp value {value!r}') from None
+    return datetime.fromtimestamp(epoch, tz=UTC).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _validate_dhan_ohlcv_rows(
+    payload: dict[str, Any],
+    *,
+    symbol: str,
+    interval: str,
+    source: str,
+) -> None:
+    opens = payload.get('open') if isinstance(payload, dict) else None
+    highs = payload.get('high') if isinstance(payload, dict) else None
+    lows = payload.get('low') if isinstance(payload, dict) else None
+    closes = payload.get('close') if isinstance(payload, dict) else None
+    volumes = payload.get('volume') if isinstance(payload, dict) else None
+    timestamps = payload.get('timestamp') if isinstance(payload, dict) else None
+
+    if not all(isinstance(series, list) for series in (opens, highs, lows, closes, volumes, timestamps)):
+        raise ValueError(f'Dhan candle payload missing OHLCV arrays for {symbol} {interval} ({source})')
+    expected_length = len(timestamps)
+    for series_name, series in (('open', opens), ('high', highs), ('low', lows), ('close', closes), ('volume', volumes)):
+        if len(series) != expected_length:
+            raise ValueError(
+                f'Dhan candle validation failed for {symbol} {interval} ({source}): {series_name} length {len(series)} does not match timestamp length {expected_length}'
+            )
+
+    seen_timestamps: set[str] = set()
+    row_count = expected_length
+    for index in range(row_count):
+        try:
+            normalized_timestamp = _normalize_dhan_epoch_timestamp(timestamps[index])
+        except ValueError as exc:
+            raise ValueError(
+                f'Dhan candle validation failed for {symbol} {interval} ({source}): missing or invalid timestamp at row {index}: {exc}'
+            ) from None
+        if normalized_timestamp in seen_timestamps:
+            raise ValueError(
+                f'Dhan candle validation failed for {symbol} {interval} ({source}): duplicate candle at {normalized_timestamp}'
+            )
+        seen_timestamps.add(normalized_timestamp)
+
+        open_price = _safe_float(opens[index], default=float('nan'))
+        high_price = _safe_float(highs[index], default=float('nan'))
+        low_price = _safe_float(lows[index], default=float('nan'))
+        close_price = _safe_float(closes[index], default=float('nan'))
+        if any(value != value for value in (open_price, high_price, low_price, close_price)):
+            raise ValueError(
+                f'Dhan candle validation failed for {symbol} {interval} ({source}): non-numeric OHLC at {normalized_timestamp}'
+            )
+        if min(open_price, high_price, low_price, close_price) <= 0:
+            raise ValueError(
+                f'Dhan candle validation failed for {symbol} {interval} ({source}): OHLC must be positive at {normalized_timestamp}'
+            )
+        if high_price < max(open_price, low_price, close_price) or low_price > min(open_price, high_price, close_price):
+            raise ValueError(
+                f'Dhan candle validation failed for {symbol} {interval} ({source}): invalid OHLC range at {normalized_timestamp}'
+            )
+
 
 def _dhan_payload_to_rows(
     payload: dict[str, Any],
@@ -453,6 +516,7 @@ def normalize_dhan_live_payload(
         return []
 
     if isinstance(payload.get('open'), list) and isinstance(payload.get('timestamp'), list):
+        _validate_dhan_ohlcv_rows(payload, symbol=symbol, interval=interval, source='DHAN_LIVE_FEED')
         return _dhan_payload_to_rows(
             payload,
             symbol=symbol,
@@ -634,6 +698,7 @@ def fetch_dhan_ohlcv(
             to_date=_format_dhan_date(end_dt + timedelta(days=1)),
             oi=False,
         )
+        _validate_dhan_ohlcv_rows(payload, symbol=symbol, interval='1d', source='DHAN_HISTORICAL')
         rows = _dhan_payload_to_rows(
             payload,
             symbol=symbol,
@@ -656,6 +721,7 @@ def fetch_dhan_ohlcv(
                 to_date=_format_dhan_timestamp(chunk_end),
                 oi=False,
             )
+            _validate_dhan_ohlcv_rows(payload, symbol=symbol, interval=f'{base_interval}m', source='DHAN_HISTORICAL')
             rows.extend(
                 _dhan_payload_to_rows(
                     payload,

@@ -70,11 +70,11 @@ def _ensure_output_files() -> None:
 
 def _period_for_interval(interval: str) -> str:
     mapping = {
-        '1m': '1d',
-        '5m': '5d',
-        '15m': '10d',
-        '30m': '20d',
-        '1h': '60d',
+        '1m': '6mo',
+        '5m': '6mo',
+        '15m': '6mo',
+        '30m': '6mo',
+        '1h': '6mo',
         '1d': '1y',
     }
     return mapping.get(interval, DEFAULT_PERIOD)
@@ -564,3 +564,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+

@@ -126,6 +126,35 @@ def _pnl_summary(
     return summary, equity_curve_rows
 
 
+def _build_breakout_bias_evaluation(
+    bias_required_summary: dict[str, Any],
+    bias_optional_summary: dict[str, Any],
+) -> dict[str, Any]:
+    pnl_delta = round(
+        _safe_float(bias_required_summary.get('total_pnl')) - _safe_float(bias_optional_summary.get('total_pnl')),
+        2,
+    )
+    win_rate_delta = round(
+        _safe_float(bias_required_summary.get('win_rate_pct')) - _safe_float(bias_optional_summary.get('win_rate_pct')),
+        2,
+    )
+    trades_delta = int(bias_required_summary.get('trades', 0) or 0) - int(bias_optional_summary.get('trades', 0) or 0)
+    if pnl_delta > 0:
+        better_mode = 'BIAS_REQUIRED'
+    elif pnl_delta < 0:
+        better_mode = 'BIAS_OPTIONAL'
+    else:
+        better_mode = 'TIE'
+    return {
+        'mode_a': str(bias_required_summary.get('strategy', 'BREAKOUT')),
+        'mode_b': str(bias_optional_summary.get('strategy', 'BREAKOUT_NO_BIAS')),
+        'pnl_delta': pnl_delta,
+        'win_rate_delta_pct': win_rate_delta,
+        'trades_delta': trades_delta,
+        'better_mode': better_mode,
+    }
+
+
 def _write_rows(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -178,6 +207,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    from src.breakout_bot import generate_trades as generate_breakout_trades
     from src.breakout_bot import load_candles
     from src.indicator_bot import IndicatorConfig, generate_indicator_rows
 
@@ -264,18 +294,33 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         max_trades_per_day=max_trades_per_day,
     )
     breakout_rows = generate_strategy_rows(breakout_context)
+    breakout_no_bias_rows = generate_breakout_trades(
+        candles,
+        capital=capital,
+        risk_pct=risk_pct,
+        rr_ratio=rr_ratio,
+        trailing_sl_pct=trailing_sl_pct,
+        cost_bps=cost_bps,
+        fixed_cost_per_trade=fixed_cost_per_trade,
+        max_daily_loss=max_daily_loss,
+        max_trades_per_day=max_trades_per_day,
+        use_first_hour_bias=False,
+        filter_choppy_days=True,
+    )
     ds_rows = generate_strategy_rows(demand_supply_context)
     indicator_rows = generate_indicator_rows(candles, config=indicator_cfg)
     one_trade_rows = generate_strategy_rows(one_trade_context)
     btst_rows = generate_strategy_rows(btst_context)
     summary_and_curves = [
         _pnl_summary('BREAKOUT', breakout_rows, starting_equity=capital),
+        _pnl_summary('BREAKOUT_NO_BIAS', breakout_no_bias_rows, starting_equity=capital),
         _pnl_summary('DEMAND_SUPPLY', ds_rows, starting_equity=capital),
         _pnl_summary('ONE_TRADE_DAY', one_trade_rows, starting_equity=capital),
         _pnl_summary('BTST', btst_rows, starting_equity=capital),
     ]
     summary_rows = [summary for summary, _ in summary_and_curves]
     equity_curve_rows = [curve_row for _, curve_rows in summary_and_curves for curve_row in curve_rows]
+    breakout_bias_evaluation = _build_breakout_bias_evaluation(summary_rows[0], summary_rows[1])
     for summary in summary_rows:
         summary['timeframe'] = timeframe
         summary['data_start'] = data_start
@@ -338,7 +383,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             max_trades_per_day=max_trades_per_day,
             max_daily_loss=max_daily_loss,
         )
-        paper_rows = list(getattr(live_result.execution_result, "rows", []))
+        paper_rows = list(getattr(live_result.execution_result, 'rows', []))
     else:
         execution_type = 'PAPER'
         paper_result = run_paper_candidates(
@@ -348,7 +393,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             max_trades_per_day=max_trades_per_day,
             max_daily_loss=max_daily_loss,
         )
-        paper_rows = list(getattr(paper_result.execution_result, "rows", []))
+        paper_rows = list(getattr(paper_result.execution_result, 'rows', []))
     return {
         'summary_rows': summary_rows,
         'equity_curve_rows': equity_curve_rows,
@@ -361,6 +406,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         'data_points': len(rows),
         'data_start': data_start,
         'data_end': data_end,
+        'breakout_bias_evaluation': breakout_bias_evaluation,
     }
 
 
@@ -370,6 +416,14 @@ def main() -> None:
     print(f"Backtest timeframe: {out['timeframe']}")
     print(f"Data points: {out['data_points']} | Start: {out['data_start']} | End: {out['data_end']}")
     print(f"Execution: {out.get('execution_type')} | Rows written: {out.get('executed_rows_count')} | Log: {out.get('executed_log_path')}")
+    bias_evaluation = out.get('breakout_bias_evaluation', {})
+    if bias_evaluation:
+        print(
+            f"Breakout bias evaluation: better={bias_evaluation.get('better_mode')} "
+            f"pnl_delta={bias_evaluation.get('pnl_delta')} "
+            f"win_rate_delta={bias_evaluation.get('win_rate_delta_pct')}% "
+            f"trades_delta={bias_evaluation.get('trades_delta')}"
+        )
     for row in out['summary_rows']:
         print(
             f"{row['strategy']}: trades={row['trades']} wins={row['wins']} "
@@ -383,7 +437,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
-
-

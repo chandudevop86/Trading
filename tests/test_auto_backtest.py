@@ -6,7 +6,7 @@ sys.modules.setdefault('yfinance', types.SimpleNamespace())
 sys.modules.setdefault('certifi', types.SimpleNamespace(where=lambda: ''))
 sys.modules.setdefault('dateutil', types.SimpleNamespace(parser=types.SimpleNamespace(parse=lambda text: text, ParserError=ValueError)))
 
-from src.auto_backtest import _build_equity_curve_rows, _pnl_summary
+from src.auto_backtest import _build_breakout_bias_evaluation, _build_equity_curve_rows, _pnl_summary
 
 
 class TestAutoBacktestMetrics(unittest.TestCase):
@@ -57,6 +57,19 @@ class TestAutoBacktestMetrics(unittest.TestCase):
 
         self.assertEqual(summary['profit_factor'], 'INF')
         self.assertEqual(summary['max_drawdown'], 0.0)
+
+    def test_breakout_bias_evaluation_reports_better_mode_and_deltas(self):
+        comparison = _build_breakout_bias_evaluation(
+            {'strategy': 'BREAKOUT', 'total_pnl': 1250.0, 'win_rate_pct': 60.0, 'trades': 5},
+            {'strategy': 'BREAKOUT_NO_BIAS', 'total_pnl': 900.0, 'win_rate_pct': 50.0, 'trades': 7},
+        )
+
+        self.assertEqual(comparison['mode_a'], 'BREAKOUT')
+        self.assertEqual(comparison['mode_b'], 'BREAKOUT_NO_BIAS')
+        self.assertEqual(comparison['better_mode'], 'BIAS_REQUIRED')
+        self.assertEqual(comparison['pnl_delta'], 350.0)
+        self.assertEqual(comparison['win_rate_delta_pct'], 10.0)
+        self.assertEqual(comparison['trades_delta'], -2)
 
 
 if __name__ == '__main__':

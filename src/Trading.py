@@ -24,6 +24,7 @@ from src.breakout_bot import generate_trades as generate_breakout_trades
 from src.indicator_bot import IndicatorConfig, generate_indicator_rows
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
+from src.amd_fvg_sd_bot import ConfluenceConfig, generate_trades as generate_amd_fvg_sd_trades
 from src.strike_selector import attach_option_strikes, pick_option_strike
 from src.telegram_notifier import build_trade_summary, send_telegram_message
 from src.live_ohlcv import fetch_live_ohlcv
@@ -675,7 +676,50 @@ def attach_lots(rows: list[dict[str, object]], lot_size: int, lots: int) -> list
         out.append(row)
     return out
 
-def run_strategy(*, strategy: str, candles: pd.DataFrame, capital: float, risk_pct: float, rr_ratio: float, trailing_sl_pct: float, symbol: str, strike_step: int, moneyness: str, strike_steps: int, fetch_option_metrics: bool, mtf_ema_period: int, mtf_setup_mode: str, mtf_retest_strength: bool, mtf_max_trades_per_day: int) -> list[dict[str, object]]:
+def run_strategy(*, strategy: str, candles: pd.DataFrame, capital: float, risk_pct: float, rr_ratio: float, trailing_sl_pct: float, symbol: str, strike_step: int, moneyness: str, strike_steps: int, fetch_option_metrics: bool, mtf_ema_period: int, mtf_setup_mode: str, mtf_retest_strength: bool, mtf_max_trades_per_day: int, amd_mode: str, amd_swing_window: int, amd_min_fvg_size: float, amd_min_bvg_size: float, amd_zone_fresh_bars: int, amd_retest_tolerance_pct: float, amd_max_retest_bars: int, amd_min_score_conservative: float, amd_min_score_balanced: float, amd_min_score_aggressive: float) -> list[dict[str, object]]:
+    if strategy == "AMD + FVG + Supply/Demand":
+        preset_config = ConfluenceConfig.for_mode(str(amd_mode))
+        config = ConfluenceConfig(
+            mode=str(amd_mode),
+            swing_window=int(amd_swing_window),
+            accumulation_lookback=preset_config.accumulation_lookback,
+            manipulation_lookback=preset_config.manipulation_lookback,
+            distribution_lookback=preset_config.distribution_lookback,
+            min_fvg_size=float(amd_min_fvg_size),
+            min_bvg_size=float(amd_min_bvg_size),
+            zone_merge_tolerance=preset_config.zone_merge_tolerance,
+            zone_fresh_bars=int(amd_zone_fresh_bars),
+            min_zone_reaction=preset_config.min_zone_reaction,
+            retest_tolerance_pct=float(amd_retest_tolerance_pct),
+            max_retest_bars=int(amd_max_retest_bars),
+            rr_ratio=float(rr_ratio),
+            trailing_sl_pct=float(trailing_sl_pct),
+            duplicate_signal_cooldown_bars=preset_config.duplicate_signal_cooldown_bars,
+            min_score_conservative=float(amd_min_score_conservative),
+            min_score_balanced=float(amd_min_score_balanced),
+            min_score_aggressive=float(amd_min_score_aggressive),
+            allow_secondary_entries=preset_config.allow_secondary_entries,
+            max_trades_per_day=preset_config.max_trades_per_day,
+        )
+        raw_rows = generate_amd_fvg_sd_trades(
+            candles,
+            capital=float(capital),
+            risk_pct=float(risk_pct),
+            rr_ratio=float(rr_ratio),
+            config=config,
+        )
+        normalized_rows: list[dict[str, object]] = []
+        for idx, row in enumerate(raw_rows, start=1):
+            item = dict(row)
+            item.setdefault("strategy", "AMD_FVG_SUPPLY_DEMAND")
+            item.setdefault("symbol", str(symbol))
+            item.setdefault("trade_no", idx)
+            item.setdefault("trade_label", f"Trade {idx}")
+            item.setdefault("entry_time", item.get("timestamp", ""))
+            normalized_rows.append(item)
+        normalized_rows = attach_option_strikes(normalized_rows, strike_step=int(strike_step), moneyness=str(moneyness), steps=int(strike_steps))
+        return _attach_option_metrics(normalized_rows, str(symbol), bool(fetch_option_metrics))
+
     context = StrategyContext(
         strategy=strategy,
         candles=candles,
@@ -2260,7 +2304,7 @@ def _render_instrument_focus_page(symbol: str, instrument_mode: str, interval: s
 
 
 def _render_strategy_page(strategy: str, workspace: str, symbol: str, interval: str, period: str, execution_mode: str) -> None:
-    strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
+    strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m", "AMD + FVG + Supply/Demand"]
     st.caption("Strategy")
     selected_strategy = st.segmented_control(
         "Strategy",
@@ -2279,6 +2323,7 @@ def _render_strategy_page(strategy: str, workspace: str, symbol: str, interval: 
         "Indicator": "Uses indicator-led market context to classify bullish, bearish, and reversal-style setups.",
         "One Trade/Day": "Keeps execution disciplined by limiting the flow to a single high-conviction setup each day.",
         "MTF 5m": "Uses 5m execution with higher timeframe filters to improve structure and confirmation quality.",
+        "AMD + FVG + Supply/Demand": "Blends AMD context, imbalance detection, zone interaction, liquidity sweeps, and retest entries to surface more structured trade opportunities.",
     }.get(str(strategy), "Review the currently selected strategy before running the desk.")
     st.caption("Strategy: active model and current market context.")
     st.markdown(
@@ -2305,7 +2350,7 @@ def main() -> None:
     masthead_slot = st.empty()
 
     workspace = "Desk"
-    strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m"]
+    strategy_options = ["Breakout", "Demand Supply", "Indicator", "One Trade/Day", "MTF 5m", "AMD + FVG + Supply/Demand"]
     strategy = str(st.session_state.get("strategy", "Breakout"))
 
     content_options = ["Home", "Live Signals", "Paper & Live", "Routing Status", "Execution Style", "Instrument Focus", "Market", "Strategy", "Trades", "Desk Controls", "Downloads"]
@@ -2366,6 +2411,16 @@ def main() -> None:
     mtf_setup_mode = "either"
     mtf_retest_strength = True
     mtf_max_trades_per_day = 3
+    amd_mode = 'Balanced'
+    amd_swing_window = 3
+    amd_min_fvg_size = 0.35
+    amd_min_bvg_size = 0.25
+    amd_zone_fresh_bars = 24
+    amd_retest_tolerance_pct = 0.0015
+    amd_max_retest_bars = 6
+    amd_min_score_conservative = 6.2
+    amd_min_score_balanced = 4.8
+    amd_min_score_aggressive = 3.5
 
     if show_controls:
         st.caption("Desk Controls")
@@ -2468,6 +2523,32 @@ def main() -> None:
             with mtf_cols[3]:
                 mtf_max_trades_per_day = int(st.segmented_control("Max trades/day", [1, 2, 3], default=mtf_max_trades_per_day))
 
+        if strategy == "AMD + FVG + Supply/Demand":
+            st.markdown('<div class="section-shell" style="margin-bottom:14px;">', unsafe_allow_html=True)
+            st.markdown('<div class="section-heading">AMD + FVG + Supply/Demand Controls</div><div class="section-copy">Tune confluence scoring, imbalance size, zone freshness, and retest tolerance without over-filtering the setup engine.</div>', unsafe_allow_html=True)
+            amd_cols_top = st.columns([1, 1, 1, 1])
+            with amd_cols_top[0]:
+                amd_mode = str(st.segmented_control("Mode", ["Conservative", "Balanced", "Aggressive"], default=amd_mode))
+            with amd_cols_top[1]:
+                amd_swing_window = int(st.number_input("Swing window", min_value=2, max_value=10, value=amd_swing_window, step=1))
+            with amd_cols_top[2]:
+                amd_min_fvg_size = float(st.number_input("Min FVG size", min_value=0.05, value=float(amd_min_fvg_size), step=0.05, format="%.2f"))
+            with amd_cols_top[3]:
+                amd_min_bvg_size = float(st.number_input("Min BVG size", min_value=0.05, value=float(amd_min_bvg_size), step=0.05, format="%.2f"))
+
+            amd_cols_bottom = st.columns([1, 1, 1, 1])
+            with amd_cols_bottom[0]:
+                amd_zone_fresh_bars = int(st.number_input("Zone freshness (bars)", min_value=4, max_value=120, value=amd_zone_fresh_bars, step=1))
+            with amd_cols_bottom[1]:
+                amd_retest_tolerance_pct = float(st.number_input("Retest tolerance", min_value=0.0005, value=float(amd_retest_tolerance_pct), step=0.0005, format="%.4f"))
+            with amd_cols_bottom[2]:
+                amd_max_retest_bars = int(st.number_input("Max retest bars", min_value=1, max_value=20, value=amd_max_retest_bars, step=1))
+            with amd_cols_bottom[3]:
+                st.caption("Score thresholds")
+                amd_min_score_conservative = float(st.number_input("Conservative score", min_value=1.0, value=float(amd_min_score_conservative), step=0.1, format="%.1f"))
+                amd_min_score_balanced = float(st.number_input("Balanced score", min_value=1.0, value=float(amd_min_score_balanced), step=0.1, format="%.1f"))
+                amd_min_score_aggressive = float(st.number_input("Aggressive score", min_value=1.0, value=float(amd_min_score_aggressive), step=0.1, format="%.1f"))
+
     if live_update:
         components.html(
             f"""<script>
@@ -2507,6 +2588,16 @@ def main() -> None:
                 mtf_setup_mode=str(mtf_setup_mode),
                 mtf_retest_strength=bool(mtf_retest_strength),
                 mtf_max_trades_per_day=int(mtf_max_trades_per_day),
+                amd_mode=str(amd_mode),
+                amd_swing_window=int(amd_swing_window),
+                amd_min_fvg_size=float(amd_min_fvg_size),
+                amd_min_bvg_size=float(amd_min_bvg_size),
+                amd_zone_fresh_bars=int(amd_zone_fresh_bars),
+                amd_retest_tolerance_pct=float(amd_retest_tolerance_pct),
+                amd_max_retest_bars=int(amd_max_retest_bars),
+                amd_min_score_conservative=float(amd_min_score_conservative),
+                amd_min_score_balanced=float(amd_min_score_balanced),
+                amd_min_score_aggressive=float(amd_min_score_aggressive),
             )
     except Exception as exc:
         st.error(f"Strategy execution failed: {exc}")

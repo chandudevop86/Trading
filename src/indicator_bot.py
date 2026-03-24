@@ -1,14 +1,15 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from src.breakout_bot import Candle, add_intraday_vwap, load_candles
+from src.breakout_bot import Candle, _coerce_candles, add_intraday_vwap, load_candles
 from src.csv_io import read_csv_rows, write_csv_rows
+from src.trading_core import ScoringConfig, StandardTrade, safe_quantity, weighted_score
 
 
-@dataclass
+@dataclass(slots=True)
 class IndicatorConfig:
     rsi_period: int = 14
     adx_period: int = 14
@@ -18,18 +19,18 @@ class IndicatorConfig:
     rsi_overbought: float = 70.0
     rsi_oversold: float = 30.0
     adx_trend_min: float = 20.0
+    mode: str = 'Balanced'
+    scoring: ScoringConfig = field(default_factory=ScoringConfig)
 
 
 def _ema(values: list[float], period: int) -> list[float | None]:
     out: list[float | None] = [None] * len(values)
     if period <= 0 or len(values) < period:
         return out
-
     multiplier = 2.0 / (period + 1)
     seed = sum(values[:period]) / period
     out[period - 1] = seed
     ema_prev = seed
-
     for idx in range(period, len(values)):
         ema_prev = (values[idx] - ema_prev) * multiplier + ema_prev
         out[idx] = ema_prev
@@ -40,32 +41,28 @@ def _rsi(closes: list[float], period: int) -> list[float | None]:
     out: list[float | None] = [None] * len(closes)
     if len(closes) <= period:
         return out
-
     gains: list[float] = []
     losses: list[float] = []
     for idx in range(1, len(closes)):
         delta = closes[idx] - closes[idx - 1]
         gains.append(max(delta, 0.0))
         losses.append(max(-delta, 0.0))
-
     avg_gain = sum(gains[:period]) / period
     avg_loss = sum(losses[:period]) / period
 
-    def to_rsi(g: float, l: float) -> float:
-        if l == 0:
+    def to_rsi(gain: float, loss: float) -> float:
+        if loss == 0:
             return 100.0
-        rs = g / l
+        rs = gain / loss
         return 100.0 - (100.0 / (1.0 + rs))
 
     out[period] = to_rsi(avg_gain, avg_loss)
-
     for idx in range(period + 1, len(closes)):
         gain = gains[idx - 1]
         loss = losses[idx - 1]
         avg_gain = ((avg_gain * (period - 1)) + gain) / period
         avg_loss = ((avg_loss * (period - 1)) + loss) / period
         out[idx] = to_rsi(avg_gain, avg_loss)
-
     return out
 
 
@@ -76,52 +73,37 @@ def _adx(candles: list[Candle], period: int) -> tuple[list[float | None], list[f
     minus_di: list[float | None] = [None] * n
     if n <= period + 1:
         return adx, plus_di, minus_di
-
     tr: list[float] = [0.0] * n
     pdm: list[float] = [0.0] * n
     mdm: list[float] = [0.0] * n
-
     for i in range(1, n):
         high_diff = candles[i].high - candles[i - 1].high
         low_diff = candles[i - 1].low - candles[i].low
         pdm[i] = high_diff if (high_diff > low_diff and high_diff > 0) else 0.0
         mdm[i] = low_diff if (low_diff > high_diff and low_diff > 0) else 0.0
-        tr[i] = max(
-            candles[i].high - candles[i].low,
-            abs(candles[i].high - candles[i - 1].close),
-            abs(candles[i].low - candles[i - 1].close),
-        )
-
-    atr = sum(tr[1 : period + 1])
-    sm_pdm = sum(pdm[1 : period + 1])
-    sm_mdm = sum(mdm[1 : period + 1])
-
+        tr[i] = max(candles[i].high - candles[i].low, abs(candles[i].high - candles[i - 1].close), abs(candles[i].low - candles[i - 1].close))
+    atr = sum(tr[1: period + 1])
+    sm_pdm = sum(pdm[1: period + 1])
+    sm_mdm = sum(mdm[1: period + 1])
     if atr == 0:
         return adx, plus_di, minus_di
-
     plus_di[period] = 100.0 * (sm_pdm / atr)
     minus_di[period] = 100.0 * (sm_mdm / atr)
     dx_values: list[float] = [0.0] * n
-
     denom = (plus_di[period] or 0.0) + (minus_di[period] or 0.0)
     dx_values[period] = 0.0 if denom == 0 else 100.0 * abs((plus_di[period] or 0.0) - (minus_di[period] or 0.0)) / denom
-
     for i in range(period + 1, n):
         atr = atr - (atr / period) + tr[i]
         sm_pdm = sm_pdm - (sm_pdm / period) + pdm[i]
         sm_mdm = sm_mdm - (sm_mdm / period) + mdm[i]
-
         if atr == 0:
             continue
-
         pdi = 100.0 * (sm_pdm / atr)
         mdi = 100.0 * (sm_mdm / atr)
         plus_di[i] = pdi
         minus_di[i] = mdi
-
         denom = pdi + mdi
         dx_values[i] = 0.0 if denom == 0 else 100.0 * abs(pdi - mdi) / denom
-
     start = period * 2
     if start < n:
         seed_values = [dx_values[i] for i in range(period, start)]
@@ -131,25 +113,20 @@ def _adx(candles: list[Candle], period: int) -> tuple[list[float | None], list[f
             for i in range(start, n):
                 adx_val = ((adx_val * (period - 1)) + dx_values[i]) / period
                 adx[i] = adx_val
-
     return adx, plus_di, minus_di
 
 
 def _macd(closes: list[float], fast: int, slow: int, signal_period: int) -> tuple[list[float | None], list[float | None], list[float | None]]:
     ema_fast = _ema(closes, fast)
     ema_slow = _ema(closes, slow)
-
     macd_line: list[float | None] = [None] * len(closes)
     for i in range(len(closes)):
         if ema_fast[i] is not None and ema_slow[i] is not None:
             macd_line[i] = (ema_fast[i] or 0.0) - (ema_slow[i] or 0.0)
-
-    compact = [v for v in macd_line if v is not None]
+    compact = [value for value in macd_line if value is not None]
     signal_compact = _ema(compact, signal_period)
-
     signal_line: list[float | None] = [None] * len(closes)
     hist: list[float | None] = [None] * len(closes)
-
     compact_idx = 0
     for i in range(len(closes)):
         if macd_line[i] is None:
@@ -159,138 +136,168 @@ def _macd(closes: list[float], fast: int, slow: int, signal_period: int) -> tupl
         if sig is not None:
             hist[i] = (macd_line[i] or 0.0) - sig
         compact_idx += 1
-
     return macd_line, signal_line, hist
 
 
 def _trend_strength(adx_val: float | None, adx_trend_min: float) -> str:
     if adx_val is None:
-        return "NA"
+        return 'NA'
     if adx_val < adx_trend_min:
-        return "WEAK"
+        return 'WEAK'
     if adx_val < adx_trend_min + 10:
-        return "MODERATE"
+        return 'MODERATE'
     if adx_val < adx_trend_min + 25:
-        return "STRONG"
-    return "VERY_STRONG"
+        return 'STRONG'
+    return 'VERY_STRONG'
 
 
-def _market_signal(
-    close: float,
-    vwap: float,
-    rsi_val: float | None,
-    adx_val: float | None,
-    macd_val: float | None,
-    macd_signal: float | None,
-    config: IndicatorConfig,
-) -> str:
+def _market_signal(close: float, vwap: float, rsi_val: float | None, adx_val: float | None, macd_val: float | None, macd_signal: float | None, config: IndicatorConfig) -> str:
     if rsi_val is None or adx_val is None or macd_val is None or macd_signal is None:
-        return "INSUFFICIENT_DATA"
-
+        return 'INSUFFICIENT_DATA'
     if rsi_val > config.rsi_overbought:
-        return "OVERBOUGHT"
+        return 'OVERBOUGHT'
     if rsi_val < config.rsi_oversold:
-        return "OVERSOLD"
-
+        return 'OVERSOLD'
     bullish = close > vwap and macd_val > macd_signal and rsi_val >= 50
     bearish = close < vwap and macd_val < macd_signal and rsi_val <= 50
-
     if adx_val < config.adx_trend_min and 40 <= rsi_val <= 60:
-        return "RANGE"
+        return 'RANGE'
     if bullish and adx_val >= config.adx_trend_min:
-        return "BULLISH_TREND"
+        return 'BULLISH_TREND'
     if bearish and adx_val >= config.adx_trend_min:
-        return "BEARISH_TREND"
-    return "NEUTRAL"
+        return 'BEARISH_TREND'
+    return 'NEUTRAL'
 
 
 def generate_indicator_rows(candles: list[Candle], config: IndicatorConfig | None = None) -> list[dict[str, object]]:
     cfg = config or IndicatorConfig()
     add_intraday_vwap(candles)
     closes = [c.close for c in candles]
-
     rsi_vals = _rsi(closes, cfg.rsi_period)
     adx_vals, plus_di, minus_di = _adx(candles, cfg.adx_period)
     macd_line, macd_signal, macd_hist = _macd(closes, cfg.macd_fast, cfg.macd_slow, cfg.macd_signal)
-
     rows: list[dict[str, object]] = []
     for i, candle in enumerate(candles):
-        signal = _market_signal(
-            close=candle.close,
-            vwap=candle.vwap,
-            rsi_val=rsi_vals[i],
-            adx_val=adx_vals[i],
-            macd_val=macd_line[i],
-            macd_signal=macd_signal[i],
-            config=cfg,
-        )
+        signal = _market_signal(candle.close, candle.vwap, rsi_vals[i], adx_vals[i], macd_line[i], macd_signal[i], cfg)
         rows.append(
             {
-                "timestamp": candle.timestamp.isoformat(sep=" "),
-                "open": round(candle.open, 4),
-                "high": round(candle.high, 4),
-                "low": round(candle.low, 4),
-                "close": round(candle.close, 4),
-                "volume": round(candle.volume, 4),
-                "vwap": round(candle.vwap, 4),
-                "rsi": "" if rsi_vals[i] is None else round(rsi_vals[i] or 0.0, 2),
-                "adx": "" if adx_vals[i] is None else round(adx_vals[i] or 0.0, 2),
-                "+di": "" if plus_di[i] is None else round(plus_di[i] or 0.0, 2),
-                "-di": "" if minus_di[i] is None else round(minus_di[i] or 0.0, 2),
-                "macd": "" if macd_line[i] is None else round(macd_line[i] or 0.0, 4),
-                "macd_signal": "" if macd_signal[i] is None else round(macd_signal[i] or 0.0, 4),
-                "macd_hist": "" if macd_hist[i] is None else round(macd_hist[i] or 0.0, 4),
-                "trend_strength": _trend_strength(adx_vals[i], cfg.adx_trend_min),
-                "market_signal": signal,
+                'timestamp': candle.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'open': round(candle.open, 4),
+                'high': round(candle.high, 4),
+                'low': round(candle.low, 4),
+                'close': round(candle.close, 4),
+                'volume': round(candle.volume, 4),
+                'vwap': round(candle.vwap, 4),
+                'rsi': '' if rsi_vals[i] is None else round(rsi_vals[i] or 0.0, 2),
+                'adx': '' if adx_vals[i] is None else round(adx_vals[i] or 0.0, 2),
+                '+di': '' if plus_di[i] is None else round(plus_di[i] or 0.0, 2),
+                '-di': '' if minus_di[i] is None else round(minus_di[i] or 0.0, 2),
+                'macd': '' if macd_line[i] is None else round(macd_line[i] or 0.0, 4),
+                'macd_signal': '' if macd_signal[i] is None else round(macd_signal[i] or 0.0, 4),
+                'macd_hist': '' if macd_hist[i] is None else round(macd_hist[i] or 0.0, 4),
+                'trend_strength': _trend_strength(adx_vals[i], cfg.adx_trend_min),
+                'market_signal': signal,
             }
         )
-
     return rows
 
 
 def build_indicator_summary(rows: list[dict[str, object]]) -> str:
     if not rows:
-        return "Indicator bot: no data available."
-
+        return 'Indicator bot: no data available.'
     last = rows[-1]
-    rsi_val = last.get("rsi", last.get("rsi_14", ""))
-    adx_val = last.get("adx", last.get("adx_14", ""))
-
     return (
-        "Indicator Bot Alert\n"
-        f"Time: {last['timestamp']}\n"
-        f"Signal: {last['market_signal']}\n"
-        f"Trend: {last.get('trend_strength', 'NA')}\n"
-        f"RSI: {rsi_val}\n"
-        f"ADX: {adx_val}\n"
-        f"MACD: {last.get('macd', '')} | Signal: {last.get('macd_signal', '')}\n"
-        f"Close: {last.get('close', '')} | VWAP: {last.get('vwap', '')}"
+        'Indicator Bot Alert\n'
+        f"Signal: {last.get('market_signal', 'N/A')}\n"
+        f"Strength: {last.get('trend_strength', 'N/A')}\n"
+        f"RSI: {last.get('rsi', 'N/A')} | ADX: {last.get('adx', 'N/A')}\n"
+        f"MACD: {last.get('macd', 'N/A')} / {last.get('macd_signal', 'N/A')}\n"
+        f"Close: {last.get('close', 'N/A')} | VWAP: {last.get('vwap', 'N/A')}"
     )
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="RSI + ADX + MACD + VWAP indicator bot")
-    parser.add_argument("--input", required=True, type=Path, help="Input intraday OHLCV CSV")
-    parser.add_argument("--output", required=True, type=Path, help="Output indicator CSV")
-    parser.add_argument("--rsi-overbought", type=float, default=70.0)
-    parser.add_argument("--rsi-oversold", type=float, default=30.0)
-    parser.add_argument("--adx-trend-min", type=float, default=20.0)
-    return parser.parse_args()
+def _trade_side(row: dict[str, object]) -> str:
+    signal = str(row.get('market_signal', '')).upper()
+    if signal in {'BULLISH_TREND', 'OVERSOLD', 'BUY', 'LONG'}:
+        return 'BUY'
+    if signal in {'BEARISH_TREND', 'OVERBOUGHT', 'SELL', 'SHORT'}:
+        return 'SELL'
+    return ''
 
 
-def run(input_path: Path, output_path: Path, config: IndicatorConfig | None = None) -> list[dict[str, object]]:
+def generate_trades(
+    df: Any,
+    capital: float,
+    risk_pct: float,
+    rr_ratio: float = 2.0,
+    config: IndicatorConfig | None = None,
+) -> list[dict[str, object]]:
+    cfg = config or IndicatorConfig()
+    candles = _coerce_candles(df)
+    rows = generate_indicator_rows(candles, cfg)
+    trades: list[dict[str, object]] = []
+    for index, row in enumerate(rows):
+        side = _trade_side(row)
+        if side not in {'BUY', 'SELL'}:
+            continue
+        close_price = float(row.get('close', 0.0) or 0.0)
+        vwap_price = float(row.get('vwap', 0.0) or 0.0)
+        rsi_value = float(row.get('rsi') or 0.0)
+        adx_value = float(row.get('adx') or 0.0)
+        trend_strength = str(row.get('trend_strength', ''))
+        score = weighted_score(
+            {
+                'trend': trend_strength in {'STRONG', 'VERY_STRONG', 'MODERATE'},
+                'vwap': close_price >= vwap_price if side == 'BUY' else close_price <= vwap_price,
+                'rsi': (rsi_value >= 50.0) if side == 'BUY' else (rsi_value <= 50.0),
+                'adx': adx_value >= float(cfg.adx_trend_min),
+                'zone': False,
+                'fvg': False,
+                'sweep': False,
+                'retest': bool(index > 0),
+            },
+            cfg.scoring,
+        )
+        if not score.accepted:
+            continue
+        if index == 0:
+            continue
+        prev_low = float(rows[index - 1].get('low', close_price) or close_price)
+        prev_high = float(rows[index - 1].get('high', close_price) or close_price)
+        stop_loss = min(prev_low, close_price * 0.995) if side == 'BUY' else max(prev_high, close_price * 1.005)
+        target = close_price + (close_price - stop_loss) * float(rr_ratio) if side == 'BUY' else close_price - (stop_loss - close_price) * float(rr_ratio)
+        quantity = safe_quantity(capital, risk_pct, close_price, stop_loss)
+        if quantity <= 0:
+            continue
+        trades.append(
+            StandardTrade(
+                timestamp=str(row.get('timestamp', '')),
+                side=side,
+                entry=close_price,
+                stop_loss=stop_loss,
+                target=target,
+                strategy='INDICATOR',
+                reason=f"{row.get('market_signal', 'SIGNAL')} score={score.total:.2f}",
+                score=score.total,
+                entry_price=close_price,
+                target_price=target,
+                risk_per_unit=abs(close_price - stop_loss),
+                quantity=quantity,
+                extra={
+                    'market_signal': row.get('market_signal', ''),
+                    'rsi': row.get('rsi', ''),
+                    'adx': row.get('adx', ''),
+                    'vwap': row.get('vwap', ''),
+                    'trend_strength': row.get('trend_strength', ''),
+                },
+            ).to_dict()
+        )
+    return trades
+
+
+def run(input_path: Path, output_path: Path, capital: float, risk_pct: float, rr_ratio: float = 2.0, config: IndicatorConfig | None = None) -> list[dict[str, object]]:
     rows = read_csv_rows(input_path)
     candles = load_candles(rows)
-    out = generate_indicator_rows(candles, config=config)
-    write_csv_rows(output_path, out)
-    return out
-
-
-if __name__ == "__main__":
-    args = parse_args()
-    cfg = IndicatorConfig(
-        rsi_overbought=args.rsi_overbought,
-        rsi_oversold=args.rsi_oversold,
-        adx_trend_min=args.adx_trend_min,
-    )
-    run(args.input, args.output, config=cfg)
+    trades = generate_trades(candles, capital=capital, risk_pct=risk_pct, rr_ratio=rr_ratio, config=config)
+    write_csv_rows(output_path, trades)
+    return trades

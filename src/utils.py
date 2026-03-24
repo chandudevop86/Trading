@@ -1,5 +1,5 @@
-# utils.py
-import pandas as pd
+from __future__ import annotations
 
-def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:
-    # ... same function ...
+from src.preprocessing import prepare_trading_data
+
+__all__ = ['prepare_trading_data']

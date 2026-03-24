@@ -10,6 +10,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
+from src.trading_core import append_log
+
 from src.csv_io import read_csv_rows
 try:
     from src.dhan_api import DhanClient, DhanExecutionError, build_order_request_from_candidate, load_security_map, resolve_security
@@ -143,7 +145,7 @@ def normalize_order_quantity(symbol: str, quantity: object) -> int:
 
 
 def _extract_share_and_strike(row: dict[str, object]) -> tuple[object, object]:
-    share_price = row.get("entry_price", row.get("close", row.get("price", "")))
+    share_price = row.get("entry_price", row.get("entry", row.get("close", row.get("price", ""))))
     strike_price = row.get("strike_price", row.get("option_strike", row.get("strike", "")))
     return share_price, strike_price
 
@@ -188,7 +190,7 @@ def _normalize_text(value: object) -> str:
 
 
 def _price_value(record: dict[str, object]) -> float:
-    for key in ("entry_price", "price", "share_price", "close", "spot_ltp"):
+    for key in ("entry_price", "entry", "price", "share_price", "close", "spot_ltp"):
         value = _safe_float(record.get(key))
         if value > 0:
             return value
@@ -287,7 +289,7 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
             "symbol": symbol,
             "signal_time": str(row.get("entry_time", row.get("timestamp", ""))),
             "side": str(row.get("side", "HOLD")),
-            "price": row.get("entry_price", row.get("close", "")),
+            "price": row.get("entry_price", row.get("entry", row.get("close", ""))),
             "share_price": share_price,
             "strike_price": strike_price,
             "option_expiry": row.get("option_expiry", row.get("expiry_date", "")),
@@ -493,6 +495,8 @@ def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[st
         return False, SKIP_REASON_MISSING_PRICE, record
     record["price"] = price
     record.setdefault("share_price", price)
+    record.setdefault("signal_time", str(record.get("entry_time", record.get("timestamp", "")) or ""))
+    record.setdefault("reason", str(record.get("reason", record.get("strategy", "TRADE")) or "TRADE"))
     record.setdefault("strike_price", record.get("option_strike", record.get("strike", "")))
     raw_quantity = record.get("quantity")
     if raw_quantity is None or str(raw_quantity).strip() == "":
@@ -626,6 +630,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
         trade_id = str(base_row.get("trade_id", ""))
         trade_key = str(base_row.get("trade_key", ""))
         if not ok:
+            append_log(f'execution_engine skipped invalid trade {base_row.get("trade_id", "")} reason={validation_reason}')
             _mark_skipped(result, base_row, validation_reason)
             continue
         if deduplicate and trade_id in historical_trade_ids:
@@ -1207,3 +1212,4 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
+

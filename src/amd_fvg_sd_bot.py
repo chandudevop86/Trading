@@ -6,6 +6,8 @@ from typing import Any
 
 import pandas as pd
 
+from src.trading_core import ScoringConfig, weighted_score
+
 REQUIRED_COLUMNS = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
 STRATEGY_NAME = 'AMD_FVG_SUPPLY_DEMAND'
 
@@ -432,62 +434,34 @@ def _recent_imbalance_context(candles: pd.DataFrame, index: int, side: str, conf
 
 def score_trade_setup(context: dict[str, Any], config: ConfluenceConfig, mode: str) -> dict[str, Any]:
     normalized_mode = _normalize_mode(mode)
-    amd_confidence = float(context.get('amd_confidence', 0.0) or 0.0)
-    liquidity_sweep = bool(context.get('liquidity_sweep', False))
-    has_fvg = bool(context.get('has_fvg', False))
-    has_bvg = bool(context.get('has_bvg', False))
-    zone_proximity = bool(context.get('zone_proximity', False))
-    retest_confirmation = bool(context.get('retest_confirmation', False))
-    trend_alignment = bool(context.get('trend_alignment', False))
-    zone_reaction_strength = float(context.get('zone_reaction_strength', 0.0) or 0.0)
-
-    amd_score = round(min(1.4, max(0.0, amd_confidence) * 1.2), 2)
-    sweep_score = 1.45 if liquidity_sweep else 0.0
-    imbalance_score = 0.0
-    if has_fvg:
-        imbalance_score += 1.15
-    if has_bvg:
-        imbalance_score += 0.95
-    if has_fvg and has_bvg:
-        imbalance_score += 0.25
-    zone_score = 1.35 if zone_proximity else 0.0
-    retest_score = 1.2 if retest_confirmation else 0.0
-    trend_score = 0.8 if trend_alignment else (0.3 if normalized_mode == 'Aggressive' and amd_score > 0 else 0.0)
-    reaction_score = min(1.1, max(0.0, zone_reaction_strength))
-    combo_bonus = 0.0
-    confluence_count = sum(1 for flag in [amd_score > 0, liquidity_sweep, has_fvg or has_bvg, zone_proximity, retest_confirmation, trend_alignment] if flag)
-    if confluence_count >= 4:
-        combo_bonus = 0.45
-    if normalized_mode == 'Conservative' and not retest_confirmation:
-        combo_bonus = 0.0
-
-    total_score = round(amd_score + sweep_score + imbalance_score + zone_score + retest_score + trend_score + reaction_score + combo_bonus, 2)
-    threshold = _score_threshold(config, normalized_mode)
-    accepted = total_score >= threshold
-
-    rejection_reasons: list[str] = []
-    if not liquidity_sweep:
-        rejection_reasons.append('missing_sweep')
-    if not zone_proximity:
-        rejection_reasons.append('missing_zone')
-    if not (has_fvg or has_bvg):
-        rejection_reasons.append('missing_imbalance')
-    if not retest_confirmation:
-        rejection_reasons.append('missing_retest')
-    if total_score < threshold:
-        rejection_reasons.append(f'score_below_{threshold:.2f}')
-
+    scoring = ScoringConfig(mode=normalized_mode)
+    scoring.thresholds.conservative = float(config.min_score_conservative)
+    scoring.thresholds.balanced = float(config.min_score_balanced)
+    scoring.thresholds.aggressive = float(config.min_score_aggressive)
+    score = weighted_score(
+        {
+            'trend': bool(context.get('trend_alignment', False)) or float(context.get('amd_confidence', 0.0) or 0.0) > 0,
+            'vwap': False,
+            'rsi': False,
+            'adx': False,
+            'zone': bool(context.get('zone_proximity', False)),
+            'fvg': bool(context.get('has_fvg', False)) or bool(context.get('has_bvg', False)),
+            'sweep': bool(context.get('liquidity_sweep', False)),
+            'retest': bool(context.get('retest_confirmation', False)),
+        },
+        scoring,
+    )
     return {
-        'accepted': accepted,
-        'threshold': threshold,
-        'amd_score': round(amd_score, 2),
-        'sweep_score': round(sweep_score, 2),
-        'imbalance_score': round(imbalance_score, 2),
-        'zone_score': round(zone_score + reaction_score, 2),
-        'trend_score': round(trend_score, 2),
-        'retest_score': round(retest_score, 2),
-        'total_score': total_score,
-        'rejection_reason': '' if accepted else ','.join(rejection_reasons),
+        'accepted': score.accepted,
+        'threshold': score.threshold,
+        'amd_score': round(score.components.get('trend', 0.0), 2),
+        'sweep_score': round(score.components.get('sweep', 0.0), 2),
+        'imbalance_score': round(score.components.get('fvg', 0.0), 2),
+        'zone_score': round(score.components.get('zone', 0.0), 2),
+        'trend_score': round(score.components.get('trend', 0.0), 2),
+        'retest_score': round(score.components.get('retest', 0.0), 2),
+        'total_score': score.total,
+        'rejection_reason': '' if score.accepted else ','.join([f'missing_{reason}' for reason in score.reasons] + ([f'score_below_{score.threshold:.2f}'] if score.total < score.threshold else [])),
     }
 
 
@@ -714,3 +688,6 @@ __all__ = [
     'score_trade_setup',
     'generate_trades',
 ]
+
+
+

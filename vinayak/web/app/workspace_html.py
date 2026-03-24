@@ -182,6 +182,18 @@ WORKSPACE_HTML = _page(
           <div><label for=\"paperLogPath\">Paper Log Path</label><input id=\"paperLogPath\" value=\"vinayak/data/paper_trading_logs_all.csv\" /></div>
           <div><label for=\"liveLogPath\">Live Log Path</label><input id=\"liveLogPath\" value=\"vinayak/data/live_trading_logs_all.csv\" /></div>
         </div>
+        <div class=\"grid4\" style=\"margin-top:12px;\">
+          <div><label for=\"entryCutoff\">Entry Cutoff</label><input id=\"entryCutoff\" value=\"\" placeholder=\"HH:MM\" /></div>
+          <div><label for=\"costBps\">Cost BPS</label><input id=\"costBps\" type=\"number\" step=\"0.1\" value=\"0\" /></div>
+          <div><label for=\"fixedCostPerTrade\">Fixed Cost / Trade</label><input id=\"fixedCostPerTrade\" type=\"number\" step=\"0.01\" value=\"0\" /></div>
+          <div><label for=\"maxDailyLoss\">Max Daily Loss</label><input id=\"maxDailyLoss\" type=\"number\" step=\"0.01\" value=\"\" placeholder=\"optional\" /></div>
+        </div>
+        <div class=\"grid4\" style=\"margin-top:12px;\">
+          <div><label for=\"maxTradesPerDay\">Max Trades / Day</label><input id=\"maxTradesPerDay\" type=\"number\" value=\"\" placeholder=\"optional\" /></div>
+          <div><label for=\"mtfEmaPeriod\">MTF EMA Period</label><input id=\"mtfEmaPeriod\" type=\"number\" value=\"3\" min=\"2\" /></div>
+          <div><label for=\"mtfSetupMode\">MTF Setup Mode</label><select id=\"mtfSetupMode\"><option selected>either</option><option>bos</option><option>fvg</option></select></div>
+          <div><label for=\"mtfMaxTradesPerDay\">MTF Max Trades / Day</label><input id=\"mtfMaxTradesPerDay\" type=\"number\" value=\"3\" min=\"1\" /></div>
+        </div>
         <div class=\"grid2\" style=\"margin-top:12px;\">
           <div><label for=\"securityMapPath\">Security Map Path</label><input id=\"securityMapPath\" value=\"vinayak/data/dhan_security_map.csv\" /></div>
           <div><label for=\"deskNote\">Desk Note</label><input id=\"deskNote\" value=\"v4 workspace synced into Vinayak\" /></div>
@@ -190,6 +202,9 @@ WORKSPACE_HTML = _page(
           <div class=\"toggle\"><input id=\"fetchOptionMetrics\" type=\"checkbox\" /><label for=\"fetchOptionMetrics\" style=\"margin:0;\">Fetch Option Metrics</label></div>
           <div class=\"toggle\"><input id=\"sendTelegram\" type=\"checkbox\" /><label for=\"sendTelegram\" style=\"margin:0;\">Send Telegram</label></div>
           <div class=\"toggle\"><input id=\"autoExecute\" type=\"checkbox\" /><label for=\"autoExecute\" style=\"margin:0;\">Auto Execute</label></div>
+        </div>
+        <div class=\"grid2\" style=\"margin-top:12px;\">
+          <div class=\"toggle\"><input id=\"mtfRetestStrength\" type=\"checkbox\" checked /><label for=\"mtfRetestStrength\" style=\"margin:0;\">Require MTF Retest Strength</label></div>
         </div>
         <div class=\"grid2\" style=\"margin-top:12px;\">
           <div><label for=\"telegramToken\">Telegram Token</label><input id=\"telegramToken\" placeholder=\"Bot token\" /></div>
@@ -299,10 +314,15 @@ WORKSPACE_HTML = _page(
         live_log_path: document.getElementById('liveLogPath').value,
         lot_size: Number(document.getElementById('lotSize').value || 0),
         lots: Number(document.getElementById('lots').value || 0),
-        mtf_ema_period: 3,
-        mtf_setup_mode: 'either',
-        mtf_retest_strength: true,
-        mtf_max_trades_per_day: 3,
+        mtf_ema_period: Number(document.getElementById('mtfEmaPeriod').value || 3),
+        mtf_setup_mode: document.getElementById('mtfSetupMode').value,
+        mtf_retest_strength: document.getElementById('mtfRetestStrength').checked,
+        mtf_max_trades_per_day: Number(document.getElementById('mtfMaxTradesPerDay').value || 3),
+        entry_cutoff_hhmm: document.getElementById('entryCutoff').value,
+        cost_bps: Number(document.getElementById('costBps').value || 0),
+        fixed_cost_per_trade: Number(document.getElementById('fixedCostPerTrade').value || 0),
+        max_daily_loss: document.getElementById('maxDailyLoss').value === '' ? null : Number(document.getElementById('maxDailyLoss').value),
+        max_trades_per_day: document.getElementById('maxTradesPerDay').value === '' ? null : Number(document.getElementById('maxTradesPerDay').value),
         desk_note: document.getElementById('deskNote').value
       };
     }
@@ -528,3 +548,4 @@ WORKSPACE_DOWNLOADS_HTML = _page(
   </script>
     """
 )
+

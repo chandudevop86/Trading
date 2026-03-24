@@ -1,4 +1,4 @@
-﻿from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient
 
 from vinayak.api.main import app
 from vinayak.api.routes import dashboard as dashboard_route
@@ -51,10 +51,11 @@ def test_dashboard_candles_route_returns_live_rows(monkeypatch) -> None:
 
 def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> None:
     _login_admin()
-    monkeypatch.setattr(
-        dashboard_route,
-        'run_live_trading_analysis',
-        lambda **kwargs: {
+    captured: dict[str, object] = {}
+
+    def _fake_run_live_trading_analysis(**kwargs):
+        captured.update(kwargs)
+        return {
             'symbol': kwargs['symbol'],
             'interval': kwargs['interval'],
             'period': kwargs['period'],
@@ -108,7 +109,12 @@ def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> N
                     'option_strike': '100CE',
                 }
             ],
-        },
+        }
+
+    monkeypatch.setattr(
+        dashboard_route,
+        'run_live_trading_analysis',
+        _fake_run_live_trading_analysis,
     )
 
     response = client.post('/dashboard/live-analysis', json={
@@ -135,6 +141,11 @@ def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> N
         'mtf_setup_mode': 'either',
         'mtf_retest_strength': True,
         'mtf_max_trades_per_day': 3,
+        'entry_cutoff_hhmm': '11:30',
+        'cost_bps': 12.5,
+        'fixed_cost_per_trade': 15,
+        'max_daily_loss': 2500,
+        'max_trades_per_day': 2,
     })
 
     assert response.status_code == 200
@@ -146,3 +157,9 @@ def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> N
     assert body['signals'][0]['option_strike'] == '100CE'
     assert body['execution_summary']['mode'] == 'NONE'
     assert body['report_artifacts']['json_report']['local_path'].endswith('mock.json')
+    assert captured['entry_cutoff_hhmm'] == '11:30'
+    assert captured['cost_bps'] == 12.5
+    assert captured['fixed_cost_per_trade'] == 15
+    assert captured['max_daily_loss'] == 2500
+    assert captured['max_trades_per_day'] == 2
+

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -279,6 +279,11 @@ def run_live_trading_analysis(
     mtf_setup_mode: str,
     mtf_retest_strength: bool,
     mtf_max_trades_per_day: int,
+    entry_cutoff_hhmm: str = '',
+    cost_bps: float = 0.0,
+    fixed_cost_per_trade: float = 0.0,
+    max_daily_loss: float | None = None,
+    max_trades_per_day: int | None = None,
     fetch_option_metrics: bool = False,
     send_telegram: bool = False,
     telegram_token: str = '',
@@ -312,6 +317,11 @@ def run_live_trading_analysis(
         mtf_setup_mode=str(mtf_setup_mode),
         mtf_retest_strength=bool(mtf_retest_strength),
         mtf_max_trades_per_day=int(mtf_max_trades_per_day),
+        entry_cutoff=str(entry_cutoff_hhmm),
+        cost_bps=float(cost_bps),
+        fixed_cost_per_trade=float(fixed_cost_per_trade),
+        max_daily_loss=max_daily_loss,
+        max_trades_per_day=max_trades_per_day,
     )
     signal_rows = run_strategy_workflow(
         context,
@@ -352,10 +362,18 @@ def run_live_trading_analysis(
                 candidates,
                 Path(str(live_log_path)),
                 deduplicate=True,
+                max_trades_per_day=max_trades_per_day,
+                max_daily_loss=max_daily_loss,
                 **_resolve_live_execution_kwargs(security_map_path),
             )
         else:
-            result = execute_paper_trades(candidates, Path(str(paper_log_path)), deduplicate=True)
+            result = execute_paper_trades(
+                candidates,
+                Path(str(paper_log_path)),
+                deduplicate=True,
+                max_trades_per_day=max_trades_per_day,
+                max_daily_loss=max_daily_loss,
+            )
         execution_summary = {
             'mode': execution_mode,
             'executed_count': result.executed_count,
@@ -385,3 +403,4 @@ def run_live_trading_analysis(
     }
     response['report_artifacts'] = _build_report_artifacts(response)
     return response
+

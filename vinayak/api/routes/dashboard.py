@@ -76,6 +76,11 @@ def post_live_analysis(request: LiveAnalysisRequest) -> LiveAnalysisResponse:
         mtf_setup_mode=request.mtf_setup_mode,
         mtf_retest_strength=request.mtf_retest_strength,
         mtf_max_trades_per_day=request.mtf_max_trades_per_day,
+        entry_cutoff_hhmm=request.entry_cutoff_hhmm,
+        cost_bps=request.cost_bps,
+        fixed_cost_per_trade=request.fixed_cost_per_trade,
+        max_daily_loss=request.max_daily_loss,
+        max_trades_per_day=request.max_trades_per_day,
     )
     return LiveAnalysisResponse(
         symbol=result['symbol'],
@@ -98,3 +103,4 @@ def post_live_analysis(request: LiveAnalysisRequest) -> LiveAnalysisResponse:
             summary_report=ReportArtifactLocation(**result['report_artifacts']['summary_report']),
         ),
     )
+

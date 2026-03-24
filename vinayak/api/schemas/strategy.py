@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 
@@ -126,3 +126,9 @@ class LiveAnalysisRequest(BaseModel):
     mtf_setup_mode: str = Field(default='either')
     mtf_retest_strength: bool = Field(default=True)
     mtf_max_trades_per_day: int = Field(default=3, ge=1)
+    entry_cutoff_hhmm: str = Field(default='')
+    cost_bps: float = Field(default=0.0, ge=0)
+    fixed_cost_per_trade: float = Field(default=0.0, ge=0)
+    max_daily_loss: float | None = Field(default=None, ge=0)
+    max_trades_per_day: int | None = Field(default=None, ge=1)
+

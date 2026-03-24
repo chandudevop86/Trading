@@ -6,7 +6,7 @@ from typing import Any
 
 from src.breakout_bot import Candle, _coerce_candles, add_intraday_vwap, load_candles
 from src.csv_io import read_csv_rows, write_csv_rows
-from src.trading_core import ScoringConfig, StandardTrade, safe_quantity, weighted_score
+from src.trading_core import ScoringConfig, ScoreThresholds, StandardTrade, safe_quantity, weighted_score
 
 
 @dataclass(slots=True)
@@ -20,7 +20,12 @@ class IndicatorConfig:
     rsi_oversold: float = 30.0
     adx_trend_min: float = 20.0
     mode: str = 'Balanced'
+    duplicate_signal_cooldown_bars: int = 4
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
+
+    def __post_init__(self) -> None:
+        self.scoring.mode = self.mode
+        self.scoring.thresholds = ScoreThresholds(conservative=6.0, balanced=4.0, aggressive=2.5)
 
 
 def _ema(values: list[float], period: int) -> list[float | None]:
@@ -216,13 +221,31 @@ def build_indicator_summary(rows: list[dict[str, object]]) -> str:
     )
 
 
-def _trade_side(row: dict[str, object]) -> str:
-    signal = str(row.get('market_signal', '')).upper()
-    if signal in {'BULLISH_TREND', 'OVERSOLD', 'BUY', 'LONG'}:
-        return 'BUY'
-    if signal in {'BEARISH_TREND', 'OVERBOUGHT', 'SELL', 'SHORT'}:
-        return 'SELL'
-    return ''
+def _score_side(row: dict[str, object], side: str, config: IndicatorConfig) -> tuple[float, dict[str, float], str] | None:
+    close_price = float(row.get('close', 0.0) or 0.0)
+    vwap_price = float(row.get('vwap', 0.0) or 0.0)
+    rsi_value = float(row.get('rsi') or 0.0)
+    adx_value = float(row.get('adx') or 0.0)
+    macd_value = float(row.get('macd') or 0.0)
+    macd_signal = float(row.get('macd_signal') or 0.0)
+    hist = float(row.get('macd_hist') or 0.0)
+    trend_strength = str(row.get('trend_strength', ''))
+    score = weighted_score(
+        {
+            'trend': trend_strength in {'STRONG', 'VERY_STRONG', 'MODERATE'},
+            'vwap': close_price >= vwap_price if side == 'BUY' else close_price <= vwap_price,
+            'rsi': (rsi_value >= 46.0 and rsi_value <= config.rsi_overbought + 8.0) if side == 'BUY' else (rsi_value <= 54.0 and rsi_value >= config.rsi_oversold - 8.0),
+            'adx': adx_value >= max(config.adx_trend_min - 3.0, 12.0),
+            'macd': (macd_value >= macd_signal and hist >= -0.08) if side == 'BUY' else (macd_value <= macd_signal and hist <= 0.08),
+            'retest': abs(close_price - vwap_price) <= max(abs(close_price) * 0.002, 0.2),
+            'reaction': abs(hist) >= 0.01,
+        },
+        config.scoring,
+    )
+    if not score.accepted:
+        return None
+    reason = f'{side.lower()} indicator score={score.total:.2f}'
+    return score.total, score.components, reason
 
 
 def generate_trades(
@@ -236,31 +259,21 @@ def generate_trades(
     candles = _coerce_candles(df)
     rows = generate_indicator_rows(candles, cfg)
     trades: list[dict[str, object]] = []
+    last_signal_index: dict[str, int] = {'BUY': -10_000, 'SELL': -10_000}
     for index, row in enumerate(rows):
-        side = _trade_side(row)
-        if side not in {'BUY', 'SELL'}:
+        candidates: list[tuple[str, float, dict[str, float], str]] = []
+        for side in ('BUY', 'SELL'):
+            scored = _score_side(row, side, cfg)
+            if scored is not None:
+                total, components, reason = scored
+                candidates.append((side, total, components, reason))
+        if not candidates:
+            continue
+        side, score_value, components, reason = max(candidates, key=lambda item: item[1])
+        if index - last_signal_index[side] < int(cfg.duplicate_signal_cooldown_bars):
             continue
         close_price = float(row.get('close', 0.0) or 0.0)
-        vwap_price = float(row.get('vwap', 0.0) or 0.0)
-        rsi_value = float(row.get('rsi') or 0.0)
-        adx_value = float(row.get('adx') or 0.0)
-        trend_strength = str(row.get('trend_strength', ''))
-        score = weighted_score(
-            {
-                'trend': trend_strength in {'STRONG', 'VERY_STRONG', 'MODERATE'},
-                'vwap': close_price >= vwap_price if side == 'BUY' else close_price <= vwap_price,
-                'rsi': (rsi_value >= 50.0) if side == 'BUY' else (rsi_value <= 50.0),
-                'adx': adx_value >= float(cfg.adx_trend_min),
-                'zone': False,
-                'fvg': False,
-                'sweep': False,
-                'retest': bool(index > 0),
-            },
-            cfg.scoring,
-        )
-        if not score.accepted:
-            continue
-        if index == 0:
+        if close_price <= 0 or index == 0:
             continue
         prev_low = float(rows[index - 1].get('low', close_price) or close_price)
         prev_high = float(rows[index - 1].get('high', close_price) or close_price)
@@ -269,6 +282,8 @@ def generate_trades(
         quantity = safe_quantity(capital, risk_pct, close_price, stop_loss)
         if quantity <= 0:
             continue
+        market_signal = str(row.get('market_signal', 'NEUTRAL'))
+        setup_type = 'trend' if market_signal in {'BULLISH_TREND', 'BEARISH_TREND'} else 'continuation'
         trades.append(
             StandardTrade(
                 timestamp=str(row.get('timestamp', '')),
@@ -277,21 +292,30 @@ def generate_trades(
                 stop_loss=stop_loss,
                 target=target,
                 strategy='INDICATOR',
-                reason=f"{row.get('market_signal', 'SIGNAL')} score={score.total:.2f}",
-                score=score.total,
+                reason=reason,
+                score=score_value,
                 entry_price=close_price,
                 target_price=target,
                 risk_per_unit=abs(close_price - stop_loss),
                 quantity=quantity,
                 extra={
-                    'market_signal': row.get('market_signal', ''),
+                    'setup_type': setup_type,
+                    'trend_score': round(components.get('trend', 0.0), 2),
+                    'indicator_score': round(sum(components.get(key, 0.0) for key in ['vwap', 'rsi', 'adx', 'macd']), 2),
+                    'zone_score': round(sum(components.get(key, 0.0) for key in ['retest', 'reaction']), 2),
+                    'total_score': round(score_value, 2),
+                    'rejection_reason': '',
+                    'market_signal': market_signal,
                     'rsi': row.get('rsi', ''),
                     'adx': row.get('adx', ''),
                     'vwap': row.get('vwap', ''),
+                    'macd': row.get('macd', ''),
+                    'macd_signal': row.get('macd_signal', ''),
                     'trend_strength': row.get('trend_strength', ''),
                 },
             ).to_dict()
         )
+        last_signal_index[side] = index
     return trades
 
 

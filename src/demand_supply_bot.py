@@ -3,10 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-import pandas as pd
-
 from src.breakout_bot import Candle, _coerce_candles, add_intraday_vwap
-from src.trading_core import ScoringConfig, StandardTrade, safe_quantity, weighted_score
+from src.trading_core import ScoringConfig, ScoreThresholds, StandardTrade, safe_quantity, weighted_score
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,9 +20,14 @@ class DemandSupplyConfig:
     mode: str = 'Balanced'
     trailing_sl_pct: float = 0.0
     pivot_window: int = 2
-    touch_tolerance_pct: float = 0.005
-    max_trades_per_day: int = 1
+    touch_tolerance_pct: float = 0.006
+    max_trades_per_day: int = 2
+    duplicate_signal_cooldown_bars: int = 4
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
+
+    def __post_init__(self) -> None:
+        self.scoring.mode = self.mode
+        self.scoring.thresholds = ScoreThresholds(conservative=6.0, balanced=4.0, aggressive=2.5)
 
 
 def _group_by_day(candles: list[Candle]) -> dict[object, list[Candle]]:
@@ -60,29 +63,45 @@ def _trend_ok(day_candles: list[Candle], idx: int, side: str) -> bool:
     return close <= fast <= slow
 
 
-def _score_retest(day_candles: list[Candle], idx: int, zone: Zone, side: str, config: DemandSupplyConfig) -> tuple[float, str] | None:
+def _reaction_strength(candle: Candle, side: str) -> float:
+    body = abs(float(candle.close) - float(candle.open))
+    full_range = max(float(candle.high) - float(candle.low), 0.01)
+    wick = (float(candle.close) - float(candle.low)) if side == 'BUY' else (float(candle.high) - float(candle.close))
+    return max(body / full_range, wick / full_range)
+
+
+def _zone_mid(zone: Zone) -> float:
+    return (float(zone.low) + float(zone.high)) / 2.0
+
+
+def _score_retest(day_candles: list[Candle], idx: int, zone: Zone, side: str, config: DemandSupplyConfig, touch: bool, strong_close: bool) -> tuple[float, dict[str, float], str, str] | None:
     candle = day_candles[idx]
     prev_close = float(day_candles[idx - 1].close) if idx > 0 else float(candle.close)
     close = float(candle.close)
     vwap_ok = close >= float(candle.vwap) if side == 'BUY' else close <= float(candle.vwap)
     rsi_proxy = close >= prev_close if side == 'BUY' else close <= prev_close
-    adx_proxy = abs(close - prev_close) >= max(abs(close) * 0.0015, 0.2)
+    adx_proxy = abs(close - prev_close) >= max(abs(close) * 0.0012, 0.12)
+    reaction = _reaction_strength(candle, side)
+    sweep = (float(candle.low) < float(zone.low)) if side == 'BUY' else (float(candle.high) > float(zone.high))
     score = weighted_score(
         {
             'trend': _trend_ok(day_candles, idx, side),
             'vwap': vwap_ok,
             'rsi': rsi_proxy,
             'adx': adx_proxy,
-            'zone': True,
-            'fvg': False,
-            'sweep': (float(candle.low) < float(zone.low)) if side == 'BUY' else (float(candle.high) > float(zone.high)),
-            'retest': True,
+            'zone': touch,
+            'retest': strong_close,
+            'reaction': reaction >= 0.38,
+            'sweep': sweep,
         },
         config.scoring,
     )
     if not score.accepted:
         return None
-    return score.total, f'{side.lower()} zone retest score={score.total:.2f}'
+    setup_type = 'retest' if strong_close else 'secondary'
+    reason = f'{side.lower()} zone {setup_type} score={score.total:.2f}'
+    rejection_reason = '' if score.accepted else ','.join(f'missing_{name}' for name in score.reasons)
+    return score.total, score.components, reason, rejection_reason
 
 
 def generate_trades(
@@ -94,8 +113,8 @@ def generate_trades(
     *,
     trailing_sl_pct: float = 0.0,
     pivot_window: int = 2,
-    touch_tolerance_pct: float = 0.005,
-    max_trades_per_day: int = 1,
+    touch_tolerance_pct: float = 0.006,
+    max_trades_per_day: int = 2,
 ) -> list[dict[str, object]]:
     cfg = config or DemandSupplyConfig()
     if config is None:
@@ -119,43 +138,49 @@ def generate_trades(
         if not zones:
             continue
         trades_taken = 0
+        last_signal_index: dict[str, int] = {'BUY': -10_000, 'SELL': -10_000}
         for zone in sorted(zones, key=lambda z: z.idx, reverse=True):
             if trades_taken >= int(cfg.max_trades_per_day or 1):
                 break
-            side = ''
+            side = 'BUY' if zone.kind == 'demand' else 'SELL'
             entry_idx = -1
             entry = 0.0
             stop = 0.0
             score_value = 0.0
             reason = ''
+            components: dict[str, float] = {}
+            rejection_reason = ''
+            setup_type = 'retest'
             tol = float(cfg.touch_tolerance_pct or 0.0)
 
             for i in range(zone.idx + 1, len(day_candles)):
+                if i - last_signal_index[side] < int(cfg.duplicate_signal_cooldown_bars):
+                    continue
                 candle = day_candles[i]
                 if zone.kind == 'demand':
                     touch = float(candle.low) <= float(zone.high) * (1.0 + tol)
-                    if touch and float(candle.close) > float(zone.high):
-                        score_result = _score_retest(day_candles, i, zone, 'BUY', cfg)
-                        if score_result is None:
-                            continue
-                        score_value, reason = score_result
-                        side = 'BUY'
+                    strong_close = float(candle.close) > float(zone.high)
+                    secondary_close = float(candle.close) > _zone_mid(zone)
+                    score_result = _score_retest(day_candles, i, zone, side, cfg, touch, strong_close)
+                    if touch and (strong_close or secondary_close) and score_result is not None:
+                        score_value, components, reason, rejection_reason = score_result
+                        setup_type = 'retest' if strong_close else 'secondary'
                         entry_idx = i
-                        entry = float(zone.high)
+                        entry = float(zone.high if strong_close else max(_zone_mid(zone), candle.close))
                         stop = min(float(candle.low), float(zone.low))
                         if stop >= entry:
                             stop = entry * 0.999
                         break
                 else:
                     touch = float(candle.high) >= float(zone.low) * (1.0 - tol)
-                    if touch and float(candle.close) < float(zone.low):
-                        score_result = _score_retest(day_candles, i, zone, 'SELL', cfg)
-                        if score_result is None:
-                            continue
-                        score_value, reason = score_result
-                        side = 'SELL'
+                    strong_close = float(candle.close) < float(zone.low)
+                    secondary_close = float(candle.close) < _zone_mid(zone)
+                    score_result = _score_retest(day_candles, i, zone, side, cfg, touch, strong_close)
+                    if touch and (strong_close or secondary_close) and score_result is not None:
+                        score_value, components, reason, rejection_reason = score_result
+                        setup_type = 'retest' if strong_close else 'secondary'
                         entry_idx = i
-                        entry = float(zone.low)
+                        entry = float(zone.low if strong_close else min(_zone_mid(zone), candle.close))
                         stop = max(float(candle.high), float(zone.high))
                         if stop <= entry:
                             stop = entry * 1.001
@@ -220,6 +245,12 @@ def generate_trades(
                 quantity=int(qty),
                 zone_type=zone.kind,
                 extra={
+                    'setup_type': setup_type,
+                    'trend_score': round(components.get('trend', 0.0), 2),
+                    'indicator_score': round(sum(components.get(key, 0.0) for key in ['vwap', 'rsi', 'adx']), 2),
+                    'zone_score': round(sum(components.get(key, 0.0) for key in ['zone', 'retest', 'reaction', 'sweep']), 2),
+                    'total_score': round(score_value, 2),
+                    'rejection_reason': rejection_reason,
                     'day': day.isoformat(),
                     'zone_kind': zone.kind,
                     'zone_low': round(float(zone.low), 4),
@@ -234,4 +265,5 @@ def generate_trades(
             ).to_dict()
             trades.append(trade)
             trades_taken += 1
+            last_signal_index[side] = entry_idx
     return trades

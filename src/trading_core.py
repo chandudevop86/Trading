@@ -102,7 +102,7 @@ class StandardTrade:
         return base
 
 
-def configure_file_logging(log_path: Path | str = Path('data/logs/trading_system.log')) -> logging.Logger:
+def configure_file_logging(log_path: Path | str = Path('logs/errors.log')) -> logging.Logger:
     path = Path(log_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if not any(isinstance(handler, logging.FileHandler) and Path(getattr(handler, 'baseFilename', '')) == path.resolve() for handler in LOGGER.handlers):
@@ -183,8 +183,17 @@ def write_rows(path: Path | str, rows: list[dict[str, object]]) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     frame = pd.DataFrame(rows)
     frame.to_csv(target, index=False)
+    try:
+        from src.aws_storage import sync_path_to_s3_if_enabled
+
+        key_prefix = target.parent.name if target.parent.name else 'data'
+        sync_path_to_s3_if_enabled(target, key_prefix=key_prefix)
+    except Exception:
+        pass
 
 
 def append_log(message: str, *, level: int = logging.INFO) -> None:
     configure_file_logging()
     LOGGER.log(level, message)
+
+

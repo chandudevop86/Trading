@@ -732,7 +732,8 @@ def resolve_security(candidate: dict[str, object], security_map: dict[str, Any] 
             if not option_type:
                 raise DhanExecutionError(OPTION_RESOLUTION_FAILED, f"Option type is required for {trade_symbol}")
             exchange_segment = _clean(candidate.get("exchange_segment") or "NSE_FNO") or "NSE_FNO"
-            if not expiry:
+            allow_expiry_inference = str(candidate.get("allow_expiry_inference", "") or "").strip().lower() in {"1", "true", "yes", "on"}
+            if not expiry and allow_expiry_inference:
                 expiry = infer_option_expiry(security_map, trade_symbol, strike, option_type, exchange_segment=exchange_segment)
             if not expiry:
                 raise DhanExecutionError(INVALID_EXPIRY, f"Option expiry is required for {trade_symbol}")
@@ -855,6 +856,7 @@ def build_order_request_from_candidate(candidate: dict[str, object], *, client_i
         drv_option_type=OPTION_TYPE_MAP.get(option_type, ""),
         drv_strike_price=float(strike_price) if strike_price else None,
     )
+
 
 
 

@@ -43,10 +43,18 @@ def attach_option_strikes(
     annotated: list[dict[str, object]] = []
     for trade in trades:
         trade_copy = dict(trade)
-        spot = float(trade_copy["entry_price"])
+        side = str(trade_copy.get("side", "")).strip().upper()
+        if side not in {"BUY", "SELL"}:
+            annotated.append(trade_copy)
+            continue
+        spot_value = trade_copy.get("entry_price", trade_copy.get("entry", 0.0))
+        spot = float(spot_value or 0.0)
+        if spot <= 0:
+            annotated.append(trade_copy)
+            continue
         strike, option_type = pick_option_strike(
             spot_price=spot,
-            side=str(trade_copy["side"]),
+            side=side,
             step=strike_step,
             moneyness=moneyness,
             steps=steps,
@@ -57,7 +65,6 @@ def attach_option_strikes(
         trade_copy["option_strike"] = f"{strike}{option_type}"
         annotated.append(trade_copy)
     return annotated
-
 
 def strike_selector(trades: list[dict[str, object]], strike_step: int, moneyness: str, steps: int) -> list[dict[str, object]]:
     return attach_option_strikes(trades, strike_step=strike_step, moneyness=moneyness, steps=steps)

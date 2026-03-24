@@ -27,6 +27,7 @@ from src.one_trade_day import generate_trades as generate_one_trade_day_trades
 from src.strike_selector import attach_option_strikes, pick_option_strike
 from src.telegram_notifier import build_trade_summary, send_telegram_message
 from src.live_ohlcv import fetch_live_ohlcv
+from src.dhan_auth import DhanAuthManager
 from src.strategy_service import StrategyContext, run_strategy_workflow
 
 try:
@@ -575,44 +576,59 @@ def _build_dhan_preview_rows(candidates: list[dict[str, object]], security_map_p
 
 def _run_dhan_readiness_check(symbol: str, security_map_path: str) -> list[str]:
     notes: list[str] = []
-    notes.append("PASS client id detected" if os.getenv("DHAN_CLIENT_ID", "").strip() else "FAIL missing DHAN_CLIENT_ID")
-    notes.append("PASS access token detected" if os.getenv("DHAN_ACCESS_TOKEN", "").strip() else "FAIL missing DHAN_ACCESS_TOKEN")
+    auth_config = DhanAuthManager.load_from_env()
+    auth_status = DhanAuthManager.validate_startup(auth_config)
+    notes.extend(f"FAIL {issue}" for issue in auth_status.issues)
+    if auth_config.client_id:
+        notes.append("PASS client id detected")
+    if auth_config.access_token:
+        notes.append("PASS access token detected")
+    if auth_config.access_token_expires_at is not None:
+        expiry_text = auth_config.access_token_expires_at.astimezone(ZoneInfo('UTC')).strftime('%Y-%m-%d %H:%M:%S UTC')
+        notes.append(f"INFO access token expiry: {expiry_text} ({auth_config.expiry_source or 'derived'})")
+    notes.extend(f"WARN {warning}" for warning in auth_status.warnings)
     path = Path(str(security_map_path))
     notes.append(f"PASS security map found: {path}" if path.exists() else f"WARN security map missing: {path}")
     notes.append(f"INFO live symbol context: {symbol}")
     return notes
 
-
 def _render_dhan_status_panel(symbol: str, security_map_path: str, execution_mode: str, reviewed_candidates: list[dict[str, object]]) -> None:
-    client_id = os.getenv("DHAN_CLIENT_ID", "").strip()
-    access_token = os.getenv("DHAN_ACCESS_TOKEN", "").strip()
+    auth_config = DhanAuthManager.load_from_env()
+    auth_status = DhanAuthManager.validate_startup(auth_config)
+    client_id = auth_config.client_id
+    access_token = auth_config.access_token
     client_id_present = bool(client_id)
     access_token_present = bool(access_token)
     security_map_exists = Path(str(security_map_path)).exists()
     builder_ready = build_order_request_from_candidate is not None and load_security_map is not None
     reviewed_count = len(reviewed_candidates)
     env_sources = ", ".join(str(path) for path in ENV_BOOTSTRAP_SOURCES) or "process environment only"
-    live_ready = str(execution_mode).upper() == "LIVE" and client_id_present and access_token_present and security_map_exists and builder_ready and reviewed_count > 0
+    live_ready = str(execution_mode).upper() == "LIVE" and auth_status.ok and security_map_exists and builder_ready and reviewed_count > 0
+    expiry_label = "Unknown"
+    if auth_config.access_token_expires_at is not None:
+        expiry_label = auth_config.access_token_expires_at.astimezone(ZoneInfo('UTC')).strftime('%Y-%m-%d %H:%M UTC')
 
-    st.caption("Dhan Status: credentials, security map, payload builder, and reviewed queue readiness.")
-    cols = st.columns(5)
+    st.caption("Dhan Status: credentials, token health, security map, payload builder, and reviewed queue readiness.")
+    cols = st.columns(6)
     cols[0].metric("Client ID", _mask_env_value(client_id))
     cols[1].metric("Access Token", _mask_env_value(access_token))
-    cols[2].metric("Security Map", "Found" if security_map_exists else "Missing")
-    cols[3].metric("Payload Builder", "Ready" if builder_ready else "Unavailable")
-    cols[4].metric("Live Ready", "YES" if live_ready else "NO")
+    cols[2].metric("Token Expiry", expiry_label)
+    cols[3].metric("Security Map", "Found" if security_map_exists else "Missing")
+    cols[4].metric("Payload Builder", "Ready" if builder_ready else "Unavailable")
+    cols[5].metric("Live Ready", "YES" if live_ready else "NO")
 
     status_rows = [
         {"check": "Broker mode", "status": str(execution_mode).upper(), "detail": "LIVE mode is required for Dhan order routing."},
         {"check": "Reviewed queue", "status": str(reviewed_count), "detail": "Only reviewed actionable trades are eligible for execution."},
         {"check": "Client ID source", "status": "Loaded" if client_id_present else "Missing", "detail": env_sources},
         {"check": "Access token source", "status": "Loaded" if access_token_present else "Missing", "detail": env_sources},
+        {"check": "Access token expiry", "status": expiry_label, "detail": auth_config.expiry_source or "No explicit expiry metadata found."},
+        {"check": "Startup validation", "status": "PASS" if auth_status.ok else "FAIL", "detail": "; ".join(auth_status.issues or auth_status.warnings or ["Credentials look usable at startup."])},
         {"check": "Symbol", "status": str(symbol), "detail": "Current live symbol context."},
         {"check": "Security map path", "status": str(security_map_path), "detail": "CSV used to map option/future contracts to Dhan security IDs."},
     ]
 
     st.dataframe(pd.DataFrame(status_rows), width="stretch", hide_index=True)
-
 def _render_live_execution_feedback(rows: list[dict[str, object]]) -> None:
     if not rows:
         return

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from src.dhan_auth import DhanAuthManager
 from src.dhan_api import DhanClient
 
 
@@ -20,6 +21,10 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    auth_config = DhanAuthManager.load_from_env()
+    auth_status = DhanAuthManager.validate_startup(auth_config)
+    if not auth_status.ok:
+        raise SystemExit('; '.join(auth_status.issues))
     client = DhanClient.from_env()
 
     if args.resource == "positions":

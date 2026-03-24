@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from src.dhan_auth import DhanAuthManager
 from src.dhan_api import DhanClient, build_order_request_from_candidate, load_security_map
 
 
@@ -50,7 +51,11 @@ def build_candidate(args: argparse.Namespace) -> dict[str, object]:
 def main() -> None:
     args = parse_args()
     security_map = load_security_map(args.security_map)
-    client_id = DhanClient.from_env().client_id if args.place_live else "PREVIEW_CLIENT"
+    auth_config = DhanAuthManager.load_from_env()
+    auth_status = DhanAuthManager.validate_startup(auth_config)
+    if args.place_live and not auth_status.ok:
+        raise SystemExit('; '.join(auth_status.issues))
+    client_id = auth_config.client_id if args.place_live else "PREVIEW_CLIENT"
     candidate = build_candidate(args)
     order_request = build_order_request_from_candidate(
         candidate,

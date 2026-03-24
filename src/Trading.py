@@ -415,11 +415,28 @@ def _order_trade_columns(df: pd.DataFrame) -> pd.DataFrame:
     ordered.extend([c for c in df.columns if c not in ordered])
     return df.loc[:, ordered]
 
+def _sanitize_streamlit_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df
+
+    cleaned = df.copy()
+    for column in cleaned.columns:
+        series = cleaned[column]
+        if str(series.dtype) != "object":
+            continue
+        non_null = [value for value in series.tolist() if value is not None and not pd.isna(value)]
+        if not non_null:
+            continue
+        value_types = {type(value) for value in non_null}
+        if len(value_types) <= 1:
+            continue
+        cleaned[column] = series.map(lambda value: "" if value is None or pd.isna(value) else str(value))
+    return cleaned
+
 def _style_order_trade_table(df: pd.DataFrame) -> object:
-    formatted = _order_trade_columns(df)
+    formatted = _sanitize_streamlit_dataframe(_order_trade_columns(df))
     if formatted is None or formatted.empty:
         return formatted
-
     def _cell_style(value: object, column: str) -> str:
         text = str(value or "").strip().upper()
         if column == "side":

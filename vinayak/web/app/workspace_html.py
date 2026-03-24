@@ -80,16 +80,6 @@ def _page(title: str, body: str, script: str = '') -> str:
     .toggle {{ display:flex; align-items:center; gap:10px; padding:11px 12px; border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,0.03); }}
     .toggle input {{ width:auto; min-height:auto; accent-color: var(--accent); }}
     .actions, .page-links {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }}
-    .hero-strip { display:grid; grid-template-columns: 1.2fr repeat(4, minmax(0, 1fr)); gap:12px; margin:0 0 18px 0; padding:18px; border:1px solid var(--line); border-radius:22px; background: linear-gradient(135deg, rgba(15,23,42,0.92), rgba(13,34,58,0.92)); box-shadow: var(--shadow); }
-    .hero-main { padding-right:10px; }
-    .hero-kicker { color:#8eb8e8; font-size:12px; letter-spacing:0.14em; text-transform:uppercase; margin-bottom:8px; }
-    .hero-symbol { font-size:32px; font-weight:800; color:#ffffff; }
-    .hero-price { font-size:20px; font-weight:700; color:#f4f8ff; margin-top:4px; }
-    .hero-change { font-size:14px; margin-top:6px; color:#8ea6c7; }
-    .hero-tile { border:1px solid var(--line); border-radius:18px; padding:14px; background: rgba(255,255,255,0.04); }
-    .hero-label { color:#8ea6c7; font-size:11px; text-transform:uppercase; letter-spacing:0.10em; }
-    .hero-value { margin-top:8px; font-size:18px; font-weight:800; color:#ffffff; }
-
     .flash {{ margin-bottom:12px; padding:12px 14px; border-radius:14px; border:1px solid var(--line); display:none; font-weight:700; }}
     .flash.good {{ display:block; background: rgba(34,197,94,0.12); color:#bbf7d0; border-color: rgba(74,222,128,0.24); }}
     .flash.bad {{ display:block; background: rgba(251,113,133,0.12); color:#fecdd3; border-color: rgba(251,113,133,0.24); }}
@@ -140,20 +130,7 @@ WORKSPACE_HTML = _page(
       <button class=\"top-tab\" type=\"button\" data-scroll=\"tradesSection\">Trades</button>
     </div>
 
-    <div id=\"heroSection\" class=\"hero-strip\">
-      <div class=\"hero-main\">
-        <div class=\"hero-kicker\">Market Snapshot</div>
-        <div class=\"hero-symbol\" id=\"heroSymbol\">^NSEI</div>
-        <div class=\"hero-price\">Spot LTP <span id=\"heroPrice\">-</span></div>
-        <div class=\"hero-change\" id=\"heroChange\">Run live analysis or preview candles to update the market strip.</div>
-      </div>
-      <div class=\"hero-tile\"><div class=\"hero-label\">Strategy</div><div id=\"statStrategy\" class=\"hero-value\">-</div></div>
-      <div class=\"hero-tile\"><div class=\"hero-label\">Candles</div><div id=\"statCandles\" class=\"hero-value\">0</div></div>
-      <div class=\"hero-tile\"><div class=\"hero-label\">Signals</div><div id=\"statSignals\" class=\"hero-value\">0</div></div>
-      <div class=\"hero-tile\"><div class=\"hero-label\">Execution</div><div id=\"statExecution\" class=\"hero-value\">NONE</div></div>
-    </div>
-
-    <div class=\"hero\">
+    <div id=\"heroSection\" class=\"hero\">
       <section class=\"card\">
         <div class=\"eyebrow\">Common Actions</div>
         <h1>Run live market analysis and review the latest trading setup from one clean page.</h1>
@@ -167,10 +144,10 @@ WORKSPACE_HTML = _page(
       </section>
       <aside class=\"card\">
         <div class=\"stats\">
-          <div class=\"stat\"><div class=\"label\">Support</div><div id=\"heroSupport\" class=\"value\">-</div></div>
-          <div class=\"stat\"><div class=\"label\">Resistance</div><div id=\"heroResistance\" class=\"value\">-</div></div>
-          <div class=\"stat\"><div class=\"label\">Telegram</div><div id=\"heroTelegram\" class=\"value\">Idle</div></div>
-          <div class=\"stat\"><div class=\"label\">Mode</div><div id=\"heroMode\" class=\"value\">Manual</div></div>
+          <div class=\"stat\"><div class=\"label\">Last Strategy</div><div id=\"statStrategy\" class=\"value\">-</div></div>
+          <div class=\"stat\"><div class=\"label\">Candles</div><div id=\"statCandles\" class=\"value\">0</div></div>
+          <div class=\"stat\"><div class=\"label\">Signals</div><div id=\"statSignals\" class=\"value\">0</div></div>
+          <div class=\"stat\"><div class=\"label\">Execution</div><div id=\"statExecution\" class=\"value\">NONE</div></div>
         </div>
       </aside>
     </div>
@@ -338,20 +315,6 @@ WORKSPACE_HTML = _page(
       document.getElementById('statCandles').textContent = String(result.candle_count || 0);
       document.getElementById('statSignals').textContent = String(result.signal_count || 0);
       document.getElementById('statExecution').textContent = result.execution_summary?.mode || 'NONE';
-      document.getElementById('heroSymbol').textContent = result.symbol || '^NSEI';
-      const latestCandle = (result.candles || []).length ? result.candles[result.candles.length - 1] : null;
-      document.getElementById('heroPrice').textContent = latestCandle && latestCandle.close != null ? String(latestCandle.close) : '-';
-      document.getElementById('heroChange').textContent = latestCandle ? ((latestCandle.timestamp || '') + ' | ' + (latestCandle.source || 'LIVE')) : 'Run live analysis or preview candles to update the market strip.';
-      const prices = (result.candles || []).map((row) => Number(row.close || 0)).filter((value) => Number.isFinite(value) && value > 0);
-      if (prices.length) {
-        document.getElementById('heroSupport').textContent = String(Math.min(...prices));
-        document.getElementById('heroResistance').textContent = String(Math.max(...prices));
-      } else {
-        document.getElementById('heroSupport').textContent = '-';
-        document.getElementById('heroResistance').textContent = '-';
-      }
-      document.getElementById('heroTelegram').textContent = result.telegram_sent ? 'Sent' : 'Idle';
-      document.getElementById('heroMode').textContent = result.execution_summary?.mode || 'Manual';
       document.getElementById('sideCounts').textContent = JSON.stringify(result.side_counts || {});
       document.getElementById('telegramStatus').textContent = result.telegram_sent ? 'Sent' : (result.telegram_error || 'Not sent');
       document.getElementById('generatedAt').textContent = result.generated_at || '-';
@@ -533,6 +496,3 @@ WORKSPACE_DOWNLOADS_HTML = _page(
   </script>
     """
 )
-
-
-

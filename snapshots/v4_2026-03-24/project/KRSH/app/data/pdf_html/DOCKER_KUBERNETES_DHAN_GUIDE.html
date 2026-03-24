@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Docker Kubernetes Dhan Guide</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; color: #111; line-height: 1.5; font-size: 14px; }
+h1 { font-size: 24px; margin-bottom: 24px; }
+.section { margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<h1>Docker Kubernetes Dhan Guide</h1>
+<div class="section"># Docker + Kubernetes + Dhan API (Future) Guide<br/>
+<br/>
+This guide deploys the Streamlit app with Docker and Kubernetes, routes traffic from `chandudevopai.shop`, and keeps a future-ready Dhan API tab in the app.<br/>
+<br/>
+## 1) Local Docker run<br/>
+<br/>
+```bash<br/>
+cd /opt/intratrade<br/>
+vim deploy/docker/Dockerfile<br/>
+vim deploy/docker/docker-compose.yml<br/>
+<br/>
+# Build image<br/>
+docker build -f deploy/docker/Dockerfile -t intratrade:latest .<br/>
+<br/>
+# Run container<br/>
+docker compose -f deploy/docker/docker-compose.yml up -d<br/>
+<br/>
+# Verify<br/>
+docker ps<br/>
+docker logs intratrade_app --tail 100<br/>
+```<br/>
+<br/>
+Open `http://&lt;server-ip&gt;:8501`.<br/>
+<br/>
+## 2) Kubernetes deployment (single node or cluster)<br/>
+<br/>
+```bash<br/>
+cd /opt/intratrade<br/>
+<br/>
+# Create namespace + config<br/>
+kubectl apply -f deploy/k8s/namespace.yaml<br/>
+kubectl apply -f deploy/k8s/configmap.yaml<br/>
+<br/>
+# Create secrets from template<br/>
+cp deploy/k8s/secret.example.yaml deploy/k8s/secret.yaml<br/>
+vim deploy/k8s/secret.yaml<br/>
+kubectl apply -f deploy/k8s/secret.yaml<br/>
+<br/>
+# Apply workload<br/>
+kubectl apply -f deploy/k8s/deployment.yaml<br/>
+kubectl apply -f deploy/k8s/service.yaml<br/>
+kubectl apply -f deploy/k8s/ingress.yaml<br/>
+kubectl apply -f deploy/k8s/hpa.yaml<br/>
+<br/>
+# Verify<br/>
+kubectl get all -n intratrade<br/>
+kubectl get ingress -n intratrade<br/>
+```<br/>
+<br/>
+## 3) Push image to registry (recommended)<br/>
+<br/>
+```bash<br/>
+# Example with Docker Hub<br/>
+docker tag intratrade:latest &lt;dockerhub-user&gt;/intratrade:latest<br/>
+docker push &lt;dockerhub-user&gt;/intratrade:latest<br/>
+<br/>
+# Then update deploy/k8s/deployment.yaml image:<br/>
+# image: &lt;dockerhub-user&gt;/intratrade:latest<br/>
+kubectl apply -f deploy/k8s/deployment.yaml<br/>
+```<br/>
+<br/>
+## 4) Domain routing<br/>
+<br/>
+Set DNS A record:<br/>
+- Host: `chandudevopai.shop`<br/>
+- Value: your load balancer/public IP<br/>
+<br/>
+If using NGINX ingress controller, ensure ports 80/443 are open.<br/>
+<br/>
+For TLS (HTTPS):<br/>
+- Install cert-manager in cluster.<br/>
+- Add TLS secret and issuer in ingress manifest.<br/>
+<br/>
+## 5) App feature included for future Dhan API<br/>
+<br/>
+The app now includes strategy tab:<br/>
+- `Dhan API (Future)`<br/>
+<br/>
+Inside that tab:<br/>
+- Auth panel for `client_id` and access token<br/>
+- Market feed contract example<br/>
+- Order router payload example<br/>
+- Webhook event schema example<br/>
+- Downloadable `dhan_order_template.csv`<br/>
+<br/>
+Current status:<br/>
+- Dhan tab is scaffold-only (safe for future extension)<br/>
+- Existing bots continue to run normally<br/>
+<br/>
+## 6) Useful operations<br/>
+<br/>
+```bash<br/>
+# Restart app deployment<br/>
+kubectl rollout restart deployment intratrade-app -n intratrade<br/>
+<br/>
+# Follow logs<br/>
+kubectl logs -f deployment/intratrade-app -n intratrade<br/>
+<br/>
+# Scale manually<br/>
+kubectl scale deployment intratrade-app --replicas=2 -n intratrade<br/>
+<br/>
+# Remove everything<br/>
+kubectl delete ns intratrade<br/>
+```<br/>
+</div>
+</body>
+</html>

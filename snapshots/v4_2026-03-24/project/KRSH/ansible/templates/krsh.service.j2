@@ -1,0 +1,12 @@
+﻿[Unit]
+Description=KRSH Trading Platform
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/krsh
+ExecStart=/usr/bin/docker compose -f /opt/krsh/docker/docker-compose.yml up
+ExecStop=/usr/bin/docker compose -f /opt/krsh/docker/docker-compose.yml down
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

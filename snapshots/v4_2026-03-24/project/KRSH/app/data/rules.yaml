@@ -1,0 +1,14 @@
+﻿- name: high_value
+  field: amount
+  op: ">"
+  value: 10000
+
+- name: risky_country
+  field: country
+  op: "in"
+  value: ["IR", "KP", "SY"]
+
+- name: active_user
+  field: status
+  op: "=="
+  value: "active"

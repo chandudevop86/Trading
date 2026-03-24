@@ -63,15 +63,17 @@ def _page(title: str, body: str, script: str = '') -> str:
     .lead {{ margin:0; color:var(--muted); font-size:17px; line-height:1.7; max-width:760px; }}
     .ribbon {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }}
     .pill {{ padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:rgba(255,255,255,0.04); color:#e8f1ff; font-size:13px; font-weight:700; }}
-    .stats, .metric-row, .grid2, .grid3, .report-grid {{ display:grid; gap:12px; }}
+    .stats, .metric-row, .grid2, .grid3, .report-grid, .grid4 {{ display:grid; gap:12px; }}
     .stats {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     .metric-row {{ grid-template-columns: repeat(4, minmax(0, 1fr)); }}
+    .grid4 {{ grid-template-columns: repeat(4, minmax(0, 1fr)); }}
     .grid2 {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     .grid3 {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
     .report-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
     .stat, .metric, .report-card {{ padding:16px; border:1px solid var(--line); border-radius:18px; background: rgba(255,255,255,0.03); }}
     .label {{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }}
     .value {{ margin-top:7px; font-size:26px; font-weight:800; }}
+    .mini-value {{ margin-top:6px; font-size:16px; font-weight:700; color:#f4f8ff; }}
     .layout {{ display:grid; grid-template-columns: 390px minmax(0, 1fr); gap:18px; }}
     .stack {{ display:grid; gap:18px; }}
     .section-title {{ margin:0 0 14px; font-size:19px; color:#f4f8ff; }}
@@ -91,7 +93,7 @@ def _page(title: str, body: str, script: str = '') -> str:
     pre {{ margin:0; padding:14px; white-space:pre-wrap; font-size:12px; line-height:1.5; max-height: 360px; overflow:auto; }}
     .muted {{ color:var(--muted); }}
     .footer-note {{ margin-top:10px; font-size:12px; color:var(--muted); }}
-    @media (max-width: 1180px) {{ .hero, .layout, .metric-row, .report-grid {{ grid-template-columns: 1fr; }} .grid3 {{ grid-template-columns: 1fr; }} }}
+    @media (max-width: 1180px) {{ .hero, .layout, .metric-row, .report-grid, .grid4 {{ grid-template-columns: 1fr; }} .grid3 {{ grid-template-columns: 1fr; }} }}
     @media (max-width: 760px) {{ .grid2, .stats {{ grid-template-columns: 1fr; }} .nav {{ flex-direction:column; align-items:flex-start; }} }}
   </style>
 </head>
@@ -132,14 +134,14 @@ WORKSPACE_HTML = _page(
 
     <div id=\"heroSection\" class=\"hero\">
       <section class=\"card\">
-        <div class=\"eyebrow\">Common Actions</div>
-        <h1>Run live market analysis and review the latest trading setup from one clean page.</h1>
-        <p class=\"lead\">This page keeps the most-used KRSH trading flow together: choose your symbol and strategy, fetch candles, run analysis, and review signals. Reports and downloads are moved to separate pages so the main workspace stays simple.</p>
+        <div class=\"eyebrow\">v4 Workspace</div>
+        <h1>Operate Vinayak like the latest desk: scan, review, and route from one focused page.</h1>
+        <p class=\"lead\">This v4 workspace view brings the denser trading-desk treatment into Vinayak without losing the clean FastAPI flow. Keep market setup, risk controls, execution routing, and last-run visibility together, while reports and downloads stay on their own pages.</p>
         <div class=\"ribbon\">
-          <div class=\"pill\">Live analysis</div>
-          <div class=\"pill\">Trade review</div>
-          <div class=\"pill\">Option metrics</div>
-          <div class=\"pill\">Telegram and execution</div>
+          <div class=\"pill\">Market setup</div>
+          <div class=\"pill\">Execution access</div>
+          <div class=\"pill\">Run context</div>
+          <div class=\"pill\">Reports split out</div>
         </div>
       </section>
       <aside class=\"card\">
@@ -149,18 +151,24 @@ WORKSPACE_HTML = _page(
           <div class=\"stat\"><div class=\"label\">Signals</div><div id=\"statSignals\" class=\"value\">0</div></div>
           <div class=\"stat\"><div class=\"label\">Execution</div><div id=\"statExecution\" class=\"value\">NONE</div></div>
         </div>
+        <div class=\"grid2\" style=\"margin-top:12px;\">
+          <div class=\"stat\"><div class=\"label\">Symbol</div><div id=\"statSymbol\" class=\"mini-value\">^NSEI</div></div>
+          <div class=\"stat\"><div class=\"label\">Timeframe</div><div id=\"statTimeframe\" class=\"mini-value\">5m / 1d</div></div>
+        </div>
       </aside>
     </div>
 
     <div class=\"layout\">
       <section id=\"controlSection\" class=\"card\">
-        <h2 class=\"section-title\">Strategy Control Panel</h2>
+        <h2 class=\"section-title\">v4 Strategy Desk</h2>
         <div id=\"flash\" class=\"flash\"></div>
         <div class=\"grid2\">
           <div><label for=\"symbol\">Symbol</label><input id=\"symbol\" value=\"^NSEI\" /></div>
           <div><label for=\"strategy\">Strategy</label><select id=\"strategy\"><option>Breakout</option><option>Demand Supply</option><option>Indicator</option><option>One Trade/Day</option><option>MTF 5m</option><option>BTST</option></select></div>
           <div><label for=\"interval\">Interval</label><select id=\"interval\"><option>1m</option><option selected>5m</option><option>15m</option><option>1h</option><option>1d</option></select></div>
           <div><label for=\"period\">Period</label><select id=\"period\"><option selected>1d</option><option>5d</option><option>1mo</option><option>3mo</option></select></div>
+        </div>
+        <div class=\"grid4\" style=\"margin-top:12px;\">
           <div><label for=\"capital\">Capital</label><input id=\"capital\" type=\"number\" value=\"100000\" /></div>
           <div><label for=\"riskPct\">Risk %</label><input id=\"riskPct\" type=\"number\" step=\"0.1\" value=\"1\" /></div>
           <div><label for=\"rrRatio\">RR Ratio</label><input id=\"rrRatio\" type=\"number\" step=\"0.1\" value=\"2\" /></div>
@@ -171,6 +179,12 @@ WORKSPACE_HTML = _page(
           <div><label for=\"lots\">Lots</label><input id=\"lots\" type=\"number\" value=\"1\" /></div>
           <div><label for=\"executionType\">Execution Type</label><select id=\"executionType\"><option selected>NONE</option><option>PAPER</option><option>LIVE</option></select></div>
           <div><label for=\"strikeSteps\">Strike Steps</label><input id=\"strikeSteps\" type=\"number\" value=\"0\" /></div>
+          <div><label for=\"paperLogPath\">Paper Log Path</label><input id=\"paperLogPath\" value=\"vinayak/data/paper_trading_logs_all.csv\" /></div>
+          <div><label for=\"liveLogPath\">Live Log Path</label><input id=\"liveLogPath\" value=\"vinayak/data/live_trading_logs_all.csv\" /></div>
+        </div>
+        <div class=\"grid2\" style=\"margin-top:12px;\">
+          <div><label for=\"securityMapPath\">Security Map Path</label><input id=\"securityMapPath\" value=\"vinayak/data/dhan_security_map.csv\" /></div>
+          <div><label for=\"deskNote\">Desk Note</label><input id=\"deskNote\" value=\"v4 workspace synced into Vinayak\" /></div>
         </div>
         <div class=\"grid3\" style=\"margin-top:12px;\">
           <div class=\"toggle\"><input id=\"fetchOptionMetrics\" type=\"checkbox\" /><label for=\"fetchOptionMetrics\" style=\"margin:0;\">Fetch Option Metrics</label></div>
@@ -189,7 +203,7 @@ WORKSPACE_HTML = _page(
           <a class=\"button secondary\" href=\"/workspace/reports\">Open Reports Page</a>
           <a class=\"button secondary\" href=\"/workspace/downloads\">Open Downloads Page</a>
         </div>
-        <div class=\"footer-note\">Only the common trading controls stay here. Related outputs are separated to reduce button clutter.</div>
+        <div class=\"footer-note\">The latest v4 desk context now lives in Vinayak: market setup, risk, execution routing, and report handoff in one workspace.</div>
       </section>
 
       <div class=\"stack\">
@@ -198,7 +212,13 @@ WORKSPACE_HTML = _page(
             <div class=\"metric\"><div class=\"label\">Side Counts</div><strong id=\"sideCounts\">No run yet.</strong></div>
             <div class=\"metric\"><div class=\"label\">Telegram</div><strong id=\"telegramStatus\">Not sent.</strong></div>
             <div class=\"metric\"><div class=\"label\">Generated At</div><strong id=\"generatedAt\">-</strong></div>
-            <div class=\"metric\"><div class=\"label\">Related Pages</div><strong style=\"font-size:16px;\">Reports / Downloads</strong></div>
+            <div class=\"metric\"><div class=\"label\">Desk Note</div><strong id=\"deskNoteView\" style=\"font-size:16px;\">v4 workspace synced into Vinayak</strong></div>
+          </div>
+          <div class=\"grid4\" style=\"margin-top:12px;\">
+            <div class=\"metric\"><div class=\"label\">Execution Type</div><strong id=\"executionTypeView\" style=\"font-size:16px;\">NONE</strong></div>
+            <div class=\"metric\"><div class=\"label\">Paper Log</div><strong id=\"paperLogView\" style=\"font-size:16px;\">vinayak/data/paper_trading_logs_all.csv</strong></div>
+            <div class=\"metric\"><div class=\"label\">Live Log</div><strong id=\"liveLogView\" style=\"font-size:16px;\">vinayak/data/live_trading_logs_all.csv</strong></div>
+            <div class=\"metric\"><div class=\"label\">Security Map</div><strong id=\"securityMapView\" style=\"font-size:16px;\">vinayak/data/dhan_security_map.csv</strong></div>
           </div>
         </section>
 
@@ -274,12 +294,16 @@ WORKSPACE_HTML = _page(
         telegram_chat_id: document.getElementById('telegramChatId').value,
         auto_execute: document.getElementById('autoExecute').checked,
         execution_type: document.getElementById('executionType').value,
+        security_map_path: document.getElementById('securityMapPath').value,
+        paper_log_path: document.getElementById('paperLogPath').value,
+        live_log_path: document.getElementById('liveLogPath').value,
         lot_size: Number(document.getElementById('lotSize').value || 0),
         lots: Number(document.getElementById('lots').value || 0),
         mtf_ema_period: 3,
         mtf_setup_mode: 'either',
         mtf_retest_strength: true,
-        mtf_max_trades_per_day: 3
+        mtf_max_trades_per_day: 3,
+        desk_note: document.getElementById('deskNote').value
       };
     }
 
@@ -311,13 +335,21 @@ WORKSPACE_HTML = _page(
 
     function renderResult(result) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
+      const currentPayload = payload();
       document.getElementById('statStrategy').textContent = result.strategy || '-';
       document.getElementById('statCandles').textContent = String(result.candle_count || 0);
       document.getElementById('statSignals').textContent = String(result.signal_count || 0);
       document.getElementById('statExecution').textContent = result.execution_summary?.mode || 'NONE';
+      document.getElementById('statSymbol').textContent = result.symbol || currentPayload.symbol || '-';
+      document.getElementById('statTimeframe').textContent = (result.interval || currentPayload.interval || '-') + ' / ' + (result.period || currentPayload.period || '-');
       document.getElementById('sideCounts').textContent = JSON.stringify(result.side_counts || {});
       document.getElementById('telegramStatus').textContent = result.telegram_sent ? 'Sent' : (result.telegram_error || 'Not sent');
       document.getElementById('generatedAt').textContent = result.generated_at || '-';
+      document.getElementById('deskNoteView').textContent = currentPayload.desk_note || 'v4 workspace synced into Vinayak';
+      document.getElementById('executionTypeView').textContent = currentPayload.execution_type || 'NONE';
+      document.getElementById('paperLogView').textContent = currentPayload.paper_log_path || '-';
+      document.getElementById('liveLogView').textContent = currentPayload.live_log_path || '-';
+      document.getElementById('securityMapView').textContent = currentPayload.security_map_path || '-';
       renderCandles(result.candles || []);
       renderSignals(result.signals || []);
       renderExecutions(result.execution_rows || []);

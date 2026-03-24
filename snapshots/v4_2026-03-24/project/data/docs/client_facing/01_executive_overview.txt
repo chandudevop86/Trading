@@ -1,0 +1,28 @@
+TRADING APP EXECUTIVE OVERVIEW
+
+Overview
+This Trading App is a unified trading workspace designed for market analysis, strategy execution, trade review, and reporting.
+It brings live market data, multiple technical strategies, contract mapping, execution flow, and reporting into one operational platform.
+
+Business Value
+The application helps traders and operations teams reduce manual work by combining market monitoring, strategy testing, signal generation, contract preparation, and reporting in one place.
+
+Core Capabilities
+Live OHLCV market data viewing.
+Multiple strategy engines.
+Options contract selection.
+Futures contract mode.
+Paper execution workflow.
+Live-execution-ready architecture.
+Telegram alerting.
+CSV, HTML, and PDF reporting.
+
+User Benefits
+Faster review of opportunities.
+Structured trading workflow.
+Centralized trade logs.
+Repeatable backtesting and reporting.
+Clear separation between analysis and execution.
+
+Target Usage
+This platform is suitable for active traders, internal trading desks, research teams, and semi-automated strategy operations.

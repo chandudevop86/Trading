@@ -1,0 +1,8 @@
+﻿Restore notes for snapshot v4 (2026-03-24)
+
+This snapshot preserves the project state under snapshots/v4_2026-03-24/project.
+
+To restore manually:
+1. Compare the snapshot contents with the live workspace.
+2. Copy required files/folders from the snapshot project directory back into F:\Trading.
+3. Avoid overwriting newer work unless you intend to roll back.

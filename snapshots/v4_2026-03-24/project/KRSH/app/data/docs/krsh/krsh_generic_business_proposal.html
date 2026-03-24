@@ -1,0 +1,114 @@
+﻿<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>KRSH Generic Business Proposal</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 0; color: #1f2937; line-height: 1.6; font-size: 14px; background: #f3f4f6; }
+.page { padding: 42px 56px; }
+.cover { background: linear-gradient(135deg, #0b132b 0%, #1c2541 55%, #23395d 100%); color: white; padding: 56px; }
+.brand { color: #fca311; letter-spacing: 4px; font-weight: 800; font-size: 15px; }
+.cover h1 { font-size: 36px; margin: 10px 0 8px 0; }
+.cover p { color: #dbe4ff; max-width: 720px; }
+.ribbon { display: inline-block; margin-top: 18px; padding: 10px 16px; border-radius: 999px; background: rgba(255,255,255,0.1); color: #fca311; font-weight: 700; }
+.section { background: white; margin: 18px 0; padding: 24px 26px; border-radius: 18px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06); }
+h2 { color: #0b132b; margin: 0 0 12px 0; font-size: 24px; }
+h3 { color: #1d3557; margin: 18px 0 8px 0; font-size: 18px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.card { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 14px; padding: 16px; }
+.price { font-size: 28px; font-weight: 800; color: #0b132b; }
+.small { color: #6b7280; }
+ul { margin: 8px 0 8px 22px; }
+.table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.table th, .table td { border: 1px solid #e5e7eb; padding: 10px 12px; text-align: left; }
+.table th { background: #f8fafc; }
+.footer { color: #6b7280; font-size: 12px; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="brand">KRSH</div>
+  <h1>KRSH Reusable Trading Platform Proposal</h1>
+  <p>Proposal for a production-ready trading platform that combines live market data, multi-strategy execution workflow, options and futures contract mapping, reporting, and future broker API integration.</p>
+  <div class="ribbon">Reusable Scope + Commercial Summary</div>
+</div>
+<div class="page">
+  <div class="section">
+    <h2>Executive Summary</h2>
+    <p>This proposal presents a structured trading application designed to support live market monitoring, strategy-based trade generation, paper execution, reporting, and future broker connectivity. The platform is suitable for internal desks, trading operations teams, and semi-automated research workflows.</p>
+  </div>
+  <div class="section">
+    <h2>Solution Overview</h2>
+    <div class="grid">
+      <div class="card"><strong>Frontend Layer</strong><br/>Streamlit dashboard for strategy controls, live charts, execution review, and reporting.</div>
+      <div class="card"><strong>Application Layer</strong><br/>Python-based strategy engine, signal flow, futures/options mapping, execution engine, and reporting logic.</div>
+      <div class="card"><strong>Data Layer</strong><br/>Yahoo OHLCV, NSE option-chain inputs, NSE futures data, CSV backtest files, and rule-based scoring.</div>
+      <div class="card"><strong>Operations Layer</strong><br/>Paper execution logs, Telegram alerts, PDF/CSV reports, and future broker API adapters.</div>
+    </div>
+  </div>
+  <div class="section">
+    <h2>Scope of Work</h2>
+    <h3>Included Scope</h3>
+    <ul>
+      <li>Trading dashboard for live analysis and strategy control</li>
+      <li>Support for breakout, demand-supply, indicator, one-trade-day, and MTF strategies</li>
+      <li>Options contract selection and futures contract mode</li>
+      <li>Paper trading workflow and execution logs</li>
+      <li>Telegram alert integration</li>
+      <li>CSV, HTML, and PDF reporting outputs</li>
+      <li>Deployment-ready documentation and operational runbook</li>
+    </ul>
+    <h3>Optional Add-ons</h3>
+    <ul>
+      <li>Broker API live order integration</li>
+      <li>Cloud deployment and monitoring</li>
+      <li>Authentication and role-based access</li>
+      <li>Database-backed execution history</li>
+      <li>Advanced analytics and trader performance dashboards</li>
+    </ul>
+  </div>
+  <div class="section">
+    <h2>Implementation Phases</h2>
+    <table class="table">
+      <tr><th>Phase</th><th>Focus</th><th>Outcome</th></tr>
+      <tr><td>Phase 1</td><td>Core platform</td><td>Dashboard, strategies, paper execution, reporting</td></tr>
+      <tr><td>Phase 2</td><td>Production hardening</td><td>Deployment setup, security controls, scheduling, backups</td></tr>
+      <tr><td>Phase 3</td><td>Broker integration</td><td>Live order routing, validation, execution audit trail</td></tr>
+      <tr><td>Phase 4</td><td>Scale and analytics</td><td>Monitoring, persistence, multi-user operations, advanced insights</td></tr>
+    </table>
+  </div>
+  <div class="section">
+    <h2>Commercial Summary</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="small">Starter Implementation</div>
+        <div class="price">Custom Quote</div>
+        <div class="small">Recommended when scope is finalized after business discussion.</div>
+      </div>
+      <div class="card">
+        <div class="small">Suggested Pricing Model</div>
+        <div>Phase-based delivery with milestone approvals for architecture, deployment readiness, and live integration.</div>
+      </div>
+    </div>
+    <h3>Indicative Commercial Options</h3>
+    <table class="table">
+      <tr><th>Package</th><th>Description</th><th>Commercial Style</th></tr>
+      <tr><td>Foundation</td><td>Dashboard, strategies, paper trading, reports</td><td>Fixed milestone pricing</td></tr>
+      <tr><td>Professional</td><td>Foundation plus production deployment and operations</td><td>Fixed milestone pricing</td></tr>
+      <tr><td>Enterprise</td><td>Professional plus broker integration and monitoring</td><td>Custom engagement pricing</td></tr>
+    </table>
+  </div>
+  <div class="section">
+    <h2>Assumptions</h2>
+    <ul>
+      <li>Live broker integration should be enabled only after paper validation, approvals, and environment checks</li>
+      <li>Market data provider access remains available from approved sources</li>
+      <li>Branding assets can be added later for any future adopter</li>
+      <li>Final commercials will depend on deployment environment and broker requirements</li>
+    </ul>
+    <div class="footer">Prepared as a reusable proposal draft for KRSH. Branding can be replaced later for any future business, desk, or implementation partner.</div>
+  </div>
+</div>
+<div class='section'><h2>Safety Positioning</h2><p>KRSH is intended to stay reusable and safe. Standard deployments can run in analysis and paper-trading mode, while live broker routing is treated as an optional later phase with stricter controls.</p></div>
+</body>
+</html>

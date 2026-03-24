@@ -1,0 +1,5 @@
+﻿customer_id,amount,country,status,high_value,risky_country,active_user
+1,12000,US,active,True,False,True
+2,3500,IN,blocked,False,False,False
+3,22000,SY,active,True,True,True
+4,800,GB,inactive,False,False,False

@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Intratrade Client Proposal</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 36px 48px; color: #1f2937; line-height: 1.6; font-size: 14px; }
+.cover { background: linear-gradient(135deg, #0b132b, #1c2541); color: white; padding: 48px; border-radius: 18px; margin-bottom: 30px; }
+.cover .brand { color: #fca311; letter-spacing: 3px; font-weight: 700; }
+.cover h1 { font-size: 34px; margin: 10px 0; }
+h2 { color: #0b132b; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; margin-top: 30px; }
+.card { background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 14px; padding: 18px; margin: 14px 0; }
+.small { color: #6b7280; }
+ul { margin: 8px 0 8px 22px; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="brand">INTRATRADE</div>
+  <h1>Trading App Client Proposal</h1>
+  <div class="small">Platform overview, architecture direction, deployment summary, and broker integration roadmap.</div>
+</div>
+<h2>Executive Overview</h2>
+<div class="card">TRADING APP EXECUTIVE OVERVIEW<br/><br/>Overview<br/>This Trading App is a unified trading workspace designed for market analysis, strategy execution, trade review, and reporting.<br/>It brings live market data, multiple technical strategies, contract mapping, execution flow, and reporting into one operational platform.<br/><br/>Business Value<br/>The application helps traders and operations teams reduce manual work by combining market monitoring, strategy testing, signal generation, contract preparation, and reporting in one place.<br/><br/>Core Capabilities<br/>Live OHLCV market data viewing.<br/>Multiple strategy engines.<br/>Options contract selection.<br/>Futures contract mode.<br/>Paper execution workflow.<br/>Live-execution-ready architecture.<br/>Telegram alerting.<br/>CSV, HTML, and PDF reporting.<br/><br/>User Benefits<br/>Faster review of opportunities.<br/>Structured trading workflow.<br/>Centralized trade logs.<br/>Repeatable backtesting and reporting.<br/>Clear separation between analysis and execution.<br/><br/>Target Usage<br/>This platform is suitable for active traders, internal trading desks, research teams, and semi-automated strategy operations.</div>
+<h2>Architecture Summary</h2>
+<div class="card">TRADING APP CLIENT ARCHITECTURE<br/><br/>User Interface Layer<br/>The application uses a Streamlit dashboard as the main user-facing layer.<br/>Users can select symbols, intervals, strategies, risk settings, execution mode, and contract type from a single interface.<br/><br/>Application Layer<br/>The backend logic is implemented in Python modules that manage market data processing, strategy execution, signal preparation, contract conversion, and trade output generation.<br/><br/>Market Data Layer<br/>The system consumes Yahoo Finance OHLCV data, NSE option-chain data, NSE futures data, and uploaded CSV datasets.<br/><br/>Execution Layer<br/>The application currently supports paper execution and is structured for future broker API integration.<br/><br/>Reporting Layer<br/>The system generates CSV outputs, HTML summaries, PDF documents, and Telegram notifications.<br/><br/>Storage Layer<br/>Operational files are stored in structured folders so logs, snapshots, reports, and rule files remain accessible and auditable.</div>
+<h2>Deployment Summary</h2>
+<div class="card">TRADING APP CLIENT DEPLOYMENT SUMMARY<br/><br/>Deployment Style<br/>The platform can run locally for development, on an internal server for team usage, or behind Nginx for controlled production-style access.<br/><br/>Recommended Stack<br/>Python runtime.<br/>Streamlit application server.<br/>Optional Nginx reverse proxy.<br/>Persistent storage for logs and reports.<br/>Secure secret storage for tokens and credentials.<br/><br/>Operational Readiness<br/>The design already supports scheduled jobs, repeatable backtests, report generation, and phased extension toward broker integrations.<br/><br/>Security Guidance<br/>Only the user interface should be internet-facing.<br/>Execution internals, credentials, and broker integrations should remain protected.</div>
+<h2>Broker Integration Roadmap</h2>
+<div class="card">TRADING APP BROKER INTEGRATION FLOW<br/><br/>Current State<br/>The platform already supports signal generation, quantity preparation, and execution logging.<br/>Paper trading is active and live integration is prepared as the next extension point.<br/><br/>Future Broker Flow<br/>1. Strategy generates BUY or SELL signal.<br/>2. Contract layer maps the signal to options or futures.<br/>3. Execution engine prepares order payload.<br/>4. Broker adapter validates symbol, quantity, and product type.<br/>5. Order is sent to broker API.<br/>6. Response is stored in execution log.<br/>7. Telegram notification is sent if enabled.<br/><br/>Integration Targets<br/>Dhan API.<br/>Zerodha API.<br/>Angel One API.<br/>Other REST or WebSocket brokers.<br/><br/>Operational Requirement<br/>Broker APIs should be attached only after stable paper-trading validation and proper secret management.</div>
+</body>
+</html>

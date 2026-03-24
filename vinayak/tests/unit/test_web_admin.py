@@ -1,4 +1,4 @@
-﻿from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient
 
 from vinayak.api.main import app
 
@@ -56,6 +56,10 @@ def test_workspace_requires_login_and_then_renders() -> None:
     assert 'Fetch Option Metrics' in workspace.text
     assert 'Send Telegram' in workspace.text
     assert 'Auto Execute' in workspace.text
+    assert 'Security Map Path' in workspace.text
+    assert 'Paper Log Path' in workspace.text
+    assert 'Live Log Path' in workspace.text
+    assert 'v4 Strategy Desk' in workspace.text
 
 
 def test_admin_login_rejects_invalid_credentials() -> None:

@@ -1,0 +1,59 @@
+﻿TRADING APP ARCHITECTURE DOCUMENTATION
+
+Overview
+This Trading App is designed with multiple tiers so market data, strategy logic, execution flow, notifications, and reporting stay organized and easy to manage.
+
+WEB OR UI TIER
+Usually UI tier is the one which has frontend and user interaction components.
+In this project, UI tier is mainly Streamlit dashboard.
+This tier is used for symbol selection, strategy selection, risk setup, lot size setup, execution mode, charts, signal review, and trade analysis.
+If required in production, this UI can be exposed through Nginx reverse proxy.
+
+APP OR STRATEGY TIER
+App tier is the main business logic layer.
+In this project it contains market data fetch, technical strategy execution, signal generation, strike selection, futures contract mapping, execution preparation, and reporting flow.
+Major modules include Trading.py, live_ohlcv.py, breakout_bot.py, supply_demand.py, indicator_bot.py, one_trade_day.py, mtf_trade_bot.py, execution_engine.py, auto_backtest.py, and auto_run.py.
+Usually this tier should not be directly open to the internet.
+
+MARKET DATA TIER
+Market data tier provides the raw inputs required for strategy calculations.
+This project uses Yahoo Finance OHLCV data, NSE option chain data, NSE futures derivative data, and uploaded CSV files for testing or backtesting.
+This tier is used for live candles, spot price, option metrics, futures contract data, and historical analysis.
+
+EXECUTION TIER
+Execution tier handles paper execution and live-execution-ready flow.
+This tier converts trade signals into executable candidate rows, normalizes quantity using lot size, and writes execution logs.
+Current project supports PAPER flow and LIVE-ready structure.
+Future broker APIs can be attached here.
+
+STORAGE TIER
+Storage tier keeps the application outputs and logs.
+This project mainly uses CSV, YAML, HTML, and PDF files.
+Examples include live_ohlcv.csv, paper_trading_logs_all.csv, live_trading_logs_all.csv, backtest_results_all.csv, nifty_options_scored.csv, and nifty_futures_snapshot.csv.
+
+NOTIFICATION TIER
+Notification tier is used for communicating signals and summaries.
+In this project Telegram is used for alerts, signal summaries, and report delivery.
+
+REPORTING TIER
+Reporting tier generates user-readable outputs.
+This includes CSV reports, HTML summaries, PDF files, backtest summaries, and trade result snapshots.
+
+COMMUNICATION FLOW
+1. User opens the dashboard.
+2. UI sends strategy settings to app tier.
+3. App tier fetches market data from Yahoo or NSE sources.
+4. Strategy modules generate BUY, SELL, or HOLD signals.
+5. Contract layer converts signals into options or futures contracts.
+6. Execution tier prepares paper or live-ready trade rows.
+7. Storage tier writes logs and result files.
+8. Notification tier sends Telegram alerts if enabled.
+9. Reporting tier prepares summaries and downloadable documents.
+
+DEPENDENCY FLOW
+UI Tier depends on App Tier.
+App Tier depends on Market Data Tier.
+Execution Tier depends on App Tier.
+Storage Tier depends on App Tier and Execution Tier.
+Notification Tier depends on App Tier and Execution Tier.
+Reporting Tier depends on Storage Tier and App Tier.

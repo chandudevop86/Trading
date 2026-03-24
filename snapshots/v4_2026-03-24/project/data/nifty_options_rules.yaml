@@ -1,0 +1,14 @@
+﻿- name: liquid_contract
+  field: openInterest
+  op: ">="
+  value: 200000
+
+- name: oi_build_up
+  field: changeInOpenInterest
+  op: ">="
+  value: 10000
+
+- name: moderate_iv
+  field: impliedVolatility
+  op: "<="
+  value: 15

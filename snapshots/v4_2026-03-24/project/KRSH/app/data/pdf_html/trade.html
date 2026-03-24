@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Intratrade Fix Report</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; color: #111; line-height: 1.5; font-size: 14px; }
+h1 { font-size: 24px; margin-bottom: 24px; }
+.section { margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<h1>Intratrade Fix Report</h1>
+<div class="section"># Intratrade Dashboard Fix Report<br/>
+<br/>
+Generated: 2026-03-16 (IST)<br/>
+<br/>
+## Problem<br/>
+Dashboard summary was misleading:<br/>
+<br/>
+- `Intratrade alert` showed many rows (e.g., `Trades: 103`) but `Win rate: 0.00%`, `Total PnL: 0.00`, `Last exit: N/A`, `Last reason: N/A`.<br/>
+<br/>
+Root cause: the dashboard was sending **non-closed rows** (signals / indicator rows / mixed rows) into the **closed-trade** summarizer.<br/>
+<br/>
+## Fix Location<br/>
+- `F:\Trading\src\telegram_notifier.py` → `build_trade_summary()` (around line 12).<br/>
+<br/>
+## What I Changed (Steps)<br/>
+1. **Classify input rows** before summarizing:<br/>
+   - Indicator rows: contain `market_signal`<br/>
+   - Execution candidates: contain `signal_time` + `side`<br/>
+   - Trade signals (entries without exits): contain `entry_price/stop_loss/target_price` but no `pnl/exit_*`<br/>
+2. **Only compute Win rate / PnL on closed trades**:<br/>
+   - Filter to rows that contain `pnl` and at least one of `exit_time` / `exit_reason`.<br/>
+3. **Fallback summaries** for signals:<br/>
+   - If there are no closed trades, show a `Signal alert` with last time/side/entry/SL/target.<br/>
+<br/>
+## How To Export To PDF<br/>
+Option A (recommended):<br/>
+1. Open this file: `F:\Trading\intratrade_fix_report.html`<br/>
+2. Press **Ctrl+P** → choose **Save as PDF**.<br/>
+<br/>
+Option B:<br/>
+- Open `F:\Trading\intratrade_fix_report.md` and print to PDF from your editor.<br/>
+</div>
+</body>
+</html>

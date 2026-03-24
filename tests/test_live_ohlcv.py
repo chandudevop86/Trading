@@ -1,13 +1,15 @@
-﻿import tempfile
+import tempfile
 import textwrap
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from src.dhan_api import load_security_map
 from src.live_ohlcv import (
     _to_rows,
     build_candle_cache_path,
+    fetch_live_ohlcv,
     fetch_dhan_ohlcv,
     normalize_dhan_live_payload,
     read_candle_cache,
@@ -177,6 +179,24 @@ class TestLiveOhlcv(unittest.TestCase):
             self.assertEqual(len(fake_client.intraday_calls), 1)
             self.assertEqual(first[0]['provider'], 'DHAN')
             self.assertEqual(first[0]['source'], 'DHAN_HISTORICAL')
+
+    def test_fetch_live_ohlcv_auto_prefers_yahoo_before_dhan(self):
+        yahoo_rows = [{'timestamp': '2026-03-24 09:15:00', 'provider': 'YAHOO'}]
+        with patch('src.live_ohlcv._fetch_yfinance_ohlcv', return_value=yahoo_rows) as yahoo_mock:
+            with patch('src.live_ohlcv.fetch_dhan_ohlcv') as dhan_mock:
+                rows = fetch_live_ohlcv('NIFTY', '5m', '1d', provider='AUTO')
+        self.assertEqual(rows, yahoo_rows)
+        yahoo_mock.assert_called_once()
+        dhan_mock.assert_not_called()
+
+    def test_fetch_live_ohlcv_auto_falls_back_to_dhan_when_yahoo_fails(self):
+        dhan_rows = [{'timestamp': '2026-03-24 09:15:00', 'provider': 'DHAN'}]
+        with patch('src.live_ohlcv._fetch_yfinance_ohlcv', side_effect=RuntimeError('timeout')) as yahoo_mock:
+            with patch('src.live_ohlcv.fetch_dhan_ohlcv', return_value=dhan_rows) as dhan_mock:
+                rows = fetch_live_ohlcv('NIFTY', '5m', '1d', provider='AUTO')
+        self.assertEqual(rows, dhan_rows)
+        yahoo_mock.assert_called_once()
+        dhan_mock.assert_called_once()
 
 
 if __name__ == '__main__':

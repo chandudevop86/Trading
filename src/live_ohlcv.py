@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
@@ -799,21 +799,41 @@ def fetch_live_ohlcv(
     cache_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     selected_provider = _clean(provider or os.getenv('MARKET_DATA_PROVIDER', DEFAULT_DATA_PROVIDER)).upper() or DEFAULT_DATA_PROVIDER
-    if selected_provider in {'DHAN', 'AUTO'}:
+    if selected_provider == 'AUTO':
         try:
-            return fetch_dhan_ohlcv(
+            yahoo_rows = _fetch_yfinance_ohlcv(
                 symbol,
                 interval,
                 period,
-                security_map=security_map,
-                broker_client=broker_client,
                 use_cache=use_cache,
                 force_refresh=force_refresh,
                 cache_dir=cache_dir,
             )
+            if yahoo_rows:
+                return yahoo_rows
         except Exception:
-            if selected_provider == 'DHAN':
-                raise
+            pass
+        return fetch_dhan_ohlcv(
+            symbol,
+            interval,
+            period,
+            security_map=security_map,
+            broker_client=broker_client,
+            use_cache=use_cache,
+            force_refresh=force_refresh,
+            cache_dir=cache_dir,
+        )
+    if selected_provider == 'DHAN':
+        return fetch_dhan_ohlcv(
+            symbol,
+            interval,
+            period,
+            security_map=security_map,
+            broker_client=broker_client,
+            use_cache=use_cache,
+            force_refresh=force_refresh,
+            cache_dir=cache_dir,
+        )
     return _fetch_yfinance_ohlcv(
         symbol,
         interval,

@@ -454,7 +454,10 @@ def _build_signal_from_zone(
     manipulation = _manipulation_profile(candle, zone, buffer_size=buffer_size)
     distribution = _distribution_profile(candles, candle_index, candle, zone)
 
-    if zone_score < int(min_zone_score):
+    amd_bonus = int(accumulation['is_valid']) + int(manipulation['is_valid']) + int(distribution['is_valid'])
+    effective_zone_score = zone_score + (amd_bonus if use_amd_filters else 0)
+
+    if effective_zone_score < int(min_zone_score):
         return None
     if average_range > 0 and candle_range < (average_range * 0.8):
         return None
@@ -466,7 +469,7 @@ def _build_signal_from_zone(
         rejection_ok = (
             close > open_price
             and close >= zone_mid
-            and lower_wick >= max(body, candle_range * 0.2)
+            and (lower_wick >= max(body * 0.15, candle_range * 0.1) or close > zone_high)
             and close_location >= 0.55
         )
         stop = min(low, zone_low) - max(close * 0.001, 0.05)
@@ -478,7 +481,7 @@ def _build_signal_from_zone(
         rejection_ok = (
             close < open_price
             and close <= zone_mid
-            and upper_wick >= max(body, candle_range * 0.2)
+            and (upper_wick >= max(body * 0.15, candle_range * 0.1) or close < zone_low)
             and close_location <= 0.45
         )
         stop = max(high, zone_high) + max(close * 0.001, 0.05)
@@ -533,7 +536,7 @@ def _build_signal_from_zone(
         'zone_boundary_mode': zone.get('boundary_mode', 'BASE'),
         'structure_level': zone.get('structure_level', ''),
         'zone_fresh': 'YES',
-        'zone_score': int(zone_score),
+        'zone_score': int(effective_zone_score),
         'zone_reasons': ','.join(zone_reasons),
         'higher_tf_bias': higher_tf_bias,
         'opposing_zone_price': round(opposing_zone_price, 4) if opposing_zone_price is not None else '',
@@ -548,6 +551,7 @@ def _build_signal_from_zone(
         'distribution_body_ratio': distribution['body_ratio'],
         'distribution_structure_break': 'YES' if distribution['structure_break'] else 'NO',
         'amd_state': amd_state,
+        'amd_score': int(amd_bonus),
         'amd_filter_enabled': 'YES' if use_amd_filters else 'NO',
     }
 

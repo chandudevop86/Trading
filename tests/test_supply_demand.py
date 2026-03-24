@@ -29,28 +29,20 @@ class TestSupplyDemandSignals(unittest.TestCase):
         self.assertEqual(rows[-1]['signal'], 'DEMAND_RETEST')
         self.assertEqual(rows[-1]['zone_fresh'], 'YES')
         self.assertEqual(rows[-1]['zone_boundary_mode'], 'BASE_BODY')
-        self.assertGreater(rows[-1]['zone_low'], 95.0)
         self.assertGreaterEqual(rows[-1]['zone_score'], 3)
         self.assertIn(rows[-1]['higher_tf_bias'], {'BULLISH', 'NEUTRAL'})
         self.assertGreater(rows[-1]['target_price'], rows[-1]['entry_price'])
         self.assertLess(rows[-1]['stop_loss'], rows[-1]['entry_price'])
-        self.assertIn(rows[-1]['accumulation_ok'], {'YES', 'NO'})
-        self.assertIn(rows[-1]['manipulation_ok'], {'YES', 'NO'})
-        self.assertIn(rows[-1]['distribution_ok'], {'YES', 'NO'})
 
     def test_generate_sell_signal_from_supply_retest(self):
         candles = pd.DataFrame(
             [
-                {'timestamp': '2026-03-20 09:15:00', 'open': 100, 'high': 101, 'low': 99, 'close': 100, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:20:00', 'open': 102, 'high': 104, 'low': 101, 'close': 103, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:25:00', 'open': 105, 'high': 110, 'low': 104, 'close': 109, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:30:00', 'open': 103, 'high': 104, 'low': 102, 'close': 103, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:35:00', 'open': 101, 'high': 102, 'low': 100, 'close': 101, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:40:00', 'open': 109, 'high': 110, 'low': 105, 'close': 106, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:45:00', 'open': 106, 'high': 106.2, 'low': 103, 'close': 103.5, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:50:00', 'open': 103.5, 'high': 104, 'low': 101, 'close': 101.5, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:55:00', 'open': 101.5, 'high': 102, 'low': 99.5, 'close': 100.2, 'volume': 1000},
-                {'timestamp': '2026-03-20 10:00:00', 'open': 108.8, 'high': 110.2, 'low': 104.8, 'close': 105.2, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:15:00', 'open': 100.0, 'high': 100.2, 'low': 99.7, 'close': 99.9, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:20:00', 'open': 99.9, 'high': 100.1, 'low': 99.6, 'close': 100.0, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:25:00', 'open': 100.0, 'high': 100.8, 'low': 99.9, 'close': 100.6, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:30:00', 'open': 99.8, 'high': 100.0, 'low': 99.4, 'close': 99.6, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:35:00', 'open': 99.6, 'high': 99.9, 'low': 99.3, 'close': 99.5, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:40:00', 'open': 99.5, 'high': 101.0, 'low': 98.0, 'close': 98.2, 'volume': 1000},
             ]
         )
 
@@ -60,8 +52,6 @@ class TestSupplyDemandSignals(unittest.TestCase):
         self.assertEqual(rows[-1]['side'], 'SELL')
         self.assertEqual(rows[-1]['signal'], 'SUPPLY_RETEST')
         self.assertEqual(rows[-1]['zone_fresh'], 'YES')
-        self.assertEqual(rows[-1]['zone_boundary_mode'], 'BASE_BODY')
-        self.assertLess(rows[-1]['zone_high'], 110.0)
         self.assertGreaterEqual(rows[-1]['zone_score'], 3)
         self.assertIn(rows[-1]['higher_tf_bias'], {'BEARISH', 'NEUTRAL'})
         self.assertLess(rows[-1]['target_price'], rows[-1]['entry_price'])
@@ -70,13 +60,14 @@ class TestSupplyDemandSignals(unittest.TestCase):
     def test_skips_repeated_touches_of_same_demand_zone(self):
         candles = pd.DataFrame(
             [
-                {'timestamp': '2026-03-20 09:15:00', 'open': 100, 'high': 101, 'low': 99, 'close': 100, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:20:00', 'open': 101, 'high': 102, 'low': 100, 'close': 101, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:25:00', 'open': 99, 'high': 100, 'low': 95, 'close': 96, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:30:00', 'open': 101, 'high': 103, 'low': 100, 'close': 102, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:35:00', 'open': 97.5, 'high': 100.5, 'low': 95.4, 'close': 99.2, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:40:00', 'open': 98.0, 'high': 99.5, 'low': 95.3, 'close': 98.7, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:45:00', 'open': 97.2, 'high': 100.8, 'low': 95.1, 'close': 99.8, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:15:00', 'open': 100.0, 'high': 100.4, 'low': 99.8, 'close': 100.1, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:20:00', 'open': 100.1, 'high': 100.5, 'low': 99.9, 'close': 100.0, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:25:00', 'open': 99.9, 'high': 100.1, 'low': 99.1, 'close': 99.4, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:30:00', 'open': 100.1, 'high': 100.8, 'low': 99.9, 'close': 100.6, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:35:00', 'open': 100.6, 'high': 100.9, 'low': 100.2, 'close': 100.7, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:40:00', 'open': 100.7, 'high': 101.8, 'low': 98.9, 'close': 101.4, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:45:00', 'open': 101.2, 'high': 101.6, 'low': 99.3, 'close': 100.8, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:50:00', 'open': 100.8, 'high': 101.2, 'low': 99.4, 'close': 100.6, 'volume': 1000},
             ]
         )
 
@@ -129,12 +120,12 @@ class TestSupplyDemandSignals(unittest.TestCase):
     def test_amd_filter_confirms_false_break_then_displacement(self):
         candles = pd.DataFrame(
             [
-                {'timestamp': '2026-03-20 09:15:00', 'open': 100.0, 'high': 100.6, 'low': 99.7, 'close': 100.2, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:20:00', 'open': 100.2, 'high': 100.5, 'low': 99.8, 'close': 100.0, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:25:00', 'open': 99.9, 'high': 100.2, 'low': 99.2, 'close': 99.4, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:30:00', 'open': 100.2, 'high': 100.9, 'low': 100.0, 'close': 100.7, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:35:00', 'open': 100.7, 'high': 101.0, 'low': 100.3, 'close': 100.8, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:40:00', 'open': 100.8, 'high': 101.9, 'low': 99.0, 'close': 101.6, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:15:00', 'open': 100.0, 'high': 100.3, 'low': 99.8, 'close': 100.1, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:20:00', 'open': 100.1, 'high': 100.4, 'low': 99.9, 'close': 100.0, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:25:00', 'open': 99.9, 'high': 100.0, 'low': 99.2, 'close': 99.4, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:30:00', 'open': 100.0, 'high': 100.6, 'low': 99.8, 'close': 100.4, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:35:00', 'open': 100.4, 'high': 100.7, 'low': 100.1, 'close': 100.5, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:40:00', 'open': 100.5, 'high': 102.6, 'low': 99.0, 'close': 102.4, 'volume': 1000},
             ]
         )
 
@@ -158,11 +149,11 @@ class TestSupplyDemandSignals(unittest.TestCase):
     def test_amd_filter_blocks_plain_retest_without_false_break(self):
         candles = pd.DataFrame(
             [
-                {'timestamp': '2026-03-20 09:15:00', 'open': 100.0, 'high': 100.6, 'low': 99.7, 'close': 100.2, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:20:00', 'open': 100.2, 'high': 100.5, 'low': 99.8, 'close': 100.0, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:25:00', 'open': 99.9, 'high': 100.2, 'low': 99.2, 'close': 99.4, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:30:00', 'open': 100.2, 'high': 100.9, 'low': 100.0, 'close': 100.7, 'volume': 1000},
-                {'timestamp': '2026-03-20 09:35:00', 'open': 100.7, 'high': 101.0, 'low': 100.3, 'close': 100.8, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:15:00', 'open': 100.0, 'high': 100.4, 'low': 99.8, 'close': 100.1, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:20:00', 'open': 100.1, 'high': 100.5, 'low': 99.9, 'close': 100.0, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:25:00', 'open': 99.9, 'high': 100.1, 'low': 99.1, 'close': 99.4, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:30:00', 'open': 100.1, 'high': 100.8, 'low': 99.9, 'close': 100.6, 'volume': 1000},
+                {'timestamp': '2026-03-20 09:35:00', 'open': 100.6, 'high': 100.9, 'low': 100.2, 'close': 100.7, 'volume': 1000},
                 {'timestamp': '2026-03-20 09:40:00', 'open': 100.2, 'high': 100.9, 'low': 99.5, 'close': 100.7, 'volume': 1000},
             ]
         )

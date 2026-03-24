@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 from typing import Any, Callable
 
 import pandas as pd
@@ -18,6 +23,7 @@ from src.live_ohlcv import fetch_live_ohlcv
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
 from src.strike_selector import attach_option_strikes
+from src.strategy_evaluator import rank_strategy_summaries
 from src.strategy_service import StrategyContext, run_strategy_workflow
 from src.trading_core import append_log, configure_file_logging, prepare_trading_data, write_rows
 
@@ -28,6 +34,7 @@ TRADES_OUTPUT = DATA_DIR / 'trades.csv'
 EXECUTED_TRADES_OUTPUT = DATA_DIR / 'executed_trades.csv'
 BACKTEST_TRADES_OUTPUT = DATA_DIR / 'backtest_trades.csv'
 BACKTEST_SUMMARY_OUTPUT = DATA_DIR / 'backtest_summary.csv'
+STRATEGY_RANKING_OUTPUT = DATA_DIR / 'strategy_expectancy_report.csv'
 ORDER_HISTORY_OUTPUT = DATA_DIR / 'order_history.csv'
 APP_LOG = LOG_DIR / 'app.log'
 BROKER_LOG = LOG_DIR / 'broker.log'
@@ -224,6 +231,15 @@ def _metric_value(rows: list[dict[str, object]], key: str, default: float = 0.0)
         return default
 
 
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        if value is None or str(value).strip() == '':
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def _strategy_callable(strategy: str, symbol: str) -> Callable[[pd.DataFrame, float, float, float, Any], list[dict[str, object]]]:
     mapping: dict[str, Callable[[pd.DataFrame, float, float, float, Any], list[dict[str, object]]]] = {
         'Breakout': generate_breakout_trades,
@@ -267,6 +283,40 @@ def _recent_trade_summary(trades: list[dict[str, object]]) -> str:
         f"SL {float(last.get('stop_loss', 0.0) or 0.0):.2f} | "
         f"Target {float(last.get('target', last.get('target_price', 0.0)) or 0.0):.2f} | "
         f"Score {float(last.get('score', 0.0) or 0.0):.2f}"
+    )
+
+
+def _load_best_strategy_profile(backtest_summary: dict[str, object], strategy: str) -> str:
+    ranking_rows: list[dict[str, object]] = []
+    if STRATEGY_RANKING_OUTPUT.exists() and STRATEGY_RANKING_OUTPUT.stat().st_size > 0:
+        try:
+            ranking_frame = pd.read_csv(STRATEGY_RANKING_OUTPUT)
+            ranking_rows = ranking_frame.to_dict(orient='records')
+        except Exception:
+            ranking_rows = []
+
+    if not ranking_rows and backtest_summary:
+        candidate = dict(backtest_summary)
+        candidate.setdefault('strategy', strategy)
+        ranking_rows = rank_strategy_summaries([candidate])
+
+    if not ranking_rows:
+        return 'No ranked strategy profile available yet.'
+
+    best = dict(ranking_rows[0])
+    rank = int(_safe_float(best.get('rank', 1), 1.0))
+    strategy_name = str(best.get('strategy', strategy) or strategy)
+    expectancy = _safe_float(best.get('expectancy_per_trade'))
+    profit_factor = str(best.get('profit_factor', '0.0'))
+    positive_expectancy = str(best.get('positive_expectancy', 'NO')).upper()
+    max_drawdown = _safe_float(best.get('max_drawdown'))
+    win_rate = _safe_float(best.get('win_rate'))
+    total_trades = int(_safe_float(best.get('total_trades', best.get('trades', 0))))
+    return (
+        f'Rank {rank} | {strategy_name} | Expectancy {expectancy:.2f} | '
+        f'PF {profit_factor} | Win Rate {win_rate:.2f}% | '
+        f'Max DD {max_drawdown:.2f} | Trades {total_trades} | '
+        f'Edge {positive_expectancy}'
     )
 
 
@@ -399,7 +449,7 @@ def _render_summary_cards(trades: list[dict[str, object]], backtest_summary: dic
     cols[3].metric('Last Signal', last_signal)
 
 
-def _render_operator_panels(status: str, trades: list[dict[str, object]], backtest_summary: dict[str, object], symbol: str, timeframe: str, period: str, broker_choice: str, broker_status: str, execution_messages: list[tuple[str, str]]) -> None:
+def _render_operator_panels(status: str, trades: list[dict[str, object]], backtest_summary: dict[str, object], strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, broker_status: str, execution_messages: list[tuple[str, str]]) -> None:
     st.markdown('<div class="desk-card">', unsafe_allow_html=True)
     st.markdown('<div class="desk-label">Current Status</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="desk-value">{status}</div>', unsafe_allow_html=True)
@@ -413,6 +463,11 @@ def _render_operator_panels(status: str, trades: list[dict[str, object]], backte
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="desk-card">', unsafe_allow_html=True)
+    st.markdown('<div class="desk-label">Best Strategy Profile</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="desk-value">{_load_best_strategy_profile(backtest_summary, strategy)}</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="desk-card">', unsafe_allow_html=True)
     st.markdown('<div class="desk-label">Recent Trade Summary</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="desk-value">{_recent_trade_summary(trades)}</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -422,7 +477,8 @@ def _render_operator_panels(status: str, trades: list[dict[str, object]], backte
     summary_line = (
         f"Wins {int(backtest_summary.get('wins', 0))} | "
         f"Losses {int(backtest_summary.get('losses', 0))} | "
-        f"Avg PnL {float(backtest_summary.get('avg_pnl', 0.0) or 0.0):.2f} | "
+        f"Expectancy {float(backtest_summary.get('expectancy_per_trade', 0.0) or 0.0):.2f} | "
+        f"PF {str(backtest_summary.get('profit_factor', 0.0))} | "
         f"Max DD {float(backtest_summary.get('max_drawdown', 0.0) or 0.0):.2f} | "
         f"Avg RR {float(backtest_summary.get('avg_rr', 0.0) or 0.0):.2f}"
     )
@@ -477,12 +533,16 @@ def main() -> None:
             _append_text_log(APP_LOG, f'BACKTEST completed for {strategy} {normalized_symbol} {timeframe}')
         elif not backtest_summary:
             backtest_summary = {
+                'strategy': strategy,
                 'total_trades': len(trades),
                 'wins': 0,
                 'losses': 0,
                 'win_rate': 0.0,
                 'total_pnl': 0.0,
                 'avg_pnl': 0.0,
+                'expectancy_per_trade': 0.0,
+                'profit_factor': 0.0,
+                'positive_expectancy': 'NO',
                 'max_drawdown': 0.0,
                 'avg_rr': _metric_value(trades, 'score', 0.0),
             }
@@ -490,9 +550,9 @@ def main() -> None:
         status = _status_message(strategy, normalized_symbol, timeframe, trades, 'Backtest' if backtest_clicked else 'Run')
         _append_text_log(APP_LOG, status)
         _render_summary_cards(trades, backtest_summary)
-        _render_operator_panels(status, trades, backtest_summary, normalized_symbol, timeframe, period, broker_choice, broker_status, execution_messages)
+        _render_operator_panels(status, trades, backtest_summary, strategy, normalized_symbol, timeframe, period, broker_choice, broker_status, execution_messages)
         st.caption(
-            f'Files updated: {OHLCV_OUTPUT}, {TRADES_OUTPUT}, {EXECUTED_TRADES_OUTPUT}, {ORDER_HISTORY_OUTPUT}, {BACKTEST_TRADES_OUTPUT}, {BACKTEST_SUMMARY_OUTPUT}, {APP_LOG}, {BROKER_LOG}, {EXECUTION_LOG}, {REJECTIONS_LOG}, {ERRORS_LOG}'
+            f'Files updated: {OHLCV_OUTPUT}, {TRADES_OUTPUT}, {EXECUTED_TRADES_OUTPUT}, {ORDER_HISTORY_OUTPUT}, {BACKTEST_TRADES_OUTPUT}, {BACKTEST_SUMMARY_OUTPUT}, {STRATEGY_RANKING_OUTPUT}, {APP_LOG}, {BROKER_LOG}, {EXECUTION_LOG}, {REJECTIONS_LOG}, {ERRORS_LOG}'
         )
     except Exception as exc:
         message = f'Trading UI failure: {exc}'
@@ -504,12 +564,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-
-
-

@@ -398,6 +398,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         paper_rows = list(getattr(paper_result.execution_result, 'rows', []))
     return {
         'summary_rows': summary_rows,
+        'ranked_summary_rows': ranked_summary_rows,
+        'ranking_output': str(args.ranking_output),
         'equity_curve_rows': equity_curve_rows,
         'equity_curve_output': str(equity_curve_output),
         'execution_type': execution_type,
@@ -434,11 +436,21 @@ def main() -> None:
             f"avg_win={row['avg_win']} avg_loss={row['avg_loss']} "
             f"pf={row['profit_factor']} max_dd={row['max_drawdown']} ({row['max_drawdown_pct']}%)"
         )
+    if out.get('ranked_summary_rows'):
+        best = out['ranked_summary_rows'][0]
+        print(
+            f"Best expectancy profile: rank={best.get('rank')} strategy={best.get('strategy')} "
+            f"expectancy={best.get('expectancy_per_trade')} pf={best.get('profit_factor')} max_dd={best.get('max_drawdown')}"
+        )
+    print(f"Strategy ranking: {out.get('ranking_output', '')}")
     print(f"Equity curves: {out['equity_curve_output']}")
 
 
 if __name__ == '__main__':
     main()
+
+
+
 
 
 

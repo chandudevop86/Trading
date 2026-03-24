@@ -429,6 +429,31 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(rows[0]['instrument_type'], 'OPTIDX')
             self.assertEqual(rows[0]['option_expiry'], '2026-03-26')
             self.assertEqual(rows[0]['broker_order_id'], 'ORD123')
+    def test_execute_paper_trades_derives_trade_levels_for_legacy_candidate(self):
+        candidates = [
+            {"strategy": "BREAKOUT", "symbol": "NIFTY", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100.0, "quantity": 65, "reason": "legacy_candidate"}
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "executed.csv"
+            result = execute_paper_trades(candidates, out)
+            self.assertEqual(result.executed_count, 1)
+            self.assertGreater(float(result[0]["stop_loss"]), 0.0)
+            self.assertGreater(float(result[0]["target_price"]), float(result[0]["price"]))
+
+    def test_execute_paper_trades_skips_duplicate_batch_trade(self):
+        candidates = [
+            {"strategy": "BREAKOUT", "symbol": "NIFTY", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100.0, "quantity": 65, "reason": "x", "stop_loss": 99.0, "target_price": 102.0},
+            {"strategy": "BREAKOUT", "symbol": "NIFTY", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100.0, "quantity": 65, "reason": "x", "stop_loss": 99.0, "target_price": 102.0},
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "executed.csv"
+            result = execute_paper_trades(candidates, out, deduplicate=True)
+            self.assertEqual(result.executed_count, 1)
+            self.assertEqual(result.skipped_count, 1)
+            self.assertEqual(result.skipped_rows[0]["duplicate_reason"], "DUPLICATE_BATCH_TRADE")
+
 if __name__ == '__main__':
     unittest.main()
 

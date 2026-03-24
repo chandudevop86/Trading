@@ -48,6 +48,11 @@ SKIP_REASON_MAX_TRADES_PER_DAY = "MAX_TRADES_PER_DAY"
 SKIP_REASON_MAX_DAILY_LOSS = "MAX_DAILY_LOSS"
 SKIP_REASON_MISSING_PRICE = "MISSING_PRICE"
 SKIP_REASON_MISSING_QUANTITY = "MISSING_QUANTITY"
+SKIP_REASON_MISSING_TIMESTAMP = "MISSING_TIMESTAMP"
+SKIP_REASON_MISSING_STOP_LOSS = "MISSING_STOP_LOSS"
+SKIP_REASON_MISSING_TARGET = "MISSING_TARGET"
+SKIP_REASON_INVALID_TRADE_LEVELS = "INVALID_TRADE_LEVELS"
+SKIP_REASON_DUPLICATE_BATCH_TRADE = "DUPLICATE_BATCH_TRADE"
 SKIP_REASON_BROKER_ERROR = "BROKER_ERROR"
 SKIP_REASON_KILL_SWITCH = "KILL_SWITCH_ENABLED"
 
@@ -263,14 +268,28 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
         elif signal in {"BEARISH_TREND", "OVERBOUGHT", "SHORT", "SELL"}:
             side = "SELL"
         close_price = _price_value(last)
+        stop_loss = _safe_float(last.get("stop_loss"))
+        target_price = _safe_float(last.get("target_price", last.get("target")))
+        if side == "BUY":
+            stop_loss = stop_loss if stop_loss > 0 else round(close_price * 0.995, 4)
+            target_price = target_price if target_price > 0 else round(close_price + ((close_price - stop_loss) * 2.0), 4)
+        elif side == "SELL":
+            stop_loss = stop_loss if stop_loss > 0 else round(close_price * 1.005, 4)
+            target_price = target_price if target_price > 0 else round(close_price - ((stop_loss - close_price) * 2.0), 4)
         candidates.append(_ensure_trade_identity({
             "strategy": "INDICATOR",
             "symbol": symbol,
             "signal_time": str(last.get("timestamp", "")),
             "side": side,
             "price": close_price,
+            "entry": close_price,
+            "entry_price": close_price,
+            "stop_loss": stop_loss,
+            "target": target_price,
+            "target_price": target_price,
             "share_price": close_price,
             "strike_price": last.get("strike_price"),
+            "score": _safe_float(last.get("score")),
             "quantity": default_quantity_for_symbol(symbol),
             "reason": signal,
         }, default_status=TRADE_STATUS_NEW))
@@ -489,15 +508,40 @@ def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[st
     if side not in {"BUY", "SELL"}:
         record["validation_error"] = SKIP_REASON_INVALID_SIDE
         return False, SKIP_REASON_INVALID_SIDE, record
+    signal_time = str(record.get("signal_time", record.get("entry_time", record.get("timestamp", ""))) or "").strip()
+    if not signal_time or _parse_dt(signal_time) is None:
+        record["validation_error"] = SKIP_REASON_MISSING_TIMESTAMP
+        return False, SKIP_REASON_MISSING_TIMESTAMP, record
     price = _price_value(record)
     if price <= 0:
         record["validation_error"] = SKIP_REASON_MISSING_PRICE
         return False, SKIP_REASON_MISSING_PRICE, record
+    stop_loss = _safe_float(record.get("stop_loss"))
+    target_price = _safe_float(record.get("target_price", record.get("target")))
+    if side == "BUY":
+        stop_loss = stop_loss if stop_loss > 0 else round(price * 0.995, 4)
+        target_price = target_price if target_price > 0 else round(price + ((price - stop_loss) * 2.0), 4)
+        if not (stop_loss < price < target_price):
+            record["validation_error"] = SKIP_REASON_INVALID_TRADE_LEVELS
+            return False, SKIP_REASON_INVALID_TRADE_LEVELS, record
+    else:
+        stop_loss = stop_loss if stop_loss > 0 else round(price * 1.005, 4)
+        target_price = target_price if target_price > 0 else round(price - ((stop_loss - price) * 2.0), 4)
+        if not (target_price < price < stop_loss):
+            record["validation_error"] = SKIP_REASON_INVALID_TRADE_LEVELS
+            return False, SKIP_REASON_INVALID_TRADE_LEVELS, record
     record["price"] = price
+    record["entry"] = _safe_float(record.get("entry", price)) or price
+    record["entry_price"] = _safe_float(record.get("entry_price", price)) or price
+    record["stop_loss"] = stop_loss
+    record["target_price"] = target_price
+    record.setdefault("target", target_price)
     record.setdefault("share_price", price)
-    record.setdefault("signal_time", str(record.get("entry_time", record.get("timestamp", "")) or ""))
+    record["signal_time"] = signal_time
+    record.setdefault("timestamp", signal_time)
     record.setdefault("reason", str(record.get("reason", record.get("strategy", "TRADE")) or "TRADE"))
     record.setdefault("strike_price", record.get("option_strike", record.get("strike", "")))
+    record["score"] = _safe_float(record.get("score"))
     raw_quantity = record.get("quantity")
     if raw_quantity is None or str(raw_quantity).strip() == "":
         record["validation_error"] = SKIP_REASON_MISSING_QUANTITY
@@ -509,14 +553,18 @@ def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[st
     record["quantity"] = quantity
     return True, "", record
 
-
 def _make_result_row(candidate: dict[str, object], *, execution_type: str, processed_at_utc: str) -> dict[str, object]:
     row = _ensure_trade_identity(candidate)
     row.setdefault("execution_type", execution_type)
     row.setdefault("executed_at_utc", processed_at_utc)
     row.setdefault("position_status", "")
+    row.setdefault("entry", row.get("entry_price", row.get("price", "")))
+    row.setdefault("entry_price", row.get("price", row.get("entry", "")))
+    row.setdefault("target_price", row.get("target", row.get("target_price", "")))
+    row.setdefault("target", row.get("target_price", row.get("target", "")))
+    row.setdefault("stop_loss", row.get("stop_loss", ""))
+    row.setdefault("score", row.get("score", ""))
     return row
-
 
 def _append_text_log(path: Path, message: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -750,6 +798,9 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
         resolved_broker_name = resolved_broker_name or "LIVE"
 
     _append_text_log(EXECUTION_LOG_PATH, f"Execution start mode={execution_type} broker={resolved_broker_name} candidates={len(candidates)}")
+    batch_seen_trade_ids: set[str] = set()
+    batch_seen_trade_keys: set[str] = set()
+
 
     for candidate in candidates:
         ok, validation_reason, validated = validate_candidate(candidate)
@@ -761,12 +812,20 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             append_log(f'execution_engine skipped invalid trade {trade_id} reason={validation_reason}')
             _mark_skipped(result, base_row, validation_reason)
             continue
+        if deduplicate and trade_id in batch_seen_trade_ids:
+            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_BATCH_TRADE)
+            continue
+        if deduplicate and trade_key in batch_seen_trade_keys:
+            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_BATCH_TRADE)
+            continue
         if deduplicate and trade_id in historical_trade_ids:
             _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_EXECUTED_TRADE)
             continue
         if deduplicate and trade_key in active_trade_keys:
             _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_ACTIVE_TRADE)
             continue
+        batch_seen_trade_ids.add(trade_id)
+        batch_seen_trade_keys.add(trade_key)
 
         day_key = _trade_day_key(base_row, today_key)
         state = daily_state.setdefault(day_key, {"count": 0.0, "realized_pnl": 0.0})

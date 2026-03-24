@@ -4,6 +4,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from vinayak.api.dependencies.admin_auth import COOKIE_NAME, admin_password, admin_username, is_authenticated, session_token
+from vinayak.web.app.workspace_html import WORKSPACE_HTML
 
 
 router = APIRouter(tags=['web'])
@@ -166,7 +167,7 @@ HOME_HTML = """
       <div class="nav-links">
         <a class="button secondary" href="/health">Health</a>
         <a class="button secondary" href="/health/ready">Readiness</a>
-        <a class="button primary" href="/admin">Open Admin</a>
+        <a class="button secondary" href="/workspace">Workspace</a><a class="button primary" href="/admin">Open Admin</a>
       </div>
     </div>
 
@@ -176,10 +177,10 @@ HOME_HTML = """
         <h1>Run strategy review, execution flow, and broker checks from one console.</h1>
         <p class="lead">Vinayak is your next-stage trading platform foundation for strategy workflows, reviewed trades, paper or live execution, and audit-ready operational control.</p>
         <div class="actions">
-          <a class="button primary" href="/admin">Launch Admin Console</a>
+          <a class="button primary" href="/workspace">Launch Live Workspace</a><a class="button secondary" href="/admin">Open Admin Console</a>
           <a class="button secondary" href="/health">Check API Health</a>
         </div>
-        <p class="footer-note">Current API entrypoints stay available under <code>/health</code>, <code>/reviewed-trades</code>, <code>/executions</code>, and <code>/dashboard</code>.</p>
+        <p class="footer-note">Current API entrypoints stay available under <code>/health</code>, <code>/reviewed-trades</code>, <code>/executions</code>, <code>/dashboard</code>, <code>/dashboard/candles</code>, and <code>/dashboard/live-analysis</code>.</p>
       </section>
 
       <aside class="card">
@@ -674,6 +675,12 @@ def home_page() -> HTMLResponse:
     return HTMLResponse(HOME_HTML)
 
 
+
+@router.get('/workspace', response_class=HTMLResponse)
+def live_workspace(request: Request) -> HTMLResponse:
+    if not is_authenticated(request):
+        return _render_login()
+    return HTMLResponse(WORKSPACE_HTML)
 @router.get('/admin', response_class=HTMLResponse)
 def admin_console(request: Request) -> HTMLResponse:
     if not is_authenticated(request):
@@ -695,6 +702,8 @@ def admin_logout():
     response = RedirectResponse(url='/admin', status_code=303)
     response.delete_cookie(COOKIE_NAME)
     return response
+
+
 
 
 

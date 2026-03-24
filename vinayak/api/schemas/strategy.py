@@ -97,3 +97,32 @@ class ExecutionCreateRequest(BaseModel):
         if self.signal_id is None and self.reviewed_trade_id is None:
             raise ValueError('signal_id or reviewed_trade_id is required')
         return self
+
+
+class LiveAnalysisRequest(BaseModel):
+    symbol: str = Field(default='^NSEI')
+    interval: str = Field(default='5m')
+    period: str = Field(default='1d')
+    strategy: str = Field(default='Breakout')
+    capital: float = Field(default=100000.0, gt=0)
+    risk_pct: float = Field(default=1.0, gt=0)
+    rr_ratio: float = Field(default=2.0, gt=0)
+    trailing_sl_pct: float = Field(default=0.5, ge=0)
+    strike_step: int = Field(default=50, gt=0)
+    moneyness: str = Field(default='ATM')
+    strike_steps: int = Field(default=0, ge=0)
+    fetch_option_metrics: bool = Field(default=False)
+    send_telegram: bool = Field(default=False)
+    telegram_token: str = Field(default='')
+    telegram_chat_id: str = Field(default='')
+    auto_execute: bool = Field(default=False)
+    execution_type: str = Field(default='NONE')
+    lot_size: int = Field(default=0, ge=0)
+    lots: int = Field(default=0, ge=0)
+    security_map_path: str = Field(default='data/dhan_security_map.csv')
+    paper_log_path: str = Field(default='vinayak/data/paper_trading_logs_all.csv')
+    live_log_path: str = Field(default='vinayak/data/live_trading_logs_all.csv')
+    mtf_ema_period: int = Field(default=3, ge=2)
+    mtf_setup_mode: str = Field(default='either')
+    mtf_retest_strength: bool = Field(default=True)
+    mtf_max_trades_per_day: int = Field(default=3, ge=1)

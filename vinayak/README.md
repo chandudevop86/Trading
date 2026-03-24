@@ -145,3 +145,66 @@ Readiness includes:
 2. Put Nginx or ALB in front of the app for production ingress.
 3. Add CI to run tests and migrations before deployment.
 4. Add ECS or EC2 deployment automation for AWS rollout.
+
+## Live Analysis API
+
+Vinayak can now reuse the current Trading project's live OHLCV and strategy workflow through the dashboard API.
+
+- `GET /dashboard/candles` returns live candle rows for a symbol, interval, and period.
+- `POST /dashboard/live-analysis` fetches live candles and runs the Trading workflow strategy layer inside Vinayak.
+- Live candle fetch now supports Redis hot-cache, file-cache fallback, and CSV fallback.
+- Live analysis now writes local report artifacts and can also push them to S3 when `REPORTS_S3_BUCKET` is configured.
+
+Example payload:
+
+```json
+{
+  "symbol": "^NSEI",
+  "interval": "5m",
+  "period": "1d",
+  "strategy": "Breakout",
+  "capital": 100000,
+  "risk_pct": 1,
+  "rr_ratio": 2,
+  "trailing_sl_pct": 0.5,
+  "strike_step": 50,
+  "moneyness": "ATM",
+  "strike_steps": 0,
+  "mtf_ema_period": 3,
+  "mtf_setup_mode": "either",
+  "mtf_retest_strength": true,
+  "mtf_max_trades_per_day": 3
+}
+```
+
+Relevant production env vars:
+
+- `REDIS_URL`
+- `REPORTS_DIR`
+- `REPORTS_S3_BUCKET`
+- `REPORTS_S3_PREFIX`
+- `AWS_REGION`
+- `YFINANCE_TIMEOUT`
+
+## Selected AWS Production Target
+
+The chosen target for Vinayak is now the full managed AWS path:
+
+- Route 53
+- ACM
+- ALB
+- ECS Fargate
+- RDS PostgreSQL
+- ElastiCache Redis
+- S3
+- Secrets Manager
+- CloudWatch
+
+Deployment blueprint files are now under:
+
+- `vinayak/deploy/aws/README.md`
+- `vinayak/deploy/aws/aws_target_architecture.md`
+- `vinayak/deploy/aws/ecs-task-definition.json`
+- `vinayak/deploy/aws/ecs-service-vars.env.example`
+
+This is now the preferred production direction for Vinayak instead of the earlier EC2-first temporary path.

@@ -37,6 +37,27 @@ def test_admin_console_requires_login_and_then_renders() -> None:
     assert 'Logout' in html
 
 
+def test_workspace_requires_login_and_then_renders() -> None:
+    login_page = client.get('/workspace')
+    assert login_page.status_code == 200
+    assert 'Vinayak Admin Login' in login_page.text
+
+    response = client.post('/admin/login', data={
+        'username': 'admin',
+        'password': 'vinayak123',
+    })
+    assert response.status_code == 200
+
+    workspace = client.get('/workspace')
+    assert workspace.status_code == 200
+    assert 'Vinayak Workspace' in workspace.text
+    assert '/dashboard/live-analysis' in workspace.text
+    assert 'Run Live Analysis' in workspace.text
+    assert 'Fetch Option Metrics' in workspace.text
+    assert 'Send Telegram' in workspace.text
+    assert 'Auto Execute' in workspace.text
+
+
 def test_admin_login_rejects_invalid_credentials() -> None:
     response = client.post('/admin/login', data={
         'username': 'admin',

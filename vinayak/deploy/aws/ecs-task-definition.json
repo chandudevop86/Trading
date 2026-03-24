@@ -1,0 +1,50 @@
+﻿{
+  "family": "vinayak-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<account-id>:role/vinayak-ecs-execution-role",
+  "taskRoleArn": "arn:aws:iam::<account-id>:role/vinayak-ecs-task-role",
+  "containerDefinitions": [
+    {
+      "name": "vinayak-api",
+      "image": "<account-id>.dkr.ecr.<region>.amazonaws.com/vinayak-api:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "AWS_REGION", "value": "ap-south-1" },
+        { "name": "REPORTS_S3_BUCKET", "value": "vinayak-reports-prod" },
+        { "name": "REDIS_URL", "value": "redis://vinayak-redis.<cache-id>.use1.cache.amazonaws.com:6379/0" }
+      ],
+      "secrets": [
+        { "name": "VINAYAK_DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:vinayak/database-url" },
+        { "name": "DHAN_CLIENT_ID", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:vinayak/dhan-client-id" },
+        { "name": "DHAN_ACCESS_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:vinayak/dhan-access-token" },
+        { "name": "TELEGRAM_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:vinayak/telegram-token" },
+        { "name": "TELEGRAM_CHAT_ID", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:vinayak/telegram-chat-id" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/vinayak-api",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8000/health/live || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 20
+      }
+    }
+  ]
+}

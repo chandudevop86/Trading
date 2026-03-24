@@ -1,0 +1,157 @@
+﻿Vinayak AWS Implementation Guide 1
+Terraform Stack
+
+Goal
+Build the full AWS target using Terraform so infra is repeatable.
+
+Scope
+1. VPC
+2. Public and private subnets
+3. Internet gateway and NAT
+4. Security groups
+5. ALB
+6. ECS cluster and Fargate service
+7. ECR repository
+8. RDS PostgreSQL
+9. ElastiCache Redis
+10. S3 bucket for reports
+11. Secrets Manager secrets
+12. CloudWatch logs and alarms
+13. Route 53 records and ACM certificate
+
+Recommended folder structure
+terraform/
+  providers.tf
+  versions.tf
+  variables.tf
+  outputs.tf
+  main.tf
+  networking.tf
+  security.tf
+  alb.tf
+  ecs.tf
+  ecr.tf
+  rds.tf
+  redis.tf
+  s3.tf
+  secrets.tf
+  route53_acm.tf
+  cloudwatch.tf
+  terraform.tfvars
+
+Step 1
+Create the Terraform root and pin providers.
+Use AWS provider and remote state if possible.
+
+Step 2
+Build networking first.
+Create one VPC across 2 or 3 AZs.
+Create public subnets for ALB.
+Create private app subnets for ECS tasks.
+Create private data subnets for RDS and Redis.
+Attach route tables.
+Create one NAT gateway per environment if budget is tight, per AZ if higher availability is needed.
+
+Step 3
+Add security groups.
+ALB SG should accept 80 and 443 from the internet.
+ECS SG should allow only ALB to reach port 8000.
+RDS SG should allow only ECS SG on 5432.
+Redis SG should allow only ECS SG on 6379.
+
+Step 4
+Provision ACM and Route 53.
+Create or use the hosted zone.
+Request certificate for the domain and validate by DNS.
+Create ALB listener 443 with ACM.
+Redirect 80 to 443.
+
+Step 5
+Create ECR repository.
+Name it vinayak-api.
+Enable image scanning on push.
+Add lifecycle policy to delete old untagged images.
+
+Step 6
+Create ECS cluster and task definition.
+Use Fargate.
+Attach execution role and task role.
+Map port 8000.
+Send logs to CloudWatch.
+Use Secrets Manager refs for DB, Dhan, and Telegram secrets.
+Use env vars for AWS region, Redis URL, and S3 bucket.
+
+Step 7
+Create ALB target group and ECS service.
+Point the target group to the ECS service.
+Use /health/live or /health/ready for health checks.
+Set minimum healthy percent so deploys stay online.
+
+Step 8
+Create RDS PostgreSQL.
+Use private subnets only.
+Start with a small instance for dev.
+Enable backups and Multi-AZ for production.
+Create the vinayak database and store the full SQLAlchemy URL in Secrets Manager.
+
+Step 9
+Create ElastiCache Redis.
+Use a subnet group in private subnets.
+Set a security group allowing ECS only.
+Expose REDIS_URL to the app through env vars.
+Use it first for OHLCV cache and option metrics cache.
+
+Step 10
+Create S3 bucket.
+Use bucket encryption.
+Block public access.
+Create prefixes such as reports/, exports/, and archives/.
+Grant ECS task role read write access only to that bucket.
+
+Step 11
+Create Secrets Manager secrets.
+Store VINAYAK_DATABASE_URL.
+Store DHAN_CLIENT_ID.
+Store DHAN_ACCESS_TOKEN.
+Store TELEGRAM_TOKEN.
+Store TELEGRAM_CHAT_ID.
+Reference them from the ECS task definition.
+
+Step 12
+Create CloudWatch resources.
+Log group /ecs/vinayak-api.
+Alarms for ALB 5xx, ECS task restarts, RDS CPU/storage, and unhealthy target count.
+
+Step 13
+Deploy order.
+Run terraform init.
+Run terraform plan.
+Run terraform apply.
+Push app image to ECR.
+Update ECS service to new task definition.
+Run alembic migrations against RDS.
+Open the ALB DNS and verify admin and workspace pages.
+
+Step 14
+Post deployment checks.
+Check /health/live.
+Check /health/ready.
+Check /workspace.
+Run one live-analysis request.
+Verify RDS connectivity.
+Verify Redis reachability.
+Verify S3 upload path.
+Verify Secrets Manager access through task role.
+
+Step 15
+Hardening.
+Split modules later by networking, data, and app.
+Add separate workspaces for dev, stage, and prod.
+Use remote state locking.
+Add GitHub Actions or another CI job to run terraform fmt and plan.
+
+What you should implement later in code
+1. Replace local report storage with S3 writes.
+2. Replace SQLite demos with RDS by default in production.
+3. Add Redis caching reads in the OHLCV and option metrics path.
+4. Move long-running jobs to a worker service.

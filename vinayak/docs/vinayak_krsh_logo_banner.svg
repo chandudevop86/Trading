@@ -1,0 +1,20 @@
+<svg width="1200" height="320" viewBox="0 0 1200 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#102a43"/>
+      <stop offset="100%" stop-color="#1f6f78"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f4d8a6"/>
+      <stop offset="100%" stop-color="#c6862f"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="320" rx="28" fill="url(#bg)"/>
+  <circle cx="160" cy="160" r="74" fill="none" stroke="url(#ring)" stroke-width="16"/>
+  <path d="M125 196 L160 112 L195 196" stroke="#f8f3ea" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M138 172 H182" stroke="#f4d8a6" stroke-width="12" stroke-linecap="round"/>
+  <text x="270" y="130" style="font:700 24px 'Segoe UI', Arial, sans-serif; fill:#f4d8a6; letter-spacing:4px;">KRSH SOLUTIONS</text>
+  <text x="270" y="185" style="font:700 54px 'Segoe UI', Arial, sans-serif; fill:#ffffff;">VINAYAK</text>
+  <text x="270" y="225" style="font:500 24px 'Segoe UI', Arial, sans-serif; fill:#dbecef;">Trading Architecture and Delivery Suite</text>
+  <text x="270" y="265" style="font:500 18px 'Segoe UI', Arial, sans-serif; fill:#c4dce1;">Web Tier  •  App Tier  •  Data Tier  •  AWS Ready</text>
+</svg>

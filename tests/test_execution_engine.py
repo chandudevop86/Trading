@@ -501,8 +501,44 @@ class TestExecutionEngine(unittest.TestCase):
         self.assertEqual(rows[0]['broker_status'], 'OPTIMIZER_GATE')
         self.assertIn('NEGATIVE_EXPECTANCY', rows[0]['broker_message'])
         self.assertEqual(broker.calls, 0)
+    def test_execute_paper_trades_skips_duplicate_signal_key_same_candle(self):
+        candidates = [
+            {"strategy": "DEMAND_SUPPLY", "symbol": "NIFTY", "timeframe": "5m", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100.0, "quantity": 65, "reason": "a", "stop_loss": 99.0, "target_price": 102.0},
+            {"strategy": "DEMAND_SUPPLY", "symbol": "NIFTY", "timeframe": "5m", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100.2, "quantity": 65, "reason": "b", "stop_loss": 99.1, "target_price": 102.4},
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            result = execute_paper_trades(candidates, out, deduplicate=True)
+            self.assertEqual(result.executed_count, 1)
+            self.assertEqual(result.skipped_count, 1)
+            self.assertEqual(result.skipped_rows[0]['duplicate_reason'], 'DUPLICATE_SIGNAL_KEY')
+
+    def test_execute_paper_trades_enforces_duplicate_signal_cooldown(self):
+        candidates = [
+            {"strategy": "DEMAND_SUPPLY", "symbol": "NIFTY", "timeframe": "5m", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100.0, "quantity": 65, "reason": "a", "stop_loss": 99.0, "target_price": 102.0, "duplicate_signal_cooldown_bars": 2},
+            {"strategy": "DEMAND_SUPPLY", "symbol": "NIFTY", "timeframe": "5m", "signal_time": "2026-03-06 10:05:00", "side": "BUY", "price": 100.4, "quantity": 65, "reason": "b", "stop_loss": 99.3, "target_price": 102.6, "duplicate_signal_cooldown_bars": 2},
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            result = execute_paper_trades(candidates, out, deduplicate=True)
+            self.assertEqual(result.executed_count, 1)
+            self.assertEqual(result.skipped_count, 1)
+            self.assertEqual(result.skipped_rows[0]['duplicate_reason'], 'DUPLICATE_SIGNAL_COOLDOWN')
+
+    def test_execute_paper_trades_blocks_when_max_open_trades_hit(self):
+        candidates = [
+            {"strategy": "BREAKOUT", "symbol": "NIFTY", "timeframe": "5m", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100.0, "quantity": 65, "reason": "seed", "stop_loss": 99.0, "target_price": 102.0},
+            {"strategy": "DEMAND_SUPPLY", "symbol": "NIFTY", "timeframe": "5m", "signal_time": "2026-03-06 10:10:00", "side": "SELL", "price": 99.0, "quantity": 65, "reason": "next", "stop_loss": 100.0, "target_price": 97.0},
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            first = execute_paper_trades([candidates[0]], out, deduplicate=True, max_open_trades=1)
+            second = execute_paper_trades([candidates[1]], out, deduplicate=True, max_open_trades=1)
+            self.assertEqual(first.executed_count, 1)
+            self.assertEqual(second.blocked_count, 1)
+            self.assertEqual(second.blocked_rows[0]['blocked_reason'], 'MAX_OPEN_TRADES')
 if __name__ == '__main__':
     unittest.main()
-
-
-

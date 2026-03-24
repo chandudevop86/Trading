@@ -24,7 +24,6 @@ from src.live_ohlcv import fetch_live_ohlcv
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
 from src.strike_selector import attach_option_strikes
-from src.strategy_evaluator import rank_strategy_summaries
 from src.strategy_service import StrategyContext, run_strategy_workflow
 from src.trading_core import append_log, configure_file_logging, prepare_trading_data, write_rows
 
@@ -440,6 +439,14 @@ def _run_live_strategy(strategy: str, symbol: str, timeframe: str, capital: floa
         amd_min_score_balanced=5.0,
         amd_min_score_aggressive=3.0,
     )
+    normalized_trades: list[dict[str, object]] = []
+    for trade in trades:
+        item = dict(trade)
+        item.setdefault('symbol', symbol)
+        item.setdefault('timeframe', timeframe)
+        item.setdefault('duplicate_signal_cooldown_bars', item.get('duplicate_signal_cooldown_bars', 0))
+        normalized_trades.append(item)
+    trades = normalized_trades
     _save_runtime_outputs(candles, trades)
     if trades:
         _append_text_log(EXECUTION_LOG, f'RUN {strategy} {symbol} {timeframe} trades={len(trades)}')
@@ -476,6 +483,7 @@ def _refresh_paper_trade_summary(candles: pd.DataFrame, capital: float) -> tuple
         validation_output=BACKTEST_VALIDATION_UI_OUTPUT,
     )
     return closed_rows, summary
+
 def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, broker_choice: str, candles: pd.DataFrame, capital: float) -> tuple[object | None, list[tuple[str, str]], str]:
     if not trades:
         return None, [('info', 'No actionable trade candidates')], 'Paper standby'
@@ -491,6 +499,8 @@ def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, 
             EXECUTED_TRADES_OUTPUT,
             broker_name='DHAN',
             live_enabled=live_enabled,
+            max_trades_per_day=3,
+            max_open_trades=1,
             order_history_path=ORDER_HISTORY_OUTPUT,
         )
         status = 'Live broker armed' if live_enabled else 'Live broker blocked by config'
@@ -498,8 +508,11 @@ def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, 
         result = execute_paper_trades(
             candidates,
             EXECUTED_TRADES_OUTPUT,
+            max_trades_per_day=3,
+            max_open_trades=1,
             order_history_path=ORDER_HISTORY_OUTPUT,
         )
+        _refresh_paper_trade_summary(candles, capital)
         status = 'Paper broker active'
     return result, execution_result_summary(result), status
 
@@ -640,6 +653,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
 

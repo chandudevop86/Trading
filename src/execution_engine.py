@@ -54,9 +54,12 @@ SKIP_REASON_MISSING_STOP_LOSS = "MISSING_STOP_LOSS"
 SKIP_REASON_MISSING_TARGET = "MISSING_TARGET"
 SKIP_REASON_INVALID_TRADE_LEVELS = "INVALID_TRADE_LEVELS"
 SKIP_REASON_DUPLICATE_BATCH_TRADE = "DUPLICATE_BATCH_TRADE"
+SKIP_REASON_DUPLICATE_SIGNAL_KEY = "DUPLICATE_SIGNAL_KEY"
+SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN = "DUPLICATE_SIGNAL_COOLDOWN"
 SKIP_REASON_BROKER_ERROR = "BROKER_ERROR"
 SKIP_REASON_KILL_SWITCH = "KILL_SWITCH_ENABLED"
 SKIP_REASON_OPTIMIZER_GATE = "OPTIMIZER_GATE_BLOCKED"
+SKIP_REASON_MAX_OPEN_TRADES = "MAX_OPEN_TRADES"
 
 ACTIVE_TRADE_STATUSES = {
     TRADE_STATUS_REVIEWED,
@@ -80,6 +83,7 @@ EXECUTION_SCHEMA = [
     "validation_error",
     "strategy",
     "symbol",
+    "timeframe",
     "data_symbol",
     "trade_symbol",
     "trading_symbol",
@@ -87,6 +91,7 @@ EXECUTION_SCHEMA = [
     "exchange_segment",
     "instrument_type",
     "signal_time",
+    "duplicate_signal_key",
     "side",
     "price",
     "share_price",
@@ -212,10 +217,64 @@ def _price_value(record: dict[str, object]) -> float:
     return 0.0
 
 
+def _timeframe_key(record: dict[str, object]) -> str:
+    return str(record.get("timeframe", record.get("interval", "")) or "").strip().lower() or "na"
+
+
+def _signal_time_text(record: dict[str, object]) -> str:
+    return str(record.get("signal_time", record.get("entry_time", record.get("timestamp", ""))) or "").strip()
+
+
+def make_duplicate_signal_key(record: dict[str, object]) -> str:
+    strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
+    symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
+    timeframe = _timeframe_key(record)
+    signal_time = _signal_time_text(record)
+    side = _normalize_text(record.get("side"))
+    return "|".join([strategy, symbol, timeframe, signal_time, side])
+
+
+def _cooldown_group_key(record: dict[str, object]) -> str:
+    strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
+    symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
+    timeframe = _timeframe_key(record)
+    side = _normalize_text(record.get("side"))
+    return "|".join([strategy, symbol, timeframe, side])
+
+
+def _infer_timeframe_minutes(value: object) -> int:
+    raw = str(value or "").strip().lower()
+    mapping = {
+        "1m": 1,
+        "3m": 3,
+        "5m": 5,
+        "10m": 10,
+        "15m": 15,
+        "30m": 30,
+        "45m": 45,
+        "1h": 60,
+        "2h": 120,
+        "4h": 240,
+        "1d": 1440,
+    }
+    return int(mapping.get(raw, 0))
+
+
+def _cooldown_window_seconds(record: dict[str, object]) -> int:
+    explicit_minutes = _safe_float(record.get("duplicate_signal_cooldown_minutes"))
+    if explicit_minutes > 0:
+        return int(explicit_minutes * 60)
+    bars = int(_safe_float(record.get("duplicate_signal_cooldown_bars")))
+    timeframe_minutes = _infer_timeframe_minutes(record.get("timeframe", record.get("interval")))
+    if bars > 0 and timeframe_minutes > 0:
+        return int(bars * timeframe_minutes * 60)
+    return 0
+
+
 def make_trade_key(record: dict[str, object]) -> str:
     strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
     symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
-    signal_time = str(record.get("signal_time", record.get("entry_time", record.get("timestamp", ""))) or "").strip()
+    signal_time = _signal_time_text(record)
     side = _normalize_text(record.get("side"))
     entry_price = f"{_price_value(record):.6f}"
     instrument = _normalize_text(
@@ -225,7 +284,7 @@ def make_trade_key(record: dict[str, object]) -> str:
         or record.get("strike_price")
         or symbol
     )
-    payload = "|".join([strategy, symbol, signal_time, side, entry_price, instrument])
+    payload = "|".join([strategy, symbol, _timeframe_key(record), signal_time, side, entry_price, instrument])
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:20]
 
 
@@ -235,11 +294,11 @@ def make_trade_id(record: dict[str, object]) -> str:
         return existing
     strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
     symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
-    signal_time = str(record.get("signal_time", record.get("entry_time", record.get("timestamp", ""))) or "").strip()
+    signal_time = _signal_time_text(record)
     side = _normalize_text(record.get("side"))
     entry_price = f"{_price_value(record):.6f}"
     option_key = _normalize_text(record.get("option_strike") or record.get("trading_symbol") or record.get("strike_price"))
-    payload = "|".join([strategy, symbol, signal_time, side, entry_price, option_key])
+    payload = "|".join([strategy, symbol, _timeframe_key(record), signal_time, side, entry_price, option_key])
     return str(uuid.uuid5(uuid.NAMESPACE_URL, payload))
 
 
@@ -251,6 +310,9 @@ def _ensure_trade_identity(record: dict[str, object], *, default_status: str | N
     normalized = dict(record)
     normalized.setdefault("strategy", str(normalized.get("strategy", "TRADE_BOT") or "TRADE_BOT"))
     normalized.setdefault("symbol", str(normalized.get("symbol", "UNKNOWN") or "UNKNOWN"))
+    normalized.setdefault("timeframe", str(normalized.get("timeframe", normalized.get("interval", "")) or ""))
+    normalized.setdefault("signal_time", _signal_time_text(normalized))
+    normalized["duplicate_signal_key"] = str(normalized.get("duplicate_signal_key", "") or make_duplicate_signal_key(normalized))
     normalized["trade_key"] = str(normalized.get("trade_key", "") or make_trade_key(normalized))
     normalized["trade_id"] = make_trade_id(normalized)
     if default_status and not str(normalized.get("trade_status", "") or "").strip():
@@ -285,6 +347,7 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
             "strategy": "INDICATOR",
             "symbol": symbol,
             "signal_time": str(last.get("timestamp", "")),
+            "timeframe": str(last.get("timeframe", last.get("interval", "")) or ""),
             "side": side,
             "price": close_price,
             "entry": close_price,
@@ -297,6 +360,8 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
             "score": _safe_float(last.get("score")),
             "quantity": default_quantity_for_symbol(symbol),
             "reason": signal,
+            "duplicate_signal_cooldown_bars": last.get("duplicate_signal_cooldown_bars", 0),
+            "duplicate_signal_cooldown_minutes": last.get("duplicate_signal_cooldown_minutes", ""),
         }, default_status=TRADE_STATUS_NEW))
         return candidates
 
@@ -319,6 +384,7 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
             "strategy": str(row.get("strategy", "TRADE_BOT")),
             "symbol": symbol,
             "signal_time": str(row.get("entry_time", row.get("timestamp", ""))),
+            "timeframe": str(row.get("timeframe", row.get("interval", "")) or ""),
             "side": str(row.get("side", "HOLD")),
             "price": row.get("entry_price", row.get("entry", row.get("close", ""))),
             "share_price": share_price,
@@ -340,6 +406,8 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
             "trailing_stop_loss": row.get("trailing_stop_loss", ""),
             "target_price": row.get("target_price", ""),
             "quantity": row.get("quantity", default_quantity_for_symbol(symbol)),
+            "duplicate_signal_cooldown_bars": row.get("duplicate_signal_cooldown_bars", 0),
+            "duplicate_signal_cooldown_minutes": row.get("duplicate_signal_cooldown_minutes", ""),
             "reason": f"SL:{row.get('stop_loss', '')} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', '')}",
         }, default_status=TRADE_STATUS_NEW))
     return candidates
@@ -389,6 +457,42 @@ def load_active_trade_keys(path: Path, execution_type: str | None = None) -> set
             continue
         keys.add(str(row.get("trade_key", "") or make_trade_key(row)))
     return keys
+
+
+def load_active_duplicate_signal_keys(path: Path, execution_type: str | None = None) -> set[str]:
+    keys: set[str] = set()
+    for row in _read_trade_rows(path):
+        if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
+            continue
+        if not _row_is_active(row):
+            continue
+        keys.add(str(row.get("duplicate_signal_key", "") or make_duplicate_signal_key(row)))
+    return keys
+
+
+def _load_recent_signal_times(path: Path, execution_type: str | None = None) -> dict[str, datetime]:
+    recent: dict[str, datetime] = {}
+    for row in _read_trade_rows(path):
+        if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
+            continue
+        signal_time = _parse_dt(row.get("signal_time")) or _parse_dt(row.get("entry_time")) or _parse_dt(row.get("timestamp"))
+        if signal_time is None:
+            continue
+        group_key = _cooldown_group_key(row)
+        current = recent.get(group_key)
+        if current is None or signal_time > current:
+            recent[group_key] = signal_time
+    return recent
+
+
+def _count_open_trades(path: Path, execution_type: str | None = None) -> int:
+    count = 0
+    for row in _read_trade_rows(path):
+        if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
+            continue
+        if _row_is_active(row):
+            count += 1
+    return count
 
 
 def _load_historical_trade_ids(path: Path, execution_type: str | None = None) -> set[str]:
@@ -542,11 +646,13 @@ def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[st
     record["target_price"] = target_price
     record.setdefault("target", target_price)
     record.setdefault("share_price", price)
+    record.setdefault("timeframe", str(record.get("timeframe", record.get("interval", "")) or ""))
     record["signal_time"] = signal_time
     record.setdefault("timestamp", signal_time)
     record.setdefault("reason", str(record.get("reason", record.get("strategy", "TRADE")) or "TRADE"))
     record.setdefault("strike_price", record.get("option_strike", record.get("strike", "")))
     record["score"] = _safe_float(record.get("score"))
+    record["duplicate_signal_key"] = str(record.get("duplicate_signal_key", "") or make_duplicate_signal_key(record))
     raw_quantity = record.get("quantity")
     if raw_quantity is None or str(raw_quantity).strip() == "":
         record["validation_error"] = SKIP_REASON_MISSING_QUANTITY
@@ -563,6 +669,8 @@ def _make_result_row(candidate: dict[str, object], *, execution_type: str, proce
     row.setdefault("execution_type", execution_type)
     row.setdefault("executed_at_utc", processed_at_utc)
     row.setdefault("position_status", "")
+    row.setdefault("timeframe", str(row.get("timeframe", row.get("interval", "")) or ""))
+    row.setdefault("duplicate_signal_key", str(row.get("duplicate_signal_key", "") or make_duplicate_signal_key(row)))
     row.setdefault("entry", row.get("entry_price", row.get("price", "")))
     row.setdefault("entry_price", row.get("price", row.get("entry", "")))
     row.setdefault("target_price", row.get("target", row.get("target_price", "")))
@@ -802,7 +910,7 @@ def _optimizer_gate_for_strategy(strategy: object, gate_map: dict[str, tuple[boo
         return False, f"no optimizer row for {strategy}"
     return gate_map[strategy_key]
 
-def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, *, execution_type: str, deduplicate: bool, max_trades_per_day: int | None, max_daily_loss: float | None, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, live_enabled: bool | None = None, symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None, max_order_quantity: int | None = None, max_order_value: float | None = None, order_history_path: Path | None = None, optimizer_report_path: Path | None = None, enforce_optimizer_gate: bool | None = None) -> ExecutionResult:
+def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, *, execution_type: str, deduplicate: bool, max_trades_per_day: int | None, max_daily_loss: float | None, max_open_trades: int | None = None, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, live_enabled: bool | None = None, symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None, max_order_quantity: int | None = None, max_order_value: float | None = None, order_history_path: Path | None = None, optimizer_report_path: Path | None = None, enforce_optimizer_gate: bool | None = None) -> ExecutionResult:
     result = ExecutionResult()
     if not candidates:
         return result
@@ -812,6 +920,9 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
     today_key = now[:10]
     historical_trade_ids = _load_historical_trade_ids(output_path, execution_type)
     active_trade_keys = load_active_trade_keys(output_path, execution_type)
+    active_duplicate_signal_keys = load_active_duplicate_signal_keys(output_path, execution_type)
+    recent_signal_times = _load_recent_signal_times(output_path, execution_type)
+    open_trade_count = _count_open_trades(output_path, execution_type)
     daily_state = _load_daily_execution_state(output_path, execution_type)
     rows_to_write: list[dict[str, object]] = []
     resolved_allowlist = _normalize_allowlist(symbol_allowlist)
@@ -835,13 +946,18 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
     _append_text_log(EXECUTION_LOG_PATH, f"Execution start mode={execution_type} broker={resolved_broker_name} candidates={len(candidates)}")
     batch_seen_trade_ids: set[str] = set()
     batch_seen_trade_keys: set[str] = set()
-
+    batch_seen_signal_keys: set[str] = set()
+    batch_recent_signal_times: dict[str, datetime] = {}
 
     for candidate in candidates:
         ok, validation_reason, validated = validate_candidate(candidate)
         base_row = _make_result_row(validated, execution_type=execution_type, processed_at_utc=now)
         trade_id = str(base_row.get("trade_id", ""))
         trade_key = str(base_row.get("trade_key", ""))
+        duplicate_signal_key = str(base_row.get("duplicate_signal_key", "") or make_duplicate_signal_key(base_row))
+        signal_time = _parse_dt(base_row.get("signal_time"))
+        cooldown_group = _cooldown_group_key(base_row)
+        cooldown_seconds = _cooldown_window_seconds(base_row)
         if not ok:
             _append_text_log(REJECTIONS_LOG_PATH, f"Rejected invalid trade {trade_id or 'UNKNOWN'} reason={validation_reason}")
             append_log(f'execution_engine skipped invalid trade {trade_id} reason={validation_reason}')
@@ -853,28 +969,43 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
         if deduplicate and trade_key in batch_seen_trade_keys:
             _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_BATCH_TRADE)
             continue
+        if deduplicate and duplicate_signal_key in batch_seen_signal_keys:
+            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_SIGNAL_KEY)
+            continue
         if deduplicate and trade_id in historical_trade_ids:
             _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_EXECUTED_TRADE)
             continue
         if deduplicate and trade_key in active_trade_keys:
             _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_ACTIVE_TRADE)
             continue
+        if deduplicate and duplicate_signal_key in active_duplicate_signal_keys:
+            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_SIGNAL_KEY)
+            continue
+        previous_signal_time = batch_recent_signal_times.get(cooldown_group) or recent_signal_times.get(cooldown_group)
+        if deduplicate and cooldown_seconds > 0 and signal_time is not None and previous_signal_time is not None:
+            if (signal_time - previous_signal_time).total_seconds() < cooldown_seconds:
+                _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN)
+                continue
         batch_seen_trade_ids.add(trade_id)
         batch_seen_trade_keys.add(trade_key)
+        batch_seen_signal_keys.add(duplicate_signal_key)
+        if signal_time is not None:
+            batch_recent_signal_times[cooldown_group] = signal_time
 
         day_key = _trade_day_key(base_row, today_key)
         state = daily_state.setdefault(day_key, {"count": 0.0, "realized_pnl": 0.0})
         trade_limit_hit = max_trades_per_day is not None and int(max_trades_per_day) > 0 and int(state["count"]) >= int(max_trades_per_day)
         loss_limit_hit = max_daily_loss is not None and float(max_daily_loss) > 0 and float(state["realized_pnl"]) <= -abs(float(max_daily_loss))
-        if trade_limit_hit or loss_limit_hit:
+        open_trade_limit_hit = max_open_trades is not None and int(max_open_trades) > 0 and int(open_trade_count) >= int(max_open_trades)
+        if trade_limit_hit or loss_limit_hit or open_trade_limit_hit:
             blocked = dict(base_row)
             blocked["trade_status"] = TRADE_STATUS_BLOCKED
             blocked["execution_status"] = "BLOCKED"
-            blocked["blocked_reason"] = SKIP_REASON_MAX_TRADES_PER_DAY if trade_limit_hit else SKIP_REASON_MAX_DAILY_LOSS
-            blocked["risk_limit_reason"] = _risk_limit_message(max_trades_per_day, max_daily_loss)
+            blocked["blocked_reason"] = SKIP_REASON_MAX_TRADES_PER_DAY if trade_limit_hit else SKIP_REASON_MAX_DAILY_LOSS if loss_limit_hit else SKIP_REASON_MAX_OPEN_TRADES
+            blocked["risk_limit_reason"] = _risk_limit_message(max_trades_per_day, max_daily_loss) if not open_trade_limit_hit else f"max open trades={int(max_open_trades)}"
             blocked["broker_name"] = resolved_broker_name
             blocked["broker_status"] = "RISK_LIMIT"
-            blocked["broker_message"] = f"Execution blocked by {_risk_limit_message(max_trades_per_day, max_daily_loss)}"
+            blocked["broker_message"] = f"Execution blocked by {blocked['risk_limit_reason']}"
             rows_to_write.append(blocked)
             _append_written_row(result, blocked)
             _append_text_log(REJECTIONS_LOG_PATH, f"Risk blocked trade {trade_id} reason={blocked['blocked_reason']}")
@@ -1007,17 +1138,21 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             state["realized_pnl"] += _safe_float(broker_row.get("pnl"))
             historical_trade_ids.add(trade_id)
             active_trade_keys.add(trade_key)
+            active_duplicate_signal_keys.add(duplicate_signal_key)
+            if signal_time is not None:
+                recent_signal_times[cooldown_group] = signal_time
+            open_trade_count += 1
 
     _write_execution_rows(output_path, rows_to_write)
     return result
 
 
-def execute_paper_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, max_trades_per_day: int | None = None, max_daily_loss: float | None = None, order_history_path: Path | None = None) -> ExecutionResult:
-    return _execute_candidates(candidates, output_path, execution_type="PAPER", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, order_history_path=order_history_path)
+def execute_paper_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, max_trades_per_day: int | None = None, max_daily_loss: float | None = None, max_open_trades: int | None = None, order_history_path: Path | None = None) -> ExecutionResult:
+    return _execute_candidates(candidates, output_path, execution_type="PAPER", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, max_open_trades=max_open_trades, order_history_path=order_history_path)
 
 
-def execute_live_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, max_trades_per_day: int | None = None, max_daily_loss: float | None = None, live_enabled: bool | None = None, symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None, max_order_quantity: int | None = None, max_order_value: float | None = None, order_history_path: Path | None = None, optimizer_report_path: Path | None = None, enforce_optimizer_gate: bool | None = None) -> ExecutionResult:
-    return _execute_candidates(candidates, output_path, execution_type="LIVE", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, broker_client=broker_client, broker_name=broker_name, security_map=security_map, live_enabled=live_enabled, symbol_allowlist=symbol_allowlist, max_order_quantity=max_order_quantity, max_order_value=max_order_value, order_history_path=order_history_path, optimizer_report_path=optimizer_report_path, enforce_optimizer_gate=enforce_optimizer_gate)
+def execute_live_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, max_trades_per_day: int | None = None, max_daily_loss: float | None = None, max_open_trades: int | None = None, live_enabled: bool | None = None, symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None, max_order_quantity: int | None = None, max_order_value: float | None = None, order_history_path: Path | None = None, optimizer_report_path: Path | None = None, enforce_optimizer_gate: bool | None = None) -> ExecutionResult:
+    return _execute_candidates(candidates, output_path, execution_type="LIVE", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, max_open_trades=max_open_trades, broker_client=broker_client, broker_name=broker_name, security_map=security_map, live_enabled=live_enabled, symbol_allowlist=symbol_allowlist, max_order_quantity=max_order_quantity, max_order_value=max_order_value, order_history_path=order_history_path, optimizer_report_path=optimizer_report_path, enforce_optimizer_gate=enforce_optimizer_gate)
 
 
 def _reconcile_execution_status(broker_status: str) -> str:
@@ -1471,11 +1606,3 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
-
-
-
-
-
-
-
-

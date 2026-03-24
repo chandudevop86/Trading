@@ -44,3 +44,17 @@
 [2026-03-24 21:56:54] Rejected invalid trade bd45846d-74df-5358-a23b-437fa02cd28e reason=INVALID_SIDE
 [2026-03-24 21:56:54] Risk blocked trade caeb03fb-5b45-534b-86e0-b5f29d082ef4 reason=MAX_TRADES_PER_DAY
 [2026-03-24 21:56:54] Rejected invalid trade 781b5df1-8de4-598a-b1d4-646fe62f75b2 reason=INVALID_SIDE
+[2026-03-24 22:35:57] Risk blocked trade a15fae86-ff29-5510-8931-7674d8706d5e reason=MAX_DAILY_LOSS
+[2026-03-24 22:35:57] Kill-switch blocked trade a15fae86-ff29-5510-8931-7674d8706d5e
+[2026-03-24 22:35:57] Optimizer gate blocked trade a15fae86-ff29-5510-8931-7674d8706d5e strategy=BREAKOUT reason=NEGATIVE_EXPECTANCY
+[2026-03-24 22:35:58] Rejected invalid trade 679a8cdc-1450-5389-ac5a-d135259cdf54 reason=INVALID_SIDE
+[2026-03-24 22:35:58] Risk blocked trade 24d33627-2d2a-574d-ba91-cfca136b0a25 reason=MAX_TRADES_PER_DAY
+[2026-03-24 22:35:58] Risk blocked trade 36dcb743-7bfe-5c48-b5a2-bb458fc4f09c reason=MAX_OPEN_TRADES
+[2026-03-24 22:35:58] Rejected invalid trade 9b9cc866-2ed4-593b-948f-3595a1cf2af1 reason=INVALID_SIDE
+[2026-03-24 22:38:02] Risk blocked trade a15fae86-ff29-5510-8931-7674d8706d5e reason=MAX_DAILY_LOSS
+[2026-03-24 22:38:02] Kill-switch blocked trade a15fae86-ff29-5510-8931-7674d8706d5e
+[2026-03-24 22:38:02] Optimizer gate blocked trade a15fae86-ff29-5510-8931-7674d8706d5e strategy=BREAKOUT reason=NEGATIVE_EXPECTANCY
+[2026-03-24 22:38:02] Rejected invalid trade 679a8cdc-1450-5389-ac5a-d135259cdf54 reason=INVALID_SIDE
+[2026-03-24 22:38:02] Risk blocked trade 24d33627-2d2a-574d-ba91-cfca136b0a25 reason=MAX_TRADES_PER_DAY
+[2026-03-24 22:38:03] Risk blocked trade 36dcb743-7bfe-5c48-b5a2-bb458fc4f09c reason=MAX_OPEN_TRADES
+[2026-03-24 22:38:03] Rejected invalid trade 9b9cc866-2ed4-593b-948f-3595a1cf2af1 reason=INVALID_SIDE

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from src.backtest_engine import nifty_intraday_validation_config, summarize_trade_log
 from src.live_ohlcv import fetch_live_ohlcv, write_csv
 from src.strategy_service import StrategyContext, generate_strategy_rows
 from src.trading_workflows import build_backtest_workflow, run_live_candidates, run_paper_candidates
@@ -197,6 +198,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--data-output', type=Path, default=Path('data/live_ohlcv.csv'))
     parser.add_argument('--summary-output', type=Path, default=Path('data/backtest_results_all.csv'))
     parser.add_argument('--summary-history-output', type=Path, default=Path('data/backtest_results_history.csv'))
+    parser.add_argument('--validation-output', type=Path, default=Path('data/backtest_validation.csv'))
     parser.add_argument('--equity-curve-output', type=Path, default=Path('data/backtest_equity_curves.csv'))
     parser.add_argument('--paper-log-output', type=Path, default=Path('data/paper_trading_logs_all.csv'))
     parser.add_argument('--execution-type', default='PAPER', choices=['PAPER', 'LIVE', 'NONE'])
@@ -340,6 +342,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     _write_rows(args.ranking_output, ranked_summary_rows)
     _write_rows(equity_curve_output, equity_curve_rows)
 
+    validation_summary: dict[str, Any] = {}
+
     breakout_workflow = build_backtest_workflow(breakout_rows, 'Breakout (15m)', args.execution_symbol)
     ds_workflow = build_backtest_workflow(ds_rows, 'Demand/Supply', args.execution_symbol)
     ind_workflow = build_backtest_workflow(indicator_rows, 'Indicator (RSI/ADX/MACD+VWAP)', args.execution_symbol)
@@ -396,10 +400,34 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             max_daily_loss=max_daily_loss,
         )
         paper_rows = list(getattr(paper_result.execution_result, 'rows', []))
+    validation_output = Path(getattr(args, 'validation_output', Path('data/backtest_validation.csv')))
+    validation_summary_output = validation_output.with_name(f'{validation_output.stem}_summary{validation_output.suffix}')
+    if execution_type in {'PAPER', 'LIVE'} and paper_rows:
+        validation_summary = summarize_trade_log(
+            paper_rows,
+            capital=capital,
+            strategy_name='PAPER_VALIDATION',
+            summary_output=validation_summary_output,
+            validation_output=validation_output,
+            validation=nifty_intraday_validation_config(),
+        )
+    elif not paper_rows:
+        validation_summary = summarize_trade_log(
+            [],
+            capital=capital,
+            strategy_name='PAPER_VALIDATION',
+            summary_output=validation_summary_output,
+            validation_output=validation_output,
+            validation=nifty_intraday_validation_config(),
+        )
+
     return {
         'summary_rows': summary_rows,
         'ranked_summary_rows': ranked_summary_rows,
         'ranking_output': str(args.ranking_output),
+        'validation_output': str(validation_output),
+        'validation_summary_output': str(validation_summary_output),
+        'validation_summary': validation_summary,
         'equity_curve_rows': equity_curve_rows,
         'equity_curve_output': str(equity_curve_output),
         'execution_type': execution_type,

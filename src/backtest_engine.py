@@ -26,6 +26,49 @@ class BacktestValidationConfig:
     require_positive_expectancy: bool = True
 
 
+
+def nifty_intraday_validation_config() -> BacktestValidationConfig:
+    """Validation preset for Nifty intraday paper/backtest promotion."""
+    return BacktestValidationConfig(
+        min_trades=100,
+        target_trades=150,
+        max_trades=200,
+        min_profit_factor=1.2,
+        min_expectancy_per_trade=0.0,
+        min_win_rate=38.0,
+        min_avg_rr=1.0,
+        max_drawdown_pct=15.0,
+        require_positive_expectancy=True,
+    )
+
+
+def nifty_intraday_backtest_config(
+    *,
+    capital: float = 100000.0,
+    risk_pct: float = 0.005,
+    rr_ratio: float = 2.0,
+    strategy_name: str = "NIFTY_INTRADAY",
+    trades_output: Path = BACKTEST_TRADES_OUTPUT,
+    summary_output: Path = BACKTEST_SUMMARY_OUTPUT,
+    validation_output: Path = BACKTEST_VALIDATION_OUTPUT,
+) -> BacktestConfig:
+    """Backtest preset aligned with Nifty intraday validation and risk controls."""
+    return BacktestConfig(
+        capital=float(capital),
+        risk_pct=float(risk_pct),
+        rr_ratio=float(rr_ratio),
+        trades_output=trades_output,
+        summary_output=summary_output,
+        validation_output=validation_output,
+        strategy_name=strategy_name,
+        max_trades_per_day=3,
+        max_daily_loss=max(float(capital) * 0.02, 0.0),
+        duplicate_cooldown_minutes=15,
+        commission_per_trade=20.0,
+        slippage_bps=3.0,
+        validation=nifty_intraday_validation_config(),
+    )
+
 @dataclass(slots=True)
 class BacktestConfig:
     capital: float = 100000.0

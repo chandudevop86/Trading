@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 import pandas as pd
 
-from src.backtest_engine import BacktestConfig, BacktestValidationConfig, run_backtest, summarize_trade_log
+from src.backtest_engine import BacktestConfig, BacktestValidationConfig, nifty_intraday_backtest_config, nifty_intraday_validation_config, run_backtest, summarize_trade_log
 
 
 def _build_market_frame(total_trades: int = 120) -> pd.DataFrame:
@@ -102,6 +102,22 @@ def _risk_rule_strategy(df, capital: float, risk_pct: float, rr_ratio: float, co
 
 
 class TestBacktestEngine(unittest.TestCase):
+    def test_nifty_intraday_preset_matches_expected_thresholds(self):
+        validation = nifty_intraday_validation_config()
+        config = nifty_intraday_backtest_config(capital=200000.0, strategy_name='NIFTY_TEST')
+
+        self.assertEqual(validation.min_trades, 100)
+        self.assertEqual(validation.target_trades, 150)
+        self.assertEqual(validation.max_trades, 200)
+        self.assertEqual(validation.min_profit_factor, 1.2)
+        self.assertEqual(validation.min_win_rate, 38.0)
+        self.assertEqual(validation.max_drawdown_pct, 15.0)
+        self.assertEqual(config.max_trades_per_day, 3)
+        self.assertEqual(config.duplicate_cooldown_minutes, 15)
+        self.assertEqual(config.commission_per_trade, 20.0)
+        self.assertEqual(config.slippage_bps, 3.0)
+        self.assertEqual(config.validation.min_avg_rr, 1.0)
+
     def test_run_backtest_reports_readiness_for_positive_sample(self):
         df = _build_market_frame(120)
         with TemporaryDirectory() as td:

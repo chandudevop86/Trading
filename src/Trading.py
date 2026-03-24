@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from src.amd_fvg_sd_bot import ConfluenceConfig, generate_trades as generate_amd_fvg_sd_trades
-from src.backtest_engine import BacktestConfig, run_backtest
+from src.backtest_engine import nifty_intraday_backtest_config, run_backtest
 from src.execution_engine import build_execution_candidates, execute_live_trades, execute_paper_trades, execution_result_summary
 from src.breakout_bot import Candle, generate_trades as generate_breakout_trades
 from src.demand_supply_bot import generate_trades as generate_demand_supply_trades
@@ -34,6 +34,7 @@ TRADES_OUTPUT = DATA_DIR / 'trades.csv'
 EXECUTED_TRADES_OUTPUT = DATA_DIR / 'executed_trades.csv'
 BACKTEST_TRADES_OUTPUT = DATA_DIR / 'backtest_trades.csv'
 BACKTEST_SUMMARY_OUTPUT = DATA_DIR / 'backtest_summary.csv'
+BACKTEST_VALIDATION_UI_OUTPUT = DATA_DIR / 'backtest_validation.csv'
 STRATEGY_RANKING_OUTPUT = DATA_DIR / 'strategy_expectancy_report.csv'
 ORDER_HISTORY_OUTPUT = DATA_DIR / 'order_history.csv'
 APP_LOG = LOG_DIR / 'app.log'
@@ -369,19 +370,16 @@ def _run_live_strategy(strategy: str, symbol: str, timeframe: str, capital: floa
 
 
 def _run_strategy_backtest(candles: pd.DataFrame, strategy: str, symbol: str, capital: float, risk_pct: float, rr_ratio: float) -> dict[str, object]:
-    return run_backtest(
-        candles,
-        _strategy_callable(strategy, symbol),
-        BacktestConfig(
-            capital=float(capital),
-            risk_pct=float(risk_pct) / 100.0,
-            rr_ratio=float(rr_ratio),
-            trades_output=BACKTEST_TRADES_OUTPUT,
-            summary_output=BACKTEST_SUMMARY_OUTPUT,
-            strategy_name=strategy,
-        ),
+    config = nifty_intraday_backtest_config(
+        capital=float(capital),
+        risk_pct=float(risk_pct) / 100.0,
+        rr_ratio=float(rr_ratio),
+        strategy_name=strategy,
+        trades_output=BACKTEST_TRADES_OUTPUT,
+        summary_output=BACKTEST_SUMMARY_OUTPUT,
+        validation_output=BACKTEST_VALIDATION_UI_OUTPUT,
     )
-
+    return run_backtest(candles, _strategy_callable(strategy, symbol), config)
 
 def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, broker_choice: str) -> tuple[object | None, list[tuple[str, str]], str]:
     if not trades:
@@ -480,7 +478,8 @@ def _render_operator_panels(status: str, trades: list[dict[str, object]], backte
         f"Expectancy {float(backtest_summary.get('expectancy_per_trade', 0.0) or 0.0):.2f} | "
         f"PF {str(backtest_summary.get('profit_factor', 0.0))} | "
         f"Max DD {float(backtest_summary.get('max_drawdown', 0.0) or 0.0):.2f} | "
-        f"Avg RR {float(backtest_summary.get('avg_rr', 0.0) or 0.0):.2f}"
+        f"Avg RR {float(backtest_summary.get('avg_rr', 0.0) or 0.0):.2f} | "
+        f"Ready {str(backtest_summary.get('deployment_ready', 'NO'))}"
     )
     st.markdown(f'<div class="desk-value">{summary_line}</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -552,7 +551,7 @@ def main() -> None:
         _render_summary_cards(trades, backtest_summary)
         _render_operator_panels(status, trades, backtest_summary, strategy, normalized_symbol, timeframe, period, broker_choice, broker_status, execution_messages)
         st.caption(
-            f'Files updated: {OHLCV_OUTPUT}, {TRADES_OUTPUT}, {EXECUTED_TRADES_OUTPUT}, {ORDER_HISTORY_OUTPUT}, {BACKTEST_TRADES_OUTPUT}, {BACKTEST_SUMMARY_OUTPUT}, {STRATEGY_RANKING_OUTPUT}, {APP_LOG}, {BROKER_LOG}, {EXECUTION_LOG}, {REJECTIONS_LOG}, {ERRORS_LOG}'
+            f'Files updated: {OHLCV_OUTPUT}, {TRADES_OUTPUT}, {EXECUTED_TRADES_OUTPUT}, {ORDER_HISTORY_OUTPUT}, {BACKTEST_TRADES_OUTPUT}, {BACKTEST_SUMMARY_OUTPUT}, {BACKTEST_VALIDATION_UI_OUTPUT}, {STRATEGY_RANKING_OUTPUT}, {APP_LOG}, {BROKER_LOG}, {EXECUTION_LOG}, {REJECTIONS_LOG}, {ERRORS_LOG}'
         )
     except Exception as exc:
         message = f'Trading UI failure: {exc}'
@@ -564,5 +563,6 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 

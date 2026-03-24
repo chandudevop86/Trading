@@ -1,10 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from vinayak.api.dependencies.admin_auth import COOKIE_NAME, admin_password, admin_username, is_authenticated, session_token
-from vinayak.web.app.workspace_html import WORKSPACE_HTML
+from vinayak.web.app.workspace_html import WORKSPACE_DOWNLOADS_HTML, WORKSPACE_HTML, WORKSPACE_REPORTS_HTML
 
 
 router = APIRouter(tags=['web'])
@@ -681,6 +681,22 @@ def live_workspace(request: Request) -> HTMLResponse:
     if not is_authenticated(request):
         return _render_login()
     return HTMLResponse(WORKSPACE_HTML)
+
+
+@router.get('/workspace/reports', response_class=HTMLResponse)
+def live_workspace_reports(request: Request) -> HTMLResponse:
+    if not is_authenticated(request):
+        return _render_login()
+    return HTMLResponse(WORKSPACE_REPORTS_HTML)
+
+
+@router.get('/workspace/downloads', response_class=HTMLResponse)
+def live_workspace_downloads(request: Request) -> HTMLResponse:
+    if not is_authenticated(request):
+        return _render_login()
+    return HTMLResponse(WORKSPACE_DOWNLOADS_HTML)
+
+
 @router.get('/admin', response_class=HTMLResponse)
 def admin_console(request: Request) -> HTMLResponse:
     if not is_authenticated(request):
@@ -702,6 +718,8 @@ def admin_logout():
     response = RedirectResponse(url='/admin', status_code=303)
     response.delete_cookie(COOKIE_NAME)
     return response
+
+
 
 
 

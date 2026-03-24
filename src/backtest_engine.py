@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -136,6 +137,8 @@ class _TradeLifecycle:
             'score': round(self.score, 2),
             'reason': self.reason,
             'trade_status': self.status,
+            'execution_status': 'CLOSED' if self.status == 'closed' else 'EXECUTED',
+            'position_status': 'CLOSED' if self.status == 'closed' else 'OPEN',
             'exit_time': '' if self.exit_time is None else self.exit_time.strftime('%Y-%m-%d %H:%M:%S'),
             'exit_price': '' if self.exit_price is None else round(self.exit_price, 4),
             'exit_reason': self.exit_reason,
@@ -167,6 +170,30 @@ def _safe_int(value: object, default: int = 0) -> int:
     except (TypeError, ValueError):
         return default
 
+def _normalize_text(value: object) -> str:
+    return str(value or '').strip().upper()
+
+
+def _trade_key(record: dict[str, object]) -> str:
+    strategy = _normalize_text(record.get('strategy', 'STRATEGY'))
+    symbol = _normalize_text(record.get('symbol', 'UNKNOWN'))
+    signal_time = pd.Timestamp(record['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+    side = _normalize_text(record.get('side'))
+    entry_price = f"{_safe_float(record.get('entry')):.6f}"
+    payload = '|'.join([strategy, symbol, signal_time, side, entry_price])
+    return hashlib.sha1(payload.encode('utf-8')).hexdigest()[:20]
+
+
+def _trade_id(record: dict[str, object]) -> str:
+    strategy = _normalize_text(record.get('strategy', 'STRATEGY'))
+    symbol = _normalize_text(record.get('symbol', 'UNKNOWN'))
+    signal_time = pd.Timestamp(record['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+    side = _normalize_text(record.get('side'))
+    entry_price = f"{_safe_float(record.get('entry')):.6f}"
+    stop_loss = f"{_safe_float(record.get('stop_loss')):.6f}"
+    target = f"{_safe_float(record.get('target')):.6f}"
+    payload = '|'.join([strategy, symbol, signal_time, side, entry_price, stop_loss, target])
+    return hashlib.sha1(payload.encode('utf-8')).hexdigest()
 
 def _cost_for_trade(entry_price: float, exit_price: float, quantity: int, cfg: BacktestConfig) -> float:
     traded_notional = (abs(float(entry_price)) + abs(float(exit_price))) * max(int(quantity), 0)
@@ -207,9 +234,13 @@ def _validate_trade_candidate(trade: dict[str, object], index: int) -> tuple[boo
     record['target'] = target
     record['target_price'] = target
     record['quantity'] = quantity
+    record['strategy'] = str(record.get('strategy', 'STRATEGY') or 'STRATEGY')
+    record['symbol'] = str(record.get('symbol', 'UNKNOWN') or 'UNKNOWN')
     record['score'] = _safe_float(record.get('score'))
     record['reason'] = str(record.get('reason', record.get('strategy', 'TRADE')) or 'TRADE')
     record['trade_index'] = index
+    record['trade_key'] = str(record.get('trade_key', '') or _trade_key(record))
+    record['trade_id'] = str(record.get('trade_id', '') or _trade_id(record))
     return True, '', record
 
 
@@ -241,6 +272,7 @@ def _build_lifecycle(record: dict[str, object]) -> _TradeLifecycle:
 def _trade_signature(record: dict[str, object]) -> tuple[str, str, float]:
     return (
         str(record.get('strategy', '')),
+        str(record.get('symbol', '')),
         str(record.get('side', '')),
         round(_safe_float(record.get('entry')), 4),
     )
@@ -285,7 +317,9 @@ def _dedupe_candidates(candidates: list[dict[str, object]], duplicate_cooldown_m
 
 
 def _simulate_trade_exit(prepared: pd.DataFrame, trade: _TradeLifecycle, *, close_open_positions_at_end: bool, cfg: BacktestConfig) -> _TradeLifecycle:
-    future = prepared[prepared['timestamp'] >= trade.entry_time].copy()
+    future = prepared[prepared['timestamp'] > trade.entry_time].copy()
+    if future.empty:
+        future = prepared[prepared['timestamp'] >= trade.entry_time].copy()
     if future.empty:
         trade.status = 'invalid'
         trade.exit_reason = 'NO_FUTURE_DATA'
@@ -502,6 +536,12 @@ def _build_rejected_row(record: dict[str, object], reason: str) -> dict[str, obj
     rejected['trade_status'] = 'rejected'
     rejected['rejection_reason'] = reason
     rejected.setdefault('entry_time', str(rejected.get('timestamp', '')))
+    rejected.setdefault('execution_status', 'REJECTED')
+    rejected.setdefault('position_status', '')
+    rejected.setdefault('exit_time', '')
+    rejected.setdefault('exit_price', '')
+    rejected.setdefault('exit_reason', '')
+    rejected.setdefault('pnl', 0.0)
     return rejected
 
 

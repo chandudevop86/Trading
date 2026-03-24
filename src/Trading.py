@@ -14,9 +14,9 @@ import pandas as pd
 import streamlit as st
 
 from src.amd_fvg_sd_bot import ConfluenceConfig, generate_trades as generate_amd_fvg_sd_trades
-from src.backtest_engine import run_backtest
+from src.backtest_engine import run_backtest, summarize_trade_log
 from src.strategy_tuning import normalize_strategy_key, strategy_backtest_config
-from src.execution_engine import build_execution_candidates, execute_live_trades, execute_paper_trades, execution_result_summary
+from src.execution_engine import build_execution_candidates, close_paper_trades, execute_live_trades, execute_paper_trades, execution_result_summary
 from src.breakout_bot import Candle, generate_trades as generate_breakout_trades
 from src.demand_supply_bot import generate_trades as generate_demand_supply_trades
 from src.indicator_bot import IndicatorConfig, generate_indicator_rows
@@ -33,6 +33,7 @@ LOG_DIR = Path('logs')
 OHLCV_OUTPUT = DATA_DIR / 'ohlcv.csv'
 TRADES_OUTPUT = DATA_DIR / 'trades.csv'
 EXECUTED_TRADES_OUTPUT = DATA_DIR / 'executed_trades.csv'
+PAPER_SUMMARY_OUTPUT = DATA_DIR / 'paper_trade_summary.csv'
 BACKTEST_TRADES_OUTPUT = DATA_DIR / 'backtest_trades.csv'
 BACKTEST_SUMMARY_OUTPUT = DATA_DIR / 'backtest_summary.csv'
 BACKTEST_VALIDATION_UI_OUTPUT = DATA_DIR / 'backtest_validation.csv'
@@ -243,6 +244,15 @@ def _safe_float(value: object, default: float = 0.0) -> float:
         return default
 
 
+def _safe_int(value: object, default: int = 0) -> int:
+    try:
+        if value is None or str(value).strip() == '':
+            return default
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
 def _strategy_callable(strategy: str, symbol: str) -> Callable[[pd.DataFrame, float, float, float, Any], list[dict[str, object]]]:
     mapping: dict[str, Callable[[pd.DataFrame, float, float, float, Any], list[dict[str, object]]]] = {
         'Breakout': generate_breakout_trades,
@@ -349,9 +359,50 @@ def _latest_optimizer_gate(strategy: str) -> tuple[bool, str]:
         return True, 'optimizer validated'
     return False, blockers or 'optimizer gate failed'
 
-def _status_message(strategy: str, symbol: str, timeframe: str, trades: list[dict[str, object]], action: str) -> str:
-    status = 'Signals generated' if trades else 'No qualifying setup'
-    return f'{action}: {status} for {strategy} on {symbol} ({timeframe}).'
+def _status_message(run_clicked: bool, backtest_clicked: bool) -> str:
+    if backtest_clicked:
+        return 'Backtest completed'
+    if run_clicked:
+        return 'Run completed'
+    return 'Ready'
+
+
+def _load_csv_summary(path: Path) -> dict[str, object]:
+    if not path.exists() or path.stat().st_size == 0:
+        return {}
+    try:
+        frame = pd.read_csv(path)
+    except Exception:
+        return {}
+    if frame.empty:
+        return {}
+    return frame.iloc[-1].to_dict()
+
+
+def _todays_trade_count(path: Path) -> int:
+    if not path.exists() or path.stat().st_size == 0:
+        return 0
+    try:
+        frame = pd.read_csv(path)
+    except Exception:
+        return 0
+    if frame.empty:
+        return 0
+    today_key = datetime.now().strftime('%Y-%m-%d')
+    for column in ('exit_time', 'entry_time', 'signal_time', 'timestamp'):
+        if column in frame.columns:
+            return int((frame[column].astype(str).str[:10] == today_key).sum())
+    return 0
+
+
+def _active_summary(backtest_summary: dict[str, object], paper_summary: dict[str, object]) -> dict[str, object]:
+    return dict(backtest_summary or paper_summary or {})
+
+
+def _short_broker_status(broker_choice: str, broker_status: str) -> str:
+    if broker_choice == 'Dhan Live':
+        return 'Dhan live active' if 'armed' in broker_status.lower() else broker_status
+    return 'Paper broker active'
 
 
 def _store_rejection(message: str) -> None:
@@ -409,7 +460,23 @@ def _run_strategy_backtest(candles: pd.DataFrame, strategy: str, symbol: str, ca
     )
     return run_backtest(candles, _strategy_callable(strategy, symbol), config)
 
-def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, broker_choice: str) -> tuple[object | None, list[tuple[str, str]], str]:
+
+def _paper_candle_rows(candles: pd.DataFrame) -> list[dict[str, object]]:
+    prepared = prepare_trading_data(candles)
+    return prepared.to_dict(orient='records')
+
+
+def _refresh_paper_trade_summary(candles: pd.DataFrame, capital: float) -> tuple[list[dict[str, object]], dict[str, object]]:
+    closed_rows = close_paper_trades(EXECUTED_TRADES_OUTPUT, _paper_candle_rows(candles), max_hold_minutes=60)
+    summary = summarize_trade_log(
+        EXECUTED_TRADES_OUTPUT,
+        capital=float(capital),
+        strategy_name='PAPER_EXECUTION',
+        summary_output=PAPER_SUMMARY_OUTPUT,
+        validation_output=BACKTEST_VALIDATION_UI_OUTPUT,
+    )
+    return closed_rows, summary
+def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, broker_choice: str, candles: pd.DataFrame, capital: float) -> tuple[object | None, list[tuple[str, str]], str]:
     if not trades:
         return None, [('info', 'No actionable trade candidates')], 'Paper standby'
     candidates = build_execution_candidates(strategy, trades, symbol)
@@ -466,19 +533,31 @@ def _minimal_theme() -> None:
     )
 
 
-def _render_summary_cards(trades: list[dict[str, object]], backtest_summary: dict[str, object]) -> None:
-    total_trades = int(backtest_summary.get('total_trades', len(trades)))
-    win_rate = float(backtest_summary.get('win_rate', 0.0) or 0.0)
-    pnl = float(backtest_summary.get('total_pnl', 0.0) or 0.0)
+def _render_summary_cards(trades: list[dict[str, object]], summary: dict[str, object], todays_trades: int) -> None:
+    total_trades = _safe_int(summary.get('total_trades', len(trades)))
+    win_rate = _safe_float(summary.get('win_rate', 0.0))
+    pnl = _safe_float(summary.get('total_pnl', summary.get('pnl', 0.0)))
     last_signal = str(trades[-1].get('side', 'NONE')) if trades else 'NONE'
-    cols = st.columns(4)
-    cols[0].metric('Total Trades', total_trades)
-    cols[1].metric('Win Rate', f'{win_rate:.2f}%')
-    cols[2].metric('PnL', f'{pnl:.2f}')
-    cols[3].metric('Last Signal', last_signal)
+    profit_factor = summary.get('profit_factor', 0.0)
+    avg_win = _safe_float(summary.get('avg_win', 0.0))
+    avg_loss = _safe_float(summary.get('avg_loss', 0.0))
+    max_drawdown = _safe_float(summary.get('max_drawdown', 0.0))
+
+    row_one = st.columns(5)
+    row_one[0].metric('Total Trades', str(total_trades))
+    row_one[1].metric('Win Rate', f'{win_rate:.2f}%' )
+    row_one[2].metric('PnL', f'{pnl:.2f}')
+    row_one[3].metric('Last Signal', last_signal)
+    row_one[4].metric('Profit Factor', str(profit_factor))
+
+    row_two = st.columns(4)
+    row_two[0].metric('Avg Win', f'{avg_win:.2f}')
+    row_two[1].metric('Avg Loss', f'{avg_loss:.2f}')
+    row_two[2].metric('Max Drawdown', f'{max_drawdown:.2f}')
+    row_two[3].metric("Today's Trades", str(todays_trades))
 
 
-def _render_operator_panels(status: str, trades: list[dict[str, object]], backtest_summary: dict[str, object], strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, broker_status: str, execution_messages: list[tuple[str, str]]) -> None:
+def _render_operator_panels(status: str, trades: list[dict[str, object]], symbol: str, timeframe: str, period: str, broker_choice: str, broker_status: str) -> None:
     st.markdown('<div class="desk-card">', unsafe_allow_html=True)
     st.markdown('<div class="desk-label">Current Status</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="desk-value">{status}</div>', unsafe_allow_html=True)
@@ -487,13 +566,7 @@ def _render_operator_panels(status: str, trades: list[dict[str, object]], backte
 
     st.markdown('<div class="desk-card">', unsafe_allow_html=True)
     st.markdown('<div class="desk-label">Broker Status</div>', unsafe_allow_html=True)
-    execution_line = ' | '.join(message for _, message in execution_messages) if execution_messages else 'No order activity.'
-    st.markdown(f'<div class="desk-value">{broker_choice} | {broker_status} | {execution_line}</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="desk-card">', unsafe_allow_html=True)
-    st.markdown('<div class="desk-label">Best Strategy Profile</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="desk-value">{_load_best_strategy_profile(backtest_summary, strategy)}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="desk-value">{broker_choice} | {_short_broker_status(broker_choice, broker_status)}</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="desk-card">', unsafe_allow_html=True)
@@ -501,26 +574,12 @@ def _render_operator_panels(status: str, trades: list[dict[str, object]], backte
     st.markdown(f'<div class="desk-value">{_recent_trade_summary(trades)}</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="desk-card">', unsafe_allow_html=True)
-    st.markdown('<div class="desk-label">Backtest Summary</div>', unsafe_allow_html=True)
-    summary_line = (
-        f"Wins {int(backtest_summary.get('wins', 0))} | "
-        f"Losses {int(backtest_summary.get('losses', 0))} | "
-        f"Expectancy {float(backtest_summary.get('expectancy_per_trade', 0.0) or 0.0):.2f} | "
-        f"PF {str(backtest_summary.get('profit_factor', 0.0))} | "
-        f"Max DD {float(backtest_summary.get('max_drawdown', 0.0) or 0.0):.2f} | "
-        f"Avg RR {float(backtest_summary.get('avg_rr', 0.0) or 0.0):.2f} | "
-        f"Ready {str(backtest_summary.get('deployment_ready', 'NO'))}"
-    )
-    st.markdown(f'<div class="desk-value">{summary_line}</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
 
 def main() -> None:
     _ensure_output_files()
     _minimal_theme()
     st.markdown(
-        '<div class="desk-card"><h2 style="margin:0;color:#e2e8f0;">Production Trading Desk</h2><p style="margin:8px 0 0 0;color:#94a3b8;">Operator-only controls. Raw data, trade logs, and backtest artifacts are saved to files.</p></div>',
+        '<div class="desk-card"><h2 style="margin:0;color:#e2e8f0;">Production Trading Desk</h2><p style="margin:8px 0 0 0;color:#94a3b8;">Minimal operator controls with live execution and historical validation routed to files.</p></div>',
         unsafe_allow_html=True,
     )
 
@@ -538,22 +597,22 @@ def main() -> None:
         mode = st.selectbox('Mode', ['Conservative', 'Balanced', 'Aggressive'], index=1)
         period = _period_for_interval(timeframe)
         st.caption(f'Fetch window: {period}')
-        run_col, backtest_col = st.columns(2)
-        run_clicked = run_col.button('Run', type='primary', use_container_width=True)
-        backtest_clicked = backtest_col.button('Backtest', use_container_width=True)
+        action_row = st.columns(2)
+        st.markdown('<div class="desk-label">Run</div>', unsafe_allow_html=True)
+        run_clicked = action_row[0].button('Run', type='primary', use_container_width=True)
+        st.markdown('<div class="desk-label">Backtest</div>', unsafe_allow_html=True)
+        backtest_clicked = action_row[1].button('Backtest', use_container_width=True)
 
     if not run_clicked and not backtest_clicked:
-        st.info('Ready. Use Run for paper/live execution or Backtest for historical validation.')
+        _render_summary_cards([], {}, 0)
+        _render_operator_panels('Ready', [], symbol.strip() or DEFAULT_SYMBOL, timeframe, _period_for_interval(timeframe), broker_choice, 'Paper broker active')
         return
-
     try:
         normalized_symbol = symbol.strip() or DEFAULT_SYMBOL
         candles, trades, period = _run_live_strategy(strategy, normalized_symbol, timeframe, float(capital), float(risk_pct), float(rr_ratio), mode)
-        execution_result = None
-        execution_messages: list[tuple[str, str]] = []
-        broker_status = 'Idle'
+        broker_status = 'Paper broker active' if broker_choice == 'Paper' else 'Idle'
         if run_clicked:
-            execution_result, execution_messages, broker_status = _run_execution(strategy, trades, normalized_symbol, broker_choice)
+            _, _, broker_status = _run_execution(strategy, trades, normalized_symbol, broker_choice, candles, capital)
             _append_text_log(APP_LOG, f'EXECUTION completed for {strategy} {normalized_symbol} broker={broker_choice}')
         backtest_summary = st.session_state.get('backtest_summary', {})
 
@@ -562,28 +621,15 @@ def main() -> None:
             st.session_state['backtest_summary'] = backtest_summary
             _append_text_log(APP_LOG, f'BACKTEST completed for {strategy} {normalized_symbol} {timeframe}')
         elif not backtest_summary:
-            backtest_summary = {
-                'strategy': strategy,
-                'total_trades': len(trades),
-                'wins': 0,
-                'losses': 0,
-                'win_rate': 0.0,
-                'total_pnl': 0.0,
-                'avg_pnl': 0.0,
-                'expectancy_per_trade': 0.0,
-                'profit_factor': 0.0,
-                'positive_expectancy': 'NO',
-                'max_drawdown': 0.0,
-                'avg_rr': _metric_value(trades, 'score', 0.0),
-            }
+            backtest_summary = {}
 
-        status = _status_message(strategy, normalized_symbol, timeframe, trades, 'Backtest' if backtest_clicked else 'Run')
+        paper_summary = _load_csv_summary(PAPER_SUMMARY_OUTPUT)
+        active_summary = _active_summary(backtest_summary if backtest_clicked else {}, paper_summary)
+        todays_trades = _todays_trade_count(EXECUTED_TRADES_OUTPUT)
+        status = _status_message(run_clicked, backtest_clicked)
         _append_text_log(APP_LOG, status)
-        _render_summary_cards(trades, backtest_summary)
-        _render_operator_panels(status, trades, backtest_summary, strategy, normalized_symbol, timeframe, period, broker_choice, broker_status, execution_messages)
-        st.caption(
-            f'Files updated: {OHLCV_OUTPUT}, {TRADES_OUTPUT}, {EXECUTED_TRADES_OUTPUT}, {ORDER_HISTORY_OUTPUT}, {BACKTEST_TRADES_OUTPUT}, {BACKTEST_SUMMARY_OUTPUT}, {BACKTEST_VALIDATION_UI_OUTPUT}, {STRATEGY_RANKING_OUTPUT}, {OPTIMIZER_OUTPUT}, {APP_LOG}, {BROKER_LOG}, {EXECUTION_LOG}, {REJECTIONS_LOG}, {ERRORS_LOG}'
-        )
+        _render_summary_cards(trades, active_summary, todays_trades)
+        _render_operator_panels(status, trades, normalized_symbol, timeframe, period, broker_choice, broker_status)
     except Exception as exc:
         message = f'Trading UI failure: {exc}'
         _append_text_log(APP_LOG, message)

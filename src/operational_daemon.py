@@ -8,8 +8,8 @@ from typing import Any
 
 from src.Trading import fetch_ohlcv_data, run_strategy
 from src.aws_storage import sync_path_to_s3_if_enabled
-from src.backtest_engine import BacktestConfig, run_backtest
-from src.execution_engine import build_execution_candidates, execute_live_trades, execute_paper_trades, execution_result_summary
+from src.backtest_engine import BacktestConfig, run_backtest, summarize_trade_log
+from src.execution_engine import build_execution_candidates, close_paper_trades, execute_live_trades, execute_paper_trades, execution_result_summary
 from src.runtime_config import RuntimeConfig
 from src.trading_core import append_log, write_rows
 
@@ -82,6 +82,18 @@ def execute_trading_cycle(config: RuntimeConfig) -> dict[str, Any]:
             max_trades_per_day=broker_config.max_trades_per_day,
             max_daily_loss=broker_config.max_daily_loss or None,
             order_history_path=paths.order_history_csv,
+        )
+        close_paper_trades(
+            paths.executed_trades_csv,
+            candles.to_dict(orient='records'),
+            max_hold_minutes=60,
+        )
+        summarize_trade_log(
+            paths.executed_trades_csv,
+            capital=float(daemon.capital),
+            strategy_name='PAPER_EXECUTION',
+            summary_output=paths.data_dir / 'paper_trade_summary.csv',
+            validation_output=paths.data_dir / 'paper_trade_validation.csv',
         )
 
     backtest_summary: dict[str, Any] = {}

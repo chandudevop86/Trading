@@ -215,7 +215,9 @@ def _price_value(record: dict[str, object]) -> float:
 def make_trade_key(record: dict[str, object]) -> str:
     strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
     symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
+    signal_time = str(record.get("signal_time", record.get("entry_time", record.get("timestamp", ""))) or "").strip()
     side = _normalize_text(record.get("side"))
+    entry_price = f"{_price_value(record):.6f}"
     instrument = _normalize_text(
         record.get("trading_symbol")
         or record.get("contract_symbol")
@@ -1255,9 +1257,9 @@ def close_paper_trades(
             updated_rows.append(r)
             continue
 
-        entry_price = _to_float(r.get("price", r.get("entry_price"))) or 0.0
+        entry_price = _to_float(r.get("entry_price", r.get("price"))) or 0.0
         stop_loss = _to_float(r.get("stop_loss"))
-        target_price = _to_float(r.get("target_price"))
+        target_price = _to_float(r.get("target_price", r.get("target")))
         trail_stop = _to_float(r.get("trailing_stop_loss")) or stop_loss
         trailing_sl_pct = _to_float(r.get("trailing_sl_pct")) or 0.0
 
@@ -1307,17 +1309,29 @@ def close_paper_trades(
         except (TypeError, ValueError):
             qty = 0
 
-        pnl = 0.0
+        gross_pnl = 0.0
         if qty > 0:
-            pnl = (float(exit_price) - float(entry_price)) * qty if side == "BUY" else (float(entry_price) - float(exit_price)) * qty
+            gross_pnl = (float(exit_price) - float(entry_price)) * qty if side == "BUY" else (float(entry_price) - float(exit_price)) * qty
+        trading_cost = _to_float(r.get("trading_cost")) or 0.0
+        risk_per_unit = abs(float(entry_price) - float(stop_loss)) if stop_loss is not None else 0.0
+        rr_achieved = (abs(float(exit_price) - float(entry_price)) / risk_per_unit) if risk_per_unit > 0 else 0.0
+        pnl = gross_pnl - trading_cost
 
         r2 = dict(r)
         r2["execution_status"] = "CLOSED"
         r2["trade_status"] = TRADE_STATUS_CLOSED
         r2["position_status"] = TRADE_STATUS_CLOSED
+        r2.setdefault("entry_time", entry_time.isoformat(sep=" "))
+        r2.setdefault("entry", round(float(entry_price), 4))
+        r2.setdefault("entry_price", round(float(entry_price), 4))
+        r2.setdefault("target", r.get("target", r.get("target_price", "")))
+        r2.setdefault("target_price", r.get("target_price", r.get("target", "")))
         r2["exit_time"] = exit_time.isoformat(sep=" ")
         r2["exit_price"] = round(float(exit_price), 4)
         r2["exit_reason"] = exit_reason
+        r2["gross_pnl"] = round(float(gross_pnl), 2)
+        r2["trading_cost"] = round(float(trading_cost), 2)
+        r2["rr_achieved"] = round(float(rr_achieved), 4)
         r2["pnl"] = round(float(pnl), 2)
         if trail_stop is not None:
             r2["trailing_stop_loss"] = round(float(trail_stop), 4)

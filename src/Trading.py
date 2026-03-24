@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import io
@@ -33,22 +33,16 @@ try:
     from src.execution_engine import (
         build_analysis_queue,
         build_execution_candidates,
-        close_paper_trades,
         execute_live_trades,
         execute_paper_trades,
         execution_result_summary,
-        load_open_trades,
-        manual_close_paper_trades,
     )
 except Exception:
     build_analysis_queue = None
     build_execution_candidates = None
-    close_paper_trades = None
     execute_live_trades = None
     execute_paper_trades = None
     execution_result_summary = None
-    load_open_trades = None
-    manual_close_paper_trades = None
 try:
     from src.supply_demand import generate_trades as generate_demand_supply_trades
 except Exception:
@@ -2799,87 +2793,6 @@ def main() -> None:
         with c3:
             st.caption(f"Execution mode: {execution_mode}")
     
-        if str(execution_mode).upper() == "PAPER":
-            with st.expander("Paper Manual Controls", expanded=False):
-                st.caption("Create a manual paper trade, run the paper auto-exit check, or manually close open paper trades.")
-                latest_manual_price = float(candles["close"].iloc[-1]) if not candles.empty else 0.0
-
-                with st.form("manual_paper_entry_form"):
-                    entry_cols = st.columns(4)
-                    manual_side = entry_cols[0].selectbox("Manual side", ["BUY", "SELL"], key="manual_paper_side")
-                    manual_entry_price = entry_cols[1].number_input("Entry price", min_value=0.0, value=float(latest_manual_price), step=0.05, key="manual_paper_entry_price")
-                    manual_quantity = entry_cols[2].number_input("Quantity", min_value=1, value=int(lot_size), step=1, key="manual_paper_quantity")
-                    manual_signal_time = entry_cols[3].text_input("Signal time (UTC)", value=datetime.now(ZoneInfo("UTC")).strftime("%Y-%m-%d %H:%M:%S"), key="manual_paper_signal_time")
-                    risk_cols = st.columns(3)
-                    manual_stop_loss = risk_cols[0].number_input("Stop loss", min_value=0.0, value=0.0, step=0.05, key="manual_paper_stop_loss")
-                    manual_target_price = risk_cols[1].number_input("Target price", min_value=0.0, value=0.0, step=0.05, key="manual_paper_target_price")
-                    manual_reason = risk_cols[2].text_input("Reason", value="MANUAL_ENTRY", key="manual_paper_reason")
-                    add_manual_trade = st.form_submit_button("Add Manual Trade To Reviewed Queue", type="primary")
-
-                if add_manual_trade:
-                    manual_candidate = {
-                        "strategy": "MANUAL",
-                        "symbol": str(symbol),
-                        "signal_time": str(manual_signal_time).strip() or datetime.now(ZoneInfo("UTC")).strftime("%Y-%m-%d %H:%M:%S"),
-                        "side": str(manual_side),
-                        "price": float(manual_entry_price),
-                        "share_price": float(manual_entry_price),
-                        "strike_price": "",
-                        "quantity": int(manual_quantity),
-                        "stop_loss": float(manual_stop_loss) if float(manual_stop_loss) > 0 else "",
-                        "target_price": float(manual_target_price) if float(manual_target_price) > 0 else "",
-                        "reason": str(manual_reason).strip() or "MANUAL_ENTRY",
-                    }
-                    manual_reviewed = build_analysis_queue([manual_candidate]) if build_analysis_queue is not None else [manual_candidate]
-                    st.session_state["analyzed_trade_queue"] = st.session_state.get("analyzed_trade_queue", []) + manual_reviewed
-                    st.success(f"Manual paper trade added to the reviewed queue for {symbol}.")
-
-                auto_exit_cols = st.columns(2)
-                with auto_exit_cols[0]:
-                    if st.button("Run Paper Auto Exit Check", width="stretch"):
-                        if close_paper_trades is None:
-                            st.error("Paper close module is not available.")
-                        else:
-                            closed_rows = close_paper_trades(Path(paper_log_output), candles.to_dict("records"), max_hold_minutes=60)
-                            if closed_rows:
-                                st.success(f"Auto-closed {len(closed_rows)} paper trade(s).")
-                                st.dataframe(_style_order_trade_table(pd.DataFrame(closed_rows)), width="stretch")
-                            else:
-                                st.info("No open paper trades met the exit conditions on this run.")
-
-                open_paper_trades = load_open_trades(Path(paper_log_output), "PAPER") if load_open_trades is not None else []
-                if open_paper_trades:
-                    open_trade_options = {
-                        f"{row.get('trade_id', '')} | {row.get('symbol', '')} | {row.get('side', '')} | qty {row.get('quantity', '')} | entry {row.get('price', '')}": str(row.get("trade_id", ""))
-                        for row in open_paper_trades
-                    }
-                    with st.form("manual_paper_exit_form"):
-                        selected_open_trades = st.multiselect("Open paper trades", options=list(open_trade_options.keys()))
-                        exit_cols = st.columns(2)
-                        manual_exit_price = exit_cols[0].number_input("Manual exit price", min_value=0.0, value=float(latest_manual_price), step=0.05, key="manual_paper_exit_price")
-                        manual_exit_reason = exit_cols[1].text_input("Manual exit reason", value="MANUAL_EXIT", key="manual_paper_exit_reason")
-                        submit_manual_exit = st.form_submit_button("Manual Exit Selected Paper Trades")
-
-                    if submit_manual_exit:
-                        selected_trade_ids = [open_trade_options[label] for label in selected_open_trades]
-                        if not selected_trade_ids:
-                            st.info("Select at least one open paper trade to close manually.")
-                        elif manual_close_paper_trades is None:
-                            st.error("Manual paper close module is not available.")
-                        else:
-                            closed_rows = manual_close_paper_trades(
-                                Path(paper_log_output),
-                                selected_trade_ids,
-                                exit_price=float(manual_exit_price) if float(manual_exit_price) > 0 else None,
-                                exit_reason=str(manual_exit_reason).strip() or "MANUAL_EXIT",
-                            )
-                            if closed_rows:
-                                st.success(f"Manually closed {len(closed_rows)} paper trade(s).")
-                                st.dataframe(_style_order_trade_table(pd.DataFrame(closed_rows)), width="stretch")
-                            else:
-                                st.info("No paper trades were closed. They may already be closed.")
-                else:
-                    st.caption("No open paper trades are available for manual exit.")
         staged_candidates = st.session_state.get("analyzed_trade_queue", [])
         staged_log_path = Path(live_log_output if execution_mode == "LIVE" else paper_log_output)
         if staged_candidates:

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import hashlib
@@ -679,7 +679,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             continue
 
         live_row.setdefault("data_symbol", live_row.get("symbol", ""))
-        live_row.setdefault("trade_symbol", live_row.get("trading_symbol", live_row.get("symbol", "")))
+        live_row.setdefault("trade_symbol", live_row.get("trading_symbol", ""))
         if resolved_broker_client is None:
             live_row["trade_status"] = TRADE_STATUS_ERROR
             live_row["execution_status"] = "ERROR"
@@ -768,76 +768,6 @@ def execute_live_trades(candidates: list[dict[str, object]], output_path: Path, 
     return _execute_candidates(candidates, output_path, execution_type="LIVE", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, broker_client=broker_client, broker_name=broker_name, security_map=security_map)
 
 
-def load_open_trades(log_path: Path, execution_type: str | None = None) -> list[dict[str, object]]:
-    rows: list[dict[str, object]] = []
-    for raw in _read_trade_rows(log_path):
-        if execution_type and _normalize_text(raw.get("execution_type")) != _normalize_text(execution_type):
-            continue
-        if not _row_is_active(raw):
-            continue
-        rows.append(_ensure_trade_identity(raw))
-    return rows
-
-
-def manual_close_paper_trades(
-    paper_log_path: Path,
-    trade_ids: list[str],
-    *,
-    exit_price: float | None = None,
-    exit_reason: str = "MANUAL_EXIT",
-    exited_at_utc: str | None = None,
-) -> list[dict[str, object]]:
-    if not paper_log_path.exists() or not trade_ids:
-        return []
-
-    target_ids = {str(trade_id or "").strip() for trade_id in trade_ids if str(trade_id or "").strip()}
-    if not target_ids:
-        return []
-
-    existing_rows = _read_trade_rows(paper_log_path)
-    updated_rows: list[dict[str, object]] = []
-    closed_rows: list[dict[str, object]] = []
-    closed_at = exited_at_utc or datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
-
-    for raw in existing_rows:
-        row = _ensure_trade_identity(raw)
-        if _normalize_text(row.get("execution_type")) != "PAPER" or _row_is_closed(row):
-            updated_rows.append(row)
-            continue
-
-        if str(row.get("trade_id", "")) not in target_ids:
-            updated_rows.append(row)
-            continue
-
-        side = _normalize_text(row.get("side"))
-        price = float(exit_price) if exit_price is not None and float(exit_price) > 0 else _price_value(row)
-        entry_price = _price_value(row)
-        qty = int(_safe_float(row.get("quantity")))
-        pnl = 0.0
-        if qty > 0 and price > 0 and side in {"BUY", "SELL"}:
-            pnl = (price - entry_price) * qty if side == "BUY" else (entry_price - price) * qty
-
-        closed = dict(row)
-        closed["execution_status"] = "CLOSED"
-        closed["trade_status"] = TRADE_STATUS_CLOSED
-        closed["position_status"] = TRADE_STATUS_CLOSED
-        closed["exit_time"] = closed_at
-        closed["exit_price"] = round(price, 4) if price > 0 else ""
-        closed["exit_reason"] = exit_reason
-        closed["pnl"] = round(float(pnl), 2)
-        updated_rows.append(closed)
-        closed_rows.append(closed)
-
-    if not closed_rows:
-        return []
-
-    fieldnames = _stable_fieldnames(updated_rows)
-    with paper_log_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(updated_rows)
-
-    return closed_rows
 def _reconcile_execution_status(broker_status: str) -> str:
     normalized = str(broker_status or "").strip().upper()
     if normalized in {"TRADED", "FILLED", "COMPLETED", "EXECUTED", "SUCCESS"}:

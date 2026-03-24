@@ -21,6 +21,7 @@ except Exception:  # pragma: no cover
 
 DEFAULT_DATA_PROVIDER = 'AUTO'
 DEFAULT_CANDLE_CACHE_DIR = Path('data/cache/candles')
+DEFAULT_YFINANCE_TIMEOUT = 15.0
 try:
     IST = ZoneInfo('Asia/Kolkata')
 except Exception:
@@ -332,6 +333,34 @@ def write_candle_cache(path: Path, rows: list[dict[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def read_latest_candle_cache(
+    *,
+    provider: str,
+    symbol: str,
+    interval: str,
+    cache_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    base_dir = Path(cache_dir or DEFAULT_CANDLE_CACHE_DIR)
+    if not base_dir.exists():
+        return []
+    pattern = (
+        f"{_sanitize_key(provider).lower()}_{_sanitize_key(symbol).upper()}_{_sanitize_key(interval)}_*.csv"
+    )
+    try:
+        candidates = sorted(base_dir.glob(pattern), key=lambda path: path.stat().st_mtime, reverse=True)
+    except Exception:
+        return []
+
+    for candidate in candidates:
+        try:
+            rows = read_candle_cache(candidate)
+        except Exception:
+            continue
+        if rows:
+            return rows
+    return []
 
 
 def _resolve_dhan_instrument(symbol: str, security_map: dict[str, Any] | None = None) -> dict[str, str]:
@@ -656,20 +685,61 @@ def fetch_dhan_ohlcv(
     return rows
 
 
-def _fetch_yfinance_ohlcv(symbol: str, interval: str, period: str) -> list[dict[str, Any]]:
+def _fetch_yfinance_ohlcv(
+    symbol: str,
+    interval: str,
+    period: str,
+    *,
+    use_cache: bool = True,
+    force_refresh: bool = False,
+    cache_dir: Path | None = None,
+) -> list[dict[str, Any]]:
     if yf is None:
         raise ModuleNotFoundError('yfinance is required for fetch_live_ohlcv (pip install yfinance)')
 
-    df = yf.download(
-        tickers=symbol,
+    start_dt, end_dt = _period_to_range(period)
+    cache_path = build_candle_cache_path(
+        provider='YAHOO',
+        symbol=symbol,
         interval=interval,
-        period=period,
-        auto_adjust=False,
-        progress=False,
+        start_dt=start_dt,
+        end_dt=end_dt,
     )
+    stale_rows = read_latest_candle_cache(
+        provider='YAHOO',
+        symbol=symbol,
+        interval=interval,
+        cache_dir=cache_dir,
+    ) if use_cache else []
+
+    if use_cache and not force_refresh:
+        cached_rows = read_candle_cache(cache_path)
+        if cached_rows:
+            return cached_rows
+
+    timeout = DEFAULT_YFINANCE_TIMEOUT
+    try:
+        timeout = float(os.getenv('YFINANCE_TIMEOUT', str(DEFAULT_YFINANCE_TIMEOUT)))
+    except Exception:
+        pass
+
+    try:
+        df = yf.download(
+            tickers=symbol,
+            interval=interval,
+            period=period,
+            auto_adjust=False,
+            progress=False,
+            threads=False,
+            timeout=timeout,
+        )
+    except Exception:
+        if stale_rows:
+            return stale_rows
+        raise
 
     if df is None or getattr(df, 'empty', False):
-        return []
+        return stale_rows
 
     df = df.reset_index()
     if pd is not None and isinstance(df.columns, pd.MultiIndex):
@@ -709,7 +779,11 @@ def _fetch_yfinance_ohlcv(symbol: str, interval: str, period: str) -> list[dict[
                 is_closed=True,
             )
         )
-    return rows
+    if use_cache and rows:
+        write_candle_cache(cache_path, rows)
+    if rows:
+        return rows
+    return stale_rows
 
 
 def fetch_live_ohlcv(
@@ -740,7 +814,14 @@ def fetch_live_ohlcv(
         except Exception:
             if selected_provider == 'DHAN':
                 raise
-    return _fetch_yfinance_ohlcv(symbol, interval, period)
+    return _fetch_yfinance_ohlcv(
+        symbol,
+        interval,
+        period,
+        use_cache=use_cache,
+        force_refresh=force_refresh,
+        cache_dir=cache_dir,
+    )
 
 
 def write_csv(rows: list[dict[str, Any]], path: str) -> None:
@@ -752,4 +833,5 @@ def write_csv(rows: list[dict[str, Any]], path: str) -> None:
         writer = csv.DictWriter(f, fieldnames=keys)
         writer.writeheader()
         writer.writerows(rows)
+
 

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 import csv
+import os
 
 try:
     import yfinance as yf  # type: ignore
@@ -13,6 +15,9 @@ try:
     import pandas as pd  # type: ignore
 except Exception:  # pragma: no cover
     pd = None  # type: ignore
+
+DEFAULT_YFINANCE_TIMEOUT = 15.0
+FALLBACK_OHLCV_PATH = Path('data/live_ohlcv.csv')
 
 
 def _to_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -89,20 +94,54 @@ def _to_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _read_fallback_ohlcv() -> list[dict[str, Any]]:
+    if pd is None or not FALLBACK_OHLCV_PATH.exists():
+        return []
+    try:
+        df = pd.read_csv(FALLBACK_OHLCV_PATH)
+    except Exception:
+        return []
+    if getattr(df, "empty", False):
+        return []
+
+    required = ["timestamp", "open", "high", "low", "close", "volume"]
+    existing = [c for c in required if c in df.columns]
+    if not existing:
+        return []
+    df = df[existing].copy()
+    if "price" not in df.columns and "close" in df.columns:
+        df["price"] = df["close"]
+    return df.to_dict("records")
+
+
 def fetch_live_ohlcv(symbol: str, interval: str, period: str) -> list[dict[str, Any]]:
     if yf is None:
         raise ModuleNotFoundError("yfinance is required for fetch_live_ohlcv (pip install yfinance)")
 
-    df = yf.download(
-        tickers=symbol,
-        interval=interval,
-        period=period,
-        auto_adjust=False,
-        progress=False,
-    )
+    fallback_rows = _read_fallback_ohlcv()
+    timeout = DEFAULT_YFINANCE_TIMEOUT
+    try:
+        timeout = float(os.getenv("YFINANCE_TIMEOUT", str(DEFAULT_YFINANCE_TIMEOUT)))
+    except Exception:
+        pass
+
+    try:
+        df = yf.download(
+            tickers=symbol,
+            interval=interval,
+            period=period,
+            auto_adjust=False,
+            progress=False,
+            threads=False,
+            timeout=timeout,
+        )
+    except Exception:
+        if fallback_rows:
+            return fallback_rows
+        raise
 
     if df is None or getattr(df, "empty", False):
-        return []
+        return fallback_rows
 
     df = df.reset_index()
 
@@ -129,7 +168,10 @@ def fetch_live_ohlcv(symbol: str, interval: str, period: str) -> list[dict[str, 
 
     df["price"] = df.get("close")
 
-    return df.to_dict("records")
+    rows = df.to_dict("records")
+    if rows:
+        return rows
+    return fallback_rows
 
 
 def write_csv(rows: list[dict[str, Any]], path: str) -> None:

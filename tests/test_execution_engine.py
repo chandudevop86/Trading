@@ -45,6 +45,14 @@ class _StubBrokerClient:
 
 
 class TestExecutionEngine(unittest.TestCase):
+    def _write_optimizer_report(self, directory: str, *, strategy: str = 'BREAKOUT', deployment_ready: str = 'YES', deployment_blockers: str = '') -> Path:
+        path = Path(directory) / 'strategy_optimizer_report.csv'
+        path.write_text(
+            'strategy,deployment_ready,deployment_blockers,optimizer_rank,rank_score\n'
+            + f'{strategy},{deployment_ready},{deployment_blockers},1,999\n',
+            encoding='utf-8',
+        )
+        return path
     def test_build_indicator_candidate(self):
         rows = [{'timestamp': '2026-03-06 10:00:00', 'market_signal': 'BULLISH_TREND', 'close': 22350.0}]
         c = build_execution_candidates('Indicator (RSI/ADX/MACD+VWAP)', rows, 'NIFTY')
@@ -225,6 +233,7 @@ class TestExecutionEngine(unittest.TestCase):
                 broker_name='DHAN',
                 security_map={},
                 max_daily_loss=1000.0,
+                optimizer_report_path=self._write_optimizer_report(td),
             )
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]['execution_status'], 'BLOCKED')
@@ -255,6 +264,7 @@ class TestExecutionEngine(unittest.TestCase):
                     broker_client=broker,
                     broker_name='DHAN',
                     security_map={},
+                    optimizer_report_path=self._write_optimizer_report(td),
                 )
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]['execution_status'], 'BLOCKED')
@@ -419,7 +429,7 @@ class TestExecutionEngine(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as td:
             out = Path(td) / 'live.csv'
-            rows = execute_live_trades(candidates, out, broker_client=broker, broker_name='DHAN', security_map=security_map)
+            rows = execute_live_trades(candidates, out, broker_client=broker, broker_name='DHAN', security_map=security_map, optimizer_report_path=self._write_optimizer_report(td), order_history_path=Path(td) / 'order_history.csv')
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]['execution_status'], 'SENT')
             self.assertEqual(rows[0]['data_symbol'], '^NSEI')
@@ -454,6 +464,45 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(result.skipped_count, 1)
             self.assertEqual(result.skipped_rows[0]["duplicate_reason"], "DUPLICATE_BATCH_TRADE")
 
+    def test_execute_live_trades_blocks_when_optimizer_gate_fails(self):
+        broker = _StubBrokerClient()
+        candidates = [
+            {
+                'strategy': 'BREAKOUT',
+                'symbol': 'NIFTY',
+                'signal_time': '2026-03-06 10:00:00',
+                'side': 'BUY',
+                'price': 100.0,
+                'quantity': 65,
+                'reason': 'x',
+                'security_id': '12345',
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'live.csv'
+            optimizer_report = self._write_optimizer_report(
+                td,
+                deployment_ready='NO',
+                deployment_blockers='NEGATIVE_EXPECTANCY',
+            )
+            rows = execute_live_trades(
+                candidates,
+                out,
+                broker_client=broker,
+                broker_name='DHAN',
+                security_map={},
+                optimizer_report_path=optimizer_report,
+            )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['execution_status'], 'BLOCKED')
+        self.assertEqual(rows[0]['blocked_reason'], 'OPTIMIZER_GATE_BLOCKED')
+        self.assertEqual(rows[0]['broker_status'], 'OPTIMIZER_GATE')
+        self.assertIn('NEGATIVE_EXPECTANCY', rows[0]['broker_message'])
+        self.assertEqual(broker.calls, 0)
 if __name__ == '__main__':
     unittest.main()
+
+
 

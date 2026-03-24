@@ -24,6 +24,7 @@ from src.brokers import (
 )
 from src.csv_io import read_csv_rows
 from src.trading_core import append_log
+from src.strategy_tuning import normalize_strategy_key
 
 DEFAULT_LOT_SIZES = {
     "NIFTY": 65,
@@ -55,6 +56,7 @@ SKIP_REASON_INVALID_TRADE_LEVELS = "INVALID_TRADE_LEVELS"
 SKIP_REASON_DUPLICATE_BATCH_TRADE = "DUPLICATE_BATCH_TRADE"
 SKIP_REASON_BROKER_ERROR = "BROKER_ERROR"
 SKIP_REASON_KILL_SWITCH = "KILL_SWITCH_ENABLED"
+SKIP_REASON_OPTIMIZER_GATE = "OPTIMIZER_GATE_BLOCKED"
 
 ACTIVE_TRADE_STATUSES = {
     TRADE_STATUS_REVIEWED,
@@ -64,6 +66,7 @@ ACTIVE_TRADE_STATUSES = {
 }
 EXECUTION_SUCCESS_STATUSES = {"EXECUTED", "SENT", "FILLED"}
 ORDER_HISTORY_OUTPUT = Path('data/order_history.csv')
+OPTIMIZER_REPORT_OUTPUT = Path('data/strategy_optimizer_report.csv')
 BROKER_LOG_PATH = Path('logs/broker.log')
 EXECUTION_LOG_PATH = Path('logs/execution.log')
 REJECTIONS_LOG_PATH = Path('logs/rejections.log')
@@ -220,7 +223,7 @@ def make_trade_key(record: dict[str, object]) -> str:
         or record.get("strike_price")
         or symbol
     )
-    payload = "|".join([strategy, symbol, side, instrument])
+    payload = "|".join([strategy, symbol, signal_time, side, entry_price, instrument])
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:20]
 
 
@@ -768,7 +771,36 @@ def execution_result_summary(result: ExecutionResult) -> list[tuple[str, str]]:
     return messages
 
 
-def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, *, execution_type: str, deduplicate: bool, max_trades_per_day: int | None, max_daily_loss: float | None, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, live_enabled: bool | None = None, symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None, max_order_quantity: int | None = None, max_order_value: float | None = None, order_history_path: Path | None = None) -> ExecutionResult:
+
+def _load_optimizer_gate_map(path: Path) -> dict[str, tuple[bool, str]]:
+    if not path.exists() or path.stat().st_size == 0:
+        return {}
+    rows = _read_trade_rows(path)
+    gate_map: dict[str, tuple[bool, str]] = {}
+    for row in rows:
+        strategy_key = normalize_strategy_key(str(row.get("strategy", "") or ""))
+        if not strategy_key:
+            continue
+        ready = str(row.get("deployment_ready", "NO") or "NO").strip().upper() == "YES"
+        blockers = str(row.get("deployment_blockers", "") or "").strip()
+        rank_value = _safe_float(row.get("optimizer_rank", row.get("rank_score", 999999)))
+        existing = gate_map.get(strategy_key)
+        if existing is None:
+            gate_map[strategy_key] = (ready, blockers if not ready else "optimizer validated", rank_value)
+            continue
+        if rank_value < existing[2]:
+            gate_map[strategy_key] = (ready, blockers if not ready else "optimizer validated", rank_value)
+    return {key: (value[0], value[1]) for key, value in gate_map.items()}
+
+def _optimizer_gate_for_strategy(strategy: object, gate_map: dict[str, tuple[bool, str]]) -> tuple[bool, str]:
+    if not gate_map:
+        return False, "optimizer report missing"
+    strategy_key = normalize_strategy_key(str(strategy or ""))
+    if strategy_key not in gate_map:
+        return False, f"no optimizer row for {strategy}"
+    return gate_map[strategy_key]
+
+def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, *, execution_type: str, deduplicate: bool, max_trades_per_day: int | None, max_daily_loss: float | None, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, live_enabled: bool | None = None, symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None, max_order_quantity: int | None = None, max_order_value: float | None = None, order_history_path: Path | None = None, optimizer_report_path: Path | None = None, enforce_optimizer_gate: bool | None = None) -> ExecutionResult:
     result = ExecutionResult()
     if not candidates:
         return result
@@ -781,7 +813,8 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
     daily_state = _load_daily_execution_state(output_path, execution_type)
     rows_to_write: list[dict[str, object]] = []
     resolved_allowlist = _normalize_allowlist(symbol_allowlist)
-    resolved_order_history = order_history_path or ORDER_HISTORY_OUTPUT
+    resolved_order_history = order_history_path or (output_path.parent / "order_history.csv" if execution_type == "PAPER" else ORDER_HISTORY_OUTPUT)
+    optimizer_gate_map = _load_optimizer_gate_map(optimizer_report_path or OPTIMIZER_REPORT_OUTPUT) if execution_type == "LIVE" and (enforce_optimizer_gate is not False) else {}
 
     if execution_type == "PAPER":
         broker: object = PaperBroker(PaperBrokerConfig(orders_path=resolved_order_history))
@@ -845,6 +878,21 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             _append_text_log(REJECTIONS_LOG_PATH, f"Risk blocked trade {trade_id} reason={blocked['blocked_reason']}")
             continue
 
+        if execution_type == "LIVE" and (enforce_optimizer_gate is not False):
+            optimizer_ready, optimizer_reason = _optimizer_gate_for_strategy(base_row.get("strategy", ""), optimizer_gate_map)
+            if not optimizer_ready:
+                blocked = dict(base_row)
+                blocked["trade_status"] = TRADE_STATUS_BLOCKED
+                blocked["execution_status"] = "BLOCKED"
+                blocked["blocked_reason"] = SKIP_REASON_OPTIMIZER_GATE
+                blocked["broker_name"] = resolved_broker_name
+                blocked["broker_status"] = "OPTIMIZER_GATE"
+                blocked["broker_message"] = optimizer_reason
+                blocked["risk_limit_reason"] = optimizer_reason
+                rows_to_write.append(blocked)
+                _append_written_row(result, blocked)
+                _append_text_log(REJECTIONS_LOG_PATH, f"Optimizer gate blocked trade {trade_id} strategy={base_row.get('strategy', '')} reason={optimizer_reason}")
+                continue
         if execution_type == "LIVE" and live_kill_switch_enabled():
             blocked = dict(base_row)
             blocked["trade_status"] = TRADE_STATUS_BLOCKED
@@ -966,8 +1014,8 @@ def execute_paper_trades(candidates: list[dict[str, object]], output_path: Path,
     return _execute_candidates(candidates, output_path, execution_type="PAPER", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, order_history_path=order_history_path)
 
 
-def execute_live_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, max_trades_per_day: int | None = None, max_daily_loss: float | None = None, live_enabled: bool | None = None, symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None, max_order_quantity: int | None = None, max_order_value: float | None = None, order_history_path: Path | None = None) -> ExecutionResult:
-    return _execute_candidates(candidates, output_path, execution_type="LIVE", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, broker_client=broker_client, broker_name=broker_name, security_map=security_map, live_enabled=live_enabled, symbol_allowlist=symbol_allowlist, max_order_quantity=max_order_quantity, max_order_value=max_order_value, order_history_path=order_history_path)
+def execute_live_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, max_trades_per_day: int | None = None, max_daily_loss: float | None = None, live_enabled: bool | None = None, symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None, max_order_quantity: int | None = None, max_order_value: float | None = None, order_history_path: Path | None = None, optimizer_report_path: Path | None = None, enforce_optimizer_gate: bool | None = None) -> ExecutionResult:
+    return _execute_candidates(candidates, output_path, execution_type="LIVE", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, broker_client=broker_client, broker_name=broker_name, security_map=security_map, live_enabled=live_enabled, symbol_allowlist=symbol_allowlist, max_order_quantity=max_order_quantity, max_order_value=max_order_value, order_history_path=order_history_path, optimizer_report_path=optimizer_report_path, enforce_optimizer_gate=enforce_optimizer_gate)
 
 
 def _reconcile_execution_status(broker_status: str) -> str:
@@ -1197,7 +1245,7 @@ def close_paper_trades(
     for r in existing_rows:
         execution_type = str(r.get("execution_type", "")).upper()
         status = str(r.get("execution_status", "")).upper()
-        if execution_type != "PAPER" or status in {"CLOSED", "EXITED"}:
+        if execution_type != "PAPER" or status in {"CLOSED", "EXITED", "BLOCKED", "ERROR"}:
             updated_rows.append(r)
             continue
 

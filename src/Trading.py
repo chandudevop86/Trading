@@ -14,7 +14,8 @@ import pandas as pd
 import streamlit as st
 
 from src.amd_fvg_sd_bot import ConfluenceConfig, generate_trades as generate_amd_fvg_sd_trades
-from src.backtest_engine import nifty_intraday_backtest_config, run_backtest
+from src.backtest_engine import run_backtest
+from src.strategy_tuning import normalize_strategy_key, strategy_backtest_config
 from src.execution_engine import build_execution_candidates, execute_live_trades, execute_paper_trades, execution_result_summary
 from src.breakout_bot import Candle, generate_trades as generate_breakout_trades
 from src.demand_supply_bot import generate_trades as generate_demand_supply_trades
@@ -36,6 +37,7 @@ BACKTEST_TRADES_OUTPUT = DATA_DIR / 'backtest_trades.csv'
 BACKTEST_SUMMARY_OUTPUT = DATA_DIR / 'backtest_summary.csv'
 BACKTEST_VALIDATION_UI_OUTPUT = DATA_DIR / 'backtest_validation.csv'
 STRATEGY_RANKING_OUTPUT = DATA_DIR / 'strategy_expectancy_report.csv'
+OPTIMIZER_OUTPUT = DATA_DIR / 'strategy_optimizer_report.csv'
 ORDER_HISTORY_OUTPUT = DATA_DIR / 'order_history.csv'
 APP_LOG = LOG_DIR / 'app.log'
 BROKER_LOG = LOG_DIR / 'broker.log'
@@ -321,6 +323,32 @@ def _load_best_strategy_profile(backtest_summary: dict[str, object], strategy: s
     )
 
 
+
+def _latest_optimizer_gate(strategy: str) -> tuple[bool, str]:
+    if not OPTIMIZER_OUTPUT.exists() or OPTIMIZER_OUTPUT.stat().st_size == 0:
+        return False, 'optimizer report missing'
+    try:
+        frame = pd.read_csv(OPTIMIZER_OUTPUT)
+    except Exception:
+        return False, 'optimizer report unreadable'
+    if frame.empty:
+        return False, 'optimizer report empty'
+    strategy_key = normalize_strategy_key(strategy)
+    frame['normalized_strategy'] = frame['strategy'].map(lambda value: normalize_strategy_key(str(value)))
+    matched = frame[frame["normalized_strategy"] == strategy_key].copy()
+    if matched.empty:
+        return False, f'no optimizer row for {strategy}'
+    if 'optimizer_rank' in matched.columns:
+        matched = matched.sort_values('optimizer_rank')
+    elif 'rank_score' in matched.columns:
+        matched = matched.sort_values('rank_score', ascending=False)
+    row = matched.iloc[0].to_dict()
+    deployment_ready = str(row.get('deployment_ready', 'NO')).strip().upper() == 'YES'
+    blockers = str(row.get('deployment_blockers', '') or '').strip()
+    if deployment_ready:
+        return True, 'optimizer validated'
+    return False, blockers or 'optimizer gate failed'
+
 def _status_message(strategy: str, symbol: str, timeframe: str, trades: list[dict[str, object]], action: str) -> str:
     status = 'Signals generated' if trades else 'No qualifying setup'
     return f'{action}: {status} for {strategy} on {symbol} ({timeframe}).'
@@ -370,11 +398,11 @@ def _run_live_strategy(strategy: str, symbol: str, timeframe: str, capital: floa
 
 
 def _run_strategy_backtest(candles: pd.DataFrame, strategy: str, symbol: str, capital: float, risk_pct: float, rr_ratio: float) -> dict[str, object]:
-    config = nifty_intraday_backtest_config(
+    config = strategy_backtest_config(
+        strategy,
         capital=float(capital),
         risk_pct=float(risk_pct) / 100.0,
         rr_ratio=float(rr_ratio),
-        strategy_name=strategy,
         trades_output=BACKTEST_TRADES_OUTPUT,
         summary_output=BACKTEST_SUMMARY_OUTPUT,
         validation_output=BACKTEST_VALIDATION_UI_OUTPUT,
@@ -386,6 +414,10 @@ def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, 
         return None, [('info', 'No actionable trade candidates')], 'Paper standby'
     candidates = build_execution_candidates(strategy, trades, symbol)
     if broker_choice == 'Dhan Live':
+        optimizer_ready, optimizer_reason = _latest_optimizer_gate(strategy)
+        if not optimizer_ready:
+            _store_rejection(f'LIVE BLOCKED {strategy} {symbol}: {optimizer_reason}')
+            return None, [('warning', f'Live blocked: {optimizer_reason}')], 'Live broker blocked by optimizer gate'
         live_enabled = str(os.getenv('LIVE_TRADING_ENABLED', '') or '').strip().lower() in {'1', 'true', 'yes', 'on'}
         result = execute_live_trades(
             candidates,
@@ -403,7 +435,6 @@ def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, 
         )
         status = 'Paper broker active'
     return result, execution_result_summary(result), status
-
 
 def _minimal_theme() -> None:
     st.set_page_config(page_title='Trading Desk', page_icon='chart', layout='wide')
@@ -551,7 +582,7 @@ def main() -> None:
         _render_summary_cards(trades, backtest_summary)
         _render_operator_panels(status, trades, backtest_summary, strategy, normalized_symbol, timeframe, period, broker_choice, broker_status, execution_messages)
         st.caption(
-            f'Files updated: {OHLCV_OUTPUT}, {TRADES_OUTPUT}, {EXECUTED_TRADES_OUTPUT}, {ORDER_HISTORY_OUTPUT}, {BACKTEST_TRADES_OUTPUT}, {BACKTEST_SUMMARY_OUTPUT}, {BACKTEST_VALIDATION_UI_OUTPUT}, {STRATEGY_RANKING_OUTPUT}, {APP_LOG}, {BROKER_LOG}, {EXECUTION_LOG}, {REJECTIONS_LOG}, {ERRORS_LOG}'
+            f'Files updated: {OHLCV_OUTPUT}, {TRADES_OUTPUT}, {EXECUTED_TRADES_OUTPUT}, {ORDER_HISTORY_OUTPUT}, {BACKTEST_TRADES_OUTPUT}, {BACKTEST_SUMMARY_OUTPUT}, {BACKTEST_VALIDATION_UI_OUTPUT}, {STRATEGY_RANKING_OUTPUT}, {OPTIMIZER_OUTPUT}, {APP_LOG}, {BROKER_LOG}, {EXECUTION_LOG}, {REJECTIONS_LOG}, {ERRORS_LOG}'
         )
     except Exception as exc:
         message = f'Trading UI failure: {exc}'

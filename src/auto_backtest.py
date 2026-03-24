@@ -8,6 +8,8 @@ from typing import Any
 
 from src.backtest_engine import nifty_intraday_validation_config, summarize_trade_log
 from src.live_ohlcv import fetch_live_ohlcv, write_csv
+from src.strategy_evaluator import rank_strategy_summaries
+from src.strategy_tuning import apply_strategy_benchmark, optimizer_report_rows
 from src.strategy_service import StrategyContext, generate_strategy_rows
 from src.trading_workflows import build_backtest_workflow, run_live_candidates, run_paper_candidates
 
@@ -198,6 +200,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--data-output', type=Path, default=Path('data/live_ohlcv.csv'))
     parser.add_argument('--summary-output', type=Path, default=Path('data/backtest_results_all.csv'))
     parser.add_argument('--summary-history-output', type=Path, default=Path('data/backtest_results_history.csv'))
+    parser.add_argument('--ranking-output', type=Path, default=Path('data/strategy_expectancy_report.csv'))
+    parser.add_argument('--optimizer-output', type=Path, default=Path('data/strategy_optimizer_report.csv'))
     parser.add_argument('--validation-output', type=Path, default=Path('data/backtest_validation.csv'))
     parser.add_argument('--equity-curve-output', type=Path, default=Path('data/backtest_equity_curves.csv'))
     parser.add_argument('--paper-log-output', type=Path, default=Path('data/paper_trading_logs_all.csv'))
@@ -209,8 +213,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    from src.amd_fvg_sd_bot import generate_trades as generate_amd_fvg_sd_trades
     from src.breakout_bot import generate_trades as generate_breakout_trades
     from src.breakout_bot import load_candles
+    from src.indicator_bot import generate_trades as generate_indicator_trades
     from src.indicator_bot import IndicatorConfig, generate_indicator_rows
 
     run_at = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
@@ -310,6 +316,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         filter_choppy_days=True,
     )
     ds_rows = generate_strategy_rows(demand_supply_context)
+    indicator_trade_rows = generate_indicator_trades(rows, capital=capital, risk_pct=risk_pct, rr_ratio=rr_ratio, config=indicator_cfg)
+    amd_rows = generate_amd_fvg_sd_trades(rows, capital=capital, risk_pct=risk_pct, rr_ratio=rr_ratio)
     indicator_rows = generate_indicator_rows(candles, config=indicator_cfg)
     one_trade_rows = generate_strategy_rows(one_trade_context)
     btst_rows = generate_strategy_rows(btst_context)
@@ -317,11 +325,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         _pnl_summary('BREAKOUT', breakout_rows, starting_equity=capital),
         _pnl_summary('BREAKOUT_NO_BIAS', breakout_no_bias_rows, starting_equity=capital),
         _pnl_summary('DEMAND_SUPPLY', ds_rows, starting_equity=capital),
+        _pnl_summary('INDICATOR', indicator_trade_rows, starting_equity=capital),
+        _pnl_summary('AMD_FVG_SD', amd_rows, starting_equity=capital),
         _pnl_summary('ONE_TRADE_DAY', one_trade_rows, starting_equity=capital),
         _pnl_summary('BTST', btst_rows, starting_equity=capital),
     ]
     summary_rows = [summary for summary, _ in summary_and_curves]
+    summary_rows = [apply_strategy_benchmark(summary) for summary in summary_rows]
     ranked_summary_rows = rank_strategy_summaries(summary_rows)
+    optimizer_rows = optimizer_report_rows(ranked_summary_rows)
     equity_curve_rows = [curve_row for _, curve_rows in summary_and_curves for curve_row in curve_rows]
     breakout_bias_evaluation = _build_breakout_bias_evaluation(summary_rows[0], summary_rows[1])
     for summary in summary_rows:
@@ -340,19 +352,22 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     _write_rows(args.summary_output, summary_rows)
     _append_rows(args.summary_history_output, summary_rows)
     _write_rows(args.ranking_output, ranked_summary_rows)
+    _write_rows(args.optimizer_output, optimizer_rows)
     _write_rows(equity_curve_output, equity_curve_rows)
 
     validation_summary: dict[str, Any] = {}
 
     breakout_workflow = build_backtest_workflow(breakout_rows, 'Breakout (15m)', args.execution_symbol)
     ds_workflow = build_backtest_workflow(ds_rows, 'Demand/Supply', args.execution_symbol)
-    ind_workflow = build_backtest_workflow(indicator_rows, 'Indicator (RSI/ADX/MACD+VWAP)', args.execution_symbol)
+    ind_workflow = build_backtest_workflow(indicator_trade_rows, 'Indicator (RSI/ADX/MACD+VWAP)', args.execution_symbol)
+    amd_workflow = build_backtest_workflow(amd_rows, 'AMD + FVG + Supply/Demand', args.execution_symbol)
     one_workflow = build_backtest_workflow(one_trade_rows, 'One Trade/Day (All Indicators)', args.execution_symbol)
     btst_workflow = build_backtest_workflow(btst_rows, 'BTST', args.execution_symbol)
     candidates = (
         breakout_workflow.execution_candidates
         + ds_workflow.execution_candidates
         + ind_workflow.execution_candidates
+        + amd_workflow.execution_candidates
         + one_workflow.execution_candidates
         + btst_workflow.execution_candidates
     )
@@ -425,6 +440,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         'summary_rows': summary_rows,
         'ranked_summary_rows': ranked_summary_rows,
         'ranking_output': str(args.ranking_output),
+        'optimizer_output': str(args.optimizer_output),
+        'optimizer_rows': optimizer_rows,
         'validation_output': str(validation_output),
         'validation_summary_output': str(validation_summary_output),
         'validation_summary': validation_summary,
@@ -471,6 +488,7 @@ def main() -> None:
             f"expectancy={best.get('expectancy_per_trade')} pf={best.get('profit_factor')} max_dd={best.get('max_drawdown')}"
         )
     print(f"Strategy ranking: {out.get('ranking_output', '')}")
+    print(f"Optimizer report: {out.get('optimizer_output', '')}" )
     print(f"Equity curves: {out['equity_curve_output']}")
 
 

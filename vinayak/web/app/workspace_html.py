@@ -41,17 +41,22 @@ def _page(title: str, body: str, script: str = '') -> str:
       backdrop-filter: blur(12px); box-shadow: var(--shadow);
     }}
     .brand-wrap {{ display:flex; flex-direction:column; gap:4px; }}
+    .top-nav-brand {{ display:flex; align-items:center; gap:10px; font-weight:800; color:#f4f8ff; }}
+    .top-nav-logo {{ width:34px; height:34px; border-radius:12px; display:grid; place-items:center; background: linear-gradient(135deg, #ffb45f, var(--accent)); color:#111; font-weight:900; }}
     .eyebrow {{ font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: #ffd089; }}
     .brand {{ font-size: 28px; font-weight: 800; }}
     .subbrand {{ color: var(--muted); font-size: 13px; }}
     .nav-actions {{ display:flex; gap:10px; flex-wrap:wrap; }}
-    .button, button, .download-link {{
+    .button, button, .download-link, .top-tab {{
       border: 1px solid var(--line); border-radius: 14px; min-height: 42px; padding: 10px 15px;
       font-weight: 800; cursor: pointer; text-decoration: none; display:inline-flex; align-items:center; justify-content:center;
       background: rgba(255,255,255,0.03); color: var(--text);
     }}
     .button.primary, button.primary {{ background: linear-gradient(135deg, #ffb45f, var(--accent)); color:#111; border-color: transparent; }}
     .button.highlight {{ background: linear-gradient(135deg, #5aa8ff, var(--accent-2)); color:#07111d; border-color: transparent; }}
+    .top-tabs {{ display:flex; gap:10px; flex-wrap:wrap; margin: 0 0 18px 0; padding: 12px 14px; border:1px solid var(--line); border-radius: 18px; background: rgba(10,20,34,0.82); box-shadow: var(--shadow); }}
+    .top-tab {{ border-radius:999px; }}
+    .top-tab.active {{ background: linear-gradient(135deg, #5aa8ff, var(--accent-2)); color:#07111d; border-color: transparent; }}
     .hero {{ display:grid; grid-template-columns: 1.2fr .8fr; gap:18px; margin-bottom:18px; }}
     .card {{ background: linear-gradient(180deg, var(--panel), rgba(8,16,28,0.98)); border:1px solid var(--line); border-radius: 24px; padding: 22px; box-shadow: var(--shadow); }}
     h1 {{ margin: 10px 0 8px; font-size: clamp(34px, 4.5vw, 56px); line-height:1.02; }}
@@ -74,7 +79,7 @@ def _page(title: str, body: str, script: str = '') -> str:
     input, select {{ width:100%; min-height:46px; border-radius:14px; border:1px solid var(--line); background: rgba(255,255,255,0.04); color:var(--text); padding:10px 12px; }}
     .toggle {{ display:flex; align-items:center; gap:10px; padding:11px 12px; border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,0.03); }}
     .toggle input {{ width:auto; min-height:auto; accent-color: var(--accent); }}
-    .actions {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }}
+    .actions, .page-links {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }}
     .flash {{ margin-bottom:12px; padding:12px 14px; border-radius:14px; border:1px solid var(--line); display:none; font-weight:700; }}
     .flash.good {{ display:block; background: rgba(34,197,94,0.12); color:#bbf7d0; border-color: rgba(74,222,128,0.24); }}
     .flash.bad {{ display:block; background: rgba(251,113,133,0.12); color:#fecdd3; border-color: rgba(251,113,133,0.24); }}
@@ -86,15 +91,8 @@ def _page(title: str, body: str, script: str = '') -> str:
     pre {{ margin:0; padding:14px; white-space:pre-wrap; font-size:12px; line-height:1.5; max-height: 360px; overflow:auto; }}
     .muted {{ color:var(--muted); }}
     .footer-note {{ margin-top:10px; font-size:12px; color:var(--muted); }}
-    .page-links {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }}
-    @media (max-width: 1180px) {{
-      .hero, .layout, .metric-row, .report-grid {{ grid-template-columns: 1fr; }}
-      .grid3 {{ grid-template-columns: 1fr; }}
-    }}
-    @media (max-width: 760px) {{
-      .grid2, .stats {{ grid-template-columns: 1fr; }}
-      .nav {{ flex-direction:column; align-items:flex-start; }}
-    }}
+    @media (max-width: 1180px) {{ .hero, .layout, .metric-row, .report-grid {{ grid-template-columns: 1fr; }} .grid3 {{ grid-template-columns: 1fr; }} }}
+    @media (max-width: 760px) {{ .grid2, .stats {{ grid-template-columns: 1fr; }} .nav {{ flex-direction:column; align-items:flex-start; }} }}
   </style>
 </head>
 <body>
@@ -111,6 +109,7 @@ WORKSPACE_HTML = _page(
   <div class=\"shell\">
     <div class=\"nav\">
       <div class=\"brand-wrap\">
+        <div class=\"top-nav-brand\"><div class=\"top-nav-logo\">K</div><div>KRSH <span style=\"color:#8ea6c7; font-weight:700;\">Solutions</span></div></div>
         <div class=\"eyebrow\">KRSH Trading Workspace</div>
         <div class=\"brand\">Vinayak Workspace</div>
         <div class=\"subbrand\">Common trading actions on one page, related outputs split into dedicated pages.</div>
@@ -124,7 +123,14 @@ WORKSPACE_HTML = _page(
       </div>
     </div>
 
-    <div class=\"hero\">
+    <div class=\"top-tabs\">
+      <button class=\"top-tab active\" type=\"button\" data-scroll=\"heroSection\">Home</button>
+      <button class=\"top-tab\" type=\"button\" data-scroll=\"controlSection\">Desk Controls</button>
+      <button class=\"top-tab\" type=\"button\" data-scroll=\"marketSection\">Market</button>
+      <button class=\"top-tab\" type=\"button\" data-scroll=\"tradesSection\">Trades</button>
+    </div>
+
+    <div id=\"heroSection\" class=\"hero\">
       <section class=\"card\">
         <div class=\"eyebrow\">Common Actions</div>
         <h1>Run live market analysis and review the latest trading setup from one clean page.</h1>
@@ -147,7 +153,7 @@ WORKSPACE_HTML = _page(
     </div>
 
     <div class=\"layout\">
-      <section class=\"card\">
+      <section id=\"controlSection\" class=\"card\">
         <h2 class=\"section-title\">Strategy Control Panel</h2>
         <div id=\"flash\" class=\"flash\"></div>
         <div class=\"grid2\">
@@ -196,13 +202,13 @@ WORKSPACE_HTML = _page(
           </div>
         </section>
 
-        <section class=\"card\">
+        <section id=\"marketSection\" class=\"card\">
           <h2 class=\"section-title\">Market Overview</h2>
           <div class=\"table-shell\"><table><thead><tr><th>Timestamp</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th><th>Source</th></tr></thead><tbody id=\"candleTable\"></tbody></table></div>
           <div id=\"candleEmpty\" class=\"muted\" style=\"margin-top:10px;\">No candle snapshot yet.</div>
         </section>
 
-        <section class=\"card\">
+        <section id=\"tradesSection\" class=\"card\">
           <h2 class=\"section-title\">Signal Rows</h2>
           <div class=\"table-shell\"><table><thead><tr><th>Strategy</th><th>Side</th><th>Entry</th><th>SL</th><th>Target</th><th>Option</th><th>Expiry</th></tr></thead><tbody id=\"signalTable\"></tbody></table></div>
           <div id=\"signalEmpty\" class=\"muted\" style=\"margin-top:10px;\">No signals yet.</div>
@@ -346,6 +352,17 @@ WORKSPACE_HTML = _page(
       }
     });
 
+    document.querySelectorAll('.top-tab').forEach((button) => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.top-tab').forEach((node) => node.classList.remove('active'));
+        button.classList.add('active');
+        const target = document.getElementById(button.dataset.scroll);
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
     loadStoredRun();
   </script>
     """
@@ -358,6 +375,7 @@ WORKSPACE_REPORTS_HTML = _page(
   <div class=\"shell\">
     <div class=\"nav\">
       <div class=\"brand-wrap\">
+        <div class=\"top-nav-brand\"><div class=\"top-nav-logo\">K</div><div>KRSH <span style=\"color:#8ea6c7; font-weight:700;\">Solutions</span></div></div>
         <div class=\"eyebrow\">KRSH Trading Workspace</div>
         <div class=\"brand\">Reports</div>
         <div class=\"subbrand\">Related report outputs are separated from the common trading page.</div>
@@ -384,26 +402,12 @@ WORKSPACE_REPORTS_HTML = _page(
     <div class=\"stack\">
       <section class=\"card\">
         <div class=\"report-grid\">
-          <div class=\"report-card\">
-            <div class=\"label\">JSON Report</div>
-            <div id=\"jsonReportPath\" class=\"value\" style=\"font-size:16px;\">-</div>
-            <div id=\"jsonReportS3\" class=\"muted\" style=\"margin-top:8px;\">No S3 artifact.</div>
-          </div>
-          <div class=\"report-card\">
-            <div class=\"label\">Summary Report</div>
-            <div id=\"summaryReportPath\" class=\"value\" style=\"font-size:16px;\">-</div>
-            <div id=\"summaryReportS3\" class=\"muted\" style=\"margin-top:8px;\">No S3 artifact.</div>
-          </div>
+          <div class=\"report-card\"><div class=\"label\">JSON Report</div><div id=\"jsonReportPath\" class=\"value\" style=\"font-size:16px;\">-</div><div id=\"jsonReportS3\" class=\"muted\" style=\"margin-top:8px;\">No S3 artifact.</div></div>
+          <div class=\"report-card\"><div class=\"label\">Summary Report</div><div id=\"summaryReportPath\" class=\"value\" style=\"font-size:16px;\">-</div><div id=\"summaryReportS3\" class=\"muted\" style=\"margin-top:8px;\">No S3 artifact.</div></div>
         </div>
       </section>
-      <section class=\"card\">
-        <h2 class=\"section-title\">Execution Summary</h2>
-        <pre id=\"executionSummary\">Run live analysis on the main workspace first.</pre>
-      </section>
-      <section class=\"card\">
-        <h2 class=\"section-title\">Latest Report Payload</h2>
-        <pre id=\"reportPreview\">Run live analysis on the main workspace first.</pre>
-      </section>
+      <section class=\"card\"><h2 class=\"section-title\">Execution Summary</h2><pre id=\"executionSummary\">Run live analysis on the main workspace first.</pre></section>
+      <section class=\"card\"><h2 class=\"section-title\">Latest Report Payload</h2><pre id=\"reportPreview\">Run live analysis on the main workspace first.</pre></section>
     </div>
   </div>
     """,
@@ -438,6 +442,7 @@ WORKSPACE_DOWNLOADS_HTML = _page(
   <div class=\"shell\">
     <div class=\"nav\">
       <div class=\"brand-wrap\">
+        <div class=\"top-nav-brand\"><div class=\"top-nav-logo\">K</div><div>KRSH <span style=\"color:#8ea6c7; font-weight:700;\">Solutions</span></div></div>
         <div class=\"eyebrow\">KRSH Trading Workspace</div>
         <div class=\"brand\">Downloads</div>
         <div class=\"subbrand\">Related export actions are moved away from the common trading page.</div>
@@ -462,18 +467,8 @@ WORKSPACE_DOWNLOADS_HTML = _page(
       </aside>
     </div>
     <div class=\"stack\">
-      <section class=\"card\">
-        <h2 class=\"section-title\">Export Actions</h2>
-        <div class=\"actions\" style=\"margin-top:0;\">
-          <a id=\"downloadCandles\" class=\"download-link\" download=\"vinayak_candles.json\" href=\"#\">Download Candles JSON</a>
-          <a id=\"downloadSignals\" class=\"download-link\" download=\"vinayak_signals.json\" href=\"#\">Download Signals JSON</a>
-          <a id=\"downloadRun\" class=\"download-link\" download=\"vinayak_run.json\" href=\"#\">Download Full Run JSON</a>
-        </div>
-      </section>
-      <section class=\"card\">
-        <h2 class=\"section-title\">Latest Run Snapshot</h2>
-        <pre id=\"downloadPreview\">Run live analysis on the main workspace first.</pre>
-      </section>
+      <section class=\"card\"><h2 class=\"section-title\">Export Actions</h2><div class=\"actions\" style=\"margin-top:0;\"><a id=\"downloadCandles\" class=\"download-link\" download=\"vinayak_candles.json\" href=\"#\">Download Candles JSON</a><a id=\"downloadSignals\" class=\"download-link\" download=\"vinayak_signals.json\" href=\"#\">Download Signals JSON</a><a id=\"downloadRun\" class=\"download-link\" download=\"vinayak_run.json\" href=\"#\">Download Full Run JSON</a></div></section>
+      <section class=\"card\"><h2 class=\"section-title\">Latest Run Snapshot</h2><pre id=\"downloadPreview\">Run live analysis on the main workspace first.</pre></section>
     </div>
   </div>
     """,
@@ -501,4 +496,3 @@ WORKSPACE_DOWNLOADS_HTML = _page(
   </script>
     """
 )
-

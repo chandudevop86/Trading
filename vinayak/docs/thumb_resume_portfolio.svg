@@ -1,0 +1,26 @@
+<svg width="800" height="520" viewBox="0 0 800 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#eef4fb"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="520" rx="28" fill="url(#bg)"/>
+  <rect x="36" y="36" width="728" height="448" rx="20" fill="#ffffff" stroke="#dce7f1" stroke-width="2"/>
+  <text x="60" y="82" style="font:700 14px 'Segoe UI', Arial, sans-serif; letter-spacing:3px; fill:#1a5f86;">PROJECT PORTFOLIO</text>
+  <text x="60" y="138" style="font:700 44px 'Segoe UI', Arial, sans-serif; fill:#17324a;">One-Page Resume Sheet</text>
+  <text x="60" y="178" style="font:500 22px 'Segoe UI', Arial, sans-serif; fill:#58748d;">Vinayak Trading Platform</text>
+  <rect x="60" y="228" width="300" height="170" rx="16" fill="#fbfdff" stroke="#dce7f1"/>
+  <text x="82" y="262" style="font:700 18px 'Segoe UI', Arial, sans-serif; fill:#17324a;">Highlights</text>
+  <text x="82" y="294" style="font:500 15px 'Segoe UI', Arial, sans-serif; fill:#58748d;">• Live analysis workflow</text>
+  <text x="82" y="324" style="font:500 15px 'Segoe UI', Arial, sans-serif; fill:#58748d;">• Redis and S3 maturity</text>
+  <text x="82" y="354" style="font:500 15px 'Segoe UI', Arial, sans-serif; fill:#58748d;">• FastAPI 3-tier architecture</text>
+  <text x="82" y="384" style="font:500 15px 'Segoe UI', Arial, sans-serif; fill:#58748d;">• AWS-ready deployment path</text>
+  <rect x="404" y="228" width="300" height="170" rx="16" fill="#f4f8fc" stroke="#dce7f1"/>
+  <rect x="438" y="260" width="230" height="30" rx="15" fill="#102a43"/>
+  <rect x="438" y="308" width="230" height="30" rx="15" fill="#1f6f78"/>
+  <rect x="438" y="356" width="230" height="30" rx="15" fill="#c6862f"/>
+  <text x="553" y="280" text-anchor="middle" style="font:700 14px 'Segoe UI', Arial, sans-serif; fill:#ffffff;">Web Tier</text>
+  <text x="553" y="328" text-anchor="middle" style="font:700 14px 'Segoe UI', Arial, sans-serif; fill:#ffffff;">App Tier</text>
+  <text x="553" y="376" text-anchor="middle" style="font:700 14px 'Segoe UI', Arial, sans-serif; fill:#ffffff;">Data Tier</text>
+</svg>

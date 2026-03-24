@@ -1,22 +1,24 @@
-﻿WORKSPACE_HTML = """
+WORKSPACE_HTML = """
 <!DOCTYPE html>
 <html lang=\"en\">
 <head>
   <meta charset=\"utf-8\" />
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-  <title>Vinayak Live Workspace</title>
+  <title>Vinayak Trading Workspace</title>
   <style>
     :root {
-      --bg: #07111d;
-      --panel: rgba(15, 28, 45, 0.92);
-      --panel-2: rgba(10, 20, 34, 0.96);
-      --text: #eef4ff;
-      --muted: #8ea6c7;
-      --line: rgba(138, 176, 224, 0.16);
-      --accent: #f59e0b;
-      --accent-2: #22c55e;
-      --accent-3: #38bdf8;
-      --danger: #fb7185;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f8fbff;
+      --text: #10243a;
+      --muted: #5f7692;
+      --line: #dbe5f0;
+      --accent: #0f766e;
+      --accent-2: #2563eb;
+      --accent-3: #f59e0b;
+      --danger: #dc2626;
+      --good: #15803d;
+      --shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
     }
     * { box-sizing: border-box; }
     body {
@@ -25,56 +27,44 @@
       font-family: Segoe UI, Arial, sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at top left, rgba(245, 158, 11, 0.16), transparent 28%),
-        radial-gradient(circle at top right, rgba(56, 189, 248, 0.14), transparent 32%),
-        linear-gradient(180deg, #0a1422 0%, #07111d 60%, #050b15 100%);
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 26%),
+        radial-gradient(circle at top right, rgba(15, 118, 110, 0.10), transparent 30%),
+        linear-gradient(180deg, #f7faff 0%, #f3f7fb 100%);
     }
-    .shell { max-width: 1400px; margin: 0 auto; padding: 28px 22px 40px; }
-    .nav { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:22px; }
-    .brand { font-size: 24px; font-weight: 800; letter-spacing: .03em; }
+    .shell { max-width: 1480px; margin: 0 auto; padding: 22px 18px 40px; }
+    .nav {
+      display:flex; justify-content:space-between; align-items:center; gap:14px;
+      padding: 14px 18px; margin-bottom: 18px; border: 1px solid var(--line);
+      border-radius: 20px; background: rgba(255,255,255,0.86); backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+    }
+    .brand-wrap { display:flex; flex-direction:column; gap:4px; }
+    .eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
+    .brand { font-size: 24px; font-weight: 800; }
+    .subbrand { color: var(--muted); font-size: 13px; }
     .nav-actions { display:flex; gap:10px; flex-wrap:wrap; }
-    .button, button {
-      border: 0;
-      border-radius: 14px;
-      min-height: 44px;
-      padding: 11px 16px;
-      font-weight: 800;
-      cursor: pointer;
-      text-decoration: none;
+    .button, button, .download-link {
+      border: 0; border-radius: 14px; min-height: 42px; padding: 10px 15px;
+      font-weight: 800; cursor: pointer; text-decoration: none; display:inline-flex;
+      align-items:center; justify-content:center;
     }
-    .button.primary, button.primary { background: linear-gradient(135deg, var(--accent), #fb923c); color:#111; }
-    .button.secondary, button.secondary { background: rgba(255,255,255,0.04); color: var(--text); border:1px solid var(--line); }
+    .button.primary, button.primary { background: linear-gradient(135deg, var(--accent), #0ea5a0); color:#fff; }
+    .button.secondary, button.secondary, .download-link { background: #fff; color: var(--text); border:1px solid var(--line); }
     .hero {
-      display:grid;
-      grid-template-columns: 1.15fr 0.85fr;
-      gap:18px;
-      margin-bottom:18px;
+      display:grid; grid-template-columns: 1.2fr .8fr; gap:18px; margin-bottom:18px;
     }
     .card {
-      background: linear-gradient(180deg, var(--panel), var(--panel-2));
-      border: 1px solid var(--line);
-      border-radius: 24px;
-      padding: 22px;
-      box-shadow: 0 24px 60px rgba(0,0,0,0.24);
+      background: var(--panel); border:1px solid var(--line); border-radius: 24px;
+      padding: 20px; box-shadow: var(--shadow);
     }
-    .eyebrow {
-      display:inline-flex;
-      padding:7px 11px;
-      border-radius:999px;
-      background: rgba(255,255,255,0.05);
-      border:1px solid rgba(255,255,255,0.08);
-      color:#ffd089;
-      font-size:11px;
-      font-weight:800;
-      letter-spacing:.14em;
-      text-transform:uppercase;
-    }
-    h1 { margin: 14px 0 10px; font-size: clamp(32px, 5vw, 54px); line-height:1.02; }
-    .lead { margin:0; color:var(--muted); font-size:17px; line-height:1.65; max-width:760px; }
+    h1 { margin: 10px 0 8px; font-size: clamp(28px, 4vw, 46px); line-height:1.04; }
+    .lead { margin:0; color:var(--muted); font-size:16px; line-height:1.7; max-width:760px; }
+    .ribbon { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+    .pill { padding:8px 12px; border-radius:999px; border:1px solid var(--line); background:var(--panel-soft); color:#17324a; font-size:13px; font-weight:700; }
     .stats { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px; }
-    .stat { padding:16px; border:1px solid var(--line); border-radius:18px; background: rgba(255,255,255,0.03); }
+    .stat { padding:16px; border:1px solid var(--line); border-radius:18px; background: linear-gradient(180deg, #ffffff, #f8fbff); }
     .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
-    .value { margin-top:8px; font-size:24px; font-weight:800; }
+    .value { margin-top:7px; font-size:24px; font-weight:800; }
     .layout { display:grid; grid-template-columns: 360px minmax(0, 1fr); gap:18px; }
     .stack { display:grid; gap:18px; }
     .section-title { margin:0 0 14px; font-size:18px; }
@@ -83,30 +73,45 @@
     label { display:block; margin-bottom:6px; color:var(--muted); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
     input, select {
       width:100%; min-height:44px; border-radius:14px; border:1px solid var(--line);
-      background: rgba(255,255,255,0.04); color:var(--text); padding:10px 12px;
+      background: #fff; color:var(--text); padding:10px 12px;
     }
-    input::placeholder { color:#7890b1; }
-    .toggle { display:flex; align-items:center; gap:10px; padding:11px 12px; border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,0.03); }
+    .toggle { display:flex; align-items:center; gap:10px; padding:11px 12px; border:1px solid var(--line); border-radius:14px; background:var(--panel-soft); }
     .toggle input { width:auto; min-height:auto; }
     .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
-    .flash { margin-bottom:12px; padding:12px 14px; border-radius:14px; border:1px solid var(--line); display:none; }
-    .flash.good { display:block; background: rgba(34,197,94,0.12); color:#bbf7d0; }
-    .flash.bad { display:block; background: rgba(251,113,133,0.12); color:#fecdd3; }
-    .ribbon { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
-    .pill { padding:8px 12px; border-radius:999px; border:1px solid var(--line); background: rgba(255,255,255,0.04); color:#d6e5ff; font-size:13px; font-weight:700; }
+    .flash { margin-bottom:12px; padding:12px 14px; border-radius:14px; border:1px solid var(--line); display:none; font-weight:700; }
+    .flash.good { display:block; background: rgba(21, 128, 61, 0.10); color:#166534; border-color: rgba(21, 128, 61, 0.16); }
+    .flash.bad { display:block; background: rgba(220, 38, 38, 0.10); color:#991b1b; border-color: rgba(220, 38, 38, 0.16); }
+    .tabs { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+    .tab-button {
+      border:1px solid var(--line); background:#fff; color:var(--text); border-radius:12px; padding:10px 12px;
+      font-weight:800; cursor:pointer;
+    }
+    .tab-button.active { background: linear-gradient(135deg, var(--accent-2), #38bdf8); color:#fff; border-color: transparent; }
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+    .metric-row { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:12px; }
+    .metric {
+      border:1px solid var(--line); border-radius:18px; padding:16px; background: linear-gradient(180deg, #fff, #f8fbff);
+    }
+    .metric strong { display:block; margin-top:8px; font-size:24px; }
     table { width:100%; border-collapse:collapse; }
-    th, td { text-align:left; padding:11px 10px; border-bottom:1px solid rgba(138,176,224,0.10); font-size:14px; vertical-align:top; }
-    th { color:#b9cdea; font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
-    .table-shell { overflow:auto; }
-    code, pre { color:#d8e8ff; background: rgba(255,255,255,0.04); border-radius:12px; }
-    pre { margin:0; padding:14px; white-space:pre-wrap; font-size:12px; line-height:1.5; }
+    th, td { text-align:left; padding:11px 10px; border-bottom:1px solid var(--line); font-size:14px; vertical-align:top; }
+    th { color:#5d7591; font-size:12px; text-transform:uppercase; letter-spacing:.06em; background:#fbfdff; position: sticky; top: 0; }
+    .table-shell { overflow:auto; max-height: 360px; border:1px solid var(--line); border-radius:16px; }
+    code, pre {
+      color:#17324a; background: #f7fbff; border:1px solid var(--line); border-radius:12px;
+    }
+    pre { margin:0; padding:14px; white-space:pre-wrap; font-size:12px; line-height:1.5; max-height: 320px; overflow:auto; }
     .muted { color:var(--muted); }
-    @media (max-width: 1100px) {
-      .hero, .layout { grid-template-columns: 1fr; }
+    .report-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:12px; }
+    .report-card { border:1px solid var(--line); border-radius:18px; padding:16px; background: linear-gradient(180deg, #fff, #f8fbff); }
+    .footer-note { margin-top:10px; font-size:12px; color:var(--muted); }
+    @media (max-width: 1180px) {
+      .hero, .layout, .metric-row, .report-grid { grid-template-columns: 1fr; }
       .grid3 { grid-template-columns: 1fr; }
     }
-    @media (max-width: 720px) {
-      .grid2 { grid-template-columns: 1fr; }
+    @media (max-width: 760px) {
+      .grid2, .stats { grid-template-columns: 1fr; }
       .nav { flex-direction:column; align-items:flex-start; }
     }
   </style>
@@ -114,7 +119,11 @@
 <body>
   <div class=\"shell\">
     <div class=\"nav\">
-      <div class=\"brand\">Vinayak Workspace</div>
+      <div class=\"brand-wrap\">
+        <div class=\"eyebrow\">Integrated Trading Workspace</div>
+        <div class=\"brand\">Vinayak Workspace</div>
+        <div class=\"subbrand\">Old Trading-style operational layout, now powered by the Vinayak backend.</div>
+      </div>
       <div class=\"nav-actions\">
         <a class=\"button secondary\" href=\"/admin\">Admin</a>
         <a class=\"button secondary\" href=\"/health\">Health</a>
@@ -124,12 +133,12 @@
 
     <div class=\"hero\">
       <section class=\"card\">
-        <div class=\"eyebrow\">Integrated Trading Workspace</div>
-        <h1>Run live analysis, option enrichment, Telegram alerts, and execution from Vinayak.</h1>
-        <p class=\"lead\">This workspace now reuses the Trading project workflow inside Vinayak. Fetch candles, generate strategy rows, enrich options, send alerts, and optionally push PAPER or LIVE execution in one flow.</p>
+        <div class=\"eyebrow\">Trading Control Room</div>
+        <h1>Run live market analysis, review trades, manage execution, and export reports in one workspace.</h1>
+        <p class=\"lead\">This page keeps the new Vinayak live-analysis, Redis/S3-ready reporting, Telegram, and execution features, but brings back the older Trading app feeling: a control sidebar, market overview, trades area, and downloadable outputs.</p>
         <div class=\"ribbon\">
-          <div class=\"pill\">Endpoint: <code>/dashboard/live-analysis</code></div>
-          <div class=\"pill\">Live candles: <code>/dashboard/candles</code></div>
+          <div class=\"pill\">Live analysis: <code>/dashboard/live-analysis</code></div>
+          <div class=\"pill\">Candles: <code>/dashboard/candles</code></div>
           <div class=\"pill\">Modes: NONE / PAPER / LIVE</div>
         </div>
       </section>
@@ -145,7 +154,7 @@
 
     <div class=\"layout\">
       <section class=\"card\">
-        <h2 class=\"section-title\">Control Panel</h2>
+        <h2 class=\"section-title\">Strategy Control Panel</h2>
         <div id=\"flash\" class=\"flash\"></div>
         <div class=\"grid2\">
           <div><label for=\"symbol\">Symbol</label><input id=\"symbol\" value=\"^NSEI\" /></div>
@@ -176,35 +185,86 @@
           <button id=\"runAnalysisBtn\" class=\"primary\" type=\"button\">Run Live Analysis</button>
           <button id=\"loadCandlesBtn\" class=\"secondary\" type=\"button\">Preview Candles</button>
         </div>
+        <div class=\"footer-note\">Tip: Run analysis first, then review Overview, Trades, Reports, and Downloads like the older Trading workspace flow.</div>
       </section>
 
       <div class=\"stack\">
         <section class=\"card\">
-          <h2 class=\"section-title\">Run Summary</h2>
-          <div class=\"grid3\">
-            <div class=\"stat\"><div class=\"label\">Side Counts</div><div id=\"sideCounts\" class=\"muted\">No run yet.</div></div>
-            <div class=\"stat\"><div class=\"label\">Telegram</div><div id=\"telegramStatus\" class=\"muted\">Not sent.</div></div>
-            <div class=\"stat\"><div class=\"label\">Generated At</div><div id=\"generatedAt\" class=\"muted\">-</div></div>
+          <div class=\"tabs\">
+            <button class=\"tab-button active\" type=\"button\" data-tab=\"overview\">Overview</button>
+            <button class=\"tab-button\" type=\"button\" data-tab=\"trades\">Trades</button>
+            <button class=\"tab-button\" type=\"button\" data-tab=\"reports\">Reports</button>
+            <button class=\"tab-button\" type=\"button\" data-tab=\"downloads\">Downloads</button>
           </div>
-        </section>
-        <section class=\"card\">
-          <h2 class=\"section-title\">Signal Rows</h2>
-          <div class=\"table-shell\"><table><thead><tr><th>Strategy</th><th>Side</th><th>Entry</th><th>SL</th><th>Target</th><th>Option</th><th>Expiry</th></tr></thead><tbody id=\"signalTable\"></tbody></table></div>
-          <div id=\"signalEmpty\" class=\"muted\">No signals yet.</div>
-        </section>
-        <section class=\"card\">
-          <h2 class=\"section-title\">Execution Rows</h2>
-          <div class=\"table-shell\"><table><thead><tr><th>Trade</th><th>Side</th><th>Status</th><th>Broker</th><th>Price</th><th>Reason</th></tr></thead><tbody id=\"executionTable\"></tbody></table></div>
-          <div id=\"executionEmpty\" class=\"muted\">No execution rows yet.</div>
-        </section>
-        <section class=\"card\">
-          <h2 class=\"section-title\">Live Candle Snapshot</h2>
-          <pre id=\"candlePreview\">Waiting for market data...</pre>
+
+          <div id=\"panel-overview\" class=\"tab-panel active\">
+            <div class=\"metric-row\">
+              <div class=\"metric\"><div class=\"label\">Side Counts</div><strong id=\"sideCounts\">No run yet.</strong></div>
+              <div class=\"metric\"><div class=\"label\">Telegram</div><strong id=\"telegramStatus\">Not sent.</strong></div>
+              <div class=\"metric\"><div class=\"label\">Generated At</div><strong id=\"generatedAt\">-</strong></div>
+              <div class=\"metric\"><div class=\"label\">Report Status</div><strong id=\"reportStatus\">Not generated</strong></div>
+            </div>
+            <div class=\"card\" style=\"margin-top:16px; padding:16px;\">
+              <h2 class=\"section-title\">Market Overview</h2>
+              <div class=\"table-shell\" style=\"max-height:none;\"><table><thead><tr><th>Timestamp</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th><th>Source</th></tr></thead><tbody id=\"candleTable\"></tbody></table></div>
+              <div id=\"candleEmpty\" class=\"muted\" style=\"margin-top:10px;\">No candle snapshot yet.</div>
+            </div>
+            <div class=\"card\" style=\"margin-top:16px; padding:16px;\">
+              <h2 class=\"section-title\">Raw Candle Snapshot</h2>
+              <pre id=\"candlePreview\">Waiting for market data...</pre>
+            </div>
+          </div>
+
+          <div id=\"panel-trades\" class=\"tab-panel\">
+            <div class=\"card\" style=\"padding:16px;\">
+              <h2 class=\"section-title\">Signal Rows</h2>
+              <div class=\"table-shell\"><table><thead><tr><th>Strategy</th><th>Side</th><th>Entry</th><th>SL</th><th>Target</th><th>Option</th><th>Expiry</th></tr></thead><tbody id=\"signalTable\"></tbody></table></div>
+              <div id=\"signalEmpty\" class=\"muted\" style=\"margin-top:10px;\">No signals yet.</div>
+            </div>
+            <div class=\"card\" style=\"padding:16px; margin-top:16px;\">
+              <h2 class=\"section-title\">Execution Rows</h2>
+              <div class=\"table-shell\"><table><thead><tr><th>Trade</th><th>Side</th><th>Status</th><th>Broker</th><th>Price</th><th>Reason</th></tr></thead><tbody id=\"executionTable\"></tbody></table></div>
+              <div id=\"executionEmpty\" class=\"muted\" style=\"margin-top:10px;\">No execution rows yet.</div>
+            </div>
+          </div>
+
+          <div id=\"panel-reports\" class=\"tab-panel\">
+            <div class=\"report-grid\">
+              <div class=\"report-card\">
+                <div class=\"label\">JSON Report</div>
+                <div id=\"jsonReportPath\" class=\"value\" style=\"font-size:16px;\">-</div>
+                <div id=\"jsonReportS3\" class=\"muted\" style=\"margin-top:8px;\">No S3 artifact.</div>
+              </div>
+              <div class=\"report-card\">
+                <div class=\"label\">Summary Report</div>
+                <div id=\"summaryReportPath\" class=\"value\" style=\"font-size:16px;\">-</div>
+                <div id=\"summaryReportS3\" class=\"muted\" style=\"margin-top:8px;\">No S3 artifact.</div>
+              </div>
+            </div>
+            <div class=\"card\" style=\"padding:16px; margin-top:16px;\">
+              <h2 class=\"section-title\">Latest Run Payload</h2>
+              <pre id=\"reportPreview\">Run live analysis to generate report artifacts.</pre>
+            </div>
+          </div>
+
+          <div id=\"panel-downloads\" class=\"tab-panel\">
+            <div class=\"actions\" style=\"margin-top:0;\">
+              <a id=\"downloadCandles\" class=\"download-link\" download=\"vinayak_candles.json\" href=\"#\">Download Candles JSON</a>
+              <a id=\"downloadSignals\" class=\"download-link\" download=\"vinayak_signals.json\" href=\"#\">Download Signals JSON</a>
+              <a id=\"downloadRun\" class=\"download-link\" download=\"vinayak_run.json\" href=\"#\">Download Full Run JSON</a>
+            </div>
+            <div class=\"card\" style=\"padding:16px; margin-top:16px;\">
+              <h2 class=\"section-title\">Download Notes</h2>
+              <p class=\"muted\">This mirrors the older Trading app pattern where raw data and output rows are available for export after each run. The backend now also stores report artifacts through the Vinayak reporting layer.</p>
+            </div>
+          </div>
         </section>
       </div>
     </div>
   </div>
   <script>
+    let latestRun = null;
+
     function flash(message, tone='good') {
       const node = document.getElementById('flash');
       node.className = `flash ${tone}`;
@@ -261,23 +321,54 @@
       };
     }
 
+    function setDownloadLink(id, filename, payload) {
+      const node = document.getElementById(id);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      node.href = URL.createObjectURL(blob);
+      node.download = filename;
+    }
+
     function renderSignals(rows) {
       const body = document.getElementById('signalTable');
       const empty = document.getElementById('signalEmpty');
       if (!rows || !rows.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
-      empty.style.display = 'none';
-      body.innerHTML = rows.slice(0, 16).map((row) => `<tr><td>${row.strategy || '-'}</td><td>${row.side || '-'}</td><td>${row.entry_price ?? '-'}</td><td>${row.stop_loss ?? '-'}</td><td>${row.target_price ?? '-'}</td><td>${row.option_strike || '-'}</td><td>${row.option_expiry || '-'}</td></tr>`).join('');
+      empty.style.display = 'block';
+      empty.textContent = `${rows.length} signal row(s) loaded.`;
+      body.innerHTML = rows.slice(0, 24).map((row) => `<tr><td>${row.strategy || '-'}</td><td>${row.side || '-'}</td><td>${row.entry_price ?? '-'}</td><td>${row.stop_loss ?? '-'}</td><td>${row.target_price ?? '-'}</td><td>${row.option_strike || '-'}</td><td>${row.option_expiry || '-'}</td></tr>`).join('');
     }
 
     function renderExecutions(rows) {
       const body = document.getElementById('executionTable');
       const empty = document.getElementById('executionEmpty');
       if (!rows || !rows.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
+      empty.style.display = 'block';
+      empty.textContent = `${rows.length} execution row(s) loaded.`;
+      body.innerHTML = rows.slice(0, 24).map((row) => `<tr><td>${row.trade_id || row.trade_label || '-'}</td><td>${row.side || '-'}</td><td>${row.execution_status || row.trade_status || '-'}</td><td>${row.broker_name || '-'}</td><td>${row.price ?? '-'}</td><td>${row.reason || row.blocked_reason || row.validation_error || '-'}</td></tr>`).join('');
+    }
+
+    function renderCandles(rows) {
+      const body = document.getElementById('candleTable');
+      const empty = document.getElementById('candleEmpty');
+      if (!rows || !rows.length) { body.innerHTML = ''; empty.style.display = 'block'; return; }
       empty.style.display = 'none';
-      body.innerHTML = rows.slice(0, 16).map((row) => `<tr><td>${row.trade_id || row.trade_label || '-'}</td><td>${row.side || '-'}</td><td>${row.execution_status || row.trade_status || '-'}</td><td>${row.broker_name || '-'}</td><td>${row.price ?? '-'}</td><td>${row.reason || row.blocked_reason || row.validation_error || '-'}</td></tr>`).join('');
+      body.innerHTML = rows.slice(-12).reverse().map((row) => `<tr><td>${row.timestamp || '-'}</td><td>${row.open ?? '-'}</td><td>${row.high ?? '-'}</td><td>${row.low ?? '-'}</td><td>${row.close ?? '-'}</td><td>${row.volume ?? '-'}</td><td>${row.source || '-'}</td></tr>`).join('');
+      document.getElementById('candlePreview').textContent = JSON.stringify(rows.slice(-8), null, 2);
+    }
+
+    function renderReports(result) {
+      const artifacts = result.report_artifacts || {};
+      const jsonReport = artifacts.json_report || {};
+      const summaryReport = artifacts.summary_report || {};
+      document.getElementById('jsonReportPath').textContent = jsonReport.local_path || '-';
+      document.getElementById('jsonReportS3').textContent = jsonReport.s3_uri || jsonReport.s3_error || 'No S3 artifact.';
+      document.getElementById('summaryReportPath').textContent = summaryReport.local_path || '-';
+      document.getElementById('summaryReportS3').textContent = summaryReport.s3_uri || summaryReport.s3_error || 'No S3 artifact.';
+      document.getElementById('reportStatus').textContent = jsonReport.local_path || summaryReport.local_path ? 'Generated' : 'Not generated';
+      document.getElementById('reportPreview').textContent = JSON.stringify({ report_artifacts: artifacts, execution_summary: result.execution_summary || {}, telegram_payload: result.telegram_payload || {} }, null, 2);
     }
 
     function renderResult(result) {
+      latestRun = result;
       document.getElementById('statStrategy').textContent = result.strategy || '-';
       document.getElementById('statCandles').textContent = String(result.candle_count || 0);
       document.getElementById('statSignals').textContent = String(result.signal_count || 0);
@@ -285,15 +376,29 @@
       document.getElementById('sideCounts').textContent = JSON.stringify(result.side_counts || {});
       document.getElementById('telegramStatus').textContent = result.telegram_sent ? 'Sent' : (result.telegram_error || 'Not sent');
       document.getElementById('generatedAt').textContent = result.generated_at || '-';
-      document.getElementById('candlePreview').textContent = JSON.stringify((result.candles || []).slice(-8), null, 2);
+      renderCandles(result.candles || []);
       renderSignals(result.signals || []);
       renderExecutions(result.execution_rows || []);
+      renderReports(result);
+      setDownloadLink('downloadCandles', 'vinayak_candles.json', result.candles || []);
+      setDownloadLink('downloadSignals', 'vinayak_signals.json', result.signals || []);
+      setDownloadLink('downloadRun', 'vinayak_run.json', result);
     }
+
+    function activateTab(name) {
+      document.querySelectorAll('.tab-button').forEach((node) => node.classList.toggle('active', node.dataset.tab === name));
+      document.querySelectorAll('.tab-panel').forEach((node) => node.classList.toggle('active', node.id === `panel-${name}`));
+    }
+
+    document.querySelectorAll('.tab-button').forEach((button) => {
+      button.addEventListener('click', () => activateTab(button.dataset.tab));
+    });
 
     document.getElementById('runAnalysisBtn').addEventListener('click', async () => {
       try {
         const result = await postJson('/dashboard/live-analysis', payload());
         renderResult(result);
+        activateTab('overview');
         flash('Live analysis completed.');
       } catch (error) {
         flash(error.message, 'bad');
@@ -304,7 +409,8 @@
       try {
         const p = payload();
         const result = await getJson(`/dashboard/candles?symbol=${encodeURIComponent(p.symbol)}&interval=${encodeURIComponent(p.interval)}&period=${encodeURIComponent(p.period)}`);
-        document.getElementById('candlePreview').textContent = JSON.stringify((result.candles || []).slice(-8), null, 2);
+        renderCandles(result.candles || []);
+        setDownloadLink('downloadCandles', 'vinayak_candles.json', result.candles || []);
         flash('Loaded latest candle snapshot.');
       } catch (error) {
         flash(error.message, 'bad');

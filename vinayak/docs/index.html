@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vinayak Document Index</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    body { margin: 0; font-family: Arial, sans-serif; background: linear-gradient(135deg, #f4f7fb, #f8f3ec); color: #17324a; }
+    .page { max-width: 1180px; margin: 0 auto; padding: 30px 36px 44px; }
+    .hero { background: linear-gradient(135deg, #102a43, #1f6f78); color: #fff; border-radius: 24px; padding: 30px 32px; box-shadow: 0 16px 34px rgba(16,42,67,0.16); }
+    .brand { letter-spacing: 4px; font-size: 13px; color: #f4d8a6; font-weight: 700; }
+    h1 { margin: 10px 0 8px; font-size: 36px; }
+    .hero p { color: #dcecef; max-width: 860px; line-height: 1.6; }
+    .section { margin-top: 24px; background: #fff; border: 1px solid #dde7f1; border-radius: 20px; padding: 20px 22px; box-shadow: 0 12px 28px rgba(23,50,74,0.06); }
+    h2 { margin: 0 0 12px; font-size: 24px; color: #17324a; }
+    .sub { color: #58748d; margin-bottom: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .previews { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .card { border: 1px solid #e4ddd2; border-radius: 18px; padding: 14px 16px; background: linear-gradient(135deg, #ffffff, #fcfaf6); box-shadow: 0 10px 22px rgba(23,50,74,0.05); }
+    .card h3 { margin: 0 0 8px; font-size: 18px; }
+    .card p { margin: 0 0 10px; color: #5a748c; line-height: 1.55; }
+    .thumb { display: block; background: #f5f8fb; border: 1px solid #dde7f1; border-radius: 14px; padding: 8px; margin-bottom: 12px; }
+    .thumb img { width: 100%; height: 190px; object-fit: cover; object-position: top; border-radius: 10px; background: #fff; }
+    ul { margin: 0; padding-left: 18px; }
+    li { margin: 6px 0; }
+    a { color: #1a5f86; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+    .chip { display: inline-block; padding: 8px 10px; border-radius: 999px; background: #eef7fb; border: 1px solid #d4e6ef; font-size: 13px; }
+    .note { margin-top: 20px; background: #eef7f5; border-left: 4px solid #1f6f78; border-radius: 10px; padding: 12px 14px; color: #29495b; }
+    @media (max-width: 960px) {
+      .grid, .previews { grid-template-columns: 1fr; }
+      .thumb img { height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <div class="brand">KRSH SOLUTIONS</div>
+      <h1>Vinayak Document Index</h1>
+      <p>Single landing page for the Vinayak architecture, implementation, branding, executive, and portfolio document set. Use this as the master index to open every asset from one place.</p>
+      <div class="links">
+        <span class="chip">Architecture</span>
+        <span class="chip">Implementation</span>
+        <span class="chip">Branding</span>
+        <span class="chip">Executive Deck</span>
+        <span class="chip">Portfolio</span>
+        <span class="chip">AWS</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Quick Previews</h2>
+      <div class="sub">Visual shortcuts for the main presentation-ready documents.</div>
+      <div class="previews">
+        <div class="card">
+          <a class="thumb" href="vinayak_krsh_branded_project_pack.html"><img src="thumb_branded_project_pack.svg" alt="Branded project pack preview" /></a>
+          <h3>Branded Project Pack</h3>
+          <p>Best for polished sharing with project stakeholders and clients.</p>
+          <div class="links">
+            <a class="chip" href="vinayak_krsh_branded_project_pack.html">HTML</a>
+            <a class="chip" href="vinayak_krsh_branded_project_pack.pdf">PDF</a>
+          </div>
+        </div>
+        <div class="card">
+          <a class="thumb" href="vinayak_executive_dark_deck.html"><img src="thumb_executive_dark_deck.svg" alt="Executive deck preview" /></a>
+          <h3>Executive Dark Deck</h3>
+          <p>Best for leadership reviews, architecture discussions, and demos.</p>
+          <div class="links">
+            <a class="chip" href="vinayak_executive_dark_deck.html">HTML</a>
+            <a class="chip" href="vinayak_executive_dark_deck.pdf">PDF</a>
+          </div>
+        </div>
+        <div class="card">
+          <a class="thumb" href="vinayak_resume_portfolio_onepage.html"><img src="thumb_resume_portfolio.svg" alt="Portfolio preview" /></a>
+          <h3>Resume Portfolio Sheet</h3>
+          <p>Best for interviews, portfolio links, and one-page summaries.</p>
+          <div class="links">
+            <a class="chip" href="vinayak_resume_portfolio_onepage.html">HTML</a>
+            <a class="chip" href="vinayak_resume_portfolio_onepage.pdf">PDF</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Standard 3-Tier Set</h2>
+      <div class="sub">Base architecture and implementation documents modeled after the Roboshop-style structure.</div>
+      <div class="grid">
+        <div class="card">
+          <h3>Architecture</h3>
+          <ul>
+            <li><a href="vinayak_3tier_architecture.svg">3-tier architecture image</a></li>
+            <li><a href="vinayak_3tier_documentation.md">Main markdown documentation</a></li>
+            <li><a href="vinayak_3tier_documentation.html">HTML preview</a></li>
+            <li><a href="vinayak_3tier_documentation.pdf">PDF version</a></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Implementation Docs</h3>
+          <ul>
+            <li><a href="01-web-tier.md">01 Web Tier</a> | <a href="01-web-tier.html">HTML</a> | <a href="01-web-tier.pdf">PDF</a></li>
+            <li><a href="02-app-tier.md">02 App Tier</a> | <a href="02-app-tier.html">HTML</a> | <a href="02-app-tier.pdf">PDF</a></li>
+            <li><a href="03-data-tier.md">03 Data Tier</a> | <a href="03-data-tier.html">HTML</a> | <a href="03-data-tier.pdf">PDF</a></li>
+            <li><a href="04-implementation-flow.md">04 Implementation Flow</a> | <a href="04-implementation-flow.html">HTML</a> | <a href="04-implementation-flow.pdf">PDF</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Branded KRSH Set</h2>
+      <div class="sub">Presentation-ready versions with KRSH and Vinayak visual styling.</div>
+      <div class="grid">
+        <div class="card">
+          <h3>Branded Architecture</h3>
+          <ul>
+            <li><a href="vinayak_krsh_branded_architecture.svg">KRSH branded architecture image</a></li>
+            <li><a href="vinayak_krsh_branded_summary.html">Branded summary HTML</a></li>
+            <li><a href="vinayak_krsh_branded_summary.pdf">Branded summary PDF</a></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Branded Project Pack</h3>
+          <ul>
+            <li><a href="vinayak_krsh_branded_project_pack.html">Project pack HTML</a></li>
+            <li><a href="vinayak_krsh_branded_project_pack.pdf">Project pack PDF</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Presentation Variants</h2>
+      <div class="sub">Alternative visual packages for logos, executive discussion, and portfolio use.</div>
+      <div class="grid">
+        <div class="card">
+          <h3>Logo Pack</h3>
+          <ul>
+            <li><a href="vinayak_krsh_logo_banner.svg">Logo banner</a></li>
+            <li><a href="vinayak_logo_branded_pack.html">Logo pack HTML</a></li>
+            <li><a href="vinayak_logo_branded_pack.pdf">Logo pack PDF</a></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Combined Pack</h3>
+          <ul>
+            <li><a href="vinayak_3tier_project_pack.html">3-tier project pack HTML</a></li>
+            <li><a href="vinayak_3tier_project_pack.pdf">3-tier project pack PDF</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>AWS Support Docs</h2>
+      <div class="sub">Earlier AWS deployment and interview assets already created for the Vinayak migration.</div>
+      <div class="grid">
+        <div class="card">
+          <h3>AWS Planning</h3>
+          <ul>
+            <li><a href="vinayak_aws_terraform_steps.pdf">Terraform steps PDF</a></li>
+            <li><a href="vinayak_aws_cloudformation_steps.pdf">CloudFormation steps PDF</a></li>
+            <li><a href="vinayak_aws_github_actions_steps.pdf">GitHub Actions steps PDF</a></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>AWS Presentation Docs</h3>
+          <ul>
+            <li><a href="vinayak_aws_architecture.pdf">AWS architecture PDF</a></li>
+            <li><a href="vinayak_aws_deployment_roadmap.pdf">Deployment roadmap PDF</a></li>
+            <li><a href="vinayak_aws_interview_qa.pdf">Interview Q and A PDF</a></li>
+            <li><a href="vinayak_master_guide.pdf">Master guide PDF</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="note">Recommended entry point: open the branded project pack for presentation, the executive deck for leadership review, and the one-page portfolio sheet for resume or interview use.</div>
+  </div>
+</body>
+</html>

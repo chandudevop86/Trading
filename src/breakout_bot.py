@@ -485,3 +485,4 @@ def run(
     if telegram_token and telegram_chat_id:
         send_telegram_message(telegram_token, telegram_chat_id, build_trade_summary(trades))
     return trades
+

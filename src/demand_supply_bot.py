@@ -267,3 +267,4 @@ def generate_trades(
             trades_taken += 1
             last_signal_index[side] = entry_idx
     return trades
+

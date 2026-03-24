@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from src.env_loader import load_env_file
+from src.env_loader import load_aws_runtime_secrets, load_env_file
 
 
 @dataclass(slots=True)
@@ -102,4 +102,5 @@ class RuntimeConfig:
     def load(cls, env_path: str | Path = '.env') -> 'RuntimeConfig':
         load_env_file(env_path)
         return cls()
+
 

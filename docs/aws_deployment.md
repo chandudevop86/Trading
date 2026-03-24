@@ -151,3 +151,48 @@ Suggested prefixes:
 - Move state/log indexes to RDS/PostgreSQL
 - Use SQS/EventBridge for asynchronous execution triggers
 - Containerize UI and daemon separately when you are ready for ECS or EKS
+
+## AWS-Native Secret Loading
+The runtime now supports optional secret hydration from:
+- AWS Systems Manager Parameter Store via `AWS_SSM_PARAMETER_PATH`
+- AWS Secrets Manager via `AWS_SECRETS_MANAGER_ID`
+
+Load order:
+1. `.env` or `/etc/trading/trading.env`
+2. Parameter Store values
+3. Secrets Manager values
+
+This keeps local development simple while letting production use IAM roles instead of static AWS credentials.
+
+Suggested Parameter Store path:
+- `/trading/prod/`
+
+Suggested keys under that path:
+- `DHAN_CLIENT_ID`
+- `DHAN_ACCESS_TOKEN`
+- `TELEGRAM_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `LIVE_TRADING_ENABLED`
+
+## Docker / ECS Readiness
+Container-ready assets added:
+- `Dockerfile`
+- `.dockerignore`
+- `docker-compose.yml`
+
+Local container run:
+- `docker compose up --build`
+
+Future ECS split:
+- service 1: Streamlit UI task
+- service 2: trading daemon task
+- shared S3 artifact bucket
+- secrets injected through ECS task secrets from SSM or Secrets Manager
+
+## Additional CloudWatch Automation
+For application-level alerting, run:
+- `bash deploy/cloudwatch/create-log-metric-filters.sh`
+
+This creates metric filters and alarms for:
+- Dhan / broker errors
+- repeated no-trade cycles

@@ -270,6 +270,17 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
     total_pnl = sum(_safe_float(trade.get('pnl')) for trade in trades)
     avg_pnl = total_pnl / total_trades if total_trades else 0.0
     avg_rr = sum(_safe_float(trade.get('rr_achieved')) for trade in trades) / total_trades if total_trades else 0.0
+    winning_trades = [_safe_float(trade.get('pnl')) for trade in trades if _safe_float(trade.get('pnl')) > 0]
+    losing_trades = [_safe_float(trade.get('pnl')) for trade in trades if _safe_float(trade.get('pnl')) < 0]
+    avg_win = sum(winning_trades) / len(winning_trades) if winning_trades else 0.0
+    avg_loss = sum(losing_trades) / len(losing_trades) if losing_trades else 0.0
+    gross_profit = sum(winning_trades)
+    gross_loss = abs(sum(losing_trades))
+    profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf') if gross_profit > 0 else 0.0
+    expectancy_per_trade = avg_pnl
+    avg_r_winners = sum(_safe_float(trade.get('rr_achieved')) for trade in trades if _safe_float(trade.get('pnl')) > 0) / len(winning_trades) if winning_trades else 0.0
+    avg_r_losers = sum(_safe_float(trade.get('rr_achieved')) for trade in trades if _safe_float(trade.get('pnl')) < 0) / len(losing_trades) if losing_trades else 0.0
+    expectancy_r = ((wins / total_trades) * avg_r_winners) - ((losses / total_trades) * avg_r_losers) if total_trades else 0.0
     equity_rows = _equity_curve_rows(trades, float(cfg.capital))
     max_drawdown = abs(min((row['drawdown'] for row in equity_rows), default=0.0))
 
@@ -279,10 +290,12 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
         strategy = str(trade.get('strategy', cfg.strategy_name) or cfg.strategy_name)
         pnl_by_strategy[strategy] = pnl_by_strategy.get(strategy, 0.0) + _safe_float(trade.get('pnl'))
         bucket = _score_bucket(_safe_float(trade.get('score')))
-        bucket_row = score_bucket_analysis.setdefault(bucket, {'count': 0.0, 'pnl': 0.0, 'wins': 0.0})
+        bucket_row = score_bucket_analysis.setdefault(bucket, {'count': 0.0, 'pnl': 0.0, 'wins': 0.0, 'expectancy': 0.0})
+        trade_pnl = _safe_float(trade.get('pnl'))
         bucket_row['count'] += 1.0
-        bucket_row['pnl'] += _safe_float(trade.get('pnl'))
-        if _safe_float(trade.get('pnl')) > 0:
+        bucket_row['pnl'] += trade_pnl
+        bucket_row['expectancy'] = bucket_row['pnl'] / bucket_row['count'] if bucket_row['count'] else 0.0
+        if trade_pnl > 0:
             bucket_row['wins'] += 1.0
 
     return {
@@ -293,11 +306,17 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
         'win_rate': round((wins / total_trades) * 100.0, 2) if total_trades else 0.0,
         'total_pnl': round(total_pnl, 2),
         'avg_pnl': round(avg_pnl, 2),
+        'avg_win': round(avg_win, 2),
+        'avg_loss': round(avg_loss, 2),
+        'profit_factor': round(profit_factor, 2) if profit_factor != float('inf') else 'inf',
+        'expectancy_per_trade': round(expectancy_per_trade, 2),
+        'expectancy_r': round(expectancy_r, 2),
+        'positive_expectancy': 'YES' if expectancy_per_trade > 0 else 'NO',
         'max_drawdown': round(max_drawdown, 2),
         'avg_rr': round(avg_rr, 2),
         'pnl_by_strategy': '; '.join(f'{key}:{value:.2f}' for key, value in sorted(pnl_by_strategy.items())),
         'score_bucket_analysis': '; '.join(
-            f"{bucket}=count:{int(values['count'])},wins:{int(values['wins'])},pnl:{values['pnl']:.2f}"
+            f"{bucket}=count:{int(values['count'])},wins:{int(values['wins'])},pnl:{values['pnl']:.2f},expectancy:{values['expectancy']:.2f}"
             for bucket, values in sorted(score_bucket_analysis.items())
         ),
         'trades_output': str(cfg.trades_output),
@@ -379,3 +398,4 @@ def run_backtest(df: Any, strategy_func: Callable[..., list[dict[str, object]]],
     summary['closed_trades'] = len(closed_trades)
     write_rows(cfg.summary_output, [summary])
     return summary
+

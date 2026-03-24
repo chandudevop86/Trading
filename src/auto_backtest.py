@@ -319,6 +319,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         _pnl_summary('BTST', btst_rows, starting_equity=capital),
     ]
     summary_rows = [summary for summary, _ in summary_and_curves]
+    ranked_summary_rows = rank_strategy_summaries(summary_rows)
     equity_curve_rows = [curve_row for _, curve_rows in summary_and_curves for curve_row in curve_rows]
     breakout_bias_evaluation = _build_breakout_bias_evaluation(summary_rows[0], summary_rows[1])
     for summary in summary_rows:
@@ -336,6 +337,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     _write_rows(args.summary_output, summary_rows)
     _append_rows(args.summary_history_output, summary_rows)
+    _write_rows(args.ranking_output, ranked_summary_rows)
     _write_rows(equity_curve_output, equity_curve_rows)
 
     breakout_workflow = build_backtest_workflow(breakout_rows, 'Breakout (15m)', args.execution_symbol)
@@ -437,3 +439,6 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+
+

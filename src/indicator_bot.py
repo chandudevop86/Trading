@@ -325,3 +325,4 @@ def run(input_path: Path, output_path: Path, capital: float, risk_pct: float, rr
     trades = generate_trades(candles, capital=capital, risk_pct=risk_pct, rr_ratio=rr_ratio, config=config)
     write_csv_rows(output_path, trades)
     return trades
+

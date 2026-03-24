@@ -1,0 +1,26 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Git
+.git/
+.gitignore
+
+# Virtual envs
+.venv/
+venv/
+
+# Local runtime data
+logs/
+data/
+reports/
+
+# Editor files
+.vscode/
+.idea/
+
+# Test cache
+.pytest_cache/
+.mypy_cache/

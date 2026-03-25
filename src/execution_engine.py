@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import hashlib
@@ -791,17 +791,32 @@ def _apply_broker_result(record: dict[str, object], broker_result: BrokerOrderRe
         record["validation_error"] = SKIP_REASON_BROKER_ERROR
 
 
+def _existing_csv_fieldnames(path: Path) -> list[str]:
+    if not path.exists() or path.stat().st_size == 0:
+        return []
+    with path.open("r", newline="", encoding="utf-8") as handle:
+        reader = csv.reader(handle)
+        return next(reader, [])
+
+
 def _append_order_history(path: Path, record: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing_rows = _read_trade_rows(path)
     fieldnames = _stable_fieldnames([record], existing_rows)
+    existing_fieldnames = _existing_csv_fieldnames(path)
     file_exists = path.exists() and path.stat().st_size > 0
+    if file_exists and existing_fieldnames != fieldnames:
+        with path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(existing_rows)
+            writer.writerow(record)
+        return
     with path.open("a", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         if not file_exists:
             writer.writeheader()
         writer.writerow(record)
-
 
 def _mark_skipped(result: ExecutionResult, row: dict[str, object], reason: str) -> None:
     skipped = dict(row)
@@ -849,13 +864,20 @@ def _write_execution_rows(path: Path, rows_to_write: list[dict[str, object]]) ->
     path.parent.mkdir(parents=True, exist_ok=True)
     existing_rows = _read_trade_rows(path)
     fieldnames = _stable_fieldnames(rows_to_write, existing_rows)
-    file_exists = path.exists()
+    existing_fieldnames = _existing_csv_fieldnames(path)
+    file_exists = path.exists() and path.stat().st_size > 0
+    if file_exists and existing_fieldnames != fieldnames:
+        with path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(existing_rows)
+            writer.writerows(rows_to_write)
+        return
     with path.open("a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         if not file_exists:
             writer.writeheader()
         writer.writerows(rows_to_write)
-
 
 def execution_result_summary(result: ExecutionResult) -> list[tuple[str, str]]:
     messages: list[tuple[str, str]] = []

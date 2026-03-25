@@ -1,3 +1,5 @@
+﻿import csv
+import io
 import os
 import tempfile
 import unittest
@@ -200,6 +202,22 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(done[0]['quantity'], 65)
             self.assertIn('share_price', done[0])
             self.assertIn('strike_price', done[0])
+
+    def test_execute_paper_trades_rewrites_file_when_schema_expands(self):
+        first_candidates = [
+            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100.0, 'quantity': 65, 'reason': 'seed'}
+        ]
+        second_candidates = [
+            {'strategy': 'DEMAND_SUPPLY', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:05:00', 'side': 'BUY', 'price': 101.0, 'quantity': 65, 'reason': 'buy zone retest score=7.0 zone_strength=4.0 bias=BULLISH', 'stop_loss': 100.0, 'target_price': 103.0, 'trade_label': 'Trade 2'}
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            execute_paper_trades(first_candidates, out, deduplicate=False)
+            execute_paper_trades(second_candidates, out, deduplicate=False)
+            rows = list(csv.reader(io.StringIO(out.read_text(encoding='utf-8'))))
+            header_fields = len(rows[0])
+            self.assertTrue(all(len(row) == header_fields for row in rows[1:]))
 
     def test_execute_paper_trades_deduplicates(self):
         candidates = [
@@ -580,3 +598,7 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(second.blocked_rows[0]['blocked_reason'], 'MAX_OPEN_TRADES')
 if __name__ == '__main__':
     unittest.main()
+
+
+
+

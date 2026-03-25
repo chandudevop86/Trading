@@ -67,7 +67,7 @@ class TestTradingRunStrategy(unittest.TestCase):
         self.assertEqual(kwargs["rr_ratio"], 2.0)
         self.assertIsInstance(kwargs["config"], BreakoutConfig)
         self.assertTrue(kwargs["config"].require_vwap_alignment)
-        self.assertFalse(kwargs["config"].allow_secondary_entries)
+        self.assertTrue(kwargs["config"].allow_secondary_entries)
         self.assertEqual(kwargs["config"].duplicate_signal_cooldown_bars, 8)
         self.assertEqual(kwargs["config"].max_trades_per_day, 1)
         mock_attach.assert_called_once()

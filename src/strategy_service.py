@@ -115,9 +115,12 @@ def generate_strategy_rows(
                 fixed_cost_per_trade=float(context.fixed_cost_per_trade),
                 max_daily_loss=context.max_daily_loss,
                 max_trades_per_day=max(1, int(configured_max_trades or 1)),
-                duplicate_signal_cooldown_bars=max(8, int(preset.duplicate_signal_cooldown_bars)),
+                duplicate_signal_cooldown_bars=max(6, int(preset.duplicate_signal_cooldown_bars)),
+                min_breakout_strength=0.14,
+                min_volume_ratio=1.0,
                 require_vwap_alignment=True,
-                allow_secondary_entries=False,
+                allow_secondary_entries=True,
+                allow_afternoon_session=True,
             ),
         )
     elif strategy_name == 'Demand Supply':

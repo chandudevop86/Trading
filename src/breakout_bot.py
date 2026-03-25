@@ -34,15 +34,18 @@ class BreakoutConfig:
     max_trades_per_day: int | None = 1
     use_first_hour_bias: bool = True
     filter_choppy_days: bool = True
-    min_breakout_strength: float = 0.18
-    min_volume_ratio: float = 1.05
+    min_breakout_strength: float = 0.14
+    min_volume_ratio: float = 1.0
     duplicate_signal_cooldown_bars: int = 8
     require_vwap_alignment: bool = True
-    allow_secondary_entries: bool = False
+    allow_secondary_entries: bool = True
     morning_session_start: str = '09:20'
     morning_session_end: str = '11:30'
     midday_start: str = '12:00'
     midday_end: str = '13:30'
+    allow_afternoon_session: bool = True
+    afternoon_session_start: str = '13:45'
+    afternoon_session_end: str = '15:00'
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
 
     def __post_init__(self) -> None:
@@ -243,9 +246,15 @@ def _parse_hhmm(value: str, fallback: str) -> time:
 
 def _session_allowed(candle: Candle, config: BreakoutConfig) -> bool:
     current = candle.timestamp.time().replace(second=0, microsecond=0)
-    start = _parse_hhmm(config.morning_session_start, '09:20')
-    end = _parse_hhmm(config.morning_session_end, '11:30')
-    return start <= current <= end
+    morning_start = _parse_hhmm(config.morning_session_start, '09:20')
+    morning_end = _parse_hhmm(config.morning_session_end, '11:30')
+    if morning_start <= current <= morning_end:
+        return True
+    if bool(config.allow_afternoon_session):
+        afternoon_start = _parse_hhmm(config.afternoon_session_start, '13:45')
+        afternoon_end = _parse_hhmm(config.afternoon_session_end, '15:00')
+        return afternoon_start <= current <= afternoon_end
+    return False
 
 
 def _midday_restricted(candle: Candle, config: BreakoutConfig) -> bool:

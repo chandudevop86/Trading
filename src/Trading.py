@@ -688,7 +688,7 @@ def main() -> None:
         broker_choice = st.selectbox('Broker', BROKER_OPTIONS)
     with control_col_2:
         timeframe = st.selectbox('Timeframe', TIMEFRAME_OPTIONS, index=TIMEFRAME_OPTIONS.index(DEFAULT_INTERVAL) if DEFAULT_INTERVAL in TIMEFRAME_OPTIONS else 1)
-        capital = st.number_input('Capital', min_value=1000.0, value=100000.0, step=1000.0)
+        capital = st.number_input('Capital', min_value=1000.0, value=20000.0, step=1000.0)
         risk_pct = st.number_input('Risk %', min_value=0.1, value=1.0, step=0.1)
     with control_col_3:
         rr_ratio = st.number_input('RR Ratio', min_value=1.0, value=2.0, step=0.1)

@@ -161,8 +161,10 @@ def _prepare_df(data: Any) -> pd.DataFrame:
     df['session_day'] = df['timestamp'].dt.strftime('%Y-%m-%d')
     typical_price = (df['high'] + df['low'] + df['close']) / 3.0
     session_value = (typical_price * df['volume'].fillna(0.0)).groupby(df['session_day']).cumsum()
-    session_volume = df['volume'].fillna(0.0).groupby(df['session_day']).cumsum().replace(0.0, pd.NA)
-    df['vwap'] = (session_value / session_volume).fillna(df['close'])
+    session_volume = df['volume'].fillna(0.0).groupby(df['session_day']).cumsum()
+    session_volume = session_volume.where(session_volume != 0.0)
+    vwap = session_value.div(session_volume)
+    df['vwap'] = vwap.where(vwap.notna(), df['close']).astype(float)
     df['avg_range_5'] = df['bar_range'].rolling(5, min_periods=1).mean()
     df['avg_body_5'] = df['body_size'].rolling(5, min_periods=1).mean()
     return df

@@ -33,6 +33,46 @@ class TestAmdFvgSdBotScoring(unittest.TestCase):
         self.assertEqual(score['total_score'], 7.0)
         self.assertTrue(score['accepted'])
 
+    def test_score_trade_setup_counts_vwap_alignment(self):
+        config = ConfluenceConfig(
+            mode='Balanced',
+            min_score_conservative=7.0,
+            min_score_balanced=5.0,
+            min_score_aggressive=3.0,
+        )
+
+        accepted = score_trade_setup(
+            {
+                'amd_confidence': 1.2,
+                'liquidity_sweep': True,
+                'has_fvg': True,
+                'has_bvg': False,
+                'zone_proximity': True,
+                'trend_alignment': True,
+                'vwap_alignment': True,
+                'retest_confirmation': True,
+            },
+            config,
+            'Balanced',
+        )
+        rejected = score_trade_setup(
+            {
+                'amd_confidence': 0.0,
+                'liquidity_sweep': False,
+                'has_fvg': False,
+                'has_bvg': False,
+                'zone_proximity': True,
+                'trend_alignment': True,
+                'vwap_alignment': False,
+                'retest_confirmation': True,
+            },
+            config,
+            'Balanced',
+        )
+
+        self.assertGreater(accepted['total_score'], rejected['total_score'])
+        self.assertTrue(accepted['accepted'])
+
     def test_score_trade_setup_rejects_when_score_is_below_threshold(self):
         config = ConfluenceConfig(
             mode='Balanced',

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import floor
+from datetime import time
 from typing import Any
 
 import pandas as pd
@@ -23,17 +24,29 @@ class ConfluenceConfig:
     min_bvg_size: float = 0.25
     zone_merge_tolerance: float = 0.0015
     zone_fresh_bars: int = 24
-    min_zone_reaction: float = 0.35
+    min_zone_reaction: float = 0.55
+    min_zone_strength_score: float = 4.0
+    max_nearby_zones: int = 2
     retest_tolerance_pct: float = 0.0015
     max_retest_bars: int = 6
     rr_ratio: float = 2.0
     trailing_sl_pct: float = 0.0
-    duplicate_signal_cooldown_bars: int = 5
-    min_score_conservative: float = 6.2
-    min_score_balanced: float = 4.8
-    min_score_aggressive: float = 3.5
+    duplicate_signal_cooldown_bars: int = 12
+    min_score_conservative: float = 7.4
+    min_score_balanced: float = 6.2
+    min_score_aggressive: float = 4.8
+    require_vwap_alignment: bool = True
+    require_trend_alignment: bool = True
+    require_retest_confirmation: bool = True
+    morning_session_start: str = '09:20'
+    morning_session_end: str = '11:30'
+    midday_start: str = '12:00'
+    midday_end: str = '13:30'
+    allow_afternoon_session: bool = False
+    afternoon_session_start: str = '13:45'
+    afternoon_session_end: str = '15:00'
     allow_secondary_entries: bool = False
-    max_trades_per_day: int = 3
+    max_trades_per_day: int = 1
 
     @classmethod
     def for_mode(cls, mode: str) -> 'ConfluenceConfig':
@@ -49,11 +62,13 @@ class ConfluenceConfig:
                 min_fvg_size=0.45,
                 min_bvg_size=0.35,
                 zone_fresh_bars=18,
+                min_zone_reaction=0.65,
+                min_zone_strength_score=4.8,
                 retest_tolerance_pct=0.0012,
                 max_retest_bars=4,
-                duplicate_signal_cooldown_bars=7,
+                duplicate_signal_cooldown_bars=14,
                 allow_secondary_entries=False,
-                max_trades_per_day=2,
+                max_trades_per_day=1,
             )
         if normalized == 'Aggressive':
             return replace(
@@ -62,14 +77,16 @@ class ConfluenceConfig:
                 accumulation_lookback=8,
                 manipulation_lookback=4,
                 distribution_lookback=6,
-                min_fvg_size=0.2,
-                min_bvg_size=0.15,
+                min_fvg_size=0.25,
+                min_bvg_size=0.2,
                 zone_fresh_bars=30,
-                retest_tolerance_pct=0.0025,
+                min_zone_reaction=0.5,
+                min_zone_strength_score=3.8,
+                retest_tolerance_pct=0.002,
                 max_retest_bars=8,
-                duplicate_signal_cooldown_bars=3,
-                allow_secondary_entries=True,
-                max_trades_per_day=5,
+                duplicate_signal_cooldown_bars=8,
+                allow_secondary_entries=False,
+                max_trades_per_day=1,
             )
         return base
 
@@ -93,13 +110,7 @@ def _score_threshold(config: ConfluenceConfig, mode: str) -> float:
 
 
 def _mode_max_trades(config: ConfluenceConfig, mode: str) -> int:
-    normalized = _normalize_mode(mode)
-    configured = max(1, int(config.max_trades_per_day))
-    if normalized == 'Conservative':
-        return max(1, configured - 1)
-    if normalized == 'Aggressive':
-        return configured + 2
-    return configured
+    return max(1, int(config.max_trades_per_day))
 
 
 def _prepare_df(data: Any) -> pd.DataFrame:
@@ -138,9 +149,13 @@ def _prepare_df(data: Any) -> pd.DataFrame:
     df['direction'] = df['close'] - df['open']
     df['ema_fast'] = df['close'].ewm(span=8, adjust=False).mean()
     df['ema_slow'] = df['close'].ewm(span=21, adjust=False).mean()
+    df['session_day'] = df['timestamp'].dt.strftime('%Y-%m-%d')
+    typical_price = (df['high'] + df['low'] + df['close']) / 3.0
+    session_value = (typical_price * df['volume'].fillna(0.0)).groupby(df['session_day']).cumsum()
+    session_volume = df['volume'].fillna(0.0).groupby(df['session_day']).cumsum().replace(0.0, pd.NA)
+    df['vwap'] = (session_value / session_volume).fillna(df['close'])
     df['avg_range_5'] = df['bar_range'].rolling(5, min_periods=1).mean()
     df['avg_body_5'] = df['body_size'].rolling(5, min_periods=1).mean()
-    df['session_day'] = df['timestamp'].dt.strftime('%Y-%m-%d')
     return df
 
 
@@ -155,6 +170,73 @@ def _window_slice(df: pd.DataFrame, start: int, end: int) -> pd.DataFrame:
         return df.iloc[0:0]
     return df.iloc[left:right]
 
+def _parse_hhmm(value: str, fallback: str) -> time:
+    raw = str(value or fallback).strip() or fallback
+    hour_text, minute_text = raw.split(':', 1)
+    return time(hour=int(hour_text), minute=int(minute_text))
+
+
+def _session_window(row: pd.Series, config: ConfluenceConfig) -> str:
+    current_time = pd.Timestamp(row['timestamp']).time()
+    morning_start = _parse_hhmm(config.morning_session_start, '09:20')
+    morning_end = _parse_hhmm(config.morning_session_end, '11:30')
+    midday_start = _parse_hhmm(config.midday_start, '12:00')
+    midday_end = _parse_hhmm(config.midday_end, '13:30')
+    afternoon_start = _parse_hhmm(config.afternoon_session_start, '13:45')
+    afternoon_end = _parse_hhmm(config.afternoon_session_end, '15:00')
+    if morning_start <= current_time <= morning_end:
+        return 'MORNING'
+    if midday_start <= current_time <= midday_end:
+        return 'MIDDAY_BLOCKED'
+    if config.allow_afternoon_session and afternoon_start <= current_time <= afternoon_end:
+        return 'AFTERNOON'
+    return ''
+
+
+def _vwap_alignment(row: pd.Series, side: str) -> bool:
+    vwap = float(row.get('vwap', 0.0) or 0.0)
+    if vwap <= 0:
+        return False
+    if side == 'BUY':
+        return float(row['close']) >= vwap
+    return float(row['close']) <= vwap
+
+
+def _zone_strength_score(zone: dict[str, Any], row: pd.Series, side: str, nearby_zones: int) -> float:
+    reaction_strength = float(zone.get('reaction_strength', 0.0) or 0.0)
+    score = 0.0
+    if reaction_strength >= 0.55:
+        score += 2.0
+    elif reaction_strength >= 0.35:
+        score += 1.0
+    age = max(0, int(row.name) - int(zone.get('created_index', row.name)))
+    if age <= 8:
+        score += 1.0
+    elif age <= 16:
+        score += 0.5
+    if side == 'BUY' and float(row['close']) >= float(row['ema_fast']):
+        score += 1.0
+    if side == 'SELL' and float(row['close']) <= float(row['ema_fast']):
+        score += 1.0
+    if nearby_zones <= 1:
+        score += 1.0
+    elif nearby_zones >= 3:
+        score -= 1.0
+    return round(score, 2)
+
+
+def _nearby_zone_count(zones: list[dict[str, Any]], zone: dict[str, Any], row: pd.Series, side: str, config: ConfluenceConfig) -> int:
+    tolerance_abs = max(float(row['close']) * float(config.zone_merge_tolerance), float(row['avg_range_5']) * 0.35, 0.05)
+    zone_mid = (float(zone['zone_low']) + float(zone['zone_high'])) / 2.0
+    zone_type = 'demand' if side == 'BUY' else 'supply'
+    count = 0
+    for item in zones:
+        if str(item.get('type', '')) != zone_type:
+            continue
+        item_mid = (float(item['zone_low']) + float(item['zone_high'])) / 2.0
+        if abs(item_mid - zone_mid) <= tolerance_abs:
+            count += 1
+    return count
 
 def detect_amd_phase(df: pd.DataFrame, config: ConfluenceConfig) -> pd.DataFrame:
     candles = _prepare_df(df)
@@ -441,7 +523,7 @@ def score_trade_setup(context: dict[str, Any], config: ConfluenceConfig, mode: s
     score = weighted_score(
         {
             'trend': bool(context.get('trend_alignment', False)) or float(context.get('amd_confidence', 0.0) or 0.0) > 0,
-            'vwap': False,
+            'vwap': bool(context.get('vwap_alignment', False)),
             'rsi': False,
             'adx': False,
             'zone': bool(context.get('zone_proximity', False)),
@@ -571,16 +653,39 @@ def generate_trades(
             if not config.allow_secondary_entries and (day_key, side) in last_signal_day_side:
                 continue
 
+            session_window = _session_window(row, config)
+            if session_window not in {'MORNING', 'AFTERNOON'}:
+                continue
+
             recent_sweep = _recent_flag(candles['bullish_sweep'] if side == 'BUY' else candles['bearish_sweep'], index, config.max_retest_bars)
             zone = _find_active_zone(zones, row, index, side, config)
+            if zone is None:
+                continue
+            nearby_zones = _nearby_zone_count(zones, zone, row, side, config)
+            zone_strength_score = _zone_strength_score(zone, row, side, nearby_zones)
+            if nearby_zones > int(config.max_nearby_zones):
+                continue
+            if float(zone.get('reaction_strength', 0.0) or 0.0) < float(config.min_zone_reaction):
+                continue
+            if zone_strength_score < float(config.min_zone_strength_score):
+                continue
+
             imbalance = _recent_imbalance_context(candles, index, side, config)
             retest_confirmation = bool(imbalance['retest_confirmed'])
-            if not retest_confirmation and zone is not None:
+            if not retest_confirmation:
                 zone_mid = (float(zone['zone_low']) + float(zone['zone_high'])) / 2.0
                 if side == 'BUY':
                     retest_confirmation = float(row['close']) > max(float(row['open']), zone_mid)
                 else:
                     retest_confirmation = float(row['close']) < min(float(row['open']), zone_mid)
+            trend_alignment = _trend_alignment(row, side)
+            vwap_alignment = _vwap_alignment(row, side)
+            if bool(config.require_retest_confirmation) and not retest_confirmation:
+                continue
+            if bool(config.require_trend_alignment) and not trend_alignment:
+                continue
+            if bool(config.require_vwap_alignment) and not vwap_alignment:
+                continue
 
             context = {
                 'side': side,
@@ -590,11 +695,13 @@ def generate_trades(
                 'has_fvg': bool(imbalance['has_fvg']),
                 'has_bvg': bool(imbalance['has_bvg']),
                 'imbalance_type': str(imbalance['imbalance_type'] or ''),
-                'zone_proximity': zone is not None,
-                'zone_type': zone['type'] if zone is not None else '',
-                'zone_reaction_strength': float(zone.get('reaction_strength', 0.0) if zone is not None else 0.0),
+                'zone_proximity': True,
+                'zone_type': zone['type'],
+                'zone_reaction_strength': float(zone.get('reaction_strength', 0.0) or 0.0),
+                'zone_strength_score': float(zone_strength_score),
                 'retest_confirmation': retest_confirmation,
-                'trend_alignment': _trend_alignment(row, side),
+                'trend_alignment': trend_alignment,
+                'vwap_alignment': vwap_alignment,
             }
             score = score_trade_setup(context, config, mode)
             if not score['accepted']:
@@ -662,6 +769,10 @@ def generate_trades(
                 'mode': mode,
                 'liquidity_sweep': 'YES' if recent_sweep else 'NO',
                 'zone_reaction_strength': round(float(context['zone_reaction_strength']), 4),
+                'zone_strength_score': round(float(context['zone_strength_score']), 2),
+                'vwap_aligned': 'YES' if vwap_alignment else 'NO',
+                'session_allowed': 'YES',
+                'session_window': session_window,
             }
             if zone is not None:
                 trade['zone_low'] = round(float(zone['zone_low']), 4)

@@ -8,6 +8,7 @@ import pandas as pd
 sys.modules.setdefault("yfinance", types.SimpleNamespace())
 
 from src.Trading import run_strategy
+from src.amd_fvg_sd_bot import ConfluenceConfig
 from src.breakout_bot import BreakoutConfig
 from src.demand_supply_bot import DemandSupplyConfig
 
@@ -100,6 +101,38 @@ class TestTradingRunStrategy(unittest.TestCase):
         self.assertEqual(kwargs["config"].duplicate_signal_cooldown_bars, 12)
         self.assertEqual(kwargs["config"].max_trades_per_day, 1)
         mock_attach.assert_called_once()
+
+    @patch("src.Trading._attach_option_metrics")
+    @patch("src.Trading.attach_option_strikes")
+    @patch("src.Trading.generate_amd_fvg_sd_trades")
+    def test_amd_strategy_uses_strict_confluence_config(self, mock_amd, mock_attach, mock_metrics):
+        mock_amd.return_value = [
+            {
+                "side": "SELL",
+                "entry_price": 100.0,
+                "stop_loss": 102.0,
+                "target_price": 96.0,
+                "timestamp": "2026-03-20 09:30:00",
+            }
+        ]
+        mock_attach.side_effect = lambda rows, **_: rows
+        mock_metrics.side_effect = lambda rows, *_args, **_kwargs: rows
+
+        rows = run_strategy(strategy="AMD + FVG + Supply/Demand", **self.common_kwargs)
+
+        self.assertEqual(len(rows), 1)
+        mock_amd.assert_called_once()
+        kwargs = mock_amd.call_args.kwargs
+        self.assertIsInstance(kwargs["config"], ConfluenceConfig)
+        self.assertTrue(kwargs["config"].require_vwap_alignment)
+        self.assertTrue(kwargs["config"].require_trend_alignment)
+        self.assertTrue(kwargs["config"].require_retest_confirmation)
+        self.assertEqual(kwargs["config"].max_trades_per_day, 1)
+        self.assertEqual(kwargs["config"].duplicate_signal_cooldown_bars, 12)
+        self.assertEqual(kwargs["config"].morning_session_start, "09:20")
+        self.assertFalse(kwargs["config"].allow_afternoon_session)
+        mock_attach.assert_called_once()
+        mock_metrics.assert_called_once()
 
     @patch("src.Trading.attach_option_strikes")
     @patch("src.Trading.generate_indicator_rows")

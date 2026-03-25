@@ -412,20 +412,66 @@ def _load_csv_summary(path: Path) -> dict[str, object]:
     return frame.iloc[-1].to_dict()
 
 
-def _todays_trade_count(path: Path) -> int:
+def _load_csv_rows(path: Path) -> list[dict[str, object]]:
     if not path.exists() or path.stat().st_size == 0:
-        return 0
+        return []
     try:
         frame = pd.read_csv(path)
     except Exception:
-        return 0
+        return []
     if frame.empty:
+        return []
+    return frame.to_dict(orient='records')
+
+
+def _current_execution_rows(path: Path, strategy: str, symbol: str, execution_type: str = 'PAPER') -> list[dict[str, object]]:
+    normalized_strategy = normalize_strategy_key(strategy)
+    normalized_symbol = (symbol or '').strip().upper()
+    rows = _load_csv_rows(path)
+    filtered: list[dict[str, object]] = []
+    for row in rows:
+        if str(row.get('execution_type', '') or '').strip().upper() != execution_type:
+            continue
+        row_strategy = normalize_strategy_key(str(row.get('strategy', '') or ''))
+        row_symbol = str(row.get('symbol', '') or '').strip().upper()
+        if normalized_strategy and row_strategy and row_strategy != normalized_strategy:
+            continue
+        if normalized_symbol and row_symbol and row_symbol != normalized_symbol:
+            continue
+        filtered.append(dict(row))
+    if filtered or not normalized_symbol:
+        return filtered
+    return [
+        dict(row)
+        for row in rows
+        if str(row.get('execution_type', '') or '').strip().upper() == execution_type
+        and normalize_strategy_key(str(row.get('strategy', '') or '')) == normalized_strategy
+    ]
+
+
+def _paper_execution_summary(path: Path, strategy: str, symbol: str, capital: float) -> dict[str, object]:
+    rows = _current_execution_rows(path, strategy, symbol, execution_type='PAPER')
+    if not rows:
+        return {}
+    return summarize_trade_log(rows, capital=float(capital), strategy_name=normalize_strategy_key(strategy) or 'PAPER_EXECUTION')
+
+
+def _todays_trade_count(path: Path, strategy: str, symbol: str, execution_type: str = 'PAPER') -> int:
+    rows = _current_execution_rows(path, strategy, symbol, execution_type=execution_type)
+    if not rows:
         return 0
     today_key = datetime.now().strftime('%Y-%m-%d')
-    for column in ('exit_time', 'entry_time', 'signal_time', 'timestamp'):
-        if column in frame.columns:
-            return int((frame[column].astype(str).str[:10] == today_key).sum())
-    return 0
+    count = 0
+    for row in rows:
+        status = str(row.get('execution_status', '') or '').strip().upper()
+        if status not in {'EXECUTED', 'FILLED', 'CLOSED', 'EXITED'}:
+            continue
+        for column in ('executed_at_utc', 'exit_time', 'entry_time', 'signal_time', 'timestamp'):
+            value = str(row.get(column, '') or '').strip()
+            if value[:10] == today_key:
+                count += 1
+                break
+    return count
 
 
 def _active_summary(backtest_summary: dict[str, object], paper_summary: dict[str, object]) -> dict[str, object]:
@@ -535,7 +581,7 @@ def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, 
             EXECUTED_TRADES_OUTPUT,
             broker_name='DHAN',
             live_enabled=live_enabled,
-            max_trades_per_day=3,
+            max_trades_per_day=1,
             max_open_trades=1,
             order_history_path=ORDER_HISTORY_OUTPUT,
         )
@@ -545,7 +591,7 @@ def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, 
         result = execute_paper_trades(
             candidates,
             EXECUTED_TRADES_OUTPUT,
-            max_trades_per_day=3,
+            max_trades_per_day=1,
             max_open_trades=1,
             order_history_path=ORDER_HISTORY_OUTPUT,
         )
@@ -585,7 +631,7 @@ def _minimal_theme() -> None:
 
 
 def _render_summary_cards(trades: list[dict[str, object]], summary: dict[str, object], todays_trades: int) -> None:
-    total_trades = _safe_int(summary.get('total_trades', len(trades)))
+    total_trades = _safe_int(summary.get('total_trades', 0))
     win_rate = _safe_float(summary.get('win_rate', 0.0))
     pnl = _safe_float(summary.get('total_pnl', summary.get('pnl', 0.0)))
     last_signal = str(trades[-1].get('side', 'NONE')) if trades else 'NONE'
@@ -674,9 +720,9 @@ def main() -> None:
         elif not backtest_summary:
             backtest_summary = {}
 
-        paper_summary = _load_csv_summary(PAPER_SUMMARY_OUTPUT)
+        paper_summary = _paper_execution_summary(EXECUTED_TRADES_OUTPUT, strategy, normalized_symbol, float(capital))
         active_summary = _active_summary(backtest_summary if backtest_clicked else {}, paper_summary)
-        todays_trades = _todays_trade_count(EXECUTED_TRADES_OUTPUT)
+        todays_trades = _todays_trade_count(EXECUTED_TRADES_OUTPUT, strategy, normalized_symbol)
         status = _status_message(run_clicked, backtest_clicked)
         _append_text_log(APP_LOG, status)
         _render_summary_cards(trades, active_summary, todays_trades)

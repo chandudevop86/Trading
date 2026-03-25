@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import sys
 from datetime import datetime
@@ -246,17 +247,17 @@ def run_strategy(*, strategy: str, candles: pd.DataFrame, capital: float, risk_p
 def _metric_value(rows: list[dict[str, object]], key: str, default: float = 0.0) -> float:
     if not rows:
         return default
-    try:
-        return float(rows[-1].get(key, default) or default)
-    except Exception:
-        return default
+    return _safe_float(rows[-1].get(key, default), default)
 
 
 def _safe_float(value: object, default: float = 0.0) -> float:
     try:
         if value is None or str(value).strip() == '':
             return default
-        return float(value)
+        parsed = float(value)
+        if math.isnan(parsed) or math.isinf(parsed):
+            return default
+        return parsed
     except (TypeError, ValueError):
         return default
 
@@ -690,3 +691,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+

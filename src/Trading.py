@@ -457,6 +457,31 @@ def _paper_execution_summary(path: Path, strategy: str, symbol: str, capital: fl
     return summarize_trade_log(rows, capital=float(capital), strategy_name=normalize_strategy_key(strategy) or 'PAPER_EXECUTION')
 
 
+def _latest_actionable_trades(trades: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Return only the most recent signal batch for execution.
+
+    The Run action should execute the latest live setup, not replay every
+    historical trade produced across the fetched candle window.
+    """
+    if not trades:
+        return []
+
+    stamped: list[tuple[pd.Timestamp, dict[str, object]]] = []
+    for trade in trades:
+        raw = trade.get('signal_time') or trade.get('entry_time') or trade.get('timestamp') or ''
+        parsed = pd.to_datetime(raw, errors='coerce')
+        if pd.isna(parsed):
+            continue
+        stamped.append((pd.Timestamp(parsed), dict(trade)))
+
+    if not stamped:
+        return [dict(trades[-1])]
+
+    latest_stamp = max(stamp for stamp, _ in stamped)
+    latest_rows = [row for stamp, row in stamped if stamp == latest_stamp]
+    return latest_rows or [dict(trades[-1])]
+
+
 def _todays_trade_count(path: Path, strategy: str, symbol: str, execution_type: str = 'PAPER') -> int:
     rows = _current_execution_rows(path, strategy, symbol, execution_type=execution_type)
     if not rows:
@@ -570,7 +595,10 @@ def _refresh_paper_trade_summary(candles: pd.DataFrame, capital: float) -> tuple
 def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, broker_choice: str, candles: pd.DataFrame, capital: float) -> tuple[object | None, list[tuple[str, str]], str]:
     if not trades:
         return None, [('info', 'No actionable trade candidates')], 'Paper standby'
-    candidates = build_execution_candidates(strategy, trades, symbol)
+    actionable_trades = _latest_actionable_trades(trades)
+    if not actionable_trades:
+        return None, [('info', 'No actionable trade candidates')], 'Paper standby'
+    candidates = build_execution_candidates(strategy, actionable_trades, symbol)
     if broker_choice == 'Dhan Live':
         optimizer_ready, optimizer_reason = _latest_optimizer_gate(strategy)
         if not optimizer_ready:
@@ -739,4 +767,5 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 

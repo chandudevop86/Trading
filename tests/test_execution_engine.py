@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import io
 import os
 import tempfile
@@ -126,6 +126,31 @@ class TestExecutionEngine(unittest.TestCase):
         self.assertIn('buy zone retest', candidates[0]['reason'])
         self.assertIn('TP:109.5', candidates[0]['reason'])
 
+
+    def test_build_execution_candidates_drops_simulated_exit_fields(self):
+        rows = [
+            {
+                'strategy': 'DEMAND_SUPPLY',
+                'entry_time': '2026-03-05 10:50:00',
+                'side': 'BUY',
+                'entry_price': 107.3,
+                'stop_loss': 105.1,
+                'target': 109.5,
+                'quantity': 65,
+                'reason': 'buy zone retest score=7.2',
+                'pnl': 250.0,
+                'gross_pnl': 260.0,
+                'exit_time': '2026-03-05 11:20:00',
+                'exit_reason': 'TARGET',
+            }
+        ]
+
+        candidates = build_execution_candidates('Demand Supply', rows, 'NIFTY')
+
+        self.assertNotIn('pnl', candidates[0])
+        self.assertNotIn('gross_pnl', candidates[0])
+        self.assertNotIn('exit_time', candidates[0])
+        self.assertNotIn('exit_reason', candidates[0])
     def test_make_trade_identity_is_stable(self):
         candidate = {
             'strategy': 'BREAKOUT',
@@ -598,6 +623,7 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(second.blocked_rows[0]['blocked_reason'], 'MAX_OPEN_TRADES')
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

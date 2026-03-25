@@ -7,7 +7,7 @@ import pandas as pd
 
 sys.modules.setdefault("yfinance", types.SimpleNamespace())
 
-from src.Trading import run_strategy
+from src.Trading import _latest_actionable_trades, run_strategy
 from src.amd_fvg_sd_bot import ConfluenceConfig
 from src.breakout_bot import BreakoutConfig
 from src.demand_supply_bot import DemandSupplyConfig
@@ -38,6 +38,18 @@ class TestTradingRunStrategy(unittest.TestCase):
             mtf_max_trades_per_day=3,
         )
 
+
+    def test_latest_actionable_trades_keeps_only_most_recent_batch(self):
+        rows = [
+            {"timestamp": "2026-03-20 09:20:00", "side": "BUY"},
+            {"timestamp": "2026-03-20 09:25:00", "side": "SELL"},
+            {"timestamp": "2026-03-20 09:25:00", "side": "BUY"},
+        ]
+
+        latest = _latest_actionable_trades(rows)
+
+        self.assertEqual(len(latest), 2)
+        self.assertTrue(all(row["timestamp"] == "2026-03-20 09:25:00" for row in latest))
     @patch("src.Trading.attach_option_strikes")
     @patch("src.Trading.generate_breakout_trades")
     def test_breakout_strategy_routes_and_normalizes(self, mock_breakout, mock_attach):
@@ -181,3 +193,4 @@ class TestTradingRunStrategy(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

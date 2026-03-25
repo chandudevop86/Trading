@@ -38,6 +38,11 @@ class ConfluenceConfig:
     require_vwap_alignment: bool = True
     require_trend_alignment: bool = True
     require_retest_confirmation: bool = True
+    require_liquidity_sweep: bool = True
+    require_fvg_confirmation: bool = True
+    allow_bvg_entries: bool = False
+    require_distribution_phase: bool = True
+    minimum_amd_confidence: float = 1.2
     morning_session_start: str = '09:20'
     morning_session_end: str = '11:30'
     midday_start: str = '12:00'
@@ -66,6 +71,8 @@ class ConfluenceConfig:
                 min_zone_strength_score=4.8,
                 retest_tolerance_pct=0.0012,
                 max_retest_bars=4,
+                require_distribution_phase=True,
+                minimum_amd_confidence=1.35,
                 duplicate_signal_cooldown_bars=14,
                 allow_secondary_entries=False,
                 max_trades_per_day=1,
@@ -84,6 +91,8 @@ class ConfluenceConfig:
                 min_zone_strength_score=3.8,
                 retest_tolerance_pct=0.002,
                 max_retest_bars=8,
+                require_distribution_phase=False,
+                minimum_amd_confidence=0.9,
                 duplicate_signal_cooldown_bars=8,
                 allow_secondary_entries=False,
                 max_trades_per_day=1,
@@ -520,21 +529,48 @@ def score_trade_setup(context: dict[str, Any], config: ConfluenceConfig, mode: s
     scoring.thresholds.conservative = float(config.min_score_conservative)
     scoring.thresholds.balanced = float(config.min_score_balanced)
     scoring.thresholds.aggressive = float(config.min_score_aggressive)
+
+    has_fvg = bool(context.get('has_fvg', False))
+    has_bvg = bool(context.get('has_bvg', False))
+    imbalance_ok = has_fvg or (bool(config.allow_bvg_entries) and has_bvg)
+    trend_ok = bool(context.get('trend_alignment', False)) or float(context.get('amd_confidence', 0.0) or 0.0) >= float(config.minimum_amd_confidence)
+    sweep_ok = bool(context.get('liquidity_sweep', False))
+    retest_ok = bool(context.get('retest_confirmation', False))
+    vwap_ok = bool(context.get('vwap_alignment', False))
+    distribution_ok = (not bool(config.require_distribution_phase)) or str(context.get('amd_phase', '') or '').strip().lower() == 'distribution'
+
     score = weighted_score(
         {
-            'trend': bool(context.get('trend_alignment', False)) or float(context.get('amd_confidence', 0.0) or 0.0) > 0,
-            'vwap': bool(context.get('vwap_alignment', False)),
+            'trend': trend_ok,
+            'vwap': vwap_ok,
             'rsi': False,
             'adx': False,
             'zone': bool(context.get('zone_proximity', False)),
-            'fvg': bool(context.get('has_fvg', False)) or bool(context.get('has_bvg', False)),
-            'sweep': bool(context.get('liquidity_sweep', False)),
-            'retest': bool(context.get('retest_confirmation', False)),
+            'fvg': imbalance_ok,
+            'sweep': sweep_ok,
+            'retest': retest_ok,
         },
         scoring,
     )
+
+    blockers: list[str] = []
+    if bool(config.require_liquidity_sweep) and not sweep_ok:
+        blockers.append('missing_required_sweep')
+    if bool(config.require_fvg_confirmation) and not has_fvg:
+        blockers.append('missing_required_fvg')
+    if bool(config.require_distribution_phase) and not distribution_ok:
+        blockers.append('missing_distribution_phase')
+    if float(context.get('amd_confidence', 0.0) or 0.0) < float(config.minimum_amd_confidence):
+        blockers.append(f'amd_confidence_below_{float(config.minimum_amd_confidence):.2f}')
+
+    accepted = score.accepted and not blockers
+    rejection_tokens = [f'missing_{reason}' for reason in score.reasons]
+    if score.total < score.threshold:
+        rejection_tokens.append(f'score_below_{score.threshold:.2f}')
+    rejection_tokens.extend(blockers)
+
     return {
-        'accepted': score.accepted,
+        'accepted': accepted,
         'threshold': score.threshold,
         'amd_score': round(score.components.get('trend', 0.0), 2),
         'sweep_score': round(score.components.get('sweep', 0.0), 2),
@@ -543,7 +579,7 @@ def score_trade_setup(context: dict[str, Any], config: ConfluenceConfig, mode: s
         'trend_score': round(score.components.get('trend', 0.0), 2),
         'retest_score': round(score.components.get('retest', 0.0), 2),
         'total_score': score.total,
-        'rejection_reason': '' if score.accepted else ','.join([f'missing_{reason}' for reason in score.reasons] + ([f'score_below_{score.threshold:.2f}'] if score.total < score.threshold else [])),
+        'rejection_reason': '' if accepted else ','.join(rejection_tokens),
     }
 
 
@@ -690,7 +726,8 @@ def generate_trades(
             context = {
                 'side': side,
                 'amd_phase': str(row['amd_phase']),
-                'amd_confidence': _supportive_amd(row, side, mode),
+                'amd_confidence_value': round(float(amd_confidence), 2),
+                'amd_confidence': amd_confidence,
                 'liquidity_sweep': recent_sweep,
                 'has_fvg': bool(imbalance['has_fvg']),
                 'has_bvg': bool(imbalance['has_bvg']),
@@ -752,6 +789,7 @@ def generate_trades(
                 'trade_label': f'Trade {trade_no}',
                 'reason': reason,
                 'amd_phase': str(row['amd_phase']),
+                'amd_confidence_value': round(float(amd_confidence), 2),
                 'imbalance_type': str(context['imbalance_type'] or ('FVG' if context['has_fvg'] else 'BVG' if context['has_bvg'] else '')),
                 'zone_type': str(context['zone_type'] or ''),
                 'score': float(score['total_score']),

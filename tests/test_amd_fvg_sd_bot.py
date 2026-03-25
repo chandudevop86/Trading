@@ -10,6 +10,10 @@ class TestAmdFvgSdBotScoring(unittest.TestCase):
             min_score_conservative=7.0,
             min_score_balanced=5.0,
             min_score_aggressive=3.0,
+            require_liquidity_sweep=False,
+            require_fvg_confirmation=False,
+            require_distribution_phase=False,
+            minimum_amd_confidence=0.0,
         )
 
         score = score_trade_setup(
@@ -39,6 +43,10 @@ class TestAmdFvgSdBotScoring(unittest.TestCase):
             min_score_conservative=7.0,
             min_score_balanced=5.0,
             min_score_aggressive=3.0,
+            require_liquidity_sweep=False,
+            require_fvg_confirmation=False,
+            require_distribution_phase=False,
+            minimum_amd_confidence=0.0,
         )
 
         accepted = score_trade_setup(
@@ -73,12 +81,50 @@ class TestAmdFvgSdBotScoring(unittest.TestCase):
         self.assertGreater(accepted['total_score'], rejected['total_score'])
         self.assertTrue(accepted['accepted'])
 
+    def test_score_trade_setup_requires_strict_confluence_when_enabled(self):
+        config = ConfluenceConfig(
+            mode='Balanced',
+            min_score_conservative=7.0,
+            min_score_balanced=5.0,
+            min_score_aggressive=3.0,
+            require_liquidity_sweep=True,
+            require_fvg_confirmation=True,
+            require_distribution_phase=True,
+            minimum_amd_confidence=1.2,
+        )
+
+        score = score_trade_setup(
+            {
+                'amd_phase': 'manipulation',
+                'amd_confidence': 0.9,
+                'liquidity_sweep': False,
+                'has_fvg': False,
+                'has_bvg': True,
+                'zone_proximity': True,
+                'trend_alignment': True,
+                'vwap_alignment': True,
+                'retest_confirmation': True,
+            },
+            config,
+            'Balanced',
+        )
+
+        self.assertFalse(score['accepted'])
+        self.assertIn('missing_required_sweep', score['rejection_reason'])
+        self.assertIn('missing_required_fvg', score['rejection_reason'])
+        self.assertIn('missing_distribution_phase', score['rejection_reason'])
+        self.assertIn('amd_confidence_below_1.20', score['rejection_reason'])
+
     def test_score_trade_setup_rejects_when_score_is_below_threshold(self):
         config = ConfluenceConfig(
             mode='Balanced',
             min_score_conservative=7.0,
             min_score_balanced=5.0,
             min_score_aggressive=3.0,
+            require_liquidity_sweep=False,
+            require_fvg_confirmation=False,
+            require_distribution_phase=False,
+            minimum_amd_confidence=0.1,
         )
 
         score = score_trade_setup(

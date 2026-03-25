@@ -716,6 +716,7 @@ def generate_trades(
                     retest_confirmation = float(row['close']) < min(float(row['open']), zone_mid)
             trend_alignment = _trend_alignment(row, side)
             vwap_alignment = _vwap_alignment(row, side)
+            amd_confidence = _supportive_amd(row, side, mode)
             if bool(config.require_retest_confirmation) and not retest_confirmation:
                 continue
             if bool(config.require_trend_alignment) and not trend_alignment:

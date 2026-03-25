@@ -73,6 +73,39 @@ def _intraday_range(candle: Candle) -> float:
 def _body_ratio(candle: Candle) -> float:
     return abs(float(candle.close) - float(candle.open)) / _intraday_range(candle)
 
+def calculate_vwap(candles: list[Candle]) -> None:
+    """Compute and attach intraday VWAP once for the supplied candle sequence."""
+    add_intraday_vwap(candles)
+
+
+def session_filter(candle: Candle, config: DemandSupplyConfig) -> bool:
+    """Return True when a candle is inside the allowed trading session and outside midday block."""
+    return _session_allowed(candle, config) and not _midday_restricted(candle, config)
+
+
+def detect_retest(day_candles: list[Candle], zone: Zone, side: str, start_idx: int, config: DemandSupplyConfig) -> tuple[int, int] | None:
+    """Detect a valid touch plus rejection retest cycle for a zone and return touch/confirmation indexes."""
+    tol = float(config.touch_tolerance_pct or 0.0)
+    for touch_idx in range(max(zone.idx + 1, start_idx), len(day_candles)):
+        candle = day_candles[touch_idx]
+        if not session_filter(candle, config):
+            continue
+        touch = float(candle.low) <= float(zone.high) * (1.0 + tol) if side == 'BUY' else float(candle.high) >= float(zone.low) * (1.0 - tol)
+        if not touch:
+            continue
+        confirmation_limit = min(len(day_candles), touch_idx + 1 + max(1, int(config.retest_confirmation_bars)))
+        for confirmation_idx in range(touch_idx, confirmation_limit):
+            confirm_candle = day_candles[confirmation_idx]
+            if not session_filter(confirm_candle, config):
+                continue
+            if _retest_confirmation_candle(confirm_candle, zone, side):
+                return touch_idx, confirmation_idx
+    return None
+
+
+def score_zone(day_candles: list[Candle], idx: int, zone: Zone, side: str, config: DemandSupplyConfig, *, touch: bool, retest_confirmed: bool) -> tuple[float, dict[str, float], str, str, dict[str, object]] | None:
+    """Score a supply/demand zone and return diagnostics for execution-quality filtering."""
+    return _quality_score(day_candles, idx, zone, side, config, touch=touch, retest_confirmed=retest_confirmed)
 
 def _reaction_strength(day_candles: list[Candle], idx: int, side: str) -> float:
     candle = day_candles[idx]
@@ -364,7 +397,7 @@ def generate_trades(
     candles = _coerce_candles(df)
     if not candles:
         return []
-    add_intraday_vwap(candles)
+    calculate_vwap(candles)
     by_day = _group_by_day(candles)
     trades: list[dict[str, object]] = []
 
@@ -391,30 +424,15 @@ def generate_trades(
                     break
                 if i - last_signal_index[side] < int(cfg.duplicate_signal_cooldown_bars):
                     continue
-                candle = day_candles[i]
-                if not _session_allowed(candle, cfg):
-                    continue
-                if _midday_restricted(candle, cfg):
+                retest = detect_retest(day_candles, zone, side, i, cfg)
+                if retest is None:
                     continue
 
-                touch = float(candle.low) <= float(zone.high) * (1.0 + tol) if side == 'BUY' else float(candle.high) >= float(zone.low) * (1.0 - tol)
-                if not touch:
-                    continue
-
-                confirmation_idx = -1
-                confirmation_limit = min(len(day_candles), i + 1 + max(1, int(cfg.retest_confirmation_bars)))
-                for confirm_idx in range(i, confirmation_limit):
-                    confirm_candle = day_candles[confirm_idx]
-                    if not _session_allowed(confirm_candle, cfg) or _midday_restricted(confirm_candle, cfg):
-                        continue
-                    if _retest_confirmation_candle(confirm_candle, zone, side):
-                        confirmation_idx = confirm_idx
-                        break
-                if confirmation_idx < 0:
-                    continue
-
+                touch_idx, confirmation_idx = retest
+                touch = True
+                candle = day_candles[touch_idx]
                 entry_candle = day_candles[confirmation_idx]
-                score_result = _quality_score(day_candles, confirmation_idx, zone, side, cfg, touch=touch, retest_confirmed=True)
+                score_result = score_zone(day_candles, confirmation_idx, zone, side, cfg, touch=touch, retest_confirmed=True)
                 if score_result is None:
                     continue
 

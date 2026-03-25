@@ -46,6 +46,7 @@ BACKTEST_VALIDATION_UI_OUTPUT = DATA_DIR / 'backtest_validation.csv'
 STRATEGY_RANKING_OUTPUT = DATA_DIR / 'strategy_expectancy_report.csv'
 OPTIMIZER_OUTPUT = DATA_DIR / 'strategy_optimizer_report.csv'
 ORDER_HISTORY_OUTPUT = DATA_DIR / 'order_history.csv'
+PAPER_ORDER_HISTORY_OUTPUT = DATA_DIR / 'paper_order_history.csv'
 APP_LOG = LOG_DIR / 'app.log'
 BROKER_LOG = LOG_DIR / 'broker.log'
 EXECUTION_LOG = LOG_DIR / 'execution.log'
@@ -593,7 +594,7 @@ def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, 
             EXECUTED_TRADES_OUTPUT,
             max_trades_per_day=1,
             max_open_trades=1,
-            order_history_path=ORDER_HISTORY_OUTPUT,
+            order_history_path=PAPER_ORDER_HISTORY_OUTPUT,
         )
         _mirror_output_file(EXECUTED_TRADES_OUTPUT, PAPER_LOG_OUTPUT)
         _refresh_paper_trade_summary(candles, capital)
@@ -708,20 +709,21 @@ def main() -> None:
         normalized_symbol = symbol.strip() or DEFAULT_SYMBOL
         candles, trades, period = _run_live_strategy(strategy, normalized_symbol, timeframe, float(capital), float(risk_pct), float(rr_ratio), mode)
         broker_status = 'Paper broker active' if broker_choice == 'Paper' else 'Idle'
+        backtest_summary: dict[str, object] = {}
+        paper_summary: dict[str, object] = {}
+
         if run_clicked:
+            st.session_state.pop('backtest_summary', None)
             _, _, broker_status = _run_execution(strategy, trades, normalized_symbol, broker_choice, candles, capital)
             _append_text_log(APP_LOG, f'EXECUTION completed for {strategy} {normalized_symbol} broker={broker_choice}')
-        backtest_summary = st.session_state.get('backtest_summary', {})
-
-        if backtest_clicked:
+            paper_summary = _paper_execution_summary(EXECUTED_TRADES_OUTPUT, strategy, normalized_symbol, float(capital))
+            active_summary = dict(paper_summary)
+        else:
             backtest_summary = _run_strategy_backtest(candles, strategy, normalized_symbol, float(capital), float(risk_pct), float(rr_ratio))
             st.session_state['backtest_summary'] = backtest_summary
             _append_text_log(APP_LOG, f'BACKTEST completed for {strategy} {normalized_symbol} {timeframe}')
-        elif not backtest_summary:
-            backtest_summary = {}
+            active_summary = dict(backtest_summary)
 
-        paper_summary = _paper_execution_summary(EXECUTED_TRADES_OUTPUT, strategy, normalized_symbol, float(capital))
-        active_summary = _active_summary(backtest_summary if backtest_clicked else {}, paper_summary)
         todays_trades = _todays_trade_count(EXECUTED_TRADES_OUTPUT, strategy, normalized_symbol)
         status = _status_message(run_clicked, backtest_clicked)
         _append_text_log(APP_LOG, status)

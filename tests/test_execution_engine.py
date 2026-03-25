@@ -19,6 +19,7 @@ from src.execution_engine import (
     normalize_order_quantity,
     reconcile_live_positions,
     reconcile_live_trades,
+    validate_candidate,
 )
 
 
@@ -103,6 +104,26 @@ class TestExecutionEngine(unittest.TestCase):
         self.assertEqual(candidates[0]['trade_no'], 2)
         self.assertEqual(candidates[0]['trade_label'], 'Trade 2')
 
+    def test_build_execution_candidates_preserves_reason_and_target_fallback(self):
+        rows = [
+            {
+                'strategy': 'DEMAND_SUPPLY',
+                'entry_time': '2026-03-05 10:50:00',
+                'side': 'BUY',
+                'entry_price': 107.3,
+                'stop_loss': 105.1,
+                'target': 109.5,
+                'quantity': 65,
+                'reason': 'buy zone retest score=7.2 zone_strength=4.5 bias=BULLISH',
+            }
+        ]
+
+        candidates = build_execution_candidates('Demand Supply', rows, 'NIFTY')
+
+        self.assertEqual(candidates[0]['target_price'], 109.5)
+        self.assertIn('buy zone retest', candidates[0]['reason'])
+        self.assertIn('TP:109.5', candidates[0]['reason'])
+
     def test_make_trade_identity_is_stable(self):
         candidate = {
             'strategy': 'BREAKOUT',
@@ -130,6 +151,23 @@ class TestExecutionEngine(unittest.TestCase):
             messages = execution_result_summary(result)
             self.assertTrue(any('1 trade executed' in message for _, message in messages))
             self.assertTrue(any('invalid side' in message for _, message in messages))
+
+    def test_validate_candidate_derives_stop_and_target_when_missing(self):
+        ok, reason, record = validate_candidate(
+            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65}
+        )
+        self.assertTrue(ok)
+        self.assertEqual(reason, '')
+        self.assertLess(record['stop_loss'], record['price'])
+        self.assertGreater(record['target_price'], record['price'])
+
+        ok, reason, record = validate_candidate(
+            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'stop_loss': 99}
+        )
+        self.assertTrue(ok)
+        self.assertEqual(reason, '')
+        self.assertEqual(record['stop_loss'], 99)
+        self.assertGreater(record['target_price'], record['price'])
     def test_normalize_order_quantity_nifty(self):
         self.assertEqual(normalize_order_quantity('NIFTY', 10), 65)
         self.assertEqual(normalize_order_quantity('NIFTY', 129), 65)

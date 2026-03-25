@@ -3,12 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from src.breakout_bot import Candle, generate_trades as generate_breakout_trades
+from src.breakout_bot import BreakoutConfig, Candle, generate_trades as generate_breakout_trades
 from src.btst_bot import generate_trades as generate_btst_trades
-from src.demand_supply_bot import generate_trades as generate_demand_supply_trades
+from src.demand_supply_bot import DemandSupplyConfig, generate_trades as generate_demand_supply_trades
 from src.indicator_bot import IndicatorConfig, generate_indicator_rows, generate_trades as generate_indicator_trades
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
+from src.strategy_tuning import strategy_tuning_preset
 
 
 @dataclass(slots=True)
@@ -101,9 +102,44 @@ def generate_strategy_rows(
     strategy_name = str(context.strategy or 'Breakout').strip()
     risk_fraction = float(context.risk_pct) / 100.0
     if strategy_name == 'Breakout':
-        rows = breakout_generator(context.candles, capital=float(context.capital), risk_pct=risk_fraction, rr_ratio=float(context.rr_ratio), trailing_sl_pct=float(context.trailing_sl_pct))
+        preset = strategy_tuning_preset('BREAKOUT')
+        configured_max_trades = context.max_trades_per_day if context.max_trades_per_day is not None else preset.max_trades_per_day
+        rows = breakout_generator(
+            context.candles,
+            capital=float(context.capital),
+            risk_pct=risk_fraction,
+            rr_ratio=float(context.rr_ratio),
+            config=BreakoutConfig(
+                trailing_sl_pct=float(context.trailing_sl_pct),
+                cost_bps=float(context.cost_bps),
+                fixed_cost_per_trade=float(context.fixed_cost_per_trade),
+                max_daily_loss=context.max_daily_loss,
+                max_trades_per_day=max(1, int(configured_max_trades or 1)),
+                duplicate_signal_cooldown_bars=max(8, int(preset.duplicate_signal_cooldown_bars)),
+                require_vwap_alignment=True,
+                allow_secondary_entries=False,
+            ),
+        )
     elif strategy_name == 'Demand Supply':
-        rows = demand_supply_generator(context.candles, capital=float(context.capital), risk_pct=risk_fraction, rr_ratio=float(context.rr_ratio))
+        preset = strategy_tuning_preset('DEMAND_SUPPLY')
+        configured_max_trades = context.max_trades_per_day if context.max_trades_per_day is not None else preset.max_trades_per_day
+        rows = demand_supply_generator(
+            context.candles,
+            capital=float(context.capital),
+            risk_pct=risk_fraction,
+            rr_ratio=float(context.rr_ratio),
+            config=DemandSupplyConfig(
+                mode='Balanced',
+                trailing_sl_pct=float(context.trailing_sl_pct),
+                pivot_window=max(1, int(context.pivot_window)),
+                max_trades_per_day=max(1, int(configured_max_trades or 1)),
+                duplicate_signal_cooldown_bars=max(12, int(preset.duplicate_signal_cooldown_bars)),
+                min_zone_strength_score=4.0,
+                require_vwap_alignment=True,
+                require_trend_bias=True,
+                allow_afternoon_session=False,
+            ),
+        )
     elif strategy_name == 'Indicator':
         try:
             rows = indicator_trade_generator(context.candles, capital=float(context.capital), risk_pct=risk_fraction, rr_ratio=float(context.rr_ratio), config=IndicatorConfig())
@@ -126,7 +162,17 @@ def generate_strategy_rows(
     elif strategy_name == 'One Trade/Day':
         rows = one_trade_generator(context.candle_rows, capital=float(context.capital), risk_pct=risk_fraction, rr_ratio=float(context.rr_ratio), config=IndicatorConfig(), trailing_sl_pct=float(context.trailing_sl_pct))
     elif strategy_name == 'MTF 5m':
-        rows = mtf_generator(context.candle_rows, capital=float(context.capital), risk_pct=risk_fraction, rr_ratio=float(context.rr_ratio), trailing_sl_pct=float(context.trailing_sl_pct), ema_period=int(context.mtf_ema_period), setup_mode=str(context.mtf_setup_mode), require_retest_strength=bool(context.mtf_retest_strength), max_trades_per_day=int(context.mtf_max_trades_per_day))
+        rows = mtf_generator(
+            context.candle_rows,
+            capital=float(context.capital),
+            risk_pct=risk_fraction,
+            rr_ratio=float(context.rr_ratio),
+            trailing_sl_pct=float(context.trailing_sl_pct),
+            ema_period=int(context.mtf_ema_period),
+            setup_mode=str(context.mtf_setup_mode),
+            require_retest_strength=bool(context.mtf_retest_strength),
+            max_trades_per_day=1,
+        )
     elif strategy_name == 'BTST':
         rows = btst_generator(context.candle_rows, capital=float(context.capital), risk_pct=risk_fraction, allow_stbt=True, cost_bps=float(context.cost_bps), fixed_cost_per_trade=float(context.fixed_cost_per_trade), max_daily_loss=context.max_daily_loss, max_trades_per_day=context.max_trades_per_day)
     else:

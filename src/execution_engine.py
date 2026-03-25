@@ -404,11 +404,14 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
             "order_value": row.get("order_value", ""),
             "stop_loss": row.get("stop_loss", ""),
             "trailing_stop_loss": row.get("trailing_stop_loss", ""),
-            "target_price": row.get("target_price", ""),
+            "target_price": row.get("target_price", row.get("target", "")),
             "quantity": row.get("quantity", default_quantity_for_symbol(symbol)),
             "duplicate_signal_cooldown_bars": row.get("duplicate_signal_cooldown_bars", 0),
             "duplicate_signal_cooldown_minutes": row.get("duplicate_signal_cooldown_minutes", ""),
-            "reason": f"SL:{row.get('stop_loss', '')} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', '')}",
+            "reason": (
+                f"{str(row.get('reason', '') or '').strip()} | "
+                f"SL:{row.get('stop_loss', '')} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', row.get('target', ''))}"
+            ).strip(' |') or f"SL:{row.get('stop_loss', '')} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', row.get('target', ''))}",
         }, default_status=TRADE_STATUS_NEW))
     return candidates
 

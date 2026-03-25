@@ -4,6 +4,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+import shutil
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -30,11 +31,16 @@ from src.trading_core import append_log, configure_file_logging, prepare_trading
 DATA_DIR = Path('data')
 LOG_DIR = Path('logs')
 OHLCV_OUTPUT = DATA_DIR / 'ohlcv.csv'
+LIVE_OHLCV_OUTPUT = DATA_DIR / 'live_ohlcv.csv'
 TRADES_OUTPUT = DATA_DIR / 'trades.csv'
+SIGNAL_OUTPUT = DATA_DIR / 'output.csv'
 EXECUTED_TRADES_OUTPUT = DATA_DIR / 'executed_trades.csv'
+PAPER_LOG_OUTPUT = DATA_DIR / 'paper_trading_logs_all.csv'
+LIVE_LOG_OUTPUT = DATA_DIR / 'live_trading_logs_all.csv'
 PAPER_SUMMARY_OUTPUT = DATA_DIR / 'paper_trade_summary.csv'
 BACKTEST_TRADES_OUTPUT = DATA_DIR / 'backtest_trades.csv'
 BACKTEST_SUMMARY_OUTPUT = DATA_DIR / 'backtest_summary.csv'
+BACKTEST_RESULTS_OUTPUT = DATA_DIR / 'backtest_results_all.csv'
 BACKTEST_VALIDATION_UI_OUTPUT = DATA_DIR / 'backtest_validation.csv'
 STRATEGY_RANKING_OUTPUT = DATA_DIR / 'strategy_expectancy_report.csv'
 OPTIMIZER_OUTPUT = DATA_DIR / 'strategy_optimizer_report.csv'
@@ -62,7 +68,19 @@ def _append_text_log(path: Path, message: str) -> None:
 
 
 def _ensure_output_files() -> None:
-    for path in [OHLCV_OUTPUT, TRADES_OUTPUT, EXECUTED_TRADES_OUTPUT, BACKTEST_TRADES_OUTPUT, BACKTEST_SUMMARY_OUTPUT, ORDER_HISTORY_OUTPUT]:
+    for path in [
+        OHLCV_OUTPUT,
+        LIVE_OHLCV_OUTPUT,
+        TRADES_OUTPUT,
+        SIGNAL_OUTPUT,
+        EXECUTED_TRADES_OUTPUT,
+        PAPER_LOG_OUTPUT,
+        LIVE_LOG_OUTPUT,
+        BACKTEST_TRADES_OUTPUT,
+        BACKTEST_SUMMARY_OUTPUT,
+        BACKTEST_RESULTS_OUTPUT,
+        ORDER_HISTORY_OUTPUT,
+    ]:
         path.parent.mkdir(parents=True, exist_ok=True)
         if not path.exists():
             pd.DataFrame().to_csv(path, index=False)
@@ -279,10 +297,25 @@ def _strategy_callable(strategy: str, symbol: str) -> Callable[[pd.DataFrame, fl
 
 
 def _save_runtime_outputs(candles: pd.DataFrame, trades: list[dict[str, object]]) -> None:
-    write_rows(OHLCV_OUTPUT, candles.to_dict(orient='records'))
+    candle_rows = candles.to_dict(orient='records')
+    write_rows(OHLCV_OUTPUT, candle_rows)
+    write_rows(LIVE_OHLCV_OUTPUT, candle_rows)
     write_rows(TRADES_OUTPUT, trades)
+    write_rows(SIGNAL_OUTPUT, trades)
     if not EXECUTED_TRADES_OUTPUT.exists() or EXECUTED_TRADES_OUTPUT.stat().st_size == 0:
         pd.DataFrame().to_csv(EXECUTED_TRADES_OUTPUT, index=False)
+    if not PAPER_LOG_OUTPUT.exists() or PAPER_LOG_OUTPUT.stat().st_size == 0:
+        pd.DataFrame().to_csv(PAPER_LOG_OUTPUT, index=False)
+    if not LIVE_LOG_OUTPUT.exists() or LIVE_LOG_OUTPUT.stat().st_size == 0:
+        pd.DataFrame().to_csv(LIVE_LOG_OUTPUT, index=False)
+
+
+def _mirror_output_file(source: Path, *destinations: Path) -> None:
+    if not source.exists():
+        return
+    for destination in destinations:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
 
 
 def _recent_trade_summary(trades: list[dict[str, object]]) -> str:
@@ -465,7 +498,9 @@ def _run_strategy_backtest(candles: pd.DataFrame, strategy: str, symbol: str, ca
         summary_output=BACKTEST_SUMMARY_OUTPUT,
         validation_output=BACKTEST_VALIDATION_UI_OUTPUT,
     )
-    return run_backtest(candles, _strategy_callable(strategy, symbol), config)
+    summary = run_backtest(candles, _strategy_callable(strategy, symbol), config)
+    _mirror_output_file(BACKTEST_SUMMARY_OUTPUT, BACKTEST_RESULTS_OUTPUT)
+    return summary
 
 
 def _paper_candle_rows(candles: pd.DataFrame) -> list[dict[str, object]]:
@@ -503,6 +538,7 @@ def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, 
             max_open_trades=1,
             order_history_path=ORDER_HISTORY_OUTPUT,
         )
+        _mirror_output_file(EXECUTED_TRADES_OUTPUT, LIVE_LOG_OUTPUT)
         status = 'Live broker armed' if live_enabled else 'Live broker blocked by config'
     else:
         result = execute_paper_trades(
@@ -512,6 +548,7 @@ def _run_execution(strategy: str, trades: list[dict[str, object]], symbol: str, 
             max_open_trades=1,
             order_history_path=ORDER_HISTORY_OUTPUT,
         )
+        _mirror_output_file(EXECUTED_TRADES_OUTPUT, PAPER_LOG_OUTPUT)
         _refresh_paper_trade_summary(candles, capital)
         status = 'Paper broker active'
     return result, execution_result_summary(result), status
@@ -653,4 +690,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-

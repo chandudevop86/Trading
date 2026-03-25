@@ -7,8 +7,17 @@ class TestStrategyTuning(unittest.TestCase):
     def test_strategy_preset_returns_expected_breakout_values(self):
         preset = strategy_tuning_preset('Breakout')
         self.assertEqual(preset.balanced_threshold, 5.5)
-        self.assertEqual(preset.max_trades_per_day, 2)
+        self.assertEqual(preset.max_trades_per_day, 1)
         self.assertEqual(preset.min_profit_factor, 1.35)
+        self.assertEqual(preset.duplicate_signal_cooldown_bars, 8)
+        self.assertEqual((preset.target_trades_low, preset.target_trades_high), (20, 30))
+
+    def test_demand_supply_preset_targets_fewer_higher_quality_trades(self):
+        preset = strategy_tuning_preset('Demand Supply')
+        self.assertEqual(preset.duplicate_signal_cooldown_bars, 12)
+        self.assertEqual(preset.max_trades_per_day, 1)
+        self.assertEqual(preset.min_trades, 20)
+        self.assertEqual((preset.target_trades_low, preset.target_trades_high), (20, 30))
 
     def test_apply_strategy_benchmark_sets_pass_fail(self):
         passed = apply_strategy_benchmark(

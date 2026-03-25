@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -31,12 +31,18 @@ class BreakoutConfig:
     cost_bps: float = 0.0
     fixed_cost_per_trade: float = 0.0
     max_daily_loss: float | None = None
-    max_trades_per_day: int | None = 2
+    max_trades_per_day: int | None = 1
     use_first_hour_bias: bool = True
     filter_choppy_days: bool = True
-    min_breakout_strength: float = 0.12
-    min_volume_ratio: float = 0.95
-    duplicate_signal_cooldown_bars: int = 3
+    min_breakout_strength: float = 0.18
+    min_volume_ratio: float = 1.05
+    duplicate_signal_cooldown_bars: int = 8
+    require_vwap_alignment: bool = True
+    allow_secondary_entries: bool = False
+    morning_session_start: str = '09:20'
+    morning_session_end: str = '11:30'
+    midday_start: str = '12:00'
+    midday_end: str = '13:30'
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
 
     def __post_init__(self) -> None:
@@ -225,6 +231,30 @@ def _candidate_sides(bias: str, *, use_first_hour_bias: bool) -> list[str]:
     return ['BUY', 'SELL']
 
 
+def _parse_hhmm(value: str, fallback: str) -> time:
+    raw = str(value or fallback).strip() or fallback
+    try:
+        hh, mm = raw.split(':', 1)
+        return time(hour=max(0, min(23, int(hh))), minute=max(0, min(59, int(mm))))
+    except Exception:
+        fh, fm = fallback.split(':', 1)
+        return time(hour=int(fh), minute=int(fm))
+
+
+def _session_allowed(candle: Candle, config: BreakoutConfig) -> bool:
+    current = candle.timestamp.time().replace(second=0, microsecond=0)
+    start = _parse_hhmm(config.morning_session_start, '09:20')
+    end = _parse_hhmm(config.morning_session_end, '11:30')
+    return start <= current <= end
+
+
+def _midday_restricted(candle: Candle, config: BreakoutConfig) -> bool:
+    current = candle.timestamp.time().replace(second=0, microsecond=0)
+    start = _parse_hhmm(config.midday_start, '12:00')
+    end = _parse_hhmm(config.midday_end, '13:30')
+    return start <= current <= end
+
+
 def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Candle, *, regime: str, bias: str, trigger: float, volume_ratio: float, strength: float, vwap_slope: float, atr_value: float, config: BreakoutConfig) -> tuple[float, str, dict[str, float], str, bool] | None:
     broke_level = breakout_candle.close > trigger if side == 'BUY' else breakout_candle.close < trigger
     vwap_ok = breakout_candle.close > breakout_candle.vwap and vwap_slope > 0 if side == 'BUY' else breakout_candle.close < breakout_candle.vwap and vwap_slope < 0
@@ -247,7 +277,11 @@ def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Ca
         },
         config.scoring,
     )
+    if config.require_vwap_alignment and not vwap_ok:
+        return None
     if not broke_level or not score.accepted:
+        return None
+    if not config.allow_secondary_entries and not retest_ok:
         return None
     if not retest_ok and not secondary_ok and score.total < score.threshold + 1.0:
         return None
@@ -268,7 +302,7 @@ def generate_trades(
     cost_bps: float = 0.0,
     fixed_cost_per_trade: float = 0.0,
     max_daily_loss: float | None = None,
-    max_trades_per_day: int | None = 2,
+    max_trades_per_day: int | None = 1,
     use_first_hour_bias: bool = True,
     filter_choppy_days: bool = True,
 ) -> list[dict[str, object]]:
@@ -312,6 +346,10 @@ def generate_trades(
                 break
             breakout_candle = day_candles[idx]
             confirmation_candle = day_candles[idx + 1]
+            if not _session_allowed(breakout_candle, cfg) or _midday_restricted(breakout_candle, cfg):
+                continue
+            if not _session_allowed(confirmation_candle, cfg) or _midday_restricted(confirmation_candle, cfg):
+                continue
             atr_value = _atr(day_candles, idx)
             volume_ratio = _volume_ratio(day_candles, idx)
             strength = _breakout_strength(breakout_candle)
@@ -416,6 +454,10 @@ def generate_trades(
                         'bias_mode': 'REQUIRED' if cfg.use_first_hour_bias else 'OBSERVE_ONLY',
                         'bias_aligned': 'YES' if side == bias else 'NO',
                         'regime_filter': 'ON' if cfg.filter_choppy_days else 'OFF',
+                        'session_allowed': 'YES',
+                        'session_window': 'MORNING',
+                        'vwap_aligned': 'YES' if cfg.require_vwap_alignment else 'OPTIONAL',
+                        'secondary_entries': 'ON' if cfg.allow_secondary_entries else 'OFF',
                         'exit_time': exit_time.strftime('%Y-%m-%d %H:%M:%S'),
                         'exit_price': round(float(exit_price), 4),
                         'exit_reason': exit_reason,
@@ -467,7 +509,7 @@ def run(
     cost_bps: float = 0.0,
     fixed_cost_per_trade: float = 0.0,
     max_daily_loss: float | None = None,
-    max_trades_per_day: int | None = 2,
+    max_trades_per_day: int | None = 1,
 ):
     rows = read_csv_rows(input_path)
     trades = generate_trades(
@@ -485,4 +527,3 @@ def run(
     if telegram_token and telegram_chat_id:
         send_telegram_message(telegram_token, telegram_chat_id, build_trade_summary(trades))
     return trades
-

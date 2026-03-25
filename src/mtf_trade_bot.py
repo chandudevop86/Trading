@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import time
 from math import floor
 
-from src.breakout_bot import Candle
+from src.breakout_bot import Candle, add_intraday_vwap
 from src.trade_safety import calculate_net_pnl, daily_limit_reached
 
 
@@ -118,6 +119,42 @@ def _strong_retest(trigger: Candle, side: str) -> bool:
     return close_price < open_price and body_ratio >= 0.35 and close_price <= high - (0.65 * candle_range)
 
 
+def _parse_hhmm(value: str, fallback: str) -> time:
+    raw = str(value or fallback).strip() or fallback
+    try:
+        hh, mm = raw.split(':', 1)
+        return time(hour=max(0, min(23, int(hh))), minute=max(0, min(59, int(mm))))
+    except Exception:
+        fh, fm = fallback.split(':', 1)
+        return time(hour=int(fh), minute=int(fm))
+
+
+def _session_allowed(candle: Candle, *, start: str = '09:20', end: str = '11:30') -> bool:
+    current = candle.timestamp.time().replace(second=0, microsecond=0)
+    return _parse_hhmm(start, '09:20') <= current <= _parse_hhmm(end, '11:30')
+
+
+def _midday_restricted(candle: Candle, *, start: str = '12:00', end: str = '13:30') -> bool:
+    current = candle.timestamp.time().replace(second=0, microsecond=0)
+    return _parse_hhmm(start, '12:00') <= current <= _parse_hhmm(end, '13:30')
+
+
+def _setup_strength(latest_15m: AggCandle, zone_low: float, zone_high: float, side: str) -> float:
+    candle_range = max(latest_15m.high - latest_15m.low, 0.0001)
+    body_ratio = abs(latest_15m.close - latest_15m.open) / candle_range
+    displacement = ((latest_15m.close - latest_15m.open) / candle_range) if side == 'BUY' else ((latest_15m.open - latest_15m.close) / candle_range)
+    zone_width = max(zone_high - zone_low, 0.0)
+    width_ratio = zone_width / candle_range
+    score = 0.0
+    if body_ratio >= 0.45:
+        score += 1.0
+    if displacement >= 0.45:
+        score += 1.0
+    if width_ratio <= 1.1:
+        score += 1.0
+    return score
+
+
 def generate_trades(
     candles: list[Candle],
     capital: float,
@@ -127,12 +164,13 @@ def generate_trades(
     ema_period: int = 3,
     setup_mode: str = "either",
     require_retest_strength: bool = True,
-    max_trades_per_day: int = 3,
+    max_trades_per_day: int = 1,
     cost_bps: float = 0.0,
     fixed_cost_per_trade: float = 0.0,
     max_daily_loss: float | None = None,
 ) -> list[dict[str, object]]:
     trades: list[dict[str, object]] = []
+    add_intraday_vwap(candles)
     by_day = _group_by_day(candles)
     ema_period = max(2, int(ema_period or 3))
     max_trades_per_day = max(1, int(max_trades_per_day or 1))
@@ -183,12 +221,21 @@ def generate_trades(
                     continue
 
                 trigger = day_candles[i]
+                if not _session_allowed(trigger) or _midday_restricted(trigger):
+                    continue
                 trigger_open = float(trigger.open)
                 trigger_high = float(trigger.high)
                 trigger_low = float(trigger.low)
                 trigger_close = float(trigger.close)
 
                 if require_retest_strength and not _strong_retest(trigger, side):
+                    continue
+                if side == 'BUY' and trigger_close < float(trigger.vwap):
+                    continue
+                if side == 'SELL' and trigger_close > float(trigger.vwap):
+                    continue
+                setup_strength = _setup_strength(latest_15m, zone_low, zone_high, side)
+                if setup_strength < 2.5:
                     continue
 
                 if side == "BUY":
@@ -238,6 +285,10 @@ def generate_trades(
                     "setup_mode": (setup_mode or "either").strip().lower(),
                     "require_retest_strength": bool(require_retest_strength),
                     "max_trades_per_day": max_trades_per_day,
+                    "vwap_aligned": 'YES',
+                    "session_allowed": 'YES',
+                    "session_window": 'MORNING',
+                    "setup_strength_score": round(setup_strength, 2),
                 }
                 entry_idx = i
                 break

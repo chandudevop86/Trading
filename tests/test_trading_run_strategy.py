@@ -8,6 +8,8 @@ import pandas as pd
 sys.modules.setdefault("yfinance", types.SimpleNamespace())
 
 from src.Trading import run_strategy
+from src.breakout_bot import BreakoutConfig
+from src.demand_supply_bot import DemandSupplyConfig
 
 
 class TestTradingRunStrategy(unittest.TestCase):
@@ -58,6 +60,15 @@ class TestTradingRunStrategy(unittest.TestCase):
         self.assertEqual(rows[0]["trade_label"], "Trade 1")
         self.assertEqual(rows[0]["entry_time"], "2026-03-20 09:30:00")
         mock_breakout.assert_called_once()
+        kwargs = mock_breakout.call_args.kwargs
+        self.assertEqual(kwargs["capital"], 100000.0)
+        self.assertEqual(kwargs["risk_pct"], 0.01)
+        self.assertEqual(kwargs["rr_ratio"], 2.0)
+        self.assertIsInstance(kwargs["config"], BreakoutConfig)
+        self.assertTrue(kwargs["config"].require_vwap_alignment)
+        self.assertFalse(kwargs["config"].allow_secondary_entries)
+        self.assertEqual(kwargs["config"].duplicate_signal_cooldown_bars, 8)
+        self.assertEqual(kwargs["config"].max_trades_per_day, 1)
         mock_attach.assert_called_once()
 
     @patch("src.Trading.attach_option_strikes")
@@ -78,7 +89,16 @@ class TestTradingRunStrategy(unittest.TestCase):
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["strategy"], "DEMAND_SUPPLY")
-        mock_demand_supply.assert_called_once_with(self.candles, capital=100000.0, risk_pct=0.01, rr_ratio=2.0)
+        mock_demand_supply.assert_called_once()
+        kwargs = mock_demand_supply.call_args.kwargs
+        self.assertEqual(kwargs["capital"], 100000.0)
+        self.assertEqual(kwargs["risk_pct"], 0.01)
+        self.assertEqual(kwargs["rr_ratio"], 2.0)
+        self.assertIsInstance(kwargs["config"], DemandSupplyConfig)
+        self.assertTrue(kwargs["config"].require_vwap_alignment)
+        self.assertTrue(kwargs["config"].require_trend_bias)
+        self.assertEqual(kwargs["config"].duplicate_signal_cooldown_bars, 12)
+        self.assertEqual(kwargs["config"].max_trades_per_day, 1)
         mock_attach.assert_called_once()
 
     @patch("src.Trading.attach_option_strikes")
@@ -120,9 +140,11 @@ class TestTradingRunStrategy(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["strategy"], "MTF_5M")
         mock_mtf.assert_called_once()
+        kwargs = mock_mtf.call_args.kwargs
+        self.assertEqual(kwargs["max_trades_per_day"], 1)
+        self.assertTrue(kwargs["require_retest_strength"])
         mock_attach.assert_called_once()
 
 
 if __name__ == "__main__":
     unittest.main()
-

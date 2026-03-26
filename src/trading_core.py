@@ -8,6 +8,8 @@ from typing import Any
 
 import pandas as pd
 
+from src.runtime_persistence import persist_rows
+
 LOGGER = logging.getLogger('trading_system')
 
 _REQUIRED_COLUMNS = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
@@ -98,6 +100,7 @@ class StandardTrade:
         extra = dict(base.pop('extra', {}) or {})
         base['timestamp'] = str(base['timestamp'])
         base['entry_time'] = str(base['timestamp'])
+<<<<<<< HEAD
         base['entry'] = round_half_up(float(base['entry']), 4)
         base['entry_price'] = round_half_up(float(base['entry_price']), 4)
         base['stop_loss'] = round_half_up(float(base['stop_loss']), 4)
@@ -105,6 +108,22 @@ class StandardTrade:
         base['target_price'] = round_half_up(float(base['target_price']), 4)
         base['score'] = round_half_up(float(base['score']), 2)
         base['risk_per_unit'] = round_half_up(float(base['risk_per_unit']), 4)
+=======
+        rounded_entry = float(Decimal(str(base['entry'])).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
+        rounded_entry_price = float(Decimal(str(base['entry_price'])).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
+        rounded_stop_loss = float(Decimal(str(base['stop_loss'])).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
+        rounded_target = float(Decimal(str(base['target'])).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
+        rounded_target_price = float(Decimal(str(base['target_price'])).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
+        base['entry'] = rounded_entry
+        base['entry_price'] = rounded_entry_price
+        base['stop_loss'] = rounded_stop_loss
+        base['target'] = rounded_target
+        base['target_price'] = rounded_target_price
+        base['score'] = round(float(base['score']), 2)
+        # Keep the displayed risk distance aligned with the displayed entry and
+        # stop prices so exported rows stay internally consistent.
+        base['risk_per_unit'] = round(abs(rounded_entry_price - rounded_stop_loss), 4)
+>>>>>>> feature
         base.update(extra)
         return base
 
@@ -191,6 +210,10 @@ def write_rows(path: Path | str, rows: list[dict[str, object]]) -> None:
     frame = pd.DataFrame(rows)
     frame.to_csv(target, index=False)
     try:
+        persist_rows(target, frame.to_dict(orient='records'), write_mode='replace')
+    except Exception:
+        pass
+    try:
         from src.aws_storage import sync_path_to_s3_if_enabled
 
         key_prefix = target.parent.name if target.parent.name else 'data'
@@ -202,5 +225,7 @@ def write_rows(path: Path | str, rows: list[dict[str, object]]) -> None:
 def append_log(message: str, *, level: int = logging.INFO) -> None:
     configure_file_logging()
     LOGGER.log(level, message)
+
+
 
 

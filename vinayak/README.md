@@ -1,4 +1,4 @@
-# Vinayak Trading Platform
+﻿# Vinayak Trading Platform
 
 `Vinayak` is the next-stage architecture base for the KRSH trading workspace.
 
@@ -60,6 +60,18 @@ vinayak/
 6. Add RabbitMQ events and workers.
 7. Put Nginx and Docker deployment in front.
 
+## Environment Profiles
+
+Vinayak now has explicit environment examples and Compose entry points:
+
+- DEV env: `vinayak/deploy/env/dev.env.example`
+- UAT env: `vinayak/deploy/env/uat.env.example`
+- PROD env: `vinayak/deploy/env/prod.env.example`
+- DEV compose: `vinayak/deploy/docker/docker-compose.dev.yml`
+- UAT compose: `vinayak/deploy/docker/docker-compose.uat.yml`
+- PROD compose: `vinayak/deploy/docker/docker-compose.prod.yml`
+- Reference matrix: `vinayak/docs/environment_matrix.md`
+
 ## v3 Baseline
 
 Current stable rollback snapshot:
@@ -82,21 +94,29 @@ Current stable rollback snapshot:
 
 ### Docker Compose Run
 
-`Vinayak` now includes a local compose stack for the app, PostgreSQL, Redis, and RabbitMQ.
+#### DEV
 
-1. Copy `.env.example` to `.env`
+1. Review `vinayak/deploy/env/dev.env.example`
 2. Start the stack:
-   - `docker compose -f deploy/docker/docker-compose.yml up --build`
-3. Open:
-   - API root: `http://localhost:8000`
-   - Admin console: `http://localhost:8000/admin`
-   - RabbitMQ UI: `http://localhost:15672`
+   - `docker compose -f vinayak/deploy/docker/docker-compose.dev.yml up --build`
 
-Default local service endpoints:
+#### UAT
 
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6379`
-- RabbitMQ: `localhost:5672`
+1. Review `vinayak/deploy/env/uat.env.example`
+2. Start the stack:
+   - `docker compose -f vinayak/deploy/docker/docker-compose.uat.yml up --build`
+
+#### PROD
+
+1. Review `vinayak/deploy/env/prod.env.example`
+2. Start the stack:
+   - `docker compose -f vinayak/deploy/docker/docker-compose.prod.yml up --build -d`
+
+Default service intent:
+
+- DEV: API only, optional Redis, messaging disabled
+- UAT: API + PostgreSQL + Redis + RabbitMQ + outbox worker + queue worker
+- PROD: API + PostgreSQL + Redis + RabbitMQ + outbox worker + queue worker behind Nginx/ALB
 
 ## Database Migrations
 
@@ -115,6 +135,7 @@ Default local service endpoints:
 - config: `alembic.ini`
 - env: `vinayak/db/migrations/env.py`
 - first revision: `vinayak/db/migrations/versions/0001_initial.py`
+- outbox revision: `vinayak/db/migrations/versions/0002_outbox_events.py`
 
 ## Health and Readiness
 
@@ -127,13 +148,16 @@ Default local service endpoints:
 Readiness includes:
 
 - database connectivity status
-- database engine type
+- document store readiness summary
+- cache readiness summary
+- message bus readiness summary
 - broker credential readiness summary
 
 ## Demo Notes
 
 - For local/demo use, `VINAYAK_DATABASE_URL` can stay on SQLite.
-- For Docker, the compose file switches the app to PostgreSQL automatically.
+- For UAT/PROD, use PostgreSQL.
+- MongoDB stays optional until a real document-data use case appears.
 - Live Dhan routing requires:
   - `DHAN_CLIENT_ID`
   - `DHAN_ACCESS_TOKEN`

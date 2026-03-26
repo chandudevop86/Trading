@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -17,6 +17,8 @@ from src.strike_selector import attach_option_strikes
 from src.telegram_notifier import build_trade_summary, send_telegram_message
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
 from vinayak.api.services.report_storage import cache_json_artifact, store_json_report, store_text_report
+from vinayak.messaging.bus import build_message_bus
+from vinayak.messaging.topics import EVENT_ANALYSIS_COMPLETED, EVENT_NOTIFICATION_REQUESTED
 
 try:
     from src.dhan_api import load_security_map
@@ -334,12 +336,25 @@ def run_live_trading_analysis(
     signal_rows = _normalize_rows(signal_rows)
     side_counts = Counter(str(row.get('side', '') or '').upper() for row in signal_rows if row.get('side'))
 
+    message_bus = build_message_bus()
     telegram_sent = False
     telegram_error = ''
     telegram_payload: dict[str, Any] | None = None
     if send_telegram and signal_rows:
+        message = build_trade_summary(signal_rows)
+        message_bus.publish(
+            EVENT_NOTIFICATION_REQUESTED,
+            {
+                'channel': 'telegram',
+                'telegram_token': telegram_token,
+                'telegram_chat_id': telegram_chat_id,
+                'message': message,
+                'symbol': symbol,
+                'strategy': strategy,
+            },
+            source='live_analysis',
+        )
         try:
-            message = build_trade_summary(signal_rows)
             telegram_payload = send_telegram_message(telegram_token, telegram_chat_id, message)
             telegram_sent = True
         except Exception as exc:
@@ -402,5 +417,19 @@ def run_live_trading_analysis(
         'execution_rows': execution_rows,
     }
     response['report_artifacts'] = _build_report_artifacts(response)
+    message_bus.publish(
+        EVENT_ANALYSIS_COMPLETED,
+        {
+            'symbol': symbol,
+            'strategy': strategy,
+            'interval': interval,
+            'period': period,
+            'signal_count': len(signal_rows),
+            'execution_mode': execution_mode,
+            'report_artifacts': response['report_artifacts'],
+        },
+        source='live_analysis',
+    )
     return response
+
 

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import hashlib
@@ -25,6 +25,14 @@ from src.brokers import (
 from src.csv_io import read_csv_rows
 from src.trading_core import append_log
 from src.strategy_tuning import normalize_strategy_key
+from src.runtime_persistence import (
+    load_current_rows,
+    load_execution_risk_state,
+    load_latest_batch_rows,
+    persist_row,
+    persist_rows,
+    refresh_execution_risk_state,
+)
 
 DEFAULT_LOT_SIZES = {
     "NIFTY": 65,
@@ -434,11 +442,12 @@ def build_analysis_queue(candidates: list[dict[str, object]], analyzed_at_utc: O
 
 
 def _read_trade_rows(path: Path) -> list[dict[str, object]]:
+    db_rows = load_current_rows(path)
+    if db_rows:
+        return [dict(row) for row in db_rows]
     if not path.exists():
         return []
     return [dict(row) for row in read_csv_rows(path)]
-
-
 def _row_is_closed(row: dict[str, object]) -> bool:
     return _normalize_text(row.get("trade_status")) == TRADE_STATUS_CLOSED or _normalize_text(row.get("position_status")) == TRADE_STATUS_CLOSED or _normalize_text(row.get("execution_status")) in {"CLOSED", "EXITED"}
 
@@ -451,7 +460,59 @@ def _row_is_active(row: dict[str, object]) -> bool:
     return _normalize_text(row.get("execution_status")) in {"EXECUTED", "SENT", "FILLED"}
 
 
+def _load_risk_state_snapshot(path: Path, execution_type: str | None = None) -> dict[str, object]:
+    normalized_execution_type = _normalize_text(execution_type or '')
+    if not normalized_execution_type:
+        return {}
+    try:
+        state = load_execution_risk_state(path, normalized_execution_type)
+    except Exception:
+        return {}
+    if not isinstance(state, dict):
+        return {}
+    has_state = any(
+        [
+            state.get('historical_trade_ids'),
+            state.get('active_trade_keys'),
+            state.get('active_duplicate_signal_keys'),
+            state.get('recent_signal_times'),
+            state.get('daily_state'),
+            int(float(state.get('open_trade_count', 0) or 0)) > 0,
+        ]
+    )
+    return state if has_state else {}
+
+
+def _deserialize_recent_signal_times(raw: object) -> dict[str, datetime]:
+    if not isinstance(raw, dict):
+        return {}
+    recent: dict[str, datetime] = {}
+    for key, value in raw.items():
+        parsed = _parse_dt(value)
+        if parsed is not None:
+            recent[str(key)] = parsed
+    return recent
+
+
+def _deserialize_daily_state(raw: object) -> dict[str, dict[str, float]]:
+    if not isinstance(raw, dict):
+        return {}
+    state: dict[str, dict[str, float]] = {}
+    for day_key, payload in raw.items():
+        if not isinstance(payload, dict):
+            continue
+        state[str(day_key)] = {
+            "count": float(payload.get("count", 0.0) or 0.0),
+            "realized_pnl": float(payload.get("realized_pnl", 0.0) or 0.0),
+        }
+    return state
+
+
 def load_active_trade_keys(path: Path, execution_type: str | None = None) -> set[str]:
+    state = _load_risk_state_snapshot(path, execution_type)
+    if state:
+        return {str(value) for value in state.get("active_trade_keys", []) if str(value).strip()}
+
     keys: set[str] = set()
     for row in _read_trade_rows(path):
         if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
@@ -463,6 +524,10 @@ def load_active_trade_keys(path: Path, execution_type: str | None = None) -> set
 
 
 def load_active_duplicate_signal_keys(path: Path, execution_type: str | None = None) -> set[str]:
+    state = _load_risk_state_snapshot(path, execution_type)
+    if state:
+        return {str(value) for value in state.get("active_duplicate_signal_keys", []) if str(value).strip()}
+
     keys: set[str] = set()
     for row in _read_trade_rows(path):
         if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
@@ -474,6 +539,10 @@ def load_active_duplicate_signal_keys(path: Path, execution_type: str | None = N
 
 
 def _load_recent_signal_times(path: Path, execution_type: str | None = None) -> dict[str, datetime]:
+    state = _load_risk_state_snapshot(path, execution_type)
+    if state:
+        return _deserialize_recent_signal_times(state.get("recent_signal_times", {}))
+
     recent: dict[str, datetime] = {}
     for row in _read_trade_rows(path):
         if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
@@ -489,6 +558,10 @@ def _load_recent_signal_times(path: Path, execution_type: str | None = None) -> 
 
 
 def _count_open_trades(path: Path, execution_type: str | None = None) -> int:
+    state = _load_risk_state_snapshot(path, execution_type)
+    if state:
+        return int(float(state.get("open_trade_count", 0) or 0))
+
     count = 0
     for row in _read_trade_rows(path):
         if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
@@ -499,6 +572,10 @@ def _count_open_trades(path: Path, execution_type: str | None = None) -> int:
 
 
 def _load_historical_trade_ids(path: Path, execution_type: str | None = None) -> set[str]:
+    state = _load_risk_state_snapshot(path, execution_type)
+    if state:
+        return {str(value) for value in state.get("historical_trade_ids", []) if str(value).strip()}
+
     ids: set[str] = set()
     for row in _read_trade_rows(path):
         if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
@@ -530,7 +607,11 @@ def _trade_day_key(record: dict[str, object], fallback_day: str) -> str:
 
 
 def _load_daily_execution_state(path: Path, execution_type: str) -> dict[str, dict[str, float]]:
-    state: dict[str, dict[str, float]] = {}
+    state = _load_risk_state_snapshot(path, execution_type)
+    if state:
+        return _deserialize_daily_state(state.get("daily_state", {}))
+
+    daily_state: dict[str, dict[str, float]] = {}
     for row in _read_trade_rows(path):
         if _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
             continue
@@ -539,10 +620,10 @@ def _load_daily_execution_state(path: Path, execution_type: str) -> dict[str, di
         if _normalize_text(row.get("execution_status")) not in EXECUTION_SUCCESS_STATUSES and _normalize_text(row.get("trade_status")) not in {TRADE_STATUS_EXECUTED, TRADE_STATUS_OPEN, TRADE_STATUS_PENDING_EXECUTION}:
             continue
         day_key = _trade_day_key(row, str(row.get("executed_at_utc", ""))[:10])
-        bucket = state.setdefault(day_key, {"count": 0.0, "realized_pnl": 0.0})
+        bucket = daily_state.setdefault(day_key, {"count": 0.0, "realized_pnl": 0.0})
         bucket["count"] += 1.0
         bucket["realized_pnl"] += _safe_float(row.get("pnl"))
-    return state
+    return daily_state
 
 
 def _risk_limit_message(max_trades_per_day: int | None, max_daily_loss: float | None) -> str:
@@ -590,17 +671,26 @@ def _apply_live_broker_result(record: dict[str, object], broker_name: str, resul
 
 def _first_execution_time(path: Path, execution_type: str) -> Optional[datetime]:
     earliest: Optional[datetime] = None
-    for row in _read_trade_rows(path):
-        if _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
-            continue
-        raw = str(row.get("executed_at_utc", "")).strip()
-        if not raw:
-            continue
+    sources: list[list[dict[str, object]]] = [_read_trade_rows(path)]
+    if path.exists():
         try:
-            ts = datetime.strptime(raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
-        except ValueError:
-            continue
-        earliest = ts if earliest is None else min(earliest, ts)
+            csv_rows = [dict(row) for row in read_csv_rows(path)]
+        except Exception:
+            csv_rows = []
+        if csv_rows:
+            sources.append(csv_rows)
+    for rows in sources:
+        for row in rows:
+            if _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
+                continue
+            raw = str(row.get("executed_at_utc", "")).strip()
+            if not raw:
+                continue
+            try:
+                ts = datetime.strptime(raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+            except ValueError:
+                continue
+            earliest = ts if earliest is None else min(earliest, ts)
     return earliest
 
 
@@ -811,13 +901,16 @@ def _append_order_history(path: Path, record: dict[str, object]) -> None:
             writer.writeheader()
             writer.writerows(existing_rows)
             writer.writerow(record)
-        return
-    with path.open("a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(record)
-
+    else:
+        with path.open("a", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(record)
+    try:
+        persist_row(path, record)
+    except Exception:
+        pass
 def _mark_skipped(result: ExecutionResult, row: dict[str, object], reason: str) -> None:
     skipped = dict(row)
     if reason.startswith("DUPLICATE_"):
@@ -872,12 +965,26 @@ def _write_execution_rows(path: Path, rows_to_write: list[dict[str, object]]) ->
             writer.writeheader()
             writer.writerows(existing_rows)
             writer.writerows(rows_to_write)
-        return
-    with path.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerows(rows_to_write)
+    else:
+        with path.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerows(rows_to_write)
+    try:
+        persist_rows(path, rows_to_write, write_mode='append')
+    except Exception:
+        pass
+    try:
+        execution_types = {
+            _normalize_text(row.get("execution_type"))
+            for row in rows_to_write
+            if str(row.get("execution_type", "")).strip()
+        }
+        for row_execution_type in execution_types:
+            refresh_execution_risk_state(path, row_execution_type)
+    except Exception:
+        pass
 
 def execution_result_summary(result: ExecutionResult) -> list[tuple[str, str]]:
     messages: list[tuple[str, str]] = []
@@ -908,9 +1015,11 @@ def execution_result_summary(result: ExecutionResult) -> list[tuple[str, str]]:
 
 
 def _load_optimizer_gate_map(path: Path) -> dict[str, tuple[bool, str]]:
-    if not path.exists() or path.stat().st_size == 0:
-        return {}
-    rows = _read_trade_rows(path)
+    rows = load_current_rows(path) or load_latest_batch_rows(path)
+    if not rows:
+        if not path.exists() or path.stat().st_size == 0:
+            return {}
+        rows = _read_trade_rows(path)
     gate_map: dict[str, tuple[bool, str]] = {}
     for row in rows:
         strategy_key = normalize_strategy_key(str(row.get("strategy", "") or ""))
@@ -926,7 +1035,6 @@ def _load_optimizer_gate_map(path: Path) -> dict[str, tuple[bool, str]]:
         if rank_value < existing[2]:
             gate_map[strategy_key] = (ready, blockers if not ready else "optimizer validated", rank_value)
     return {key: (value[0], value[1]) for key, value in gate_map.items()}
-
 def _optimizer_gate_for_strategy(strategy: object, gate_map: dict[str, tuple[bool, str]]) -> tuple[bool, str]:
     if not gate_map:
         return False, "optimizer report missing"
@@ -1296,6 +1404,12 @@ def reconcile_live_trades(
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(updated_rows)
+
+    try:
+        persist_rows(live_log_path, updated_rows, write_mode='replace')
+        refresh_execution_risk_state(live_log_path, "LIVE")
+    except Exception:
+        pass
 
     return reconciled_rows
 

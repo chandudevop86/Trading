@@ -3,8 +3,13 @@ uvicorn
 pydantic
 sqlalchemy
 psycopg2-binary
+pymysql
+pyodbc
 redis
 pika
+kafka-python
+stomp.py
+pymongo
 python-dotenv
 requests
 pandas

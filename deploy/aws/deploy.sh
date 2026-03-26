@@ -4,6 +4,10 @@ set -euo pipefail
 APP_DIR="/opt/trading"
 DOMAIN="chandudevopai.shop"
 
+export APP_ENV="${APP_ENV:-production}"
+export LEGACY_DEPLOYMENT_TARGET="production"
+python3 -m src.deployment_guard --target production
+
 echo "[1/9] Installing packages..."
 sudo apt update
 sudo apt install -y python3 python3-venv python3-pip nginx certbot python3-certbot-nginx git

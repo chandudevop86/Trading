@@ -7,9 +7,14 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/opt/trading
 Environment="PATH=/opt/trading/.venv/bin"
+<<<<<<< HEAD
 ExecStart=/opt/trading/.venv/bin/streamlit run src/Trading.py
+=======
+ExecStart=/opt/trading/.venv/bin/streamlit run src/Trading.py --server.port 8501 --server.address 0.0.0.0
+>>>>>>> feature
 Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
+

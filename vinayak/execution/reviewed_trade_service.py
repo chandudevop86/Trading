@@ -8,6 +8,8 @@ from vinayak.db.models.reviewed_trade import ReviewedTradeRecord
 from vinayak.db.models.signal import SignalRecord
 from vinayak.db.repositories.reviewed_trade_repository import ReviewedTradeRepository
 from vinayak.db.repositories.signal_repository import SignalRepository
+from vinayak.messaging.outbox import OutboxService
+from vinayak.messaging.topics import EVENT_TRADE_REVIEWED
 
 ALLOWED_REVIEWED_TRADE_STATUSES = {'REVIEWED', 'APPROVED', 'REJECTED', 'EXECUTED'}
 ALLOWED_STATUS_TRANSITIONS = {
@@ -47,6 +49,7 @@ class ReviewedTradeService:
         self.session = session
         self.repository = ReviewedTradeRepository(session)
         self.signal_repository = SignalRepository(session)
+        self.outbox = OutboxService(session)
 
     def list_reviewed_trades(self) -> list[ReviewedTradeRecord]:
         return self.repository.list_reviewed_trades()
@@ -54,7 +57,7 @@ class ReviewedTradeService:
     def get_reviewed_trade(self, reviewed_trade_id: int) -> ReviewedTradeRecord | None:
         return self.repository.get_reviewed_trade(reviewed_trade_id)
 
-    def create_reviewed_trade(self, command: ReviewedTradeCreateCommand) -> ReviewedTradeRecord:
+    def create_reviewed_trade(self, command: ReviewedTradeCreateCommand, *, auto_commit: bool = True) -> ReviewedTradeRecord:
         signal_record = self._get_signal_if_needed(command.signal_id)
 
         strategy_name = command.strategy_name or (signal_record.strategy_name if signal_record else None)
@@ -96,9 +99,8 @@ class ReviewedTradeService:
             status=status,
             notes=command.notes,
         )
-        self.session.commit()
-        self.session.refresh(record)
-        return record
+        self._enqueue_review_event(record, action='created')
+        return self._finalize(record, auto_commit=auto_commit)
 
     def create_reviewed_trade_from_signal(
         self,
@@ -118,7 +120,7 @@ class ReviewedTradeService:
             )
         )
 
-    def update_reviewed_trade_status(self, command: ReviewedTradeStatusUpdateCommand) -> ReviewedTradeRecord:
+    def update_reviewed_trade_status(self, command: ReviewedTradeStatusUpdateCommand, *, auto_commit: bool = True) -> ReviewedTradeRecord:
         record = self.repository.get_reviewed_trade(command.reviewed_trade_id)
         if record is None:
             raise ValueError(f'Reviewed trade {command.reviewed_trade_id} was not found.')
@@ -138,17 +140,17 @@ class ReviewedTradeService:
             quantity=command.quantity,
             lots=command.lots,
         )
-        self.session.commit()
-        self.session.refresh(updated)
-        return updated
+        self._enqueue_review_event(updated, action='status_updated')
+        return self._finalize(updated, auto_commit=auto_commit)
 
-    def mark_executed(self, reviewed_trade_id: int, notes: str | None = None) -> ReviewedTradeRecord:
+    def mark_executed(self, reviewed_trade_id: int, notes: str | None = None, *, auto_commit: bool = True) -> ReviewedTradeRecord:
         return self.update_reviewed_trade_status(
             ReviewedTradeStatusUpdateCommand(
                 reviewed_trade_id=reviewed_trade_id,
                 status='EXECUTED',
                 notes=notes,
-            )
+            ),
+            auto_commit=auto_commit,
         )
 
     def _get_signal_if_needed(self, signal_id: int | None) -> SignalRecord | None:
@@ -158,3 +160,28 @@ class ReviewedTradeService:
         if signal_record is None:
             raise ValueError(f'Signal {signal_id} was not found.')
         return signal_record
+
+    def _enqueue_review_event(self, record: ReviewedTradeRecord, *, action: str) -> None:
+        self.outbox.enqueue(
+            event_name=EVENT_TRADE_REVIEWED,
+            payload={
+                'action': action,
+                'reviewed_trade_id': record.id,
+                'signal_id': record.signal_id,
+                'strategy_name': record.strategy_name,
+                'symbol': record.symbol,
+                'side': record.side,
+                'status': record.status,
+                'quantity': record.quantity,
+                'lots': record.lots,
+            },
+            source='reviewed_trade_service',
+        )
+
+    def _finalize(self, record: ReviewedTradeRecord, *, auto_commit: bool) -> ReviewedTradeRecord:
+        if auto_commit:
+            self.session.commit()
+            self.session.refresh(record)
+        else:
+            self.session.flush()
+        return record

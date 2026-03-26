@@ -8,6 +8,8 @@ from uuid import uuid4
 
 import pandas as pd
 
+from src.runtime_persistence import load_current_rows, persist_row
+
 from src.brokers.base import Broker, BrokerBalance, BrokerHealth, BrokerOrderRequest, BrokerOrderResult
 
 
@@ -71,6 +73,9 @@ class PaperBroker(Broker):
         return BrokerBalance(available_cash=0.0, utilized_margin=0.0, metadata={'mode': 'paper'})
 
     def get_orders(self) -> list[dict[str, Any]]:
+        db_rows = load_current_rows(self.config.orders_path)
+        if db_rows:
+            return [dict(row) for row in db_rows]
         if not self.config.orders_path.exists() or self.config.orders_path.stat().st_size == 0:
             return []
         frame = pd.read_csv(self.config.orders_path)
@@ -87,3 +92,7 @@ class PaperBroker(Broker):
         else:
             frame = pd.DataFrame([record])
         frame.to_csv(path, index=False)
+        try:
+            persist_row(path, record)
+        except Exception:
+            pass

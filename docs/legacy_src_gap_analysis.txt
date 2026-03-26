@@ -1,0 +1,198 @@
+LEGACY SRC MONOLITH REQUIREMENT AND GAP ANALYSIS
+
+Date: 2026-03-26
+Scope: Old monolithic trading project under F:\Trading\src
+Excluded: F:\Trading\vinayak rewrite
+
+EXECUTIVE SUMMARY
+
+The legacy trading project under src/ is functionally strong. It already
+supports market-data ingestion, multiple strategies, backtesting, paper
+trading, optional live Dhan execution, reporting, and a Streamlit operator
+console.
+
+The main issue is not missing features. The main issue is architectural
+concentration: too many responsibilities sit inside one monolithic runtime,
+with critical operational state still stored in CSV files.
+
+In its current form, the legacy app is suitable for local or operator-led
+use, but it is not yet aligned with a production-grade architecture. The
+highest-risk gaps are persistence, auditability, recovery, maintainability,
+and safe live-execution governance.
+
+ASSESSMENT BASIS
+
+This review is based on the current legacy implementation and supporting
+assets, including README.md, src/Trading.py, src/strategy_service.py,
+src/execution_engine.py, src/auto_run.py, and tests/.
+
+Legacy test baseline observed during review:
+- 122 tests executed in the legacy tests/ suite
+- 121 passed
+- 1 failed in F:\Trading\tests\test_breakout_bot.py
+
+CURRENT-STATE SUMMARY
+
+Strengths
+- Broad strategy coverage exists in the monolith.
+- Backtesting and execution workflows are both implemented.
+- Risk controls are present in execution logic.
+- Operator workflow is accessible through a single Streamlit console.
+- Automated test coverage is substantial for the legacy code path.
+
+Weaknesses
+- UI and orchestration are tightly coupled.
+- CSV files are heavily used as operational records.
+- Production deployment ambitions exceed runtime hardening maturity.
+- Recovery and auditability are weaker than required for a stronger profile.
+- The repository mixes active legacy code with parallel and archived assets.
+
+REQUIREMENT AND GAP HIGHLIGHTS
+
+High priority gaps
+- UI and orchestration are centralized in src/Trading.py
+- CSV files in data/ act as the practical system of record
+- Live and paper execution depend on local file-state assumptions
+- Production deployment guidance exceeds runtime hardening maturity
+- The legacy suite is close to stable, but not fully green
+
+Medium priority gaps
+- Configuration is spread across env vars, code defaults, docs, and paths
+- Reporting and notifications are useful but operationally fragmented
+- Repo hygiene increases accidental-target risk
+- Monitoring and observability are mostly local and file-based
+
+Representative gap table
+
+1. Area: Product Scope
+   Requirement: One clear legacy product boundary
+   Current Implementation: Repo also contains vinayak, snapshots, archives,
+   and duplicate assets
+   Gap: Ownership boundary is blurred
+   Priority: High
+   Recommendation: Declare src/ as legacy-maintenance scope and document
+   official entrypoints only
+
+2. Area: UI Entry
+   Requirement: Single operator console for trading actions
+   Current Implementation: Streamlit UI in src/Trading.py handles run,
+   backtest, and execution
+   Gap: UI is also orchestration layer
+   Priority: High
+   Recommendation: Keep UI thin and move orchestration into service modules
+
+3. Area: Strategy Routing
+   Requirement: Unified strategy execution contract
+   Current Implementation: Multiple strategies run through shared workflow
+   Gap: Strategy integration depends on centralized routing and UI knowledge
+   Priority: High
+   Recommendation: Standardize input and output contracts for all strategies
+
+4. Area: Persistence
+   Requirement: Durable system of record
+   Current Implementation: CSV files in data/ are heavily used
+   Gap: CSV is weak for concurrency, audit, rollback, and multi-instance use
+   Priority: High
+   Recommendation: Introduce DB-backed persistence for signals, executions,
+   orders, and summaries
+
+5. Area: Paper Trading
+   Requirement: Default safe execution mode
+   Current Implementation: Implemented in src/execution_engine.py
+   Gap: Uses file ledger as source of truth
+   Priority: High
+   Recommendation: Move paper-trade ledger to DB and keep CSV only as export
+
+6. Area: Live Trading
+   Requirement: Controlled live broker execution
+   Current Implementation: Dhan live flow exists with gating and checks
+   Gap: Shares monolith runtime and file-state assumptions
+   Priority: High
+   Recommendation: Isolate live execution service and strengthen audit trail
+
+7. Area: Risk Controls
+   Requirement: Daily loss, duplicate blocking, and open trade limits
+   Current Implementation: Present in execution flow
+   Gap: Controls depend on file history integrity
+   Priority: High
+   Recommendation: Store risk-control state in durable transactional storage
+
+8. Area: Deployment
+   Requirement: Support local plus production deployment
+   Current Implementation: Docker, K8s, and AWS docs/assets exist
+   Gap: Deployment story is ahead of runtime architecture maturity
+   Priority: High
+   Recommendation: Reframe docs so local use is supported now and production
+   remains aspirational until persistence is hardened
+
+9. Area: Test Coverage
+   Requirement: Automated regression protection
+   Current Implementation: Legacy suite is strong and 122 tests ran
+   Gap: Suite is not fully green
+   Priority: High
+   Recommendation: Fix the failing test in tests/test_breakout_bot.py first
+
+10. Area: Code Organization
+    Requirement: Clear separation of concerns
+    Current Implementation: Many capabilities exist in one codebase
+    Gap: UI, workflows, file IO, and execution are tightly coupled
+    Priority: High
+    Recommendation: Refactor by domain: data, strategies, execution,
+    reporting, UI
+
+11. Area: Repo Hygiene
+    Requirement: Low confusion in active code surface
+    Current Implementation: Repo contains archived, experimental, and snapshot
+    files
+    Gap: Risk of using wrong file or deploying wrong target
+    Priority: Medium
+    Recommendation: Mark archives clearly and remove non-active files from
+    active docs
+
+12. Area: Documentation
+    Requirement: Accurate current-state guidance
+    Current Implementation: README is detailed
+    Gap: Docs mix local workflow, broker flow, deployment, and production
+    claims
+    Priority: Medium
+    Recommendation: Split docs into Legacy Local Ops, Legacy Deployment
+    Limits, and Migration Notes
+
+ROADMAP
+
+Phase 1: Stabilize
+- Fix the failing legacy test in tests/test_breakout_bot.py
+- Define official legacy entrypoints in README.md
+- Mark non-production or archived files as inactive
+- Freeze current CSV schemas so behavior is explicit
+
+Phase 2: Harden
+- Introduce DB-backed persistence for signals, executions, order history,
+  and summaries
+- Keep CSV generation only for export and reporting
+- Separate execution-state handling from Streamlit UI code
+- Strengthen live-trading approval and audit flow
+
+Phase 3: Refactor
+- Break orchestration out of src/Trading.py
+- Standardize strategy input and output contracts
+- Separate domains into data, strategy, execution, reporting, and UI layers
+- Decouple Telegram and reporting from core trade workflows
+
+Phase 4: Operationalize
+- Split local operator app docs from production deployment docs
+- Add structured logs and clearer recovery procedures
+- Define a supportable production profile only after persistence and audit
+  gaps are closed
+- Treat horizontal scaling as out of scope until local-file state is removed
+  from the core path
+
+FINAL CONCLUSION
+
+The legacy src/ project is a capable trading application with substantial
+real functionality already in place. Its biggest gaps are architectural and
+operational, not feature-related.
+
+The right next move is not adding more strategy breadth. The right next move
+is hardening the system of record, separating concerns, and re-establishing
+a fully green baseline for the monolithic code path.

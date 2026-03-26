@@ -12,6 +12,7 @@ from src.strategy_evaluator import rank_strategy_summaries
 from src.strategy_tuning import apply_strategy_benchmark, optimizer_report_rows
 from src.strategy_service import StrategyContext, generate_strategy_rows
 from src.trading_workflows import build_backtest_workflow, run_live_candidates, run_paper_candidates
+from src.runtime_persistence import persist_rows
 
 
 def _safe_float(value: Any) -> float:
@@ -162,11 +163,19 @@ def _write_rows(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
         path.write_text('', encoding='utf-8')
+        try:
+            persist_rows(path, [], write_mode='replace')
+        except Exception:
+            pass
         return
     with path.open('w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
+    try:
+        persist_rows(path, [dict(row) for row in rows], write_mode='replace')
+    except Exception:
+        pass
 
 
 def _append_rows(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -179,6 +188,10 @@ def _append_rows(path: Path, rows: list[dict[str, Any]]) -> None:
         if not file_exists:
             writer.writeheader()
         writer.writerows(rows)
+    try:
+        persist_rows(path, [dict(row) for row in rows], write_mode='replace')
+    except Exception:
+        pass
 
 
 def parse_args() -> argparse.Namespace:

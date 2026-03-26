@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, timezone
@@ -235,6 +235,7 @@ _INTERVAL_ALIASES: dict[str, tuple[str, int, int | None]] = {
 
 def _period_to_range(period: str, *, now: datetime | None = None) -> tuple[datetime, datetime]:
     end = now.astimezone(IST) if now is not None else datetime.now(IST)
+    end = end.replace(second=0, microsecond=0)
     text = _clean(period).lower()
     if not text:
         return end - timedelta(days=1), end
@@ -919,5 +920,6 @@ def write_csv(rows: list[dict[str, Any]], path: str) -> None:
         writer = csv.DictWriter(f, fieldnames=keys)
         writer.writeheader()
         writer.writerows(rows)
+
 
 

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import time
@@ -10,6 +10,7 @@ from src.Trading import fetch_ohlcv_data, run_strategy
 from src.aws_storage import sync_path_to_s3_if_enabled
 from src.backtest_engine import BacktestConfig, run_backtest, summarize_trade_log
 from src.execution_engine import build_execution_candidates, close_paper_trades, execute_live_trades, execute_paper_trades, execution_result_summary
+from src.legacy_scope import fail_noncanonical_entrypoint
 from src.runtime_config import RuntimeConfig
 from src.trading_core import append_log, write_rows
 
@@ -184,4 +185,4 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    fail_noncanonical_entrypoint('src/operational_daemon.py', canonical='src.auto_run')

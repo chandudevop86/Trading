@@ -104,60 +104,18 @@ Launch web app:
 streamlit run src/Trading.py
 ```
 
-<<<<<<< HEAD
 ## Active Legacy Surface
 
 Supported active legacy entrypoints:
 - `streamlit run src/Trading.py`
 - `py -3 -m src.breakout_bot`
+- `py -3 -m src.auto_run ...`
+- `py -3 -m src.auto_backtest ...`
+- `py -3 -m src.dhan_example ...`
+- `py -3 -m src.dhan_account ...`
 - `tools/run_app.ps1`
 
 Reference-only / non-active files in `src/` are documented in `src/EXPERIMENTAL_SURFACE.md` and should not be used as runtime or deployment targets.
-=======
-## Legacy Supported Entry Points
-
-During Phase 0 stabilization, the supported legacy `src/` runtime surface is:
-
-- UI operator console: `streamlit run src/Trading.py`
-- End-to-end batch pipeline: `py -3 -m src.auto_run ...`
-- Backtesting workflow: `py -3 -m src.auto_backtest ...`
-- Broker/account CLI reference: `py -3 -m src.dhan_example ...` and `py -3 -m src.dhan_account ...`
-
-These are the supported legacy entrypoints for the old monolithic project.
-
-## Legacy Product Boundary
-
-The legacy maintained product in this repository is the monolithic trading application under `src/`.
-
-In scope for legacy maintenance:
-
-- `src/`
-- `tests/`
-- `data/`
-- `logs/`
-- root-level legacy runtime docs and deploy assets that directly support `src/`
-
-Not in scope for legacy runtime ownership:
-
-- `vinayak/` because it is the next-generation platform track
-- `snapshots/` because they are rollback/reference artifacts
-- `src/_archive/` because it is archived legacy history, not an active runtime surface
-- duplicate or historical experimental files that are not part of the supported `src/` entrypoints
-
-For the formal legacy scope definition, see:
-
-- `docs/legacy_scope.md`
-
-Not supported as legacy deployment targets:
-
-- files under `src/_archive/`
-- deleted or historical experimental files referenced in old snapshots
-- parallel rewrite code under `vinayak/`
-
-For current legacy contracts and runtime outputs, see:
-
-- `docs/legacy_src_contracts.md`
->>>>>>> feature
 
 What app does:
 - Upload intraday OHLCV CSV
@@ -217,12 +175,10 @@ After this, open: `https://chandudevopai.shop`
    - `py -3 -m pip install -r requirements.txt`
 2. Configure local AWS credentials (AWS CLI profile or env vars).
 3. Run app locally:
-<<<<<<< HEAD
-   - streamlit run src/Trading.py`n4. In app sidebar, enable **AWS S3 (localhost)** and fill:
-=======
    - `streamlit run src/Trading.py`
 4. In app sidebar, enable **AWS S3 (localhost)** and fill:
->>>>>>> feature
+   - `streamlit run src/Trading.py`
+4. In app sidebar, enable **AWS S3 (localhost)** and fill:
    - S3 bucket
    - AWS region
    - S3 key prefix

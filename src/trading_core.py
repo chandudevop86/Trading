@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 from decimal import Decimal, ROUND_HALF_UP
@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+from src.runtime_persistence import persist_rows
 
 LOGGER = logging.getLogger('trading_system')
 
@@ -191,6 +193,10 @@ def write_rows(path: Path | str, rows: list[dict[str, object]]) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     frame = pd.DataFrame(rows)
     frame.to_csv(target, index=False)
+    try:
+        persist_rows(target, frame.to_dict(orient='records'), write_mode='replace')
+    except Exception:
+        pass
     try:
         from src.aws_storage import sync_path_to_s3_if_enabled
 

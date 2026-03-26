@@ -8,6 +8,8 @@ from uuid import uuid4
 
 import pandas as pd
 
+from src.runtime_persistence import persist_row
+
 from src.brokers.base import Broker, BrokerBalance, BrokerHealth, BrokerOrderRequest, BrokerOrderResult
 
 
@@ -87,3 +89,7 @@ class PaperBroker(Broker):
         else:
             frame = pd.DataFrame([record])
         frame.to_csv(path, index=False)
+        try:
+            persist_row(path, record)
+        except Exception:
+            pass

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import shutil
@@ -8,12 +8,12 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from src.amd_fvg_sd_bot import ConfluenceConfig, generate_trades as generate_amd_fvg_sd_trades
+from src.amd_fvg_sd_bot import generate_trades as generate_amd_fvg_sd_trades
 from src.backtest_engine import run_backtest, summarize_trade_log
 from src.breakout_bot import Candle, generate_trades as generate_breakout_trades
 from src.demand_supply_bot import generate_trades as generate_demand_supply_trades
 from src.execution_engine import build_execution_candidates, close_paper_trades, execute_live_trades, execute_paper_trades, execution_result_summary
-from src.indicator_bot import IndicatorConfig, generate_indicator_rows
+from src.indicator_bot import generate_indicator_rows
 from src.live_ohlcv import fetch_live_ohlcv
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
@@ -165,49 +165,6 @@ def run_strategy(
     amd_min_score_balanced: float = 5.0,
     amd_min_score_aggressive: float = 3.0,
 ) -> list[dict[str, object]]:
-    if strategy == "AMD + FVG + Supply/Demand":
-        preset_config = ConfluenceConfig.for_mode(str(amd_mode))
-        config = ConfluenceConfig(
-            mode=str(amd_mode),
-            swing_window=int(amd_swing_window),
-            accumulation_lookback=preset_config.accumulation_lookback,
-            manipulation_lookback=preset_config.manipulation_lookback,
-            distribution_lookback=preset_config.distribution_lookback,
-            min_fvg_size=float(amd_min_fvg_size),
-            min_bvg_size=float(amd_min_bvg_size),
-            zone_merge_tolerance=preset_config.zone_merge_tolerance,
-            zone_fresh_bars=int(amd_zone_fresh_bars),
-            min_zone_reaction=preset_config.min_zone_reaction,
-            retest_tolerance_pct=float(amd_retest_tolerance_pct),
-            max_retest_bars=int(amd_max_retest_bars),
-            rr_ratio=float(rr_ratio),
-            trailing_sl_pct=float(trailing_sl_pct),
-            duplicate_signal_cooldown_bars=preset_config.duplicate_signal_cooldown_bars,
-            min_score_conservative=float(amd_min_score_conservative),
-            min_score_balanced=float(amd_min_score_balanced),
-            min_score_aggressive=float(amd_min_score_aggressive),
-            allow_secondary_entries=preset_config.allow_secondary_entries,
-            max_trades_per_day=preset_config.max_trades_per_day,
-        )
-        rows = generate_amd_fvg_sd_trades(candles, capital=float(capital), risk_pct=float(risk_pct), rr_ratio=float(rr_ratio), config=config)
-        rows = attach_option_strikes(rows, strike_step=int(strike_step), moneyness=str(moneyness), steps=int(strike_steps))
-        return _attach_option_metrics(rows, str(symbol), bool(fetch_option_metrics))
-
-    if strategy == "Indicator":
-        raw_rows = generate_indicator_rows(_df_to_candles(candles), config=IndicatorConfig())
-        mapped: list[dict[str, object]] = []
-        for row in raw_rows:
-            item = dict(row)
-            signal = str(item.get("market_signal", "")).upper()
-            item["side"] = "BUY" if signal in {"BULLISH_TREND", "OVERSOLD", "BUY", "LONG"} else "SELL" if signal in {"BEARISH_TREND", "OVERBOUGHT", "SELL", "SHORT"} else ""
-            item.setdefault("entry_price", item.get("close", item.get("price", 0.0)))
-            item.setdefault("timestamp", item.get("timestamp", ""))
-            item.setdefault("strategy", "INDICATOR")
-            mapped.append(item)
-        rows = _attach_indicator_trade_levels(mapped, rr_ratio=float(rr_ratio), trailing_sl_pct=float(trailing_sl_pct))
-        rows = attach_option_strikes(rows, strike_step=int(strike_step), moneyness=str(moneyness), steps=int(strike_steps))
-        return _attach_option_metrics(rows, str(symbol), bool(fetch_option_metrics))
-
     context = StrategyContext(
         strategy=strategy,
         candles=candles,
@@ -225,6 +182,16 @@ def run_strategy(
         mtf_setup_mode=str(mtf_setup_mode),
         mtf_retest_strength=bool(mtf_retest_strength),
         mtf_max_trades_per_day=int(mtf_max_trades_per_day),
+        amd_mode=str(amd_mode),
+        amd_swing_window=int(amd_swing_window),
+        amd_min_fvg_size=float(amd_min_fvg_size),
+        amd_min_bvg_size=float(amd_min_bvg_size),
+        amd_zone_fresh_bars=int(amd_zone_fresh_bars),
+        amd_retest_tolerance_pct=float(amd_retest_tolerance_pct),
+        amd_max_retest_bars=int(amd_max_retest_bars),
+        amd_min_score_conservative=float(amd_min_score_conservative),
+        amd_min_score_balanced=float(amd_min_score_balanced),
+        amd_min_score_aggressive=float(amd_min_score_aggressive),
     )
     return run_strategy_workflow(
         context,
@@ -233,6 +200,7 @@ def run_strategy(
         indicator_generator=generate_indicator_rows,
         one_trade_generator=generate_one_trade_day_trades,
         mtf_generator=generate_mtf_trade_trades,
+        amd_generator=generate_amd_fvg_sd_trades,
         attach_levels_fn=_attach_indicator_trade_levels,
         attach_option_strikes_fn=attach_option_strikes,
         attach_option_metrics_fn=_attach_option_metrics,
@@ -243,7 +211,23 @@ def _strategy_callable(strategy: str, symbol: str) -> Callable[[pd.DataFrame, fl
     mapping: dict[str, Callable[[pd.DataFrame, float, float, float, Any], list[dict[str, object]]]] = {
         "Breakout": generate_breakout_trades,
         "Demand Supply": generate_demand_supply_trades,
-        "AMD + FVG + Supply/Demand": generate_amd_fvg_sd_trades,
+        "AMD + FVG + Supply/Demand": lambda df, capital, risk_pct, rr_ratio, config=None: run_strategy(
+            strategy="AMD + FVG + Supply/Demand",
+            candles=df,
+            capital=capital,
+            risk_pct=risk_pct * 100 if risk_pct <= 1 else risk_pct,
+            rr_ratio=rr_ratio,
+            trailing_sl_pct=0.0,
+            symbol=symbol,
+            strike_step=50,
+            moneyness="ATM",
+            strike_steps=0,
+            fetch_option_metrics=False,
+            mtf_ema_period=3,
+            mtf_setup_mode="either",
+            mtf_retest_strength=True,
+            mtf_max_trades_per_day=3,
+        ),
         "Indicator": lambda df, capital, risk_pct, rr_ratio, config=None: run_strategy(
             strategy="Indicator",
             candles=df,

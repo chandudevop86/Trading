@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import hashlib
@@ -25,6 +25,7 @@ from src.brokers import (
 from src.csv_io import read_csv_rows
 from src.trading_core import append_log
 from src.strategy_tuning import normalize_strategy_key
+from src.runtime_persistence import persist_row, persist_rows
 
 DEFAULT_LOT_SIZES = {
     "NIFTY": 65,
@@ -811,13 +812,16 @@ def _append_order_history(path: Path, record: dict[str, object]) -> None:
             writer.writeheader()
             writer.writerows(existing_rows)
             writer.writerow(record)
-        return
-    with path.open("a", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(record)
-
+    else:
+        with path.open("a", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(record)
+    try:
+        persist_row(path, record)
+    except Exception:
+        pass
 def _mark_skipped(result: ExecutionResult, row: dict[str, object], reason: str) -> None:
     skipped = dict(row)
     if reason.startswith("DUPLICATE_"):
@@ -872,13 +876,16 @@ def _write_execution_rows(path: Path, rows_to_write: list[dict[str, object]]) ->
             writer.writeheader()
             writer.writerows(existing_rows)
             writer.writerows(rows_to_write)
-        return
-    with path.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerows(rows_to_write)
-
+    else:
+        with path.open("a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            if not file_exists:
+                writer.writeheader()
+            writer.writerows(rows_to_write)
+    try:
+        persist_rows(path, rows_to_write, write_mode='append')
+    except Exception:
+        pass
 def execution_result_summary(result: ExecutionResult) -> list[tuple[str, str]]:
     messages: list[tuple[str, str]] = []
     if result.executed_count:

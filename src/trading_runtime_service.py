@@ -21,6 +21,7 @@ from src.strike_selector import attach_option_strikes
 from src.strategy_service import StrategyContext, run_strategy_workflow
 from src.strategy_tuning import normalize_strategy_key, strategy_backtest_config
 from src.trading_core import prepare_trading_data, write_rows
+from src.runtime_persistence import load_current_rows, load_latest_batch_rows
 
 DATA_DIR = Path("data")
 OHLCV_OUTPUT = DATA_DIR / "ohlcv.csv"
@@ -284,6 +285,9 @@ def _refresh_paper_trade_summary(candles: pd.DataFrame, capital: float) -> dict[
 
 
 def _load_csv_rows(path: Path) -> list[dict[str, object]]:
+    db_rows = load_current_rows(path)
+    if db_rows:
+        return [dict(row) for row in db_rows]
     if not path.exists() or path.stat().st_size == 0:
         return []
     try:
@@ -363,12 +367,18 @@ def todays_trade_count(path: Path, strategy: str, symbol: str, execution_type: s
 
 
 def _latest_optimizer_gate(strategy: str) -> tuple[bool, str]:
-    if not OPTIMIZER_OUTPUT.exists() or OPTIMIZER_OUTPUT.stat().st_size == 0:
-        return False, "optimizer report missing"
-    try:
-        frame = pd.read_csv(OPTIMIZER_OUTPUT)
-    except Exception:
-        return False, "optimizer report unreadable"
+    rows = load_current_rows(OPTIMIZER_OUTPUT) or load_latest_batch_rows(OPTIMIZER_OUTPUT)
+    if not rows:
+        if not OPTIMIZER_OUTPUT.exists() or OPTIMIZER_OUTPUT.stat().st_size == 0:
+            return False, "optimizer report missing"
+        try:
+            frame = pd.read_csv(OPTIMIZER_OUTPUT)
+        except Exception:
+            return False, "optimizer report unreadable"
+        if frame.empty:
+            return False, "optimizer report empty"
+        rows = frame.to_dict(orient="records")
+    frame = pd.DataFrame(rows)
     if frame.empty:
         return False, "optimizer report empty"
     strategy_key = normalize_strategy_key(strategy)

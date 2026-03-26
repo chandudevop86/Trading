@@ -1,8 +1,12 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 set -euo pipefail
 
 APP_DIR=${APP_DIR:-/opt/trading}
 BRANCH=${BRANCH:-main}
+
+export APP_ENV="${APP_ENV:-production}"
+export LEGACY_DEPLOYMENT_TARGET="production"
+python3 -m src.deployment_guard --target production
 
 cd "$APP_DIR"
 git fetch --all --prune

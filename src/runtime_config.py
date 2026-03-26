@@ -154,11 +154,15 @@ class TradingDaemonConfig:
 @dataclass(slots=True)
 class RuntimeConfig:
     app_name: str = os.getenv('APP_NAME', 'trading-system')
-    environment: str = os.getenv('APP_ENV', 'production')
+    environment: str = os.getenv('APP_ENV', 'local')
     paths: AppPaths = field(default_factory=AppPaths)
     aws: AwsConfig = field(default_factory=AwsConfig)
     broker: BrokerRuntimeConfig = field(default_factory=BrokerRuntimeConfig)
     daemon: TradingDaemonConfig = field(default_factory=TradingDaemonConfig)
+
+    @property
+    def local_mode(self) -> bool:
+        return str(self.environment or 'local').strip().lower() in {'local', 'dev', 'development', 'docker', 'test'}
 
     @classmethod
     def load(cls, env_path: str | Path = '.env') -> 'RuntimeConfig':

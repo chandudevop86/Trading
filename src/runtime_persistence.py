@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import os
@@ -81,6 +81,25 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_runtime_records_current_path
         ON runtime_records_current(artifact_path);
+
+        CREATE TABLE IF NOT EXISTS runtime_risk_state_current (
+            artifact_path TEXT NOT NULL,
+            execution_type TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL,
+            PRIMARY KEY(artifact_path, execution_type)
+        );
+
+        CREATE TABLE IF NOT EXISTS runtime_risk_state_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            artifact_path TEXT NOT NULL,
+            execution_type TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            updated_at_utc TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_runtime_risk_state_history_path
+        ON runtime_risk_state_history(artifact_path, execution_type, updated_at_utc DESC);
         '''
     )
     conn.commit()
@@ -186,3 +205,229 @@ def load_latest_batch_rows(path: Path | str, *, db_path: Path | str | None = Non
         if isinstance(payload, dict):
             decoded.append(payload)
     return decoded
+
+
+def _normalize_text(value: object) -> str:
+    return str(value or '').strip().upper()
+
+
+def _safe_float(value: object) -> float:
+    try:
+        if value is None or str(value).strip() == '':
+            return 0.0
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _parse_timestamp(text: object) -> datetime | None:
+    raw = str(text or '').strip()
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw)
+    except ValueError:
+        dt = None
+    if dt is None:
+        for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M'):
+            try:
+                dt = datetime.strptime(raw, fmt)
+                break
+            except ValueError:
+                continue
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(UTC).replace(tzinfo=None)
+    return dt
+
+
+def _row_is_closed(row: dict[str, Any]) -> bool:
+    status = _normalize_text(row.get('trade_status'))
+    position_status = _normalize_text(row.get('position_status'))
+    execution_status = _normalize_text(row.get('execution_status'))
+    return status == 'CLOSED' or position_status == 'CLOSED' or execution_status in {'CLOSED', 'EXITED'}
+
+
+def _row_is_active(row: dict[str, Any]) -> bool:
+    if _row_is_closed(row):
+        return False
+    status = _normalize_text(row.get('trade_status'))
+    if status in {'REVIEWED', 'PENDING_EXECUTION', 'EXECUTED', 'OPEN'}:
+        return True
+    return _normalize_text(row.get('execution_status')) in {'EXECUTED', 'SENT', 'FILLED'}
+
+
+def _timeframe_key(row: dict[str, Any]) -> str:
+    return str(row.get('timeframe', row.get('interval', '')) or '').strip().lower() or 'na'
+
+
+def _signal_time_text(row: dict[str, Any]) -> str:
+    return str(row.get('signal_time', row.get('entry_time', row.get('timestamp', ''))) or '').strip()
+
+
+def _duplicate_signal_key(row: dict[str, Any]) -> str:
+    strategy = _normalize_text(row.get('strategy', 'TRADE_BOT'))
+    symbol = _normalize_text(row.get('symbol', 'UNKNOWN'))
+    side = _normalize_text(row.get('side'))
+    return '|'.join([strategy, symbol, _timeframe_key(row), _signal_time_text(row), side])
+
+
+def _cooldown_group_key(row: dict[str, Any]) -> str:
+    strategy = _normalize_text(row.get('strategy', 'TRADE_BOT'))
+    symbol = _normalize_text(row.get('symbol', 'UNKNOWN'))
+    side = _normalize_text(row.get('side'))
+    return '|'.join([strategy, symbol, _timeframe_key(row), side])
+
+
+def _trade_day_key(row: dict[str, Any]) -> str:
+    ts = (
+        _parse_timestamp(row.get('signal_time'))
+        or _parse_timestamp(row.get('entry_time'))
+        or _parse_timestamp(row.get('timestamp'))
+        or _parse_timestamp(row.get('executed_at_utc'))
+    )
+    if ts is None:
+        return str(row.get('executed_at_utc', '') or '')[:10]
+    return ts.strftime('%Y-%m-%d')
+
+
+def build_execution_risk_state(rows: list[dict[str, Any]], execution_type: str) -> dict[str, Any]:
+    normalized_execution_type = _normalize_text(execution_type)
+    historical_trade_ids: set[str] = set()
+    active_trade_keys: set[str] = set()
+    active_duplicate_signal_keys: set[str] = set()
+    recent_signal_times: dict[str, str] = {}
+    daily_state: dict[str, dict[str, float]] = {}
+    open_trade_count = 0
+
+    for raw_row in rows:
+        row = dict(raw_row)
+        if _normalize_text(row.get('execution_type')) != normalized_execution_type:
+            continue
+
+        trade_id = str(row.get('trade_id', '') or '').strip()
+        if trade_id:
+            historical_trade_ids.add(trade_id)
+
+        if _row_is_active(row):
+            trade_key = str(row.get('trade_key', '') or '').strip()
+            if trade_key:
+                active_trade_keys.add(trade_key)
+            duplicate_signal_key = str(row.get('duplicate_signal_key', '') or '').strip() or _duplicate_signal_key(row)
+            if duplicate_signal_key:
+                active_duplicate_signal_keys.add(duplicate_signal_key)
+            open_trade_count += 1
+
+        signal_time = (
+            _parse_timestamp(row.get('signal_time'))
+            or _parse_timestamp(row.get('entry_time'))
+            or _parse_timestamp(row.get('timestamp'))
+        )
+        if signal_time is not None:
+            group_key = _cooldown_group_key(row)
+            current = recent_signal_times.get(group_key)
+            signal_time_text = signal_time.strftime('%Y-%m-%d %H:%M:%S')
+            if current is None or signal_time_text > current:
+                recent_signal_times[group_key] = signal_time_text
+
+        if _row_is_closed(row):
+            continue
+        if _normalize_text(row.get('execution_status')) not in {'EXECUTED', 'SENT', 'FILLED'} and _normalize_text(row.get('trade_status')) not in {'EXECUTED', 'OPEN', 'PENDING_EXECUTION'}:
+            continue
+        day_key = _trade_day_key(row)
+        if not day_key:
+            continue
+        bucket = daily_state.setdefault(day_key, {'count': 0.0, 'realized_pnl': 0.0})
+        bucket['count'] += 1.0
+        bucket['realized_pnl'] += _safe_float(row.get('pnl'))
+
+    return {
+        'artifact_path': '',
+        'execution_type': normalized_execution_type,
+        'historical_trade_ids': sorted(historical_trade_ids),
+        'active_trade_keys': sorted(active_trade_keys),
+        'active_duplicate_signal_keys': sorted(active_duplicate_signal_keys),
+        'recent_signal_times': recent_signal_times,
+        'open_trade_count': int(open_trade_count),
+        'daily_state': daily_state,
+    }
+
+
+def save_execution_risk_state(
+    path: Path | str,
+    execution_type: str,
+    state: dict[str, Any],
+    *,
+    db_path: Path | str | None = None,
+) -> dict[str, Any]:
+    artifact_path = str(Path(path))
+    normalized_state = dict(state)
+    normalized_state['artifact_path'] = artifact_path
+    normalized_state['execution_type'] = _normalize_text(execution_type)
+    payload_json = json.dumps(normalized_state, ensure_ascii=True, sort_keys=True, default=str)
+    updated_at = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    conn = _connect(db_path)
+    try:
+        with conn:
+            conn.execute(
+                'INSERT INTO runtime_risk_state_history(artifact_path, execution_type, payload_json, updated_at_utc) VALUES (?, ?, ?, ?)',
+                (artifact_path, normalized_state['execution_type'], payload_json, updated_at),
+            )
+            conn.execute(
+                '''
+                INSERT INTO runtime_risk_state_current(artifact_path, execution_type, payload_json, updated_at_utc)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(artifact_path, execution_type)
+                DO UPDATE SET payload_json = excluded.payload_json, updated_at_utc = excluded.updated_at_utc
+                ''',
+                (artifact_path, normalized_state['execution_type'], payload_json, updated_at),
+            )
+    finally:
+        conn.close()
+    return normalized_state
+
+
+def refresh_execution_risk_state(
+    path: Path | str,
+    execution_type: str,
+    *,
+    db_path: Path | str | None = None,
+) -> dict[str, Any]:
+    rows = load_current_rows(path, db_path=db_path)
+    state = build_execution_risk_state(rows, execution_type)
+    return save_execution_risk_state(path, execution_type, state, db_path=db_path)
+
+
+def load_execution_risk_state(
+    path: Path | str,
+    execution_type: str,
+    *,
+    db_path: Path | str | None = None,
+) -> dict[str, Any]:
+    artifact_path = str(Path(path))
+    normalized_execution_type = _normalize_text(execution_type)
+    conn = _connect(db_path)
+    try:
+        row = conn.execute(
+            'SELECT payload_json FROM runtime_risk_state_current WHERE artifact_path = ? AND execution_type = ?',
+            (artifact_path, normalized_execution_type),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is not None:
+        try:
+            payload = json.loads(str(row[0]))
+        except Exception:
+            payload = None
+        if isinstance(payload, dict):
+            payload.setdefault('artifact_path', artifact_path)
+            payload.setdefault('execution_type', normalized_execution_type)
+            payload.setdefault('historical_trade_ids', [])
+            payload.setdefault('active_trade_keys', [])
+            payload.setdefault('active_duplicate_signal_keys', [])
+            payload.setdefault('recent_signal_times', {})
+            payload.setdefault('open_trade_count', 0)
+            payload.setdefault('daily_state', {})
+            return payload
+    return refresh_execution_risk_state(path, normalized_execution_type, db_path=db_path)

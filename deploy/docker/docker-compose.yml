@@ -1,4 +1,4 @@
-version: "3.9"
+﻿version: "3.9"
 
 services:
   intratrade:
@@ -10,6 +10,8 @@ services:
     ports:
       - "8501:8501"
     environment:
+      APP_ENV: "local"
+      LEGACY_DEPLOYMENT_TARGET: "local"
       STREAMLIT_SERVER_PORT: "8501"
       STREAMLIT_SERVER_ADDRESS: "0.0.0.0"
       AWS_DEFAULT_REGION: "ap-south-1"

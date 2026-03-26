@@ -1,9 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
-import math
 import os
 import sys
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -21,7 +19,8 @@ from src.indicator_bot import generate_indicator_rows
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.strike_selector import attach_option_strikes
 from src.trading_core import append_log, configure_file_logging
-from src.trading_runtime_service import TradingActionRequest, latest_actionable_trades, period_for_interval, run_operator_action
+from src.trading_runtime_service import latest_actionable_trades, period_for_interval, run_operator_action
+from src.trading_ui_service import apply_minimal_theme, build_request, initialize_ui_runtime, log_ui_event, render_operator_panels, render_summary_cards
 
 DATA_DIR = Path('data')
 LOG_DIR = Path('logs')
@@ -68,161 +67,44 @@ def run_strategy(**kwargs):
     return trading_runtime_service.run_strategy(**kwargs)
 
 
-def _append_text_log(path: Path, message: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    with path.open('a', encoding='utf-8') as handle:
-        handle.write(f'[{stamp}] {message}\n')
-
-
 def _ensure_output_files() -> None:
-    for path in [
-        OHLCV_OUTPUT,
-        LIVE_OHLCV_OUTPUT,
-        TRADES_OUTPUT,
-        SIGNAL_OUTPUT,
-        EXECUTED_TRADES_OUTPUT,
-        PAPER_LOG_OUTPUT,
-        LIVE_LOG_OUTPUT,
-        BACKTEST_TRADES_OUTPUT,
-        BACKTEST_SUMMARY_OUTPUT,
-        BACKTEST_RESULTS_OUTPUT,
-        ORDER_HISTORY_OUTPUT,
-        PAPER_ORDER_HISTORY_OUTPUT,
-    ]:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists():
-            pd.DataFrame().to_csv(path, index=False)
-    for path in [APP_LOG, BROKER_LOG, EXECUTION_LOG, REJECTIONS_LOG, ERRORS_LOG]:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.touch(exist_ok=True)
-
-
-def _safe_float(value: object, default: float = 0.0) -> float:
-    try:
-        if value is None or str(value).strip() == '':
-            return default
-        parsed = float(value)
-        if math.isnan(parsed) or math.isinf(parsed):
-            return default
-        return parsed
-    except (TypeError, ValueError):
-        return default
-
-
-def _safe_int(value: object, default: int = 0) -> int:
-    try:
-        if value is None or str(value).strip() == '':
-            return default
-        return int(float(value))
-    except (TypeError, ValueError):
-        return default
-
-
-def _recent_trade_summary(trades: list[dict[str, object]]) -> str:
-    if not trades:
-        return 'No recent trade generated.'
-    last = dict(trades[-1])
-    return (
-        f"{last.get('side', 'NA')} {last.get('strategy', 'TRADE')} | "
-        f"Entry {float(last.get('entry', last.get('entry_price', 0.0)) or 0.0):.2f} | "
-        f"SL {float(last.get('stop_loss', 0.0) or 0.0):.2f} | "
-        f"Target {float(last.get('target', last.get('target_price', 0.0)) or 0.0):.2f} | "
-        f"Score {float(last.get('score', 0.0) or 0.0):.2f}"
+    initialize_ui_runtime(
+        [
+            OHLCV_OUTPUT,
+            LIVE_OHLCV_OUTPUT,
+            TRADES_OUTPUT,
+            SIGNAL_OUTPUT,
+            EXECUTED_TRADES_OUTPUT,
+            PAPER_LOG_OUTPUT,
+            LIVE_LOG_OUTPUT,
+            BACKTEST_TRADES_OUTPUT,
+            BACKTEST_SUMMARY_OUTPUT,
+            BACKTEST_RESULTS_OUTPUT,
+            ORDER_HISTORY_OUTPUT,
+            PAPER_ORDER_HISTORY_OUTPUT,
+        ],
+        [APP_LOG, BROKER_LOG, EXECUTION_LOG, REJECTIONS_LOG, ERRORS_LOG],
     )
-
-
-def _short_broker_status(broker_choice: str, broker_status: str) -> str:
-    if broker_choice == 'Dhan Live':
-        return 'Dhan live active' if 'armed' in broker_status.lower() else broker_status
-    return 'Paper broker active'
 
 
 def _minimal_theme() -> None:
-    st.set_page_config(page_title='Trading Desk', page_icon='chart', layout='wide')
-    st.markdown(
-        '''
-        <style>
-        [data-testid="stAppViewContainer"] {
-            background: linear-gradient(180deg, #08111a 0%, #0b1724 100%);
-        }
-        .main .block-container {max-width: 960px; padding-top: 1.75rem;}
-        [data-testid="stMetric"] {
-            background: rgba(15, 23, 42, 0.92);
-            border: 1px solid rgba(148, 163, 184, 0.18);
-            border-radius: 14px;
-            padding: 8px;
-        }
-        .desk-card {
-            background: rgba(15, 23, 42, 0.9);
-            border: 1px solid rgba(148, 163, 184, 0.16);
-            border-radius: 18px;
-            padding: 16px;
-            margin-bottom: 14px;
-        }
-        .desk-label {color:#94a3b8; font-size:0.86rem; margin-bottom:0.35rem;}
-        .desk-value {color:#e2e8f0; font-size:1.02rem;}
-        </style>
-        ''',
-        unsafe_allow_html=True,
-    )
+    apply_minimal_theme()
 
 
 def _render_summary_cards(trades: list[dict[str, object]], summary: dict[str, object], todays_trades: int) -> None:
-    total_trades = _safe_int(summary.get('total_trades', 0))
-    win_rate = _safe_float(summary.get('win_rate', 0.0))
-    pnl = _safe_float(summary.get('total_pnl', summary.get('pnl', 0.0)))
-    last_signal = str(trades[-1].get('side', 'NONE')) if trades else 'NONE'
-    profit_factor = summary.get('profit_factor', 0.0)
-    avg_win = _safe_float(summary.get('avg_win', 0.0))
-    avg_loss = _safe_float(summary.get('avg_loss', 0.0))
-    max_drawdown = _safe_float(summary.get('max_drawdown', 0.0))
-
-    row_one = st.columns(5)
-    row_one[0].metric('Total Trades', str(total_trades))
-    row_one[1].metric('Win Rate', f'{win_rate:.2f}%')
-    row_one[2].metric('PnL', f'{pnl:.2f}')
-    row_one[3].metric('Last Signal', last_signal)
-    row_one[4].metric('Profit Factor', str(profit_factor))
-
-    row_two = st.columns(4)
-    row_two[0].metric('Avg Win', f'{avg_win:.2f}')
-    row_two[1].metric('Avg Loss', f'{avg_loss:.2f}')
-    row_two[2].metric('Max Drawdown', f'{max_drawdown:.2f}')
-    row_two[3].metric("Today's Trades", str(todays_trades))
+    render_summary_cards(trades, summary, todays_trades)
 
 
 def _render_operator_panels(status: str, trades: list[dict[str, object]], symbol: str, timeframe: str, period: str, broker_choice: str, broker_status: str) -> None:
-    st.markdown('<div class="desk-card">', unsafe_allow_html=True)
-    st.markdown('<div class="desk-label">Current Status</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="desk-value">{status}</div>', unsafe_allow_html=True)
-    st.caption(f'Symbol={symbol} | Timeframe={timeframe} | Fetch window={period}')
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="desk-card">', unsafe_allow_html=True)
-    st.markdown('<div class="desk-label">Broker Status</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="desk-value">{broker_choice} | {_short_broker_status(broker_choice, broker_status)}</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="desk-card">', unsafe_allow_html=True)
-    st.markdown('<div class="desk-label">Recent Trade Summary</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="desk-value">{_recent_trade_summary(trades)}</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    render_operator_panels(status, trades, symbol, timeframe, period, broker_choice, broker_status)
 
 
-def _build_request(strategy: str, symbol: str, timeframe: str, capital: float, risk_pct: float, rr_ratio: float, mode: str, broker_choice: str, run_clicked: bool, backtest_clicked: bool) -> TradingActionRequest:
-    return TradingActionRequest(
-        strategy=strategy,
-        symbol=symbol,
-        timeframe=timeframe,
-        capital=float(capital),
-        risk_pct=float(risk_pct),
-        rr_ratio=float(rr_ratio),
-        mode=mode,
-        broker_choice=broker_choice,
-        run_requested=bool(run_clicked),
-        backtest_requested=bool(backtest_clicked),
-    )
+def _build_request(strategy: str, symbol: str, timeframe: str, capital: float, risk_pct: float, rr_ratio: float, mode: str, broker_choice: str, run_clicked: bool, backtest_clicked: bool):
+    return build_request(strategy, symbol, timeframe, capital, risk_pct, rr_ratio, mode, broker_choice, run_clicked, backtest_clicked)
+
+
+def _append_text_log(path: Path, message: str) -> None:
+    log_ui_event(path, message)
 
 
 def _latest_actionable_trades(trades: list[dict[str, object]]) -> list[dict[str, object]]:

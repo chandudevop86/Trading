@@ -13,15 +13,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+import src.trading_runtime_service as trading_runtime_service
+from src.amd_fvg_sd_bot import generate_trades as generate_amd_fvg_sd_trades
+from src.breakout_bot import generate_trades as generate_breakout_trades
+from src.demand_supply_bot import generate_trades as generate_demand_supply_trades
+from src.indicator_bot import generate_indicator_rows
+from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
+from src.strike_selector import attach_option_strikes
 from src.trading_core import append_log, configure_file_logging
-from src.trading_runtime_service import (
-    TradingActionRequest,
-    fetch_ohlcv_data,
-    latest_actionable_trades,
-    period_for_interval,
-    run_operator_action,
-    run_strategy,
-)
+from src.trading_runtime_service import TradingActionRequest, latest_actionable_trades, period_for_interval, run_operator_action
 
 DATA_DIR = Path('data')
 LOG_DIR = Path('logs')
@@ -49,6 +49,23 @@ STRATEGY_OPTIONS = ['Breakout', 'Demand Supply', 'Indicator', 'One Trade/Day', '
 BROKER_OPTIONS = ['Paper', 'Dhan Live']
 
 configure_file_logging()
+
+_attach_option_metrics = trading_runtime_service._attach_option_metrics
+
+
+def fetch_ohlcv_data(symbol: str, interval: str = DEFAULT_INTERVAL, period: str = trading_runtime_service.DEFAULT_PERIOD) -> pd.DataFrame:
+    return trading_runtime_service.fetch_ohlcv_data(symbol, interval=interval, period=period)
+
+
+def run_strategy(**kwargs):
+    trading_runtime_service.generate_breakout_trades = generate_breakout_trades
+    trading_runtime_service.generate_demand_supply_trades = generate_demand_supply_trades
+    trading_runtime_service.generate_amd_fvg_sd_trades = generate_amd_fvg_sd_trades
+    trading_runtime_service.generate_indicator_rows = generate_indicator_rows
+    trading_runtime_service.generate_mtf_trade_trades = generate_mtf_trade_trades
+    trading_runtime_service.attach_option_strikes = attach_option_strikes
+    trading_runtime_service._attach_option_metrics = _attach_option_metrics
+    return trading_runtime_service.run_strategy(**kwargs)
 
 
 def _append_text_log(path: Path, message: str) -> None:

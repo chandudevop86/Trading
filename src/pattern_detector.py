@@ -1,4 +1,6 @@
-import pandas as pd
+﻿import pandas as pd
+
+from src.legacy_scope import fail_noncanonical_entrypoint
 
 
 def is_base(candle):
@@ -34,41 +36,18 @@ def detect_patterns(df):
         raise ValueError(f"Missing required columns: {missing}")
 
     for i in range(2, len(df)):
-        c1 = df.iloc[i - 2]   # first candle
-        c2 = df.iloc[i - 1]   # base candle
-        c3 = df.iloc[i]       # third candle
+        c1 = df.iloc[i - 2]
+        c2 = df.iloc[i - 1]
+        c3 = df.iloc[i]
 
-        # RBR = Rally Base Rally
         if is_rally(c1) and is_base(c2) and is_rally(c3):
-            patterns.append({
-                "index": i,
-                "pattern": "RBR",
-                "price": float(c3["close"]),
-            })
-
-        # DBR = Drop Base Rally
+            patterns.append({"index": i, "pattern": "RBR", "price": float(c3["close"])})
         elif is_drop(c1) and is_base(c2) and is_rally(c3):
-            patterns.append({
-                "index": i,
-                "pattern": "DBR",
-                "price": float(c3["close"]),
-            })
-
-        # RBD = Rally Base Drop
+            patterns.append({"index": i, "pattern": "DBR", "price": float(c3["close"])})
         elif is_rally(c1) and is_base(c2) and is_drop(c3):
-            patterns.append({
-                "index": i,
-                "pattern": "RBD",
-                "price": float(c3["close"]),
-            })
-
-        # DBD = Drop Base Drop
+            patterns.append({"index": i, "pattern": "RBD", "price": float(c3["close"])})
         elif is_drop(c1) and is_base(c2) and is_drop(c3):
-            patterns.append({
-                "index": i,
-                "pattern": "DBD",
-                "price": float(c3["close"]),
-            })
+            patterns.append({"index": i, "pattern": "DBD", "price": float(c3["close"])})
 
     return patterns
 
@@ -82,35 +61,12 @@ def generate_trades(df, patterns):
         price = df.iloc[index]["close"]
 
         if pattern_type in ["RBR", "DBR"]:
-            trades.append({
-                "type": "BUY",
-                "price": float(price),
-                "pattern": pattern_type,
-                "index": index,
-            })
-
+            trades.append({"type": "BUY", "price": float(price), "pattern": pattern_type, "index": index})
         elif pattern_type in ["RBD", "DBD"]:
-            trades.append({
-                "type": "SELL",
-                "price": float(price),
-                "pattern": pattern_type,
-                "index": index,
-            })
+            trades.append({"type": "SELL", "price": float(price), "pattern": pattern_type, "index": index})
 
     return trades
 
 
 if __name__ == "__main__":
-    df = pd.read_csv("live_ohlcv.csv")
-    df.columns = df.columns.str.lower()
-
-    patterns = detect_patterns(df)
-    trades = generate_trades(df, patterns)
-
-    print("Patterns found:")
-    for p in patterns:
-        print(p)
-
-    print("\nTrades generated:")
-    for t in trades:
-        print(t)
+    fail_noncanonical_entrypoint("src/pattern_detector.py", canonical="src/Trading.py")

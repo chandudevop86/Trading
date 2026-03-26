@@ -1,0 +1,282 @@
+MONOLITHIC TO MICROSERVICES CONVERSION REPORT
+
+Date: 2026-03-26
+Scope: Migration of the legacy trading project under F:\Trading\src toward
+a microservices architecture
+Related legacy analysis: F:\Trading\docs\legacy_src_gap_analysis.md
+
+EXECUTIVE SUMMARY
+
+The current legacy trading project is feature-rich but structurally
+monolithic. The best path forward is not a direct full rewrite in one step.
+It is a controlled migration from the current src/ monolith into a
+service-oriented platform with clear ownership boundaries, durable
+persistence, safer execution controls, and better operational scalability.
+
+This report focuses on requirements for converting the monolith to
+microservices, the current gap analysis, migration bottlenecks, recommended
+implementation steps, and the target operating model.
+
+The recommended strategy is a staged strangler-style migration. Keep the
+monolith stable, extract bounded capabilities one by one, and move critical
+state off CSV and local-process coupling before attempting true scale-out.
+
+MIGRATION GOAL
+
+The migration should transform the current monolithic trading application
+into a platform where:
+- services have clear responsibilities
+- execution-critical state is durable and auditable
+- live trading controls are isolated from UI concerns
+- market data, strategy analysis, execution, reporting, and notification
+  pipelines can evolve independently
+- deployment can scale more safely than the current single-runtime model
+
+CURRENT MONOLITHIC BASELINE
+
+The old application currently provides:
+- Streamlit operator UI
+- multiple strategy execution paths
+- backtesting and strategy ranking
+- paper and optional live Dhan execution
+- Telegram notification flow
+- file-based logs and CSV-ledger outputs
+- automation scripts and deployment assets
+
+TARGET MICROSERVICES REQUIREMENTS
+
+Functional requirements
+- API gateway or web layer for a single entrypoint
+- auth and access control for operator and admin actions
+- market data service for OHLCV and instrument handling
+- strategy service for standardized signal generation
+- backtest service for historical analysis
+- execution service for paper and live order workflows
+- risk service for policy enforcement before execution
+- broker service for Dhan connectivity and reconciliation
+- notification service for Telegram and future channels
+- reporting service for summaries and artifacts
+- audit service for immutable history
+- scheduler or worker service for background jobs
+- config and secret handling outside UI shortcuts
+
+Non-functional requirements
+- reliability through bounded failure domains
+- auditability of critical execution events
+- recovery across process restarts
+- maintainability through service boundaries
+- scalability of non-execution workloads independently
+- stronger security around secrets and trading controls
+- observability per service
+- independent service-level testing
+
+GAP ANALYSIS
+
+1. Service boundaries
+   Current state: Most major workflows are concentrated in one runtime
+   Target state: Each domain owned by a bounded service
+   Gap: Very large structural gap
+   Priority: High
+
+2. Persistence
+   Current state: CSV files act as the practical system of record
+   Target state: DB-backed transactional persistence
+   Gap: Very large operational gap
+   Priority: High
+
+3. Execution isolation
+   Current state: UI and orchestration are closely linked
+   Target state: Execution service isolated from UI
+   Gap: High risk gap
+   Priority: High
+
+4. Risk controls
+   Current state: Present, but tied to file history and shared runtime
+   Target state: Risk service with durable state checks
+   Gap: High reliability gap
+   Priority: High
+
+5. Broker abstraction
+   Current state: Dhan integration exists inside the monolith
+   Target state: Dedicated broker integration boundary
+   Gap: Medium to high gap
+   Priority: High
+
+6. Market data
+   Current state: Data fetching is embedded in broader runtime flows
+   Target state: Dedicated data service with cache and contracts
+   Gap: Medium gap
+   Priority: Medium
+
+7. Notifications
+   Current state: Telegram is part of the main workflow path
+   Target state: Event-driven notification service
+   Gap: Medium gap
+   Priority: Medium
+
+8. Reporting
+   Current state: Reports are generated locally and stored ad hoc
+   Target state: Report service with structured artifact storage
+   Gap: Medium gap
+   Priority: Medium
+
+9. Authentication
+   Current state: Trusted local operator model dominates
+   Target state: Explicit auth and role model
+   Gap: High security gap
+   Priority: High
+
+10. Deployment
+    Current state: Docker and infra assets exist, but runtime is still
+    monolithic
+    Target state: Service-based deploy topology
+    Gap: High execution mismatch
+    Priority: High
+
+MIGRATION BOTTLENECKS
+
+1. CSV-centric state
+- weak concurrency behavior
+- poor transactional guarantees
+- difficult recovery after partial failures
+- limited auditability
+- unsuitable for horizontally scaled services
+
+2. Centralized orchestration in src/Trading.py
+- UI changes can affect core trading behavior
+- business logic is harder to test independently
+- service extraction becomes slower because responsibilities are mixed
+
+3. Shared runtime assumptions
+- local writable filesystem
+- local logs
+- shared output paths
+- in-process execution sequencing
+
+4. Live execution coupling
+- paper and live execution live too close to the monolith runtime and
+  operator workflow
+
+5. Mixed repository surface
+- old monolith, newer vinayak platform work, snapshots, archived files,
+  and deployment artifacts live together
+
+RECOMMENDED TARGET ARCHITECTURE
+
+Core services
+- Gateway or Admin UI
+- Auth Service
+- Market Data Service
+- Strategy Service
+- Backtest Service
+- Risk Service
+- Execution Service
+- Broker Adapter Service
+- Notification Service
+- Reporting Service
+- Scheduler or Worker Service
+- Audit or Event Service
+
+Shared platform components
+- PostgreSQL
+- Redis
+- Message Bus
+- Object Storage
+- Secrets Manager
+
+IMPLEMENTATION STRATEGY
+
+Phase 0: Stabilize the monolith
+- freeze monolith scope
+- fix failing legacy test baseline
+- identify official entrypoints
+- document current data schemas and runtime outputs
+
+Phase 1: Extract persistence first
+- replace CSV-ledger behavior with database-backed persistence
+- preserve CSV as exports only
+- add normalized tables for signals, executions, orders, reconciliations,
+  and reports
+
+Phase 2: Extract strategy and backtest services
+- move strategy execution behind a service contract
+- move historical backtesting into a separate bounded service
+- keep signal output schemas stable
+
+Phase 3: Extract execution and risk services
+- isolate paper and live execution workflows
+- move risk-policy enforcement into a pre-execution control layer
+- add stronger execution audit states and retries
+
+Phase 4: Extract notification, reporting, and scheduler services
+- move Telegram and future channels out of the critical path
+- move report generation to async workflows
+- separate background jobs from request-response actions
+
+Phase 5: Introduce gateway and auth boundaries
+- place operator UI and API access behind a defined gateway
+- add explicit auth and authorization
+- expose only supported internal service routes
+
+STEP-BY-STEP IMPLEMENTATION PLAN
+
+1. Freeze official monolith entrypoints
+2. Fix the current failing legacy test
+3. Define canonical data models for signals, executions, orders, reports,
+   and audit events
+4. Move CSV-ledger state into PostgreSQL
+5. Keep CSV outputs as generated exports only
+6. Extract strategy execution interface from src/Trading.py
+7. Wrap strategies behind a strategy service contract
+8. Extract backtest workflows into a separate service path
+9. Extract risk policy checks into a pre-execution service
+10. Extract execution engine into a dedicated service
+11. Isolate Dhan integration into a broker adapter boundary
+12. Move notifications to async event-driven processing
+13. Move reporting to artifact and summary services
+14. Add message bus for async workflows
+15. Add Redis for cache, dedupe, and short-lived policy windows
+16. Add gateway, auth, and role-based controls
+17. Decommission monolithic responsibilities incrementally
+
+RISKS DURING MIGRATION
+
+- dual-write inconsistency between CSV and DB
+- logic drift between extracted services and monolith behavior
+- live-trading risk during execution refactors
+- over-fragmentation from too many services too early
+- incomplete observability after splitting services
+
+RECOMMENDED SERVICE EXTRACTION ORDER
+
+1. Persistence layer
+2. Strategy service
+3. Backtest service
+4. Risk service
+5. Execution service
+6. Broker adapter service
+7. Reporting service
+8. Notification service
+9. Scheduler and worker service
+10. Gateway and auth layer
+
+SUCCESS CRITERIA
+
+The migration is successful when:
+- the monolith is no longer the system of record
+- strategy runs can happen without the Streamlit UI
+- execution and risk workflows are isolated from presentation logic
+- live trading is auditable and recoverable through durable state
+- notifications and reports are asynchronous side effects
+- deployment can scale non-execution services independently
+
+FINAL RECOMMENDATION
+
+Do not convert the monolith to microservices by splitting files only.
+Convert it by first separating responsibility, persistence, and operational
+control.
+
+The most important first move is not Kubernetes, not more deployment YAML,
+and not more UI features. The most important first move is replacing
+CSV-based operational state and extracting execution-critical workflows out
+of the monolithic app runtime.

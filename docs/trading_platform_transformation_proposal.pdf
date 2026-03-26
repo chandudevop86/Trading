@@ -1,0 +1,360 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R 12 0 R 14 0 R] /Count 6 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 3298 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (TRADING PLATFORM TRANSFORMATION PROPOSAL) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Date: 2026-03-26) Tj
+1 0 0 1 50 758 Tm (Scope: Current monolithic trading platform under F:\\Trading\\src, target) Tj
+1 0 0 1 50 744 Tm (microservices direction, and migration roadmap) Tj
+1 0 0 1 50 730 Tm () Tj
+1 0 0 1 50 716 Tm (EXECUTIVE SUMMARY) Tj
+1 0 0 1 50 702 Tm () Tj
+1 0 0 1 50 688 Tm (The current trading platform is a capable monolithic application with) Tj
+1 0 0 1 50 674 Tm (meaningful real-world functionality already in place. It supports) Tj
+1 0 0 1 50 660 Tm (market-data ingestion, multiple strategies, backtesting, paper execution,) Tj
+1 0 0 1 50 646 Tm (optional live Dhan execution, operator workflows, and reporting.) Tj
+1 0 0 1 50 632 Tm () Tj
+1 0 0 1 50 618 Tm (Its main limitation is not feature coverage. Its main limitation is) Tj
+1 0 0 1 50 604 Tm (structural concentration. The current platform depends heavily on one) Tj
+1 0 0 1 50 590 Tm (application runtime, shared local file state, and CSV-led operational) Tj
+1 0 0 1 50 576 Tm (records. That creates risk around maintainability, auditability, recovery,) Tj
+1 0 0 1 50 562 Tm (and safe production scaling.) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm (The recommended direction is a staged transformation from the current) Tj
+1 0 0 1 50 520 Tm (monolith into a bounded microservices platform. This should not be executed) Tj
+1 0 0 1 50 506 Tm (as a big-bang rewrite. It should be done through a controlled migration that) Tj
+1 0 0 1 50 492 Tm (first stabilizes the monolith, moves critical state into durable) Tj
+1 0 0 1 50 478 Tm (persistence, and then extracts services in a risk-aware order.) Tj
+1 0 0 1 50 464 Tm () Tj
+1 0 0 1 50 450 Tm (CURRENT-STATE OVERVIEW) Tj
+1 0 0 1 50 436 Tm () Tj
+1 0 0 1 50 422 Tm (The current src/ platform already provides:) Tj
+1 0 0 1 50 408 Tm (- a Streamlit-based operator console) Tj
+1 0 0 1 50 394 Tm (- multiple strategy execution paths) Tj
+1 0 0 1 50 380 Tm (- market-data retrieval and normalization) Tj
+1 0 0 1 50 366 Tm (- historical backtesting and strategy comparison) Tj
+1 0 0 1 50 352 Tm (- paper trading execution) Tj
+1 0 0 1 50 338 Tm (- optional live Dhan trading flow) Tj
+1 0 0 1 50 324 Tm (- Telegram notification support) Tj
+1 0 0 1 50 310 Tm (- automation scripts and deployment assets) Tj
+1 0 0 1 50 296 Tm () Tj
+1 0 0 1 50 282 Tm (Strengths) Tj
+1 0 0 1 50 268 Tm (- strong feature breadth for a single application) Tj
+1 0 0 1 50 254 Tm (- practical trading workflow support) Tj
+1 0 0 1 50 240 Tm (- meaningful execution safeguards already exist) Tj
+1 0 0 1 50 226 Tm (- good legacy test coverage) Tj
+1 0 0 1 50 212 Tm (- usable operator-facing workflow) Tj
+1 0 0 1 50 198 Tm () Tj
+1 0 0 1 50 184 Tm (Weaknesses) Tj
+1 0 0 1 50 170 Tm (- too much responsibility is centralized in one runtime path) Tj
+1 0 0 1 50 156 Tm (- local CSV files behave like the practical system of record) Tj
+1 0 0 1 50 142 Tm (- UI, orchestration, reporting, and execution concerns are closely coupled) Tj
+1 0 0 1 50 128 Tm (- production-style deployment ambition exceeds runtime maturity) Tj
+1 0 0 1 50 114 Tm (- audit and recovery controls are not yet strong enough for a more serious) Tj
+1 0 0 1 50 100 Tm (  live-trading posture) Tj
+1 0 0 1 50 86 Tm () Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2838 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (AS-IS ASSESSMENT) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (1. Product runtime) Tj
+1 0 0 1 50 758 Tm (   As-is state: Monolithic application) Tj
+1 0 0 1 50 744 Tm (   Business impact: Faster early delivery, but harder long-term change) Tj
+1 0 0 1 50 730 Tm (   control) Tj
+1 0 0 1 50 716 Tm () Tj
+1 0 0 1 50 702 Tm (2. UI layer) Tj
+1 0 0 1 50 688 Tm (   As-is state: Streamlit UI also orchestrates workflows) Tj
+1 0 0 1 50 674 Tm (   Business impact: User-facing changes can affect core behavior) Tj
+1 0 0 1 50 660 Tm () Tj
+1 0 0 1 50 646 Tm (3. Persistence) Tj
+1 0 0 1 50 632 Tm (   As-is state: Heavy CSV and file-state usage) Tj
+1 0 0 1 50 618 Tm (   Business impact: Weak durability and auditability) Tj
+1 0 0 1 50 604 Tm () Tj
+1 0 0 1 50 590 Tm (4. Strategy layer) Tj
+1 0 0 1 50 576 Tm (   As-is state: Multiple strategies available) Tj
+1 0 0 1 50 562 Tm (   Business impact: Strong feature value, but growing coupling) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm (5. Execution layer) Tj
+1 0 0 1 50 520 Tm (   As-is state: Paper and live logic exist) Tj
+1 0 0 1 50 506 Tm (   Business impact: Valuable capability, but operationally sensitive) Tj
+1 0 0 1 50 492 Tm () Tj
+1 0 0 1 50 478 Tm (6. Reporting) Tj
+1 0 0 1 50 464 Tm (   As-is state: Outputs and summaries exist) Tj
+1 0 0 1 50 450 Tm (   Business impact: Useful, but fragmented) Tj
+1 0 0 1 50 436 Tm () Tj
+1 0 0 1 50 422 Tm (7. Notifications) Tj
+1 0 0 1 50 408 Tm (   As-is state: Telegram support exists) Tj
+1 0 0 1 50 394 Tm (   Business impact: Helpful, but tightly coupled) Tj
+1 0 0 1 50 380 Tm () Tj
+1 0 0 1 50 366 Tm (8. Deployment) Tj
+1 0 0 1 50 352 Tm (   As-is state: Docker and cloud assets exist) Tj
+1 0 0 1 50 338 Tm (   Business impact: Signals ambition, but not full production readiness) Tj
+1 0 0 1 50 324 Tm () Tj
+1 0 0 1 50 310 Tm (9. Testing) Tj
+1 0 0 1 50 296 Tm (   As-is state: Strong legacy suite) Tj
+1 0 0 1 50 282 Tm (   Business impact: Good base, but baseline should be fully green) Tj
+1 0 0 1 50 268 Tm () Tj
+1 0 0 1 50 254 Tm (TO-BE TARGET STATE) Tj
+1 0 0 1 50 240 Tm () Tj
+1 0 0 1 50 226 Tm (The target platform should become a service-oriented trading system where:) Tj
+1 0 0 1 50 212 Tm (- each domain has a clear responsibility boundary) Tj
+1 0 0 1 50 198 Tm (- core trading state is persisted in a durable store) Tj
+1 0 0 1 50 184 Tm (- execution and risk policy are isolated from presentation logic) Tj
+1 0 0 1 50 170 Tm (- data, strategy, execution, reporting, and notifications can evolve) Tj
+1 0 0 1 50 156 Tm (  independently) Tj
+1 0 0 1 50 142 Tm (- asynchronous workloads are moved out of the request path) Tj
+1 0 0 1 50 128 Tm (- production operations rely on structured audit, observability, and) Tj
+1 0 0 1 50 114 Tm (  recovery) Tj
+1 0 0 1 50 100 Tm () Tj
+1 0 0 1 50 86 Tm (Target domains) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2356 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (- Gateway or Web Layer) Tj
+1 0 0 1 50 786 Tm (- Auth or Access Control) Tj
+1 0 0 1 50 772 Tm (- Market Data Service) Tj
+1 0 0 1 50 758 Tm (- Strategy Service) Tj
+1 0 0 1 50 744 Tm (- Backtest Service) Tj
+1 0 0 1 50 730 Tm (- Risk Service) Tj
+1 0 0 1 50 716 Tm (- Execution Service) Tj
+1 0 0 1 50 702 Tm (- Broker Adapter Service) Tj
+1 0 0 1 50 688 Tm (- Notification Service) Tj
+1 0 0 1 50 674 Tm (- Reporting Service) Tj
+1 0 0 1 50 660 Tm (- Scheduler or Worker Service) Tj
+1 0 0 1 50 646 Tm (- Audit or Event Layer) Tj
+1 0 0 1 50 632 Tm (- PostgreSQL) Tj
+1 0 0 1 50 618 Tm (- Redis) Tj
+1 0 0 1 50 604 Tm (- Message Bus) Tj
+1 0 0 1 50 590 Tm (- Object Storage) Tj
+1 0 0 1 50 576 Tm () Tj
+1 0 0 1 50 562 Tm (REQUIREMENT AND GAP SUMMARY) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm (Architecture) Tj
+1 0 0 1 50 520 Tm (- Current state: Monolithic) Tj
+1 0 0 1 50 506 Tm (- Target state: Bounded services) Tj
+1 0 0 1 50 492 Tm (- Gap level: Large) Tj
+1 0 0 1 50 478 Tm (- Priority: High) Tj
+1 0 0 1 50 464 Tm () Tj
+1 0 0 1 50 450 Tm (Persistence) Tj
+1 0 0 1 50 436 Tm (- Current state: CSV and local files) Tj
+1 0 0 1 50 422 Tm (- Target state: Transactional DB-backed model) Tj
+1 0 0 1 50 408 Tm (- Gap level: Large) Tj
+1 0 0 1 50 394 Tm (- Priority: High) Tj
+1 0 0 1 50 380 Tm () Tj
+1 0 0 1 50 366 Tm (Execution safety) Tj
+1 0 0 1 50 352 Tm (- Current state: Present but runtime-coupled) Tj
+1 0 0 1 50 338 Tm (- Target state: Isolated auditable execution service) Tj
+1 0 0 1 50 324 Tm (- Gap level: Large) Tj
+1 0 0 1 50 310 Tm (- Priority: High) Tj
+1 0 0 1 50 296 Tm () Tj
+1 0 0 1 50 282 Tm (Risk controls) Tj
+1 0 0 1 50 268 Tm (- Current state: Present but file-history dependent) Tj
+1 0 0 1 50 254 Tm (- Target state: Durable policy enforcement service) Tj
+1 0 0 1 50 240 Tm (- Gap level: Large) Tj
+1 0 0 1 50 226 Tm (- Priority: High) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (Scalability) Tj
+1 0 0 1 50 184 Tm (- Current state: Limited by local-state assumptions) Tj
+1 0 0 1 50 170 Tm (- Target state: Selective service-scale capability) Tj
+1 0 0 1 50 156 Tm (- Gap level: Large) Tj
+1 0 0 1 50 142 Tm (- Priority: High) Tj
+1 0 0 1 50 128 Tm () Tj
+1 0 0 1 50 114 Tm (Recovery) Tj
+1 0 0 1 50 100 Tm (- Current state: Partial and local-file based) Tj
+1 0 0 1 50 86 Tm (- Target state: Durable resumable workflows) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 2679 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (- Gap level: Large) Tj
+1 0 0 1 50 786 Tm (- Priority: High) Tj
+1 0 0 1 50 772 Tm () Tj
+1 0 0 1 50 758 Tm (Auditability) Tj
+1 0 0 1 50 744 Tm (- Current state: Partial through logs and CSVs) Tj
+1 0 0 1 50 730 Tm (- Target state: Structured immutable event trail) Tj
+1 0 0 1 50 716 Tm (- Gap level: Large) Tj
+1 0 0 1 50 702 Tm (- Priority: High) Tj
+1 0 0 1 50 688 Tm () Tj
+1 0 0 1 50 674 Tm (Maintainability) Tj
+1 0 0 1 50 660 Tm (- Current state: Centralized code ownership) Tj
+1 0 0 1 50 646 Tm (- Target state: Clear domain ownership) Tj
+1 0 0 1 50 632 Tm (- Gap level: Large) Tj
+1 0 0 1 50 618 Tm (- Priority: High) Tj
+1 0 0 1 50 604 Tm () Tj
+1 0 0 1 50 590 Tm (BOTTLENECKS) Tj
+1 0 0 1 50 576 Tm () Tj
+1 0 0 1 50 562 Tm (1. CSV as operational state) Tj
+1 0 0 1 50 548 Tm (2. Orchestration inside the UI runtime) Tj
+1 0 0 1 50 534 Tm (3. Shared filesystem assumptions) Tj
+1 0 0 1 50 520 Tm (4. Execution coupling) Tj
+1 0 0 1 50 506 Tm (5. Mixed codebase generations) Tj
+1 0 0 1 50 492 Tm () Tj
+1 0 0 1 50 478 Tm (TRANSFORMATION STRATEGY) Tj
+1 0 0 1 50 464 Tm () Tj
+1 0 0 1 50 450 Tm (Phase 0: Stabilize the current monolith) Tj
+1 0 0 1 50 436 Tm (- keep the old app functional) Tj
+1 0 0 1 50 422 Tm (- define official legacy entrypoints) Tj
+1 0 0 1 50 408 Tm (- fix the current failing baseline issue) Tj
+1 0 0 1 50 394 Tm (- document current schemas and outputs) Tj
+1 0 0 1 50 380 Tm () Tj
+1 0 0 1 50 366 Tm (Phase 1: Introduce durable persistence) Tj
+1 0 0 1 50 352 Tm (- move signals, executions, orders, reports, and audit history into a) Tj
+1 0 0 1 50 338 Tm (  database) Tj
+1 0 0 1 50 324 Tm (- stop treating CSV as the source of truth) Tj
+1 0 0 1 50 310 Tm (- retain CSV only as export output) Tj
+1 0 0 1 50 296 Tm () Tj
+1 0 0 1 50 282 Tm (Phase 2: Extract strategy and backtest domains) Tj
+1 0 0 1 50 268 Tm (- standardize strategy contracts) Tj
+1 0 0 1 50 254 Tm (- run strategies outside the UI runtime) Tj
+1 0 0 1 50 240 Tm (- separate historical backtesting from live execution paths) Tj
+1 0 0 1 50 226 Tm () Tj
+1 0 0 1 50 212 Tm (Phase 3: Extract risk and execution domains) Tj
+1 0 0 1 50 198 Tm (- isolate trade lifecycle management) Tj
+1 0 0 1 50 184 Tm (- make risk policy checks durable and auditable) Tj
+1 0 0 1 50 170 Tm (- contain live broker activity within a controlled boundary) Tj
+1 0 0 1 50 156 Tm () Tj
+1 0 0 1 50 142 Tm (Phase 4: Extract reporting, notification, and jobs) Tj
+1 0 0 1 50 128 Tm (- move report generation out of critical request paths) Tj
+1 0 0 1 50 114 Tm (- shift Telegram and similar actions to async workflows) Tj
+1 0 0 1 50 100 Tm (- isolate schedulers and worker logic) Tj
+1 0 0 1 50 86 Tm () Tj
+ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 3073 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Phase 5: Add gateway and access control) Tj
+1 0 0 1 50 786 Tm (- route all interactions through a clear front door) Tj
+1 0 0 1 50 772 Tm (- introduce authentication and role-aware action control) Tj
+1 0 0 1 50 758 Tm (- expose only supported internal APIs) Tj
+1 0 0 1 50 744 Tm () Tj
+1 0 0 1 50 730 Tm (RECOMMENDED IMPLEMENTATION ROADMAP) Tj
+1 0 0 1 50 716 Tm () Tj
+1 0 0 1 50 702 Tm (1. Freeze legacy entrypoints and unsupported surfaces) Tj
+1 0 0 1 50 688 Tm (2. Fix the remaining failing legacy test) Tj
+1 0 0 1 50 674 Tm (3. Define canonical data models for trading records) Tj
+1 0 0 1 50 660 Tm (4. Introduce PostgreSQL as the system of record) Tj
+1 0 0 1 50 646 Tm (5. Keep CSV outputs only for export and reporting) Tj
+1 0 0 1 50 632 Tm (6. Extract strategy interfaces out of the UI code) Tj
+1 0 0 1 50 618 Tm (7. Stand up a strategy service boundary) Tj
+1 0 0 1 50 604 Tm (8. Separate backtesting into its own service path) Tj
+1 0 0 1 50 590 Tm (9. Add a dedicated risk evaluation boundary) Tj
+1 0 0 1 50 576 Tm (10. Extract the execution engine into a service) Tj
+1 0 0 1 50 562 Tm (11. Encapsulate Dhan in a broker adapter boundary) Tj
+1 0 0 1 50 548 Tm (12. Move notifications to event-driven workflows) Tj
+1 0 0 1 50 534 Tm (13. Move reporting to structured artifact handling) Tj
+1 0 0 1 50 520 Tm (14. Add Redis and message bus support) Tj
+1 0 0 1 50 506 Tm (15. Add gateway and auth controls) Tj
+1 0 0 1 50 492 Tm (16. Decommission monolith responsibilities gradually) Tj
+1 0 0 1 50 478 Tm () Tj
+1 0 0 1 50 464 Tm (RISKS AND MITIGATIONS) Tj
+1 0 0 1 50 450 Tm () Tj
+1 0 0 1 50 436 Tm (- migration drift) Tj
+1 0 0 1 50 422 Tm (  Mitigation: preserve contract tests and golden data) Tj
+1 0 0 1 50 408 Tm (- dual-write errors) Tj
+1 0 0 1 50 394 Tm (  Mitigation: make DB primary as early as possible) Tj
+1 0 0 1 50 380 Tm (- live-trading instability) Tj
+1 0 0 1 50 366 Tm (  Mitigation: roll out in tightly gated stages) Tj
+1 0 0 1 50 352 Tm (- too many services too early) Tj
+1 0 0 1 50 338 Tm (  Mitigation: start with only high-value boundaries) Tj
+1 0 0 1 50 324 Tm (- weak observability during split) Tj
+1 0 0 1 50 310 Tm (  Mitigation: add structured logging and IDs from the start) Tj
+1 0 0 1 50 296 Tm () Tj
+1 0 0 1 50 282 Tm (FINAL RECOMMENDATION) Tj
+1 0 0 1 50 268 Tm () Tj
+1 0 0 1 50 254 Tm (The current monolithic platform should be treated as a valuable working) Tj
+1 0 0 1 50 240 Tm (asset, not discarded. It should become the source system for a controlled) Tj
+1 0 0 1 50 226 Tm (extraction program.) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (The correct transformation order is:) Tj
+1 0 0 1 50 184 Tm (1. stabilize) Tj
+1 0 0 1 50 170 Tm (2. persist durably) Tj
+1 0 0 1 50 156 Tm (3. extract bounded domains) Tj
+1 0 0 1 50 142 Tm (4. isolate live execution) Tj
+1 0 0 1 50 128 Tm (5. add async and operational controls) Tj
+1 0 0 1 50 114 Tm (6. complete service-based routing and governance) Tj
+1 0 0 1 50 100 Tm () Tj
+1 0 0 1 50 86 Tm (This approach reduces delivery risk while preserving the real trading) Tj
+ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 15 0 R >>
+endobj
+15 0 obj
+<< /Length 73 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (functionality that already exists.) Tj
+ET
+endstream
+endobj
+xref
+0 16
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000148 00000 n 
+0000000218 00000 n 
+0000000344 00000 n 
+0000003694 00000 n 
+0000003820 00000 n 
+0000006710 00000 n 
+0000006836 00000 n 
+0000009244 00000 n 
+0000009372 00000 n 
+0000012104 00000 n 
+0000012232 00000 n 
+0000015358 00000 n 
+0000015486 00000 n 
+trailer
+<< /Size 16 /Root 1 0 R >>
+startxref
+15610
+%%EOF

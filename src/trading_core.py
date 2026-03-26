@@ -1,6 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -91,13 +92,20 @@ class StandardTrade:
         extra = dict(base.pop('extra', {}) or {})
         base['timestamp'] = str(base['timestamp'])
         base['entry_time'] = str(base['timestamp'])
-        base['entry'] = round(float(base['entry']), 4)
-        base['entry_price'] = round(float(base['entry_price']), 4)
-        base['stop_loss'] = round(float(base['stop_loss']), 4)
-        base['target'] = round(float(base['target']), 4)
-        base['target_price'] = round(float(base['target_price']), 4)
+        rounded_entry = float(Decimal(str(base['entry'])).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
+        rounded_entry_price = float(Decimal(str(base['entry_price'])).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
+        rounded_stop_loss = float(Decimal(str(base['stop_loss'])).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
+        rounded_target = float(Decimal(str(base['target'])).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
+        rounded_target_price = float(Decimal(str(base['target_price'])).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP))
+        base['entry'] = rounded_entry
+        base['entry_price'] = rounded_entry_price
+        base['stop_loss'] = rounded_stop_loss
+        base['target'] = rounded_target
+        base['target_price'] = rounded_target_price
         base['score'] = round(float(base['score']), 2)
-        base['risk_per_unit'] = round(float(base['risk_per_unit']), 4)
+        # Keep the displayed risk distance aligned with the displayed entry and
+        # stop prices so exported rows stay internally consistent.
+        base['risk_per_unit'] = round(abs(rounded_entry_price - rounded_stop_loss), 4)
         base.update(extra)
         return base
 
@@ -195,5 +203,7 @@ def write_rows(path: Path | str, rows: list[dict[str, object]]) -> None:
 def append_log(message: str, *, level: int = logging.INFO) -> None:
     configure_file_logging()
     LOGGER.log(level, message)
+
+
 
 

@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+﻿# syntax=docker/dockerfile:1
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -16,4 +16,5 @@ COPY .streamlit /app/.streamlit
 
 EXPOSE 8501
 
-CMD ["streamlit", "run", "src/breakout_app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD ["streamlit", "run", "src/Trading.py", "--server.address=0.0.0.0", "--server.port=8501"]
+

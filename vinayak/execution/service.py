@@ -19,6 +19,8 @@ from vinayak.execution.broker.dhan_client import DhanClient, DhanClientConfigErr
 from vinayak.execution.broker.payload_builder import build_dhan_order_request
 from vinayak.execution.broker.response_mapper import map_dhan_response
 from vinayak.execution.reviewed_trade_service import ReviewedTradeService
+from vinayak.messaging.outbox import OutboxService
+from vinayak.messaging.topics import EVENT_TRADE_EXECUTED, EVENT_TRADE_EXECUTE_REQUESTED
 
 
 @dataclass
@@ -138,6 +140,7 @@ class ExecutionService:
         self.reviewed_trade_service = ReviewedTradeService(session)
         self.paper_adapter = PaperExecutionAdapter()
         self.live_adapter = LiveExecutionAdapter()
+        self.outbox = OutboxService(session)
 
     def list_executions(self) -> list[ExecutionRecord]:
         return self.execution_repository.list_executions()
@@ -164,6 +167,16 @@ class ExecutionService:
                 raise ValueError(f'Signal {signal_id} was not found.')
 
         mode = command.mode.upper()
+        self.outbox.enqueue(
+            event_name=EVENT_TRADE_EXECUTE_REQUESTED,
+            payload={
+                'mode': mode,
+                'broker': command.broker,
+                'signal_id': signal_id,
+                'reviewed_trade_id': command.reviewed_trade_id,
+            },
+            source='execution_service',
+        )
         adapter = self.live_adapter if mode == 'LIVE' else self.paper_adapter
         result = adapter.execute(
             command=ExecutionCreateCommand(
@@ -201,7 +214,22 @@ class ExecutionService:
             self.reviewed_trade_service.mark_executed(
                 reviewed_trade.id,
                 notes=f'Execution recorded via {mode} mode.',
+                auto_commit=False,
             )
+
+        self.outbox.enqueue(
+            event_name=EVENT_TRADE_EXECUTED,
+            payload={
+                'execution_id': record.id,
+                'signal_id': record.signal_id,
+                'reviewed_trade_id': record.reviewed_trade_id,
+                'mode': record.mode,
+                'broker': record.broker,
+                'status': record.status,
+                'broker_reference': record.broker_reference,
+            },
+            source='execution_service',
+        )
         self.session.commit()
         self.session.refresh(record)
         return record

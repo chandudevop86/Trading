@@ -7,7 +7,7 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/opt/trading
 Environment="PATH=/opt/trading/.venv/bin"
-ExecStart=/opt/trading/.venv/bin/streamlit run src/breakout_app.py
+ExecStart=/opt/trading/.venv/bin/streamlit run src/Trading.py
 Restart=always
 RestartSec=5
 

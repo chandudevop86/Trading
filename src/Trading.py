@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import math
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
-import shutil
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -16,18 +14,20 @@ import pandas as pd
 import streamlit as st
 
 from src.amd_fvg_sd_bot import ConfluenceConfig, generate_trades as generate_amd_fvg_sd_trades
-from src.backtest_engine import run_backtest, summarize_trade_log
+from src.backtest_engine import run_backtest
 from src.strategy_tuning import normalize_strategy_key, strategy_backtest_config
 from src.execution_engine import build_execution_candidates, close_paper_trades, execute_live_trades, execute_paper_trades, execution_result_summary
 from src.breakout_bot import Candle, generate_trades as generate_breakout_trades
 from src.demand_supply_bot import generate_trades as generate_demand_supply_trades
 from src.indicator_bot import IndicatorConfig, generate_indicator_rows
-from src.live_ohlcv import fetch_live_ohlcv
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
 from src.strike_selector import attach_option_strikes
 from src.strategy_service import StrategyContext, run_strategy_workflow
-from src.trading_core import append_log, configure_file_logging, prepare_trading_data, write_rows
+from src.market_data_service import dataframe_to_candles, fetch_ohlcv_data as _fetch_ohlcv_data, paper_candle_rows, period_for_interval
+from src.reporting_service import active_summary as build_active_summary, current_execution_rows, load_csv_rows, load_csv_summary, metric_value, paper_execution_summary, recent_trade_summary, safe_float, safe_int, short_broker_status, status_message, todays_trade_count
+from src.runtime_file_service import append_text_log as write_text_log, ensure_output_files, mirror_output_file, save_runtime_outputs
+from src.trading_core import append_log, configure_file_logging, prepare_trading_data
 
 DATA_DIR = Path('data')
 LOG_DIR = Path('logs')
@@ -70,59 +70,19 @@ def _append_text_log(path: Path, message: str) -> None:
 
 
 def _ensure_output_files() -> None:
-    for path in [
-        OHLCV_OUTPUT,
-        LIVE_OHLCV_OUTPUT,
-        TRADES_OUTPUT,
-        SIGNAL_OUTPUT,
-        EXECUTED_TRADES_OUTPUT,
-        PAPER_LOG_OUTPUT,
-        LIVE_LOG_OUTPUT,
-        BACKTEST_TRADES_OUTPUT,
-        BACKTEST_SUMMARY_OUTPUT,
-        BACKTEST_RESULTS_OUTPUT,
-        ORDER_HISTORY_OUTPUT,
-    ]:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists():
-            pd.DataFrame().to_csv(path, index=False)
-    for path in [APP_LOG, BROKER_LOG, EXECUTION_LOG, REJECTIONS_LOG, ERRORS_LOG]:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.touch(exist_ok=True)
+    ensure_output_files([OHLCV_OUTPUT, LIVE_OHLCV_OUTPUT, TRADES_OUTPUT, SIGNAL_OUTPUT, EXECUTED_TRADES_OUTPUT, PAPER_LOG_OUTPUT, LIVE_LOG_OUTPUT, BACKTEST_TRADES_OUTPUT, BACKTEST_SUMMARY_OUTPUT, BACKTEST_RESULTS_OUTPUT, ORDER_HISTORY_OUTPUT], [APP_LOG, BROKER_LOG, EXECUTION_LOG, REJECTIONS_LOG, ERRORS_LOG])
 
 
 def _period_for_interval(interval: str) -> str:
-    mapping = {
-        '1m': '7d',
-        '5m': '60d',
-        '15m': '60d',
-        '30m': '60d',
-        '1h': '730d',
-        '1d': '1y',
-    }
-    return mapping.get(interval, DEFAULT_PERIOD)
+    return period_for_interval(interval, DEFAULT_PERIOD)
 
 
 def _df_to_candles(df: pd.DataFrame) -> list[Candle]:
-    prepared = prepare_trading_data(df)
-    candles: list[Candle] = []
-    for row in prepared.itertuples(index=False):
-        candles.append(
-            Candle(
-                timestamp=pd.Timestamp(row.timestamp).to_pydatetime(),
-                open=float(row.open),
-                high=float(row.high),
-                low=float(row.low),
-                close=float(row.close),
-                volume=float(row.volume),
-            )
-        )
-    return candles
+    return dataframe_to_candles(df)
 
 
 def fetch_ohlcv_data(symbol: str, interval: str = DEFAULT_INTERVAL, period: str = DEFAULT_PERIOD) -> pd.DataFrame:
-    rows = fetch_live_ohlcv(symbol, interval, period)
-    return prepare_trading_data(pd.DataFrame(rows or []))
+    return _fetch_ohlcv_data(symbol, interval=interval, period=period)
 
 
 def _attach_option_metrics(rows: list[dict[str, object]], symbol: str, fetch_option_metrics: bool) -> list[dict[str, object]]:
@@ -246,30 +206,15 @@ def run_strategy(*, strategy: str, candles: pd.DataFrame, capital: float, risk_p
 
 
 def _metric_value(rows: list[dict[str, object]], key: str, default: float = 0.0) -> float:
-    if not rows:
-        return default
-    return _safe_float(rows[-1].get(key, default), default)
+    return metric_value(rows, key, default)
 
 
 def _safe_float(value: object, default: float = 0.0) -> float:
-    try:
-        if value is None or str(value).strip() == '':
-            return default
-        parsed = float(value)
-        if math.isnan(parsed) or math.isinf(parsed):
-            return default
-        return parsed
-    except (TypeError, ValueError):
-        return default
+    return safe_float(value, default)
 
 
 def _safe_int(value: object, default: int = 0) -> int:
-    try:
-        if value is None or str(value).strip() == '':
-            return default
-        return int(float(value))
-    except (TypeError, ValueError):
-        return default
+    return safe_int(value, default)
 
 
 def _strategy_callable(strategy: str, symbol: str) -> Callable[[pd.DataFrame, float, float, float, Any], list[dict[str, object]]]:
@@ -299,38 +244,15 @@ def _strategy_callable(strategy: str, symbol: str) -> Callable[[pd.DataFrame, fl
 
 
 def _save_runtime_outputs(candles: pd.DataFrame, trades: list[dict[str, object]]) -> None:
-    candle_rows = candles.to_dict(orient='records')
-    write_rows(OHLCV_OUTPUT, candle_rows)
-    write_rows(LIVE_OHLCV_OUTPUT, candle_rows)
-    write_rows(TRADES_OUTPUT, trades)
-    write_rows(SIGNAL_OUTPUT, trades)
-    if not EXECUTED_TRADES_OUTPUT.exists() or EXECUTED_TRADES_OUTPUT.stat().st_size == 0:
-        pd.DataFrame().to_csv(EXECUTED_TRADES_OUTPUT, index=False)
-    if not PAPER_LOG_OUTPUT.exists() or PAPER_LOG_OUTPUT.stat().st_size == 0:
-        pd.DataFrame().to_csv(PAPER_LOG_OUTPUT, index=False)
-    if not LIVE_LOG_OUTPUT.exists() or LIVE_LOG_OUTPUT.stat().st_size == 0:
-        pd.DataFrame().to_csv(LIVE_LOG_OUTPUT, index=False)
+    save_runtime_outputs(candles, trades, ohlcv_output=OHLCV_OUTPUT, live_ohlcv_output=LIVE_OHLCV_OUTPUT, trades_output=TRADES_OUTPUT, signal_output=SIGNAL_OUTPUT, executed_trades_output=EXECUTED_TRADES_OUTPUT, paper_log_output=PAPER_LOG_OUTPUT, live_log_output=LIVE_LOG_OUTPUT)
 
 
 def _mirror_output_file(source: Path, *destinations: Path) -> None:
-    if not source.exists():
-        return
-    for destination in destinations:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, destination)
+    mirror_output_file(source, *destinations)
 
 
 def _recent_trade_summary(trades: list[dict[str, object]]) -> str:
-    if not trades:
-        return 'No recent trade generated.'
-    last = dict(trades[-1])
-    return (
-        f"{last.get('side', 'NA')} {last.get('strategy', 'TRADE')} | "
-        f"Entry {float(last.get('entry', last.get('entry_price', 0.0)) or 0.0):.2f} | "
-        f"SL {float(last.get('stop_loss', 0.0) or 0.0):.2f} | "
-        f"Target {float(last.get('target', last.get('target_price', 0.0)) or 0.0):.2f} | "
-        f"Score {float(last.get('score', 0.0) or 0.0):.2f}"
-    )
+    return recent_trade_summary(trades)
 
 
 def _load_best_strategy_profile(backtest_summary: dict[str, object], strategy: str) -> str:
@@ -394,67 +316,23 @@ def _latest_optimizer_gate(strategy: str) -> tuple[bool, str]:
     return False, blockers or 'optimizer gate failed'
 
 def _status_message(run_clicked: bool, backtest_clicked: bool) -> str:
-    if backtest_clicked:
-        return 'Backtest completed'
-    if run_clicked:
-        return 'Run completed'
-    return 'Ready'
+    return status_message(run_clicked, backtest_clicked)
 
 
 def _load_csv_summary(path: Path) -> dict[str, object]:
-    if not path.exists() or path.stat().st_size == 0:
-        return {}
-    try:
-        frame = pd.read_csv(path)
-    except Exception:
-        return {}
-    if frame.empty:
-        return {}
-    return frame.iloc[-1].to_dict()
+    return load_csv_summary(path)
 
 
 def _load_csv_rows(path: Path) -> list[dict[str, object]]:
-    if not path.exists() or path.stat().st_size == 0:
-        return []
-    try:
-        frame = pd.read_csv(path)
-    except Exception:
-        return []
-    if frame.empty:
-        return []
-    return frame.to_dict(orient='records')
+    return load_csv_rows(path)
 
 
 def _current_execution_rows(path: Path, strategy: str, symbol: str, execution_type: str = 'PAPER') -> list[dict[str, object]]:
-    normalized_strategy = normalize_strategy_key(strategy)
-    normalized_symbol = (symbol or '').strip().upper()
-    rows = _load_csv_rows(path)
-    filtered: list[dict[str, object]] = []
-    for row in rows:
-        if str(row.get('execution_type', '') or '').strip().upper() != execution_type:
-            continue
-        row_strategy = normalize_strategy_key(str(row.get('strategy', '') or ''))
-        row_symbol = str(row.get('symbol', '') or '').strip().upper()
-        if normalized_strategy and row_strategy and row_strategy != normalized_strategy:
-            continue
-        if normalized_symbol and row_symbol and row_symbol != normalized_symbol:
-            continue
-        filtered.append(dict(row))
-    if filtered or not normalized_symbol:
-        return filtered
-    return [
-        dict(row)
-        for row in rows
-        if str(row.get('execution_type', '') or '').strip().upper() == execution_type
-        and normalize_strategy_key(str(row.get('strategy', '') or '')) == normalized_strategy
-    ]
+    return current_execution_rows(path, strategy, symbol, execution_type=execution_type)
 
 
 def _paper_execution_summary(path: Path, strategy: str, symbol: str, capital: float) -> dict[str, object]:
-    rows = _current_execution_rows(path, strategy, symbol, execution_type='PAPER')
-    if not rows:
-        return {}
-    return summarize_trade_log(rows, capital=float(capital), strategy_name=normalize_strategy_key(strategy) or 'PAPER_EXECUTION')
+    return paper_execution_summary(path, strategy, symbol, capital)
 
 
 def _latest_actionable_trades(trades: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -483,31 +361,15 @@ def _latest_actionable_trades(trades: list[dict[str, object]]) -> list[dict[str,
 
 
 def _todays_trade_count(path: Path, strategy: str, symbol: str, execution_type: str = 'PAPER') -> int:
-    rows = _current_execution_rows(path, strategy, symbol, execution_type=execution_type)
-    if not rows:
-        return 0
-    today_key = datetime.now().strftime('%Y-%m-%d')
-    count = 0
-    for row in rows:
-        status = str(row.get('execution_status', '') or '').strip().upper()
-        if status not in {'EXECUTED', 'FILLED', 'CLOSED', 'EXITED'}:
-            continue
-        for column in ('executed_at_utc', 'exit_time', 'entry_time', 'signal_time', 'timestamp'):
-            value = str(row.get(column, '') or '').strip()
-            if value[:10] == today_key:
-                count += 1
-                break
-    return count
+    return todays_trade_count(path, strategy, symbol, execution_type=execution_type)
 
 
 def _active_summary(backtest_summary: dict[str, object], paper_summary: dict[str, object]) -> dict[str, object]:
-    return dict(backtest_summary or paper_summary or {})
+    return build_active_summary(backtest_summary, paper_summary)
 
 
 def _short_broker_status(broker_choice: str, broker_status: str) -> str:
-    if broker_choice == 'Dhan Live':
-        return 'Dhan live active' if 'armed' in broker_status.lower() else broker_status
-    return 'Paper broker active'
+    return short_broker_status(broker_choice, broker_status)
 
 
 def _store_rejection(message: str) -> None:
@@ -577,8 +439,7 @@ def _run_strategy_backtest(candles: pd.DataFrame, strategy: str, symbol: str, ca
 
 
 def _paper_candle_rows(candles: pd.DataFrame) -> list[dict[str, object]]:
-    prepared = prepare_trading_data(candles)
-    return prepared.to_dict(orient='records')
+    return paper_candle_rows(candles)
 
 
 def _refresh_paper_trade_summary(candles: pd.DataFrame, capital: float) -> tuple[list[dict[str, object]], dict[str, object]]:

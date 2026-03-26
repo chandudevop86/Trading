@@ -101,8 +101,17 @@ Input CSV columns (required):
 Launch web app:
 
 ```bash
-streamlit run src/breakout_app.py
+streamlit run src/Trading.py
 ```
+
+## Active Legacy Surface
+
+Supported active legacy entrypoints:
+- `streamlit run src/Trading.py`
+- `py -3 -m src.breakout_bot`
+- `tools/run_app.ps1`
+
+Reference-only / non-active files in `src/` are documented in `src/EXPERIMENTAL_SURFACE.md` and should not be used as runtime or deployment targets.
 
 What app does:
 - Upload intraday OHLCV CSV
@@ -125,7 +134,7 @@ The app can run behind your domain, but domain routing needs DNS + reverse proxy
 
 1. Run Streamlit on the server:
 ```bash
-streamlit run src/breakout_app.py
+streamlit run src/Trading.py
 ```
 
 2. Point DNS A record:
@@ -161,7 +170,7 @@ After this, open: `https://chandudevopai.shop`
 1. Install dependencies:
    - py -3 -m pip install -r requirements.txt`n2. Configure local AWS credentials (AWS CLI profile or env vars).
 3. Run app locally:
-   - streamlit run src/breakout_app.py`n4. In app sidebar, enable **AWS S3 (localhost)** and fill:
+   - streamlit run src/Trading.py`n4. In app sidebar, enable **AWS S3 (localhost)** and fill:
    - S3 bucket
    - AWS region
    - S3 key prefix

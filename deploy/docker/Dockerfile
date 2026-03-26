@@ -16,4 +16,4 @@ COPY .streamlit /app/.streamlit
 
 EXPOSE 8501
 
-CMD ["streamlit", "run", "src/breakout_app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD ["streamlit", "run", "src/Trading.py", "--server.address=0.0.0.0", "--server.port=8501"]

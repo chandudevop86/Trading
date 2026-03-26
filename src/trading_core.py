@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,12 @@ import pandas as pd
 LOGGER = logging.getLogger('trading_system')
 
 _REQUIRED_COLUMNS = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
+
+
+def round_half_up(value: float, places: int) -> float:
+    quantum = Decimal('1').scaleb(-places)
+    normalized = Decimal(f'{float(value):.{places + 8}f}')
+    return float(normalized.quantize(quantum, rounding=ROUND_HALF_UP))
 
 
 @dataclass(slots=True)
@@ -91,13 +98,13 @@ class StandardTrade:
         extra = dict(base.pop('extra', {}) or {})
         base['timestamp'] = str(base['timestamp'])
         base['entry_time'] = str(base['timestamp'])
-        base['entry'] = round(float(base['entry']), 4)
-        base['entry_price'] = round(float(base['entry_price']), 4)
-        base['stop_loss'] = round(float(base['stop_loss']), 4)
-        base['target'] = round(float(base['target']), 4)
-        base['target_price'] = round(float(base['target_price']), 4)
-        base['score'] = round(float(base['score']), 2)
-        base['risk_per_unit'] = round(float(base['risk_per_unit']), 4)
+        base['entry'] = round_half_up(float(base['entry']), 4)
+        base['entry_price'] = round_half_up(float(base['entry_price']), 4)
+        base['stop_loss'] = round_half_up(float(base['stop_loss']), 4)
+        base['target'] = round_half_up(float(base['target']), 4)
+        base['target_price'] = round_half_up(float(base['target_price']), 4)
+        base['score'] = round_half_up(float(base['score']), 2)
+        base['risk_per_unit'] = round_half_up(float(base['risk_per_unit']), 4)
         base.update(extra)
         return base
 

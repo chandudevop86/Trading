@@ -651,7 +651,7 @@ def generate_trades(
     df: pd.DataFrame,
     capital: float,
     risk_pct: float,
-    rr_ratio: float | None = None,
+    rr_ratio: float = 2.0,
     config: ConfluenceConfig | None = None,
 ) -> list[dict[str, object]]:
     config = config or ConfluenceConfig()
@@ -840,6 +840,4 @@ __all__ = [
     'score_trade_setup',
     'generate_trades',
 ]
-
-
 

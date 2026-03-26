@@ -5,10 +5,10 @@ from typing import Any, Callable, Literal
 
 from src.amd_fvg_sd_bot import ConfluenceConfig, generate_trades as generate_amd_fvg_sd_trades
 from src.breakout_bot import BreakoutConfig, Candle, generate_trades as generate_breakout_trades
-from src.btst_bot import generate_trades as generate_btst_trades
+from src.btst_bot import BtstConfig, generate_trades as generate_btst_trades
 from src.demand_supply_bot import DemandSupplyConfig, generate_trades as generate_demand_supply_trades
 from src.indicator_bot import IndicatorConfig, generate_indicator_rows, generate_trades as generate_indicator_trades
-from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
+from src.mtf_trade_bot import MtfTradeConfig, generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
 from src.strategy_tuning import strategy_tuning_preset
 
@@ -103,11 +103,13 @@ def _canonical_strategy_name(strategy_name: str) -> str:
 
 
 def _base_contract_fields(row: dict[str, object], *, strategy_name: str, symbol: str, trade_no: int) -> dict[str, object]:
-    timestamp = str(row.get('timestamp') or row.get('entry_time') or '')
+    timestamp = str(row.get('timestamp') or row.get('entry_time') or row.get('signal_time') or row.get('time') or row.get('date') or '')
+    side = str(row.get('side') or row.get('type') or '').upper()
     base = dict(row)
     base['timestamp'] = timestamp
     base['entry_time'] = str(base.get('entry_time') or timestamp)
     base['signal_time'] = str(base.get('signal_time') or base['entry_time'])
+    base['side'] = side if side in _ACTIONABLE_SIDES else str(base.get('side') or base.get('type') or '')
     base['strategy'] = str(base.get('strategy') or _canonical_strategy_name(strategy_name))
     base['symbol'] = str(base.get('symbol') or symbol)
     base['trade_no'] = int(base.get('trade_no') or trade_no)
@@ -115,42 +117,34 @@ def _base_contract_fields(row: dict[str, object], *, strategy_name: str, symbol:
     base['contract_version'] = STRATEGY_SIGNAL_CONTRACT_VERSION
     base['source_strategy'] = str(strategy_name)
     return base
-
-
 def standardize_strategy_rows(rows: list[dict[str, object]], *, strategy_name: str, symbol: str) -> list[dict[str, object]]:
     standardized: list[dict[str, object]] = []
     for idx, row in enumerate(rows, start=1):
         item = _base_contract_fields(dict(row), strategy_name=strategy_name, symbol=symbol, trade_no=idx)
         side = str(item.get('side', '')).upper()
         item['side'] = side if side in _ACTIONABLE_SIDES else str(item.get('side', ''))
-        item.setdefault('reason', str(item.get('reason', item.get('market_signal', '')) or ''))
-        score = _safe_float(item.get('score', 0.0))
+        item['reason'] = str(item.get('reason', item.get('market_signal', '')) or '')
+        score = _safe_float(item.get('score', item.get('total_score', 0.0)))
         item['score'] = round(score, 2) if score is not None else 0.0
         item['quantity'] = _coerce_trade_quantity(item)
 
-        entry_price = _coerce_trade_price(item, 'entry_price', 'entry', 'price', 'close')
-        target_price = _coerce_trade_price(item, 'target_price', 'target')
-        stop_loss = _coerce_trade_price(item, 'stop_loss', 'trailing_stop_loss', 'entry_price', 'entry', 'price', 'close')
+        entry_value = _coerce_trade_price(item, 'entry', 'entry_price', 'price', 'close')
+        stop_loss = _coerce_trade_price(item, 'stop_loss', 'sl', 'trailing_stop_loss', 'entry_price', 'entry', 'price', 'close')
+        target_value = _coerce_trade_price(item, 'target', 'target_price', 'tp')
 
-        if item.get('entry', '') in ('', None):
-            item['entry'] = entry_price
-        if item.get('entry_price', '') in ('', None):
-            item['entry_price'] = entry_price
-        if item.get('target', '') in ('', None):
-            item['target'] = target_price
-        if item.get('target_price', '') in ('', None):
-            item['target_price'] = target_price
-        if item.get('stop_loss', '') in ('', None):
-            item['stop_loss'] = stop_loss
+        item['entry'] = entry_value
+        item['entry_price'] = _coerce_trade_price(item, 'entry_price', 'entry', 'price', 'close')
+        item['stop_loss'] = stop_loss
+        item['target'] = target_value
+        item['target_price'] = _coerce_trade_price(item, 'target_price', 'target', 'tp')
+        item['price'] = _coerce_trade_price(item, 'price', 'entry', 'entry_price', 'close')
 
-        entry_numeric = _safe_float(item.get('entry_price'))
+        entry_numeric = _safe_float(item.get('entry'))
         stop_numeric = _safe_float(item.get('stop_loss'))
         risk_per_unit = abs(entry_numeric - stop_numeric) if entry_numeric is not None and stop_numeric is not None else 0.0
         item['risk_per_unit'] = round(risk_per_unit, 4)
         standardized.append(item)
     return standardized
-
-
 def normalize_strategy_rows(rows: list[dict[str, object]], *, strategy_name: str, symbol: str) -> list[dict[str, object]]:
     return standardize_strategy_rows(rows, strategy_name=strategy_name, symbol=symbol)
 
@@ -280,27 +274,31 @@ def _run_mtf_strategy(context: StrategyContext, dependencies: StrategyDependenci
         capital=float(context.capital),
         risk_pct=float(context.risk_pct) / 100.0,
         rr_ratio=float(context.rr_ratio),
-        trailing_sl_pct=float(context.trailing_sl_pct),
-        ema_period=int(context.mtf_ema_period),
-        setup_mode=str(context.mtf_setup_mode),
-        require_retest_strength=bool(context.mtf_retest_strength),
-        max_trades_per_day=1,
+        config=MtfTradeConfig(
+            trailing_sl_pct=float(context.trailing_sl_pct),
+            ema_period=int(context.mtf_ema_period),
+            setup_mode=str(context.mtf_setup_mode),
+            require_retest_strength=bool(context.mtf_retest_strength),
+            max_trades_per_day=1,
+            cost_bps=float(context.cost_bps),
+            fixed_cost_per_trade=float(context.fixed_cost_per_trade),
+            max_daily_loss=context.max_daily_loss,
+        ),
     )
-
-
 def _run_btst_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
     return dependencies.btst_generator(
         context.candle_rows,
         capital=float(context.capital),
         risk_pct=float(context.risk_pct) / 100.0,
-        allow_stbt=True,
-        cost_bps=float(context.cost_bps),
-        fixed_cost_per_trade=float(context.fixed_cost_per_trade),
-        max_daily_loss=context.max_daily_loss,
-        max_trades_per_day=context.max_trades_per_day,
+        rr_ratio=float(context.rr_ratio),
+        config=BtstConfig(
+            allow_stbt=True,
+            cost_bps=float(context.cost_bps),
+            fixed_cost_per_trade=float(context.fixed_cost_per_trade),
+            max_daily_loss=context.max_daily_loss,
+            max_trades_per_day=context.max_trades_per_day,
+        ),
     )
-
-
 def _run_amd_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
     preset_config = ConfluenceConfig.for_mode(str(context.amd_mode))
     config = ConfluenceConfig(
@@ -420,3 +418,6 @@ def run_strategy_workflow(
         attach_option_strikes_fn=attach_option_strikes_fn,
         attach_option_metrics_fn=attach_option_metrics_fn,
     )
+
+
+

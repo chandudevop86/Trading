@@ -12,8 +12,6 @@ from src.runtime_persistence import persist_rows
 
 LOGGER = logging.getLogger('trading_system')
 
-_REQUIRED_COLUMNS = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
-
 
 def round_half_up(value: float, places: int) -> float:
     quantum = Decimal('1').scaleb(-places)
@@ -130,43 +128,9 @@ def configure_file_logging(log_path: Path | str = Path('logs/errors.log')) -> lo
 
 
 def prepare_trading_data(df: Any) -> pd.DataFrame:
-    if isinstance(df, pd.DataFrame):
-        prepared = df.copy()
-    else:
-        prepared = pd.DataFrame(df or [])
+    from src.preprocessing import prepare_trading_data as _prepare_trading_data
 
-    if prepared.empty:
-        return pd.DataFrame(columns=_REQUIRED_COLUMNS)
-
-    if isinstance(prepared.columns, pd.MultiIndex):
-        prepared.columns = [str(col[0]).strip().lower() for col in prepared.columns]
-    else:
-        prepared.columns = [str(col).strip().lower() for col in prepared.columns]
-
-    rename_map: dict[str, str] = {}
-    if 'datetime' in prepared.columns:
-        rename_map['datetime'] = 'timestamp'
-    if 'date' in prepared.columns and 'timestamp' not in prepared.columns:
-        rename_map['date'] = 'timestamp'
-    if 'time' in prepared.columns and 'timestamp' not in prepared.columns:
-        rename_map['time'] = 'timestamp'
-    if rename_map:
-        prepared = prepared.rename(columns=rename_map)
-
-    missing_columns = [column for column in _REQUIRED_COLUMNS if column not in prepared.columns]
-    if missing_columns:
-        raise ValueError(f'Missing required columns: {missing_columns}')
-
-    prepared = prepared.loc[:, _REQUIRED_COLUMNS].copy()
-    prepared['timestamp'] = pd.to_datetime(prepared['timestamp'], errors='coerce')
-    for column in ['open', 'high', 'low', 'close', 'volume']:
-        prepared[column] = pd.to_numeric(prepared[column], errors='coerce')
-
-    prepared = prepared.dropna(subset=['timestamp', 'open', 'high', 'low', 'close'])
-    prepared = prepared[(prepared['high'] >= prepared['low']) & (prepared['open'] >= 0) & (prepared['close'] >= 0)]
-    prepared = prepared.drop_duplicates(subset=['timestamp']).sort_values('timestamp').reset_index(drop=True)
-    return prepared
-
+    return _prepare_trading_data(df)
 
 def weighted_score(signals: dict[str, bool], config: ScoringConfig | None = None) -> WeightedScore:
     scoring = config or ScoringConfig()
@@ -215,7 +179,4 @@ def write_rows(path: Path | str, rows: list[dict[str, object]]) -> None:
 def append_log(message: str, *, level: int = logging.INFO) -> None:
     configure_file_logging()
     LOGGER.log(level, message)
-
-
-
 

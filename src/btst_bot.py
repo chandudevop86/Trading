@@ -1,12 +1,22 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from math import floor
 from pathlib import Path
 
 from src.breakout_bot import Candle, add_intraday_vwap, load_candles
 from src.csv_io import read_csv_rows, write_csv_rows
 from src.trade_safety import calculate_net_pnl, daily_limit_reached
+
+
+@dataclass(slots=True)
+class BtstConfig:
+    allow_stbt: bool = True
+    cost_bps: float = 0.0
+    fixed_cost_per_trade: float = 0.0
+    max_daily_loss: float | None = None
+    max_trades_per_day: int | None = 1
 
 
 def _group_by_day(candles: list[Candle]) -> dict:
@@ -27,12 +37,23 @@ def generate_trades(
     candles: list[Candle],
     capital: float,
     risk_pct: float,
+    rr_ratio: float = 2.0,
+    config: BtstConfig | None = None,
+    *,
     allow_stbt: bool = True,
     cost_bps: float = 0.0,
     fixed_cost_per_trade: float = 0.0,
     max_daily_loss: float | None = None,
     max_trades_per_day: int | None = 1,
 ) -> list[dict[str, object]]:
+    del rr_ratio
+    cfg = config or BtstConfig(
+        allow_stbt=bool(allow_stbt),
+        cost_bps=float(cost_bps),
+        fixed_cost_per_trade=float(fixed_cost_per_trade),
+        max_daily_loss=max_daily_loss,
+        max_trades_per_day=max_trades_per_day,
+    )
     add_intraday_vwap(candles)
     by_day = _group_by_day(candles)
     days = sorted(by_day.keys())
@@ -44,8 +65,8 @@ def generate_trades(
         if daily_limit_reached(
             trades_taken,
             realized_pnl,
-            max_trades_per_day=max_trades_per_day,
-            max_daily_loss=max_daily_loss,
+            max_trades_per_day=cfg.max_trades_per_day,
+            max_daily_loss=cfg.max_daily_loss,
         ):
             continue
 
@@ -60,7 +81,7 @@ def generate_trades(
         side = ''
         if last.close > last.vwap and last.close > last.open:
             side = 'BUY'
-        elif allow_stbt and last.close < last.vwap and last.close < last.open:
+        elif cfg.allow_stbt and last.close < last.vwap and last.close < last.open:
             side = 'SELL'
         else:
             continue
@@ -77,8 +98,8 @@ def generate_trades(
             entry,
             exit_price,
             qty,
-            cost_bps=cost_bps,
-            fixed_cost_per_trade=fixed_cost_per_trade,
+            cost_bps=cfg.cost_bps,
+            fixed_cost_per_trade=cfg.fixed_cost_per_trade,
         )
         risk = abs(entry - stop)
         rr = 0.0 if risk == 0 else abs(exit_price - entry) / risk

@@ -354,6 +354,7 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
         candidates.append(_ensure_trade_identity({
             "strategy": "INDICATOR",
             "symbol": symbol,
+            "timestamp": str(last.get("timestamp", "")),
             "signal_time": str(last.get("timestamp", "")),
             "timeframe": str(last.get("timeframe", last.get("interval", "")) or ""),
             "side": side,
@@ -365,7 +366,7 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
             "target_price": target_price,
             "share_price": close_price,
             "strike_price": last.get("strike_price"),
-            "score": _safe_float(last.get("score")),
+            "score": _safe_float(last.get("score")) or 0.0,
             "quantity": default_quantity_for_symbol(symbol),
             "reason": signal,
             "duplicate_signal_cooldown_bars": last.get("duplicate_signal_cooldown_bars", 0),
@@ -377,7 +378,7 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
         share_price, strike_price = _extract_share_and_strike(row)
         option_type = str(row.get("option_type", "")).strip().upper()
         if not option_type:
-            side_val = str(row.get("side", "")).strip().upper()
+            side_val = str(row.get("side", row.get("type", ""))).strip().upper()
             if side_val == "BUY":
                 option_type = "CE"
             elif side_val == "SELL":
@@ -388,13 +389,19 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
                 option_strike = f"{int(float(str(strike_price)))}{option_type}"
             except Exception:
                 option_strike = f"{strike_price}{option_type}"
+        entry_value = row.get("entry", row.get("entry_price", row.get("price", row.get("close", ""))))
+        stop_value = row.get("stop_loss", row.get("sl", ""))
+        target_value = row.get("target", row.get("target_price", row.get("tp", "")))
         candidates.append(_ensure_trade_identity({
             "strategy": str(row.get("strategy", "TRADE_BOT")),
             "symbol": symbol,
-            "signal_time": str(row.get("entry_time", row.get("timestamp", ""))),
+            "timestamp": str(row.get("timestamp", row.get("entry_time", row.get("time", "")))),
+            "signal_time": str(row.get("entry_time", row.get("timestamp", row.get("time", "")))),
             "timeframe": str(row.get("timeframe", row.get("interval", "")) or ""),
-            "side": str(row.get("side", "HOLD")),
-            "price": row.get("entry_price", row.get("entry", row.get("close", ""))),
+            "side": str(row.get("side", row.get("type", "HOLD"))),
+            "price": row.get("price", entry_value),
+            "entry": entry_value,
+            "entry_price": row.get("entry_price", entry_value),
             "share_price": share_price,
             "strike_price": strike_price,
             "option_expiry": row.get("option_expiry", row.get("expiry_date", "")),
@@ -410,16 +417,18 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
             "option_ltp": row.get("option_ltp", ""),
             "lots": row.get("lots", ""),
             "order_value": row.get("order_value", ""),
-            "stop_loss": row.get("stop_loss", ""),
+            "stop_loss": stop_value,
             "trailing_stop_loss": row.get("trailing_stop_loss", ""),
-            "target_price": row.get("target_price", row.get("target", "")),
+            "target": target_value,
+            "target_price": row.get("target_price", target_value),
+            "score": _safe_float(row.get("score", row.get("total_score"))) or 0.0,
             "quantity": row.get("quantity", default_quantity_for_symbol(symbol)),
             "duplicate_signal_cooldown_bars": row.get("duplicate_signal_cooldown_bars", 0),
             "duplicate_signal_cooldown_minutes": row.get("duplicate_signal_cooldown_minutes", ""),
             "reason": (
                 f"{str(row.get('reason', '') or '').strip()} | "
-                f"SL:{row.get('stop_loss', '')} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', row.get('target', ''))}"
-            ).strip(' |') or f"SL:{row.get('stop_loss', '')} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', row.get('target', ''))}",
+                f"SL:{stop_value} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', target_value)}"
+            ).strip(' |') or f"SL:{stop_value} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', target_value)}",
         }, default_status=TRADE_STATUS_NEW))
     return candidates
 
@@ -584,21 +593,85 @@ def _load_historical_trade_ids(path: Path, execution_type: str | None = None) ->
     return ids
 
 
+
+def _duplicate_reason_for_candidate(
+    record: dict[str, object],
+    *,
+    historical_trade_ids: set[str],
+    active_trade_keys: set[str],
+    active_duplicate_signal_keys: set[str],
+    recent_signal_times: dict[str, datetime],
+    batch_seen_trade_ids: set[str] | None = None,
+    batch_seen_trade_keys: set[str] | None = None,
+    batch_seen_signal_keys: set[str] | None = None,
+    batch_recent_signal_times: dict[str, datetime] | None = None,
+) -> str:
+    trade_id = str(record.get("trade_id", "") or "")
+    trade_key = str(record.get("trade_key", "") or make_trade_key(record))
+    duplicate_signal_key = str(record.get("duplicate_signal_key", "") or make_duplicate_signal_key(record))
+    signal_time = _parse_dt(record.get("signal_time"))
+    cooldown_group = _cooldown_group_key(record)
+    cooldown_seconds = _cooldown_window_seconds(record)
+
+    if batch_seen_trade_ids is not None and trade_id and trade_id in batch_seen_trade_ids:
+        return SKIP_REASON_DUPLICATE_BATCH_TRADE
+    if batch_seen_trade_keys is not None and trade_key and trade_key in batch_seen_trade_keys:
+        return SKIP_REASON_DUPLICATE_BATCH_TRADE
+    if batch_seen_signal_keys is not None and duplicate_signal_key and duplicate_signal_key in batch_seen_signal_keys:
+        return SKIP_REASON_DUPLICATE_SIGNAL_KEY
+    if trade_id and trade_id in historical_trade_ids:
+        return SKIP_REASON_DUPLICATE_EXECUTED_TRADE
+    if trade_key and trade_key in active_trade_keys:
+        return SKIP_REASON_DUPLICATE_ACTIVE_TRADE
+    if duplicate_signal_key and duplicate_signal_key in active_duplicate_signal_keys:
+        return SKIP_REASON_DUPLICATE_SIGNAL_KEY
+
+    previous_signal_time = None
+    if batch_recent_signal_times is not None:
+        previous_signal_time = batch_recent_signal_times.get(cooldown_group)
+    if previous_signal_time is None:
+        previous_signal_time = recent_signal_times.get(cooldown_group)
+    if cooldown_seconds > 0 and signal_time is not None and previous_signal_time is not None:
+        if (signal_time - previous_signal_time).total_seconds() < cooldown_seconds:
+            return SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN
+    return ""
 def filter_unlogged_candidates(candidates: list[dict[str, object]], output_path: Path) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-    active_keys = load_active_trade_keys(output_path)
+    historical_trade_ids = _load_historical_trade_ids(output_path)
+    active_trade_keys = load_active_trade_keys(output_path)
+    active_duplicate_signal_keys = load_active_duplicate_signal_keys(output_path)
+    recent_signal_times = _load_recent_signal_times(output_path)
+    batch_seen_trade_ids: set[str] = set()
+    batch_seen_trade_keys: set[str] = set()
+    batch_seen_signal_keys: set[str] = set()
+    batch_recent_signal_times: dict[str, datetime] = {}
     fresh: list[dict[str, object]] = []
     skipped: list[dict[str, object]] = []
     for candidate in candidates:
         row = _ensure_trade_identity(candidate)
-        if str(row.get("trade_key", "")) in active_keys:
+        reason = _duplicate_reason_for_candidate(
+            row,
+            historical_trade_ids=historical_trade_ids,
+            active_trade_keys=active_trade_keys,
+            active_duplicate_signal_keys=active_duplicate_signal_keys,
+            recent_signal_times=recent_signal_times,
+            batch_seen_trade_ids=batch_seen_trade_ids,
+            batch_seen_trade_keys=batch_seen_trade_keys,
+            batch_seen_signal_keys=batch_seen_signal_keys,
+            batch_recent_signal_times=batch_recent_signal_times,
+        )
+        if reason:
             flagged = dict(row)
-            flagged["duplicate_reason"] = SKIP_REASON_DUPLICATE_ACTIVE_TRADE
+            flagged['duplicate_reason'] = reason
             skipped.append(flagged)
-        else:
-            fresh.append(row)
+            continue
+        batch_seen_trade_ids.add(str(row.get('trade_id', '') or ''))
+        batch_seen_trade_keys.add(str(row.get('trade_key', '') or ''))
+        batch_seen_signal_keys.add(str(row.get('duplicate_signal_key', '') or ''))
+        signal_time = _parse_dt(row.get('signal_time'))
+        if signal_time is not None:
+            batch_recent_signal_times[_cooldown_group_key(row)] = signal_time
+        fresh.append(row)
     return fresh, skipped
-
-
 def _trade_day_key(record: dict[str, object], fallback_day: str) -> str:
     ts = _parse_dt(record.get("signal_time")) or _parse_dt(record.get("entry_time")) or _parse_dt(record.get("timestamp"))
     if ts is None:
@@ -1090,41 +1163,31 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
         duplicate_signal_key = str(base_row.get("duplicate_signal_key", "") or make_duplicate_signal_key(base_row))
         signal_time = _parse_dt(base_row.get("signal_time"))
         cooldown_group = _cooldown_group_key(base_row)
-        cooldown_seconds = _cooldown_window_seconds(base_row)
         if not ok:
             _append_text_log(REJECTIONS_LOG_PATH, f"Rejected invalid trade {trade_id or 'UNKNOWN'} reason={validation_reason}")
             append_log(f'execution_engine skipped invalid trade {trade_id} reason={validation_reason}')
             _mark_skipped(result, base_row, validation_reason)
             continue
-        if deduplicate and trade_id in batch_seen_trade_ids:
-            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_BATCH_TRADE)
-            continue
-        if deduplicate and trade_key in batch_seen_trade_keys:
-            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_BATCH_TRADE)
-            continue
-        if deduplicate and duplicate_signal_key in batch_seen_signal_keys:
-            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_SIGNAL_KEY)
-            continue
-        if deduplicate and trade_id in historical_trade_ids:
-            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_EXECUTED_TRADE)
-            continue
-        if deduplicate and trade_key in active_trade_keys:
-            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_ACTIVE_TRADE)
-            continue
-        if deduplicate and duplicate_signal_key in active_duplicate_signal_keys:
-            _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_SIGNAL_KEY)
-            continue
-        previous_signal_time = batch_recent_signal_times.get(cooldown_group) or recent_signal_times.get(cooldown_group)
-        if deduplicate and cooldown_seconds > 0 and signal_time is not None and previous_signal_time is not None:
-            if (signal_time - previous_signal_time).total_seconds() < cooldown_seconds:
-                _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN)
+        if deduplicate:
+            duplicate_reason = _duplicate_reason_for_candidate(
+                base_row,
+                historical_trade_ids=historical_trade_ids,
+                active_trade_keys=active_trade_keys,
+                active_duplicate_signal_keys=active_duplicate_signal_keys,
+                recent_signal_times=recent_signal_times,
+                batch_seen_trade_ids=batch_seen_trade_ids,
+                batch_seen_trade_keys=batch_seen_trade_keys,
+                batch_seen_signal_keys=batch_seen_signal_keys,
+                batch_recent_signal_times=batch_recent_signal_times,
+            )
+            if duplicate_reason:
+                _mark_skipped(result, base_row, duplicate_reason)
                 continue
         batch_seen_trade_ids.add(trade_id)
         batch_seen_trade_keys.add(trade_key)
         batch_seen_signal_keys.add(duplicate_signal_key)
         if signal_time is not None:
             batch_recent_signal_times[cooldown_group] = signal_time
-
         day_key = _trade_day_key(base_row, today_key)
         state = daily_state.setdefault(day_key, {"count": 0.0, "realized_pnl": 0.0})
         trade_limit_hit = max_trades_per_day is not None and int(max_trades_per_day) > 0 and int(state["count"]) >= int(max_trades_per_day)
@@ -1745,3 +1808,8 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
+
+
+
+
+

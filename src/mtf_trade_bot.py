@@ -19,6 +19,17 @@ class AggCandle:
     close: float
 
 
+@dataclass(slots=True)
+class MtfTradeConfig:
+    trailing_sl_pct: float = 0.0
+    ema_period: int = 3
+    setup_mode: str = "either"
+    require_retest_strength: bool = True
+    max_trades_per_day: int = 1
+    cost_bps: float = 0.0
+    fixed_cost_per_trade: float = 0.0
+    max_daily_loss: float | None = None
+
 def _group_by_day(candles: list[Candle]) -> dict:
     by_day: dict = {}
     for candle in candles:
@@ -160,6 +171,8 @@ def generate_trades(
     capital: float,
     risk_pct: float,
     rr_ratio: float = 2.0,
+    config: MtfTradeConfig | None = None,
+    *,
     trailing_sl_pct: float = 0.0,
     ema_period: int = 3,
     setup_mode: str = "either",
@@ -169,11 +182,21 @@ def generate_trades(
     fixed_cost_per_trade: float = 0.0,
     max_daily_loss: float | None = None,
 ) -> list[dict[str, object]]:
+    cfg = config or MtfTradeConfig(
+        trailing_sl_pct=float(trailing_sl_pct),
+        ema_period=int(ema_period),
+        setup_mode=str(setup_mode),
+        require_retest_strength=bool(require_retest_strength),
+        max_trades_per_day=int(max_trades_per_day),
+        cost_bps=float(cost_bps),
+        fixed_cost_per_trade=float(fixed_cost_per_trade),
+        max_daily_loss=max_daily_loss,
+    )
     trades: list[dict[str, object]] = []
     add_intraday_vwap(candles)
     by_day = _group_by_day(candles)
-    ema_period = max(2, int(ema_period or 3))
-    max_trades_per_day = max(1, int(max_trades_per_day or 1))
+    ema_period = max(2, int(cfg.ema_period or 3))
+    max_trades_per_day = max(1, int(cfg.max_trades_per_day or 1))
 
     for day in sorted(by_day.keys()):
         day_candles = by_day[day]
@@ -189,7 +212,12 @@ def generate_trades(
         trades_taken = 0
         realized_pnl = 0.0
 
-        while search_start < len(day_candles) and not daily_limit_reached(trades_taken, realized_pnl, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss):
+        while search_start < len(day_candles) and not daily_limit_reached(
+            trades_taken,
+            realized_pnl,
+            max_trades_per_day=max_trades_per_day,
+            max_daily_loss=cfg.max_daily_loss,
+        ):
             trade = None
             entry_idx = -1
 
@@ -212,7 +240,7 @@ def generate_trades(
                 if not side:
                     continue
 
-                confirmed, setup_source, zone_low, zone_high = _setup_confirmation(completed_15m, side, setup_mode=setup_mode)
+                confirmed, setup_source, zone_low, zone_high = _setup_confirmation(completed_15m, side, setup_mode=cfg.setup_mode)
                 if not confirmed:
                     continue
 
@@ -228,7 +256,7 @@ def generate_trades(
                 trigger_low = float(trigger.low)
                 trigger_close = float(trigger.close)
 
-                if require_retest_strength and not _strong_retest(trigger, side):
+                if cfg.require_retest_strength and not _strong_retest(trigger, side):
                     continue
                 if side == 'BUY' and trigger_close < float(trigger.vwap):
                     continue
@@ -282,8 +310,8 @@ def generate_trades(
                     "retest_zone_high": round(zone_high, 4),
                     "trend_ema": round(ema_now, 4),
                     "ema_period": ema_period,
-                    "setup_mode": (setup_mode or "either").strip().lower(),
-                    "require_retest_strength": bool(require_retest_strength),
+                    "setup_mode": (cfg.setup_mode or "either").strip().lower(),
+                    "require_retest_strength": bool(cfg.require_retest_strength),
                     "max_trades_per_day": max_trades_per_day,
                     "vwap_aligned": 'YES',
                     "session_allowed": 'YES',
@@ -309,11 +337,11 @@ def generate_trades(
 
             for idx in range(entry_idx + 1, len(day_candles)):
                 candle = day_candles[idx]
-                if trailing_sl_pct > 0:
+                if cfg.trailing_sl_pct > 0:
                     if side == "BUY":
-                        trail_stop = max(trail_stop, float(candle.high) * (1.0 - trailing_sl_pct))
+                        trail_stop = max(trail_stop, float(candle.high) * (1.0 - cfg.trailing_sl_pct))
                     else:
-                        trail_stop = min(trail_stop, float(candle.low) * (1.0 + trailing_sl_pct))
+                        trail_stop = min(trail_stop, float(candle.low) * (1.0 + cfg.trailing_sl_pct))
                     trade["trailing_stop_loss"] = round(trail_stop, 4)
 
                 if side == "BUY":
@@ -348,8 +376,8 @@ def generate_trades(
                 entry,
                 exit_price,
                 qty,
-                cost_bps=cost_bps,
-                fixed_cost_per_trade=fixed_cost_per_trade,
+                cost_bps=cfg.cost_bps,
+                fixed_cost_per_trade=cfg.fixed_cost_per_trade,
             )
             trade["exit_time"] = exit_time.isoformat(sep=" ")
             trade["exit_price"] = round(exit_price, 4)
@@ -364,3 +392,4 @@ def generate_trades(
             search_start = exit_idx + 1
 
     return trades
+

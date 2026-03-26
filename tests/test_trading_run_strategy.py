@@ -11,6 +11,7 @@ from src.Trading import _latest_actionable_trades, run_strategy
 from src.amd_fvg_sd_bot import ConfluenceConfig
 from src.breakout_bot import BreakoutConfig
 from src.demand_supply_bot import DemandSupplyConfig
+from src.strategy_service import standardize_strategy_rows
 
 
 class TestTradingRunStrategy(unittest.TestCase):
@@ -163,6 +164,8 @@ class TestTradingRunStrategy(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["side"], "BUY")
         self.assertEqual(rows[0]["entry_price"], 101.5)
+        self.assertEqual(rows[0]["entry"], 101.5)
+        self.assertEqual(rows[0]["target"], 101.5)
         self.assertEqual(rows[0]["strategy"], "INDICATOR")
         mock_attach.assert_called_once()
 
@@ -186,11 +189,36 @@ class TestTradingRunStrategy(unittest.TestCase):
         self.assertEqual(rows[0]["strategy"], "MTF_5M")
         mock_mtf.assert_called_once()
         kwargs = mock_mtf.call_args.kwargs
-        self.assertEqual(kwargs["max_trades_per_day"], 1)
-        self.assertTrue(kwargs["require_retest_strength"])
+        self.assertEqual(kwargs["rr_ratio"], 2.0)
+        self.assertTrue(kwargs["config"].require_retest_strength)
         mock_attach.assert_called_once()
+
+    def test_standardize_strategy_rows_maps_legacy_aliases_to_trade_schema(self):
+        rows = standardize_strategy_rows(
+            [
+                {
+                    "type": "buy",
+                    "price": 101.25,
+                    "sl": 99.5,
+                    "target_price": 104.75,
+                    "total_score": 6.2,
+                    "time": "2026-03-20 09:30:00",
+                }
+            ],
+            strategy_name="Breakout",
+            symbol="NIFTY",
+        )
+
+        self.assertEqual(rows[0]["timestamp"], "2026-03-20 09:30:00")
+        self.assertEqual(rows[0]["side"], "BUY")
+        self.assertEqual(rows[0]["entry"], 101.25)
+        self.assertEqual(rows[0]["entry_price"], 101.25)
+        self.assertEqual(rows[0]["price"], 101.25)
+        self.assertEqual(rows[0]["stop_loss"], 99.5)
+        self.assertEqual(rows[0]["target"], 104.75)
+        self.assertEqual(rows[0]["target_price"], 104.75)
+        self.assertEqual(rows[0]["score"], 6.2)
 
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -127,6 +127,32 @@ class TestExecutionEngine(unittest.TestCase):
         self.assertIn('TP:109.5', candidates[0]['reason'])
 
 
+    def test_build_execution_candidates_standardizes_trade_schema_aliases(self):
+        rows = [
+            {
+                'strategy': 'DEMAND_SUPPLY',
+                'time': '2026-03-05 10:50:00',
+                'type': 'BUY',
+                'price': 107.3,
+                'sl': 105.1,
+                'target': 109.5,
+                'total_score': 7.2,
+                'quantity': 65,
+                'reason': 'buy zone retest score=7.2',
+            }
+        ]
+
+        candidates = build_execution_candidates('Demand Supply', rows, 'NIFTY')
+
+        self.assertEqual(candidates[0]['timestamp'], '2026-03-05 10:50:00')
+        self.assertEqual(candidates[0]['signal_time'], '2026-03-05 10:50:00')
+        self.assertEqual(candidates[0]['side'], 'BUY')
+        self.assertEqual(candidates[0]['entry'], 107.3)
+        self.assertEqual(candidates[0]['entry_price'], 107.3)
+        self.assertEqual(candidates[0]['stop_loss'], 105.1)
+        self.assertEqual(candidates[0]['target'], 109.5)
+        self.assertEqual(candidates[0]['target_price'], 109.5)
+        self.assertEqual(candidates[0]['score'], 7.2)
     def test_build_execution_candidates_drops_simulated_exit_fields(self):
         rows = [
             {
@@ -271,6 +297,91 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(len(skipped), 1)
             self.assertEqual(skipped[0]['signal_time'], '2026-03-06 10:00:00')
 
+    def test_filter_unlogged_candidates_skips_duplicate_signal_key_from_logged_rows(self):
+        seed = {
+            'strategy': 'DEMAND_SUPPLY',
+            'symbol': 'NIFTY',
+            'timeframe': '5m',
+            'signal_time': '2026-03-06 10:00:00',
+            'timestamp': '2026-03-06 10:00:00',
+            'side': 'BUY',
+            'price': 100.0,
+            'entry': 100.0,
+            'entry_price': 100.0,
+            'stop_loss': 99.0,
+            'target': 102.0,
+            'target_price': 102.0,
+            'quantity': 65,
+            'reason': 'seed',
+        }
+        follow_up = {
+            'strategy': 'DEMAND_SUPPLY',
+            'symbol': 'NIFTY',
+            'timeframe': '5m',
+            'signal_time': '2026-03-06 10:00:00',
+            'timestamp': '2026-03-06 10:00:00',
+            'side': 'BUY',
+            'price': 100.4,
+            'entry': 100.4,
+            'entry_price': 100.4,
+            'stop_loss': 99.3,
+            'target': 102.6,
+            'target_price': 102.6,
+            'quantity': 65,
+            'reason': 'follow_up',
+        }
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            execute_paper_trades([seed], out, deduplicate=True)
+            fresh, skipped = filter_unlogged_candidates([follow_up], out)
+            self.assertEqual(len(fresh), 0)
+            self.assertEqual(len(skipped), 1)
+            self.assertEqual(skipped[0]['duplicate_reason'], 'DUPLICATE_SIGNAL_KEY')
+
+    def test_filter_unlogged_candidates_enforces_duplicate_signal_cooldown(self):
+        seed = {
+            'strategy': 'DEMAND_SUPPLY',
+            'symbol': 'NIFTY',
+            'timeframe': '5m',
+            'signal_time': '2026-03-06 10:00:00',
+            'timestamp': '2026-03-06 10:00:00',
+            'side': 'BUY',
+            'price': 100.0,
+            'entry': 100.0,
+            'entry_price': 100.0,
+            'stop_loss': 99.0,
+            'target': 102.0,
+            'target_price': 102.0,
+            'quantity': 65,
+            'reason': 'seed',
+            'duplicate_signal_cooldown_bars': 2,
+        }
+        follow_up = {
+            'strategy': 'DEMAND_SUPPLY',
+            'symbol': 'NIFTY',
+            'timeframe': '5m',
+            'signal_time': '2026-03-06 10:05:00',
+            'timestamp': '2026-03-06 10:05:00',
+            'side': 'BUY',
+            'price': 100.4,
+            'entry': 100.4,
+            'entry_price': 100.4,
+            'stop_loss': 99.3,
+            'target': 102.6,
+            'target_price': 102.6,
+            'quantity': 65,
+            'reason': 'follow_up',
+            'duplicate_signal_cooldown_bars': 2,
+        }
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            execute_paper_trades([seed], out, deduplicate=True)
+            fresh, skipped = filter_unlogged_candidates([follow_up], out)
+            self.assertEqual(len(fresh), 0)
+            self.assertEqual(len(skipped), 1)
+            self.assertEqual(skipped[0]['duplicate_reason'], 'DUPLICATE_SIGNAL_COOLDOWN')
     def test_execute_paper_trades_blocks_after_daily_trade_limit(self):
         candidates = [
             {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},
@@ -623,6 +734,8 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(second.blocked_rows[0]['blocked_reason'], 'MAX_OPEN_TRADES')
 if __name__ == '__main__':
     unittest.main()
+
+
 
 
 

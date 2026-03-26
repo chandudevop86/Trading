@@ -101,6 +101,27 @@ def _risk_rule_strategy(df, capital: float, risk_pct: float, rr_ratio: float, co
     ]
 
 
+def _single_trade_strategy(entry_idx: int = 0):
+    def _strategy(df, capital: float, risk_pct: float, rr_ratio: float, config=None):
+        del capital, risk_pct, rr_ratio, config
+        row = df.iloc[entry_idx]
+        entry = float(row['close'])
+        return [
+            {
+                'timestamp': row['timestamp'],
+                'side': 'BUY',
+                'entry': entry,
+                'stop_loss': round(entry - 0.6, 4),
+                'target': round(entry + 0.8, 4),
+                'strategy': 'LIFECYCLE_TEST',
+                'reason': 'single_trade',
+                'score': 5.0,
+                'quantity': 1,
+            }
+        ]
+    return _strategy
+
+
 class TestBacktestEngine(unittest.TestCase):
     def test_nifty_intraday_preset_matches_expected_thresholds(self):
         validation = nifty_intraday_validation_config()
@@ -165,6 +186,86 @@ class TestBacktestEngine(unittest.TestCase):
         self.assertEqual(summary['duplicate_rejections'], 1)
         self.assertEqual(summary['risk_rule_rejections'], 1)
 
+    def test_run_backtest_closes_trade_at_target_and_computes_pnl(self):
+        df = _build_market_frame(3)
+        with TemporaryDirectory() as td:
+            trades_output = Path(td) / 'trades.csv'
+            run_backtest(
+                df,
+                _single_trade_strategy(2),
+                BacktestConfig(
+                    capital=100000.0,
+                    risk_pct=0.01,
+                    rr_ratio=2.0,
+                    trades_output=trades_output,
+                    summary_output=Path(td) / 'summary.csv',
+                    validation_output=Path(td) / 'validation.csv',
+                    strategy_name='LIFECYCLE_TARGET',
+                ),
+            )
+            rows = pd.read_csv(trades_output).to_dict(orient='records')
+
+        self.assertEqual(rows[0]['trade_status'], 'closed')
+        self.assertEqual(rows[0]['exit_reason'], 'TARGET')
+        self.assertGreater(float(rows[0]['exit_price']), float(rows[0]['entry_price']))
+        self.assertGreater(float(rows[0]['pnl']), 0.0)
+        self.assertGreater(float(rows[0]['rr_achieved']), 0.0)
+
+    def test_run_backtest_closes_trade_at_stop_loss_and_computes_negative_pnl(self):
+        df = _build_market_frame(1)
+        with TemporaryDirectory() as td:
+            trades_output = Path(td) / 'trades.csv'
+            run_backtest(
+                df,
+                _single_trade_strategy(0),
+                BacktestConfig(
+                    capital=100000.0,
+                    risk_pct=0.01,
+                    rr_ratio=2.0,
+                    trades_output=trades_output,
+                    summary_output=Path(td) / 'summary.csv',
+                    validation_output=Path(td) / 'validation.csv',
+                    strategy_name='LIFECYCLE_STOP',
+                ),
+            )
+            rows = pd.read_csv(trades_output).to_dict(orient='records')
+
+        self.assertEqual(rows[0]['trade_status'], 'closed')
+        self.assertEqual(rows[0]['exit_reason'], 'STOP_LOSS')
+        self.assertLess(float(rows[0]['exit_price']), float(rows[0]['entry_price']))
+        self.assertLess(float(rows[0]['pnl']), 0.0)
+        self.assertLess(float(rows[0]['rr_achieved']), 0.0)
+
+    def test_run_backtest_closes_open_trade_at_end_of_data_when_enabled(self):
+        df = pd.DataFrame(
+            [
+                {'timestamp': '2026-03-01 09:15:00', 'open': 100.0, 'high': 100.2, 'low': 99.8, 'close': 100.0, 'volume': 1000},
+                {'timestamp': '2026-03-01 09:16:00', 'open': 100.0, 'high': 100.3, 'low': 99.9, 'close': 100.1, 'volume': 1001},
+            ]
+        )
+        with TemporaryDirectory() as td:
+            trades_output = Path(td) / 'trades.csv'
+            run_backtest(
+                df,
+                _single_trade_strategy(0),
+                BacktestConfig(
+                    capital=100000.0,
+                    risk_pct=0.01,
+                    rr_ratio=2.0,
+                    trades_output=trades_output,
+                    summary_output=Path(td) / 'summary.csv',
+                    validation_output=Path(td) / 'validation.csv',
+                    strategy_name='LIFECYCLE_EOD',
+                    close_open_positions_at_end=True,
+                ),
+            )
+            rows = pd.read_csv(trades_output).to_dict(orient='records')
+
+        self.assertEqual(rows[0]['trade_status'], 'closed')
+        self.assertEqual(rows[0]['exit_reason'], 'END_OF_DATA')
+        self.assertEqual(rows[0]['exit_time'], '2026-03-01 09:16:00')
+        self.assertIn('pnl', rows[0])
+
     def test_summarize_trade_log_blocks_deployment_when_sample_too_small(self):
         rows = [
             {
@@ -198,3 +299,4 @@ class TestBacktestEngine(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

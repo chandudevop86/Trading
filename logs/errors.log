@@ -60,3 +60,8 @@
 2026-03-26 21:35:42,827 INFO execution_engine skipped invalid trade 9b9cc866-2ed4-593b-948f-3595a1cf2af1 reason=INVALID_SIDE
 2026-03-26 21:36:06,519 INFO execution_engine skipped invalid trade 679a8cdc-1450-5389-ac5a-d135259cdf54 reason=INVALID_SIDE
 2026-03-26 21:36:12,462 INFO execution_engine skipped invalid trade 9b9cc866-2ed4-593b-948f-3595a1cf2af1 reason=INVALID_SIDE
+2026-03-27 00:39:00,761 INFO execution_engine skipped invalid trade 679a8cdc-1450-5389-ac5a-d135259cdf54 reason=INVALID_SIDE
+2026-03-27 00:39:16,957 INFO execution_engine skipped invalid trade 9b9cc866-2ed4-593b-948f-3595a1cf2af1 reason=INVALID_SIDE
+2026-03-27 00:51:46,755 INFO execution_engine skipped invalid trade 679a8cdc-1450-5389-ac5a-d135259cdf54 reason=INVALID_SIDE
+2026-03-27 00:52:19,724 INFO execution_engine skipped invalid trade 9b9cc866-2ed4-593b-948f-3595a1cf2af1 reason=INVALID_SIDE
+2026-03-27 01:00:50,199 INFO backtest_engine strategy execution failed: single positional indexer is out-of-bounds

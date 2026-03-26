@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import time
 from math import floor
@@ -55,8 +55,9 @@ def generate_trades(
     candles: list[Candle],
     capital: float,
     risk_pct: float,
-    rr_ratio: float,
-    config: IndicatorConfig,
+    rr_ratio: float = 2.0,
+    config: IndicatorConfig | None = None,
+    *,
     entry_cutoff_hhmm: str = '',
     trailing_sl_pct: float = 0.0,
     cost_bps: float = 0.0,
@@ -64,7 +65,8 @@ def generate_trades(
     max_daily_loss: float | None = None,
     max_trades_per_day: int | None = 1,
 ) -> list[dict[str, object]]:
-    indicator_rows = generate_indicator_rows(candles, config=config)
+    cfg = config or IndicatorConfig()
+    indicator_rows = generate_indicator_rows(candles, config=cfg)
     by_day = _group_day_indices(candles)
     trades: list[dict[str, object]] = []
     cutoff = _parse_cutoff(entry_cutoff_hhmm)
@@ -89,7 +91,7 @@ def generate_trades(
         for i in indices:
             if cutoff is not None and candles[i].timestamp.time() > cutoff:
                 continue
-            s = _side_from_row(indicator_rows[i], config.adx_trend_min)
+            s = _side_from_row(indicator_rows[i], cfg.adx_trend_min)
             if s:
                 entry_idx = i
                 side = s
@@ -194,3 +196,4 @@ def generate_trades(
         trades.append(trade)
 
     return trades
+

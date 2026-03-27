@@ -1,4 +1,4 @@
-import unittest
+﻿import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -60,6 +60,26 @@ def _positive_expectancy_strategy(df, capital: float, risk_pct: float, rr_ratio:
     return trades
 
 
+def _overtrade_strategy(df, capital: float, risk_pct: float, rr_ratio: float, config=None):
+    del capital, risk_pct, rr_ratio, config
+    trades: list[dict[str, object]] = []
+    for trade_index in range(205):
+        row = df.iloc[trade_index * 2]
+        entry = float(row['close'])
+        trades.append(
+            {
+                'timestamp': row['timestamp'],
+                'side': 'BUY',
+                'entry': entry,
+                'stop_loss': round(entry - 0.6, 4),
+                'target': round(entry + 0.8, 4),
+                'strategy': 'POSITIVE_EDGE',
+                'reason': 'overtrade_sample',
+                'score': 6.0,
+                'quantity': 1,
+            }
+        )
+    return trades
 def _risk_rule_strategy(df, capital: float, risk_pct: float, rr_ratio: float, config=None):
     del capital, risk_pct, rr_ratio, config
     entry_one = float(df.iloc[0]['close'])
@@ -266,6 +286,27 @@ class TestBacktestEngine(unittest.TestCase):
         self.assertEqual(rows[0]['exit_time'], '2026-03-01 09:16:00')
         self.assertIn('pnl', rows[0])
 
+    def test_run_backtest_blocks_deployment_when_trade_sample_exceeds_cap(self):
+        df = _build_market_frame(205)
+        with TemporaryDirectory() as td:
+            summary = run_backtest(
+                df,
+                _overtrade_strategy,
+                BacktestConfig(
+                    capital=100000.0,
+                    risk_pct=0.01,
+                    rr_ratio=2.0,
+                    trades_output=Path(td) / 'trades.csv',
+                    summary_output=Path(td) / 'summary.csv',
+                    validation_output=Path(td) / 'validation.csv',
+                    strategy_name='POSITIVE_EDGE',
+                    validation=BacktestValidationConfig(min_trades=100, target_trades=150, max_trades=200, min_profit_factor=1.1),
+                ),
+            )
+
+        self.assertEqual(summary['sample_window_passed'], 'NO')
+        self.assertEqual(summary['deployment_ready'], 'NO')
+        self.assertIn('MAX_TRADES>200', summary['deployment_blockers'])
     def test_summarize_trade_log_blocks_deployment_when_sample_too_small(self):
         rows = [
             {
@@ -299,4 +340,6 @@ class TestBacktestEngine(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
 

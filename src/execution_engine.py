@@ -1047,8 +1047,18 @@ def _append_order_history(path: Path, record: dict[str, object]) -> None:
         persist_row(path, record)
     except Exception:
         pass
+def _annotate_rejection_row(row: dict[str, object], *, reason: str, category: str, detail: str = '') -> dict[str, object]:
+    annotated = dict(row)
+    annotated['rejection_reason'] = reason
+    annotated['rejection_category'] = category
+    if detail:
+        annotated['rejection_detail'] = detail
+    return annotated
+
+
 def _mark_skipped(result: ExecutionResult, row: dict[str, object], reason: str) -> None:
-    skipped = dict(row)
+    category = 'deduplication' if reason.startswith("DUPLICATE_") else 'validation'
+    skipped = _annotate_rejection_row(row, reason=reason, category=category)
     if reason.startswith("DUPLICATE_"):
         skipped["duplicate_reason"] = reason
         result.duplicate_count += 1
@@ -1276,6 +1286,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["trade_status"] = TRADE_STATUS_BLOCKED
             blocked["execution_status"] = "BLOCKED"
             blocked["blocked_reason"] = SKIP_REASON_MAX_OPEN_TRADES if open_trade_limit_hit else SKIP_REASON_MAX_TRADES_PER_DAY if trade_limit_hit else SKIP_REASON_MAX_DAILY_LOSS
+            blocked = _annotate_rejection_row(blocked, reason=str(blocked["blocked_reason"]), category='risk')
             blocked["risk_limit_reason"] = f"max open trades={int(max_open_trades)}" if open_trade_limit_hit else _risk_limit_message(effective_max_trades_per_day, max_daily_loss)
             blocked["broker_name"] = resolved_broker_name
             blocked["broker_status"] = "RISK_LIMIT"
@@ -1292,6 +1303,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
                 blocked["trade_status"] = TRADE_STATUS_BLOCKED
                 blocked["execution_status"] = "BLOCKED"
                 blocked["blocked_reason"] = SKIP_REASON_OPTIMIZER_GATE
+                blocked = _annotate_rejection_row(blocked, reason=SKIP_REASON_OPTIMIZER_GATE, category='optimizer_gate', detail=str(optimizer_reason))
                 blocked["broker_name"] = resolved_broker_name
                 blocked["broker_status"] = "OPTIMIZER_GATE"
                 blocked["broker_message"] = optimizer_reason
@@ -1305,6 +1317,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["trade_status"] = TRADE_STATUS_BLOCKED
             blocked["execution_status"] = "BLOCKED"
             blocked["blocked_reason"] = SKIP_REASON_KILL_SWITCH
+            blocked = _annotate_rejection_row(blocked, reason=SKIP_REASON_KILL_SWITCH, category='kill_switch')
             blocked["broker_name"] = resolved_broker_name
             blocked["broker_status"] = "KILL_SWITCH"
             blocked["broker_message"] = "Live execution blocked by LIVE_TRADING_KILL_SWITCH."
@@ -1318,6 +1331,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["trade_status"] = TRADE_STATUS_BLOCKED
             blocked["execution_status"] = "BLOCKED"
             blocked["blocked_reason"] = "LIVE_DISABLED"
+            blocked = _annotate_rejection_row(blocked, reason='LIVE_DISABLED', category='live_disabled')
             blocked["broker_name"] = resolved_broker_name
             blocked["broker_status"] = "LIVE_DISABLED"
             blocked["broker_message"] = "Live execution requires explicit enablement."
@@ -1331,6 +1345,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["trade_status"] = TRADE_STATUS_BLOCKED
             blocked["execution_status"] = "BLOCKED"
             blocked["blocked_reason"] = "SYMBOL_NOT_ALLOWED"
+            blocked = _annotate_rejection_row(blocked, reason='SYMBOL_NOT_ALLOWED', category='allowlist')
             blocked["broker_name"] = resolved_broker_name
             blocked["broker_status"] = "SYMBOL_NOT_ALLOWED"
             blocked["broker_message"] = "Symbol is not part of the live allowlist."
@@ -1344,6 +1359,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["trade_status"] = TRADE_STATUS_BLOCKED
             blocked["execution_status"] = "BLOCKED"
             blocked["blocked_reason"] = "MAX_ORDER_QUANTITY"
+            blocked = _annotate_rejection_row(blocked, reason='MAX_ORDER_QUANTITY', category='order_limit')
             blocked["broker_name"] = resolved_broker_name
             blocked["broker_status"] = "MAX_ORDER_QUANTITY"
             blocked["broker_message"] = f"Order quantity exceeds configured limit {int(max_order_quantity)}."
@@ -1358,6 +1374,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["trade_status"] = TRADE_STATUS_BLOCKED
             blocked["execution_status"] = "BLOCKED"
             blocked["blocked_reason"] = "MAX_ORDER_VALUE"
+            blocked = _annotate_rejection_row(blocked, reason='MAX_ORDER_VALUE', category='order_limit')
             blocked["broker_name"] = resolved_broker_name
             blocked["broker_status"] = "MAX_ORDER_VALUE"
             blocked["broker_message"] = f"Order value exceeds configured limit {float(max_order_value):.2f}."
@@ -1894,6 +1911,10 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
+
+
+
+
 
 
 

@@ -34,6 +34,7 @@ class DemandSupplyConfig:
     min_volatility_ratio: float = 0.90
     zone_freshness_bars: int = 20
     min_reaction_strength: float = 0.50
+    min_zone_selection_score: float = 3.00
     min_confirmation_body_ratio: float = 0.45
     min_rejection_wick_ratio: float = 0.35
     zone_buffer_atr_fraction: float = 0.12
@@ -535,6 +536,10 @@ def generate_trades(
                 continue
             if zone.idx + 2 >= len(day_candles):
                 continue
+            prequal_idx = min(len(day_candles) - 1, zone.idx + 2)
+            zone_selection_score = _zone_selection_score(day_candles, prequal_idx, zone, side, cfg)
+            if zone_selection_score < float(cfg.min_zone_selection_score):
+                continue
 
             retest = detect_retest(day_candles, zone, side, zone.idx + 2, cfg)
             if retest is None:
@@ -607,7 +612,9 @@ def generate_trades(
                     'volatility_component': round(float(components['volatility_quality']), 2),
                     'session_component': round(float(components['session_quality']), 2),
                     'zone_strength_score': round(float(diagnostics['zone_strength_score']), 2),
-                    'zone_selection_score': round(float(diagnostics['zone_selection_score']), 2),
+                    'zone_selection_score': round(float(zone_selection_score), 2),
+                    'zone_prequalification_floor': round(float(cfg.min_zone_selection_score), 2),
+                    'zone_prequalified': 'YES',
                     'structure_score': round(float(diagnostics['structure_score']), 4),
                     'freshness_ratio': round(float(diagnostics['freshness_ratio']), 4),
                     'reaction_score': round(float(diagnostics['reaction_score']), 4),
@@ -639,5 +646,8 @@ def generate_trades(
             used_signal_keys.add(signal_key)
 
     return trades
+
+
+
 
 

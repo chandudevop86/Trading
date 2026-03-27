@@ -459,6 +459,9 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
         if trade_pnl > 0:
             bucket_row['wins'] += 1.0
 
+    trading_days = len({str(trade.get('exit_time') or trade.get('entry_time') or trade.get('timestamp') or '')[:10] for trade in trades if str(trade.get('exit_time') or trade.get('entry_time') or trade.get('timestamp') or '').strip()})
+    avg_trades_per_day = total_trades / trading_days if trading_days else 0.0
+
     return {
         'strategy': cfg.strategy_name,
         'total_trades': total_trades,
@@ -478,6 +481,8 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
         'max_drawdown': round(max_drawdown, 2),
         'max_drawdown_pct': round(max_drawdown_pct, 2),
         'avg_rr': round(avg_rr, 2),
+        'trading_days': trading_days,
+        'avg_trades_per_day': round(avg_trades_per_day, 2),
         'pnl_by_strategy': '; '.join(f'{key}:{value:.2f}' for key, value in sorted(pnl_by_strategy.items())),
         'score_bucket_analysis': '; '.join(
             f"{bucket}=count:{int(values['count'])},wins:{int(values['wins'])},pnl:{values['pnl']:.2f},expectancy:{values['expectancy']:.2f}"
@@ -502,11 +507,13 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
 
     blockers: list[str] = []
     notes: list[str] = []
+    sample_window_passed = int(rules.min_trades) <= total_trades <= int(rules.max_trades)
 
     if total_trades < int(rules.min_trades):
         blockers.append(f'MIN_TRADES<{int(rules.min_trades)}')
     elif total_trades > int(rules.max_trades):
-        notes.append(f'SAMPLE_ABOVE_TARGET>{int(rules.max_trades)}')
+        blockers.append(f'MAX_TRADES>{int(rules.max_trades)}')
+        notes.append('OVERTRADING_SAMPLE_REJECTED')
     else:
         notes.append('SAMPLE_WITHIN_TARGET_WINDOW')
 
@@ -532,6 +539,7 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
     return {
         'strategy': str(summary.get('strategy', cfg.strategy_name) or cfg.strategy_name),
         'sample_status': sample_status,
+        'sample_window_passed': 'YES' if sample_window_passed else 'NO',
         'sample_trade_floor': int(rules.min_trades),
         'sample_trade_target': int(rules.target_trades),
         'sample_trade_cap': int(rules.max_trades),
@@ -547,6 +555,7 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
         'required_profit_factor': round(float(rules.min_profit_factor), 2),
         'max_duplicate_rejections': int(rules.max_duplicate_rejections),
         'duplicate_rejections': duplicate_rejections,
+        'validation_passed': deployment_ready,
         'deployment_ready': deployment_ready,
         'deployment_blockers': '; '.join(blockers),
         'validation_notes': '; '.join(notes),
@@ -712,6 +721,7 @@ def summarize_trade_log(
     write_rows(summary_output, [summary])
     write_rows(validation_output, [validation_row])
     return summary
+
 
 
 

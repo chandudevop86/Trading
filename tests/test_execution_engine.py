@@ -197,6 +197,20 @@ class TestExecutionEngine(unittest.TestCase):
         self.assertEqual(make_trade_id(candidate), make_trade_id(candidate))
         self.assertEqual(make_trade_key(candidate), make_trade_key(candidate))
 
+    def test_execute_paper_trades_exposes_rejection_metadata_for_duplicates(self):
+        candidates = [
+            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},
+            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            result = execute_paper_trades(candidates, out, deduplicate=True)
+
+        self.assertEqual(result.executed_count, 1)
+        self.assertEqual(result.skipped_count, 1)
+        self.assertEqual(result.skipped_rows[0]['rejection_category'], 'deduplication')
+        self.assertEqual(result.skipped_rows[0]['rejection_reason'], 'DUPLICATE_BATCH_TRADE')
     def test_execute_paper_trades_returns_structured_summary(self):
         candidates = [
             {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},
@@ -831,3 +845,4 @@ class TestExecutionEngine(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

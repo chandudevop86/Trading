@@ -187,6 +187,8 @@ def apply_strategy_benchmark(summary_row: dict[str, Any]) -> dict[str, Any]:
     blockers: list[str] = []
     if total_trades < preset.min_trades:
         blockers.append(f'MIN_TRADES<{preset.min_trades}')
+    if total_trades > preset.target_trades_high:
+        blockers.append(f'MAX_TRADES>{preset.target_trades_high}')
     if profit_factor != float('inf') and profit_factor < preset.min_profit_factor:
         blockers.append(f'PROFIT_FACTOR<{preset.min_profit_factor:.2f}')
     if expectancy <= preset.min_expectancy_per_trade:
@@ -202,6 +204,7 @@ def apply_strategy_benchmark(summary_row: dict[str, Any]) -> dict[str, Any]:
     if total_trades > 0 and (risk_rule_rejections / total_trades) > 0.15:
         blockers.append('RISK_RULE_REJECTIONS_ELEVATED')
     item['positive_expectancy'] = positive_expectancy
+    item['sample_window_passed'] = 'YES' if preset.min_trades <= total_trades <= preset.target_trades_high else 'NO'
     item['deployment_ready'] = 'YES' if not blockers else 'NO'
     item['deployment_blockers'] = '; '.join(blockers)
     item['mode'] = item.get('mode', 'Balanced')
@@ -273,3 +276,4 @@ def optimizer_report_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str, 
     for idx, row in enumerate(rows, start=1):
         row['optimizer_rank'] = idx
     return rows
+

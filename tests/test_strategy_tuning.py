@@ -59,6 +59,23 @@ class TestStrategyTuning(unittest.TestCase):
         self.assertIn('MIN_TRADES<100', failed['deployment_blockers'])
         self.assertIn('DUPLICATES>0', failed['deployment_blockers'])
 
+    def test_apply_strategy_benchmark_rejects_overtrading_samples(self):
+        failed = apply_strategy_benchmark(
+            {
+                'strategy': 'DEMAND_SUPPLY',
+                'total_trades': 220,
+                'win_rate': 45.0,
+                'profit_factor': 1.55,
+                'expectancy_per_trade': 8.0,
+                'avg_rr': 1.5,
+                'max_drawdown_pct': 8.0,
+                'duplicate_rejections': 0,
+                'risk_rule_rejections': 2,
+            }
+        )
+        self.assertEqual(failed['sample_window_passed'], 'NO')
+        self.assertEqual(failed['deployment_ready'], 'NO')
+        self.assertIn('MAX_TRADES>180', failed['deployment_blockers'])
     def test_optimizer_report_rows_orders_by_rank_score(self):
         rows = optimizer_report_rows(
             [
@@ -90,3 +107,4 @@ class TestStrategyTuning(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import types
 import unittest
 from unittest.mock import patch
@@ -111,7 +111,7 @@ class TestTradingRunStrategy(unittest.TestCase):
         self.assertIsInstance(kwargs["config"], DemandSupplyConfig)
         self.assertTrue(kwargs["config"].require_vwap_alignment)
         self.assertTrue(kwargs["config"].require_trend_bias)
-        self.assertEqual(kwargs["config"].duplicate_signal_cooldown_bars, 12)
+        self.assertEqual(kwargs["config"].duplicate_signal_cooldown_bars, 18)
         self.assertEqual(kwargs["config"].max_trades_per_day, 1)
         mock_attach.assert_called_once()
 
@@ -222,3 +222,5 @@ class TestTradingRunStrategy(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

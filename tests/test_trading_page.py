@@ -61,6 +61,7 @@ class _FakeStreamlit:
         self.warnings = []
         self.successes = []
         self.infos = []
+        self.dataframes = []
 
     def set_page_config(self, **kwargs):
         return None
@@ -73,6 +74,9 @@ class _FakeStreamlit:
 
     def columns(self, count):
         return [_FakeColumn(self) for _ in range(count)]
+
+    def expander(self, label, **kwargs):
+        return _FakeColumn(self)
 
     def text_input(self, label, value=''):
         return value
@@ -103,7 +107,32 @@ class _FakeStreamlit:
         self.infos.append(str(message))
 
 
+    def dataframe(self, data, **kwargs):
+        self.dataframes.append((data, kwargs))
+
 class TestTradingPage(unittest.TestCase):
+    def test_build_scorecard_rows_uses_validation_summary(self):
+        rows = trading_page._build_scorecard_rows(
+            {
+                'total_trades': 140,
+                'avg_trades_per_day': 1.1,
+                'duplicate_rejections': 0,
+                'risk_rule_rejections': 0,
+                'profit_factor': 1.45,
+                'expectancy_per_trade': 12.0,
+                'max_drawdown_pct': 7.5,
+                'deployment_ready': 'YES',
+                'sample_window_passed': 'YES',
+            },
+            status='Backtest completed',
+            todays_trades=1,
+        )
+
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[0]['area'], 'Trade Quality')
+        self.assertGreaterEqual(float(rows[1]['score']), 8.0)
+        self.assertIn('passed current gates', rows[1]['current issue'])
+
     def _result(self, *, status='Run completed', backtest_summary=None, execution_messages=None):
         return TradingActionResult(
             candles=pd.DataFrame(),
@@ -177,3 +206,6 @@ class TestTradingPage(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+

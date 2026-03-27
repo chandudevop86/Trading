@@ -6,7 +6,7 @@ from typing import Any, Callable, Literal
 from src.amd_fvg_sd_bot import ConfluenceConfig, generate_trades as generate_amd_fvg_sd_trades
 from src.breakout_bot import BreakoutConfig, Candle, generate_trades as generate_breakout_trades
 from src.btst_bot import BtstConfig, generate_trades as generate_btst_trades
-from src.demand_supply_bot import DemandSupplyConfig, generate_trades as generate_demand_supply_trades
+from src.strategy_demand_supply import DemandSupplyConfig, generate_trades as generate_demand_supply_trades
 from src.indicator_bot import IndicatorConfig, generate_indicator_rows, generate_trades as generate_indicator_trades
 from src.mtf_trade_bot import MtfTradeConfig, generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
@@ -420,6 +420,7 @@ def run_strategy_workflow(
         attach_option_strikes_fn=attach_option_strikes_fn,
         attach_option_metrics_fn=attach_option_metrics_fn,
     )
+
 
 
 

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import math
 from datetime import datetime
@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.backtest_engine import summarize_trade_log
+from src.trading_core import append_log
 from src.strategy_tuning import normalize_strategy_key
 
 
@@ -63,7 +64,8 @@ def load_csv_summary(path: Path) -> dict[str, object]:
         return {}
     try:
         frame = pd.read_csv(path)
-    except Exception:
+    except Exception as exc:
+        append_log(f'reporting_service load_csv_summary failed path={path}: {type(exc).__name__}: {exc}', level=40)
         return {}
     if frame.empty:
         return {}
@@ -75,7 +77,8 @@ def load_csv_rows(path: Path) -> list[dict[str, object]]:
         return []
     try:
         frame = pd.read_csv(path)
-    except Exception:
+    except Exception as exc:
+        append_log(f'reporting_service load_csv_rows failed path={path}: {type(exc).__name__}: {exc}', level=40)
         return []
     if frame.empty:
         return []
@@ -140,3 +143,4 @@ def short_broker_status(broker_choice: str, broker_status: str) -> str:
     if broker_choice == 'Dhan Live':
         return 'Dhan live active' if 'armed' in broker_status.lower() else broker_status
     return 'Paper broker active'
+

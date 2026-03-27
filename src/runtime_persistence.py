@@ -2,15 +2,27 @@
 
 import json
 import os
+import logging
 import sqlite3
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
-DEFAULT_DB_PATH = Path('data/legacy_runtime.db')
+from src.runtime_config import RuntimeConfig
+
+RUNTIME_CONFIG = RuntimeConfig.load()
+DEFAULT_DB_PATH = RUNTIME_CONFIG.paths.data_dir / 'legacy_runtime.db'
 
 
+
+def _log_runtime_persistence_warning(message: str) -> None:
+    try:
+        from src.trading_core import append_log
+
+        append_log(message, level=logging.WARNING)
+    except Exception:
+        pass
 def resolve_db_path(db_path: Path | str | None = None) -> Path:
     if db_path is not None:
         return Path(db_path)
@@ -172,7 +184,8 @@ def load_current_rows(path: Path | str, *, db_path: Path | str | None = None) ->
     for (payload_json,) in rows:
         try:
             payload = json.loads(payload_json)
-        except Exception:
+        except Exception as exc:
+            _log_runtime_persistence_warning(f'runtime_persistence decode latest batch failed path={artifact_path}: {type(exc).__name__}: {exc}')
             continue
         if isinstance(payload, dict):
             decoded.append(payload)
@@ -200,7 +213,8 @@ def load_latest_batch_rows(path: Path | str, *, db_path: Path | str | None = Non
     for (payload_json,) in rows:
         try:
             payload = json.loads(payload_json)
-        except Exception:
+        except Exception as exc:
+            _log_runtime_persistence_warning(f'runtime_persistence decode latest batch failed path={artifact_path}: {type(exc).__name__}: {exc}')
             continue
         if isinstance(payload, dict):
             decoded.append(payload)
@@ -418,7 +432,8 @@ def load_execution_risk_state(
     if row is not None:
         try:
             payload = json.loads(str(row[0]))
-        except Exception:
+        except Exception as exc:
+            _log_runtime_persistence_warning(f'runtime_persistence decode risk state failed path={artifact_path}: {type(exc).__name__}: {exc}')
             payload = None
         if isinstance(payload, dict):
             payload.setdefault('artifact_path', artifact_path)
@@ -431,3 +446,6 @@ def load_execution_risk_state(
             payload.setdefault('daily_state', {})
             return payload
     return refresh_execution_risk_state(path, normalized_execution_type, db_path=db_path)
+
+
+

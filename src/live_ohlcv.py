@@ -9,6 +9,8 @@ import csv
 import os
 import re
 
+from src.runtime_config import RuntimeConfig
+
 try:
     import yfinance as yf  # type: ignore
 except Exception:  # pragma: no cover
@@ -19,8 +21,9 @@ try:
 except Exception:  # pragma: no cover
     pd = None  # type: ignore
 
+RUNTIME_CONFIG = RuntimeConfig.load()
 DEFAULT_DATA_PROVIDER = 'AUTO'
-DEFAULT_CANDLE_CACHE_DIR = Path('data/cache/candles')
+DEFAULT_CANDLE_CACHE_DIR = RUNTIME_CONFIG.paths.data_dir / 'cache' / 'candles'
 DEFAULT_YFINANCE_TIMEOUT = 15.0
 try:
     IST = ZoneInfo('Asia/Kolkata')
@@ -920,6 +923,7 @@ def write_csv(rows: list[dict[str, Any]], path: str) -> None:
         writer = csv.DictWriter(f, fieldnames=keys)
         writer.writeheader()
         writer.writerows(rows)
+
 
 
 

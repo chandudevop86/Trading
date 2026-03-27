@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
@@ -7,11 +7,13 @@ from typing import Any, Callable
 
 import pandas as pd
 
+from src.runtime_config import RuntimeConfig
 from src.trading_core import append_log, prepare_trading_data, write_rows
 
-BACKTEST_TRADES_OUTPUT = Path('data/backtest_trades.csv')
-BACKTEST_SUMMARY_OUTPUT = Path('data/backtest_summary.csv')
-BACKTEST_VALIDATION_OUTPUT = Path('data/backtest_validation.csv')
+RUNTIME_CONFIG = RuntimeConfig.load()
+BACKTEST_TRADES_OUTPUT = RUNTIME_CONFIG.paths.backtest_trades_csv
+BACKTEST_SUMMARY_OUTPUT = RUNTIME_CONFIG.paths.backtest_summary_csv
+BACKTEST_VALIDATION_OUTPUT = RUNTIME_CONFIG.paths.backtest_validation_csv
 
 
 @dataclass(slots=True)
@@ -702,5 +704,6 @@ def summarize_trade_log(
     write_rows(summary_output, [summary])
     write_rows(validation_output, [validation_row])
     return summary
+
 
 

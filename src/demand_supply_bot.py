@@ -94,7 +94,7 @@ def detect_retest(day_candles: list[Candle], zone: Zone, side: str, start_idx: i
         if not touch:
             continue
         confirmation_limit = min(len(day_candles), touch_idx + 1 + max(1, int(config.retest_confirmation_bars)))
-        for confirmation_idx in range(touch_idx, confirmation_limit):
+        for confirmation_idx in range(touch_idx + 1, confirmation_limit):
             confirm_candle = day_candles[confirmation_idx]
             if not session_filter(confirm_candle, config):
                 continue
@@ -538,3 +538,5 @@ def generate_trades(
                 used_signal_keys.add(signal_key)
                 break
     return trades
+
+

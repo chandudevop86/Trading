@@ -316,60 +316,74 @@ def _dedupe_candidates(candidates: list[dict[str, object]], duplicate_cooldown_m
     return unique, rejected
 
 
+def _finalize_trade_exit(
+    trade: _TradeLifecycle,
+    *,
+    exit_price: float,
+    exit_time: pd.Timestamp,
+    exit_reason: str,
+    cfg: BacktestConfig,
+) -> _TradeLifecycle:
+    trade.exit_price = float(exit_price)
+    trade.exit_time = pd.Timestamp(exit_time)
+    trade.exit_reason = str(exit_reason)
+    trade.status = 'closed'
+    if trade.side == 'BUY':
+        trade.gross_pnl = (trade.exit_price - trade.entry_price) * trade.quantity
+    else:
+        trade.gross_pnl = (trade.entry_price - trade.exit_price) * trade.quantity
+    trade.trading_cost = _cost_for_trade(trade.entry_price, trade.exit_price, trade.quantity, cfg)
+    trade.pnl = trade.gross_pnl - trade.trading_cost
+    risk_per_unit = abs(trade.entry_price - trade.stop_loss)
+    if risk_per_unit <= 0:
+        trade.rr_achieved = 0.0
+    else:
+        rr = abs(trade.exit_price - trade.entry_price) / risk_per_unit
+        if trade.pnl < 0:
+            rr *= -1.0
+        trade.rr_achieved = rr
+    return trade
+
 def _simulate_trade_exit(prepared: pd.DataFrame, trade: _TradeLifecycle, *, close_open_positions_at_end: bool, cfg: BacktestConfig) -> _TradeLifecycle:
     future = prepared[prepared['timestamp'] > trade.entry_time].copy()
     if future.empty:
-        future = prepared[prepared['timestamp'] >= trade.entry_time].copy()
-    if future.empty:
+        if close_open_positions_at_end:
+            current_row = prepared[prepared['timestamp'] == trade.entry_time].tail(1)
+            if not current_row.empty:
+                last_row = current_row.iloc[-1]
+                return _finalize_trade_exit(
+                    trade,
+                    exit_price=float(last_row['close']),
+                    exit_time=pd.Timestamp(last_row['timestamp']),
+                    exit_reason='END_OF_DATA',
+                    cfg=cfg,
+                )
         trade.status = 'invalid'
         trade.exit_reason = 'NO_FUTURE_DATA'
         return trade
-
     for row in future.itertuples(index=False):
         candle_time = pd.Timestamp(row.timestamp)
         if trade.side == 'BUY':
             if float(row.low) <= trade.stop_loss:
-                trade.exit_price = trade.stop_loss
-                trade.exit_time = candle_time
-                trade.exit_reason = 'STOP_LOSS'
-                trade.status = 'closed'
-                break
+                return _finalize_trade_exit(trade, exit_price=trade.stop_loss, exit_time=candle_time, exit_reason='STOP_LOSS', cfg=cfg)
             if float(row.high) >= trade.target_price:
-                trade.exit_price = trade.target_price
-                trade.exit_time = candle_time
-                trade.exit_reason = 'TARGET'
-                trade.status = 'closed'
-                break
+                return _finalize_trade_exit(trade, exit_price=trade.target_price, exit_time=candle_time, exit_reason='TARGET', cfg=cfg)
         else:
             if float(row.high) >= trade.stop_loss:
-                trade.exit_price = trade.stop_loss
-                trade.exit_time = candle_time
-                trade.exit_reason = 'STOP_LOSS'
-                trade.status = 'closed'
-                break
+                return _finalize_trade_exit(trade, exit_price=trade.stop_loss, exit_time=candle_time, exit_reason='STOP_LOSS', cfg=cfg)
             if float(row.low) <= trade.target_price:
-                trade.exit_price = trade.target_price
-                trade.exit_time = candle_time
-                trade.exit_reason = 'TARGET'
-                trade.status = 'closed'
-                break
-
-    if trade.status != 'closed' and close_open_positions_at_end:
+                return _finalize_trade_exit(trade, exit_price=trade.target_price, exit_time=candle_time, exit_reason='TARGET', cfg=cfg)
+    if close_open_positions_at_end:
         last_row = future.iloc[-1]
-        trade.exit_price = float(last_row['close'])
-        trade.exit_time = pd.Timestamp(last_row['timestamp'])
-        trade.exit_reason = 'END_OF_DATA'
-        trade.status = 'closed'
-
-    if trade.exit_price is not None:
-        if trade.side == 'BUY':
-            trade.gross_pnl = (trade.exit_price - trade.entry_price) * trade.quantity
-        else:
-            trade.gross_pnl = (trade.entry_price - trade.exit_price) * trade.quantity
-        trade.trading_cost = _cost_for_trade(trade.entry_price, trade.exit_price, trade.quantity, cfg)
-        trade.pnl = trade.gross_pnl - trade.trading_cost
-        risk_per_unit = abs(trade.entry_price - trade.stop_loss)
-        trade.rr_achieved = 0.0 if risk_per_unit <= 0 else abs(trade.exit_price - trade.entry_price) / risk_per_unit
+        return _finalize_trade_exit(
+            trade,
+            exit_price=float(last_row['close']),
+            exit_time=pd.Timestamp(last_row['timestamp']),
+            exit_reason='END_OF_DATA',
+            cfg=cfg,
+        )
+    trade.status = 'open'
+    trade.exit_reason = 'OPEN_AT_END'
     return trade
 
 
@@ -423,9 +437,7 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
     gross_loss = abs(sum(losing_trades))
     profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf') if gross_profit > 0 else 0.0
     expectancy_per_trade = avg_pnl
-    avg_r_winners = sum(_safe_float(trade.get('rr_achieved')) for trade in trades if _safe_float(trade.get('pnl')) > 0) / len(winning_trades) if winning_trades else 0.0
-    avg_r_losers = sum(_safe_float(trade.get('rr_achieved')) for trade in trades if _safe_float(trade.get('pnl')) < 0) / len(losing_trades) if losing_trades else 0.0
-    expectancy_r = ((wins / total_trades) * avg_r_winners) - ((losses / total_trades) * avg_r_losers) if total_trades else 0.0
+    expectancy_r = sum(_safe_float(trade.get('rr_achieved')) for trade in trades) / total_trades if total_trades else 0.0
     equity_rows = _equity_curve_rows(trades, float(cfg.capital))
     max_drawdown = abs(min((row['drawdown'] for row in equity_rows), default=0.0))
     max_drawdown_pct = max((row['drawdown_pct'] for row in equity_rows), default=0.0)
@@ -690,3 +702,5 @@ def summarize_trade_log(
     write_rows(summary_output, [summary])
     write_rows(validation_output, [validation_row])
     return summary
+
+

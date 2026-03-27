@@ -62,6 +62,19 @@ def _body_high(candle: pd.Series) -> float:
     return float(max(float(candle['open']), float(candle['close'])))
 
 
+def _add_vwap(candles: pd.DataFrame) -> pd.DataFrame:
+    out = candles.copy()
+    if out.empty:
+        out['vwap'] = pd.Series(dtype='float64')
+        return out
+
+    typical_price = (out['high'].astype(float) + out['low'].astype(float) + out['close'].astype(float)) / 3.0
+    volume = pd.to_numeric(out.get('volume', 0.0), errors='coerce').fillna(0.0).astype(float)
+    cumulative_volume = volume.cumsum()
+    cumulative_pv = (typical_price * volume).cumsum()
+    out['vwap'] = typical_price.where(cumulative_volume <= 0, cumulative_pv / cumulative_volume).astype(float)
+    return out
+
 def _base_bounds(candles: pd.DataFrame, start_index: int, end_index: int) -> tuple[float, float]:
     start = max(0, int(start_index))
     end = min(len(candles) - 1, int(end_index))
@@ -427,6 +440,8 @@ def _build_signal_from_zone(
     high = float(candle['high'])
     low = float(candle['low'])
     close = float(candle['close'])
+    vwap_value = candle.get('vwap', close)
+    vwap = float(close if pd.isna(vwap_value) else vwap_value)
     zone_low = float(zone['zone_low'])
     zone_high = float(zone['zone_high'])
     zone_mid = (zone_low + zone_high) / 2.0
@@ -463,6 +478,8 @@ def _build_signal_from_zone(
         return None
 
     if zone_type == 'demand':
+        if close <= vwap:
+            return None
         if higher_tf_bias == 'BEARISH':
             return None
         touched = _zone_touched(candle, zone_low, zone_high, buffer_size)
@@ -475,6 +492,8 @@ def _build_signal_from_zone(
         stop = min(low, zone_low) - max(close * 0.001, 0.05)
         side = 'BUY'
     elif zone_type == 'supply':
+        if close >= vwap:
+            return None
         if higher_tf_bias == 'BULLISH':
             return None
         touched = _zone_touched(candle, zone_low, zone_high, buffer_size)
@@ -528,6 +547,8 @@ def _build_signal_from_zone(
         'trailing_stop_loss': round(stop, 4),
         'target_price': round(target, 4),
         'quantity': int(quantity),
+        'vwap': round(vwap, 4),
+        'vwap_aligned': 'YES',
         'signal': f'{zone_type.upper()}_RETEST',
         'zone_type': zone_type,
         'zone_low': round(zone_low, 4),
@@ -568,7 +589,7 @@ def generate_trades(
     accumulation_longer_lookback: int = 12,
     **_: Any,
 ) -> list[dict[str, Any]]:
-    candles = _coerce_candles(df)
+    candles = _add_vwap(_coerce_candles(df))
     zones: list[dict[str, Any]] = []
     seen: set[tuple[str, int, float, float, str]] = set()
     swing_highs: list[tuple[int, float]] = []

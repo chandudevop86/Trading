@@ -221,10 +221,11 @@ def _build_scorecard_rows(summary: dict[str, object], *, status: str, todays_tra
 
 
 
-def _scorecard_detail_map(summary: dict[str, object], *, status: str, todays_trades: int) -> dict[str, list[str]]:
+def _scorecard_detail_map(summary: dict[str, object], *, status: str, todays_trades: int, strategy_label: str) -> dict[str, list[str]]:
     blockers = str(summary.get('deployment_blockers', '') or '').strip() or 'None'
     return {
         'Trade Quality': [
+            f"Operator strategy: {strategy_label}",
             f"Today's trades: {todays_trades}",
             f"Total validated trades: {_safe_int(summary.get('total_trades', summary.get('closed_trades', 0)))}",
             f"Avg trades/day: {_safe_float(summary.get('avg_trades_per_day')):.2f}",
@@ -245,9 +246,9 @@ def _scorecard_detail_map(summary: dict[str, object], *, status: str, todays_tra
             f"Validation passed: {str(summary.get('validation_passed', summary.get('deployment_ready', 'NO')) or 'NO')}",
         ],
     }
-def _render_scorecard(summary: dict[str, object], status: str, todays_trades: int) -> None:
+def _render_scorecard(summary: dict[str, object], status: str, todays_trades: int, strategy_label: str) -> None:
     rows = _build_scorecard_rows(summary, status=status, todays_trades=todays_trades)
-    details = _scorecard_detail_map(summary, status=status, todays_trades=todays_trades)
+    details = _scorecard_detail_map(summary, status=status, todays_trades=todays_trades, strategy_label=strategy_label)
     st.markdown('### Current-State Scorecard')
     st.caption('Green = strong, amber = watchlist, red = needs action.')
     st.dataframe(_scorecard_styler(rows), use_container_width=True, hide_index=True)
@@ -313,7 +314,7 @@ def main() -> None:
         resting_summary = dict(st.session_state.get('backtest_summary', {}) or {})
         _render_summary_cards([], {}, 0)
         _render_operator_panels('Ready', [], normalized_symbol, timeframe, period_for_interval(timeframe), broker_choice, 'Paper broker active')
-        _render_scorecard(resting_summary, 'Ready', 0)
+        _render_scorecard(resting_summary, 'Ready', 0, strategy)
         return
 
     try:
@@ -325,7 +326,7 @@ def main() -> None:
             _append_text_log(ERRORS_LOG, result.status)
             _render_summary_cards(result.trades, result.active_summary, result.todays_trades)
             _render_operator_panels(result.status, result.trades, normalized_symbol, timeframe, result.period, broker_choice, result.broker_status)
-            _render_scorecard(dict(result.backtest_summary or result.active_summary or {}), result.status, result.todays_trades)
+            _render_scorecard(dict(result.backtest_summary or result.active_summary or {}), result.status, result.todays_trades, strategy)
             _render_execution_feedback(result.execution_messages)
             st.error(result.status)
             return
@@ -340,7 +341,7 @@ def main() -> None:
         _append_text_log(APP_LOG, result.status)
         _render_summary_cards(result.trades, result.active_summary, result.todays_trades)
         _render_operator_panels(result.status, result.trades, normalized_symbol, timeframe, result.period, broker_choice, result.broker_status)
-        _render_scorecard(dict(result.backtest_summary or result.active_summary or {}), result.status, result.todays_trades)
+        _render_scorecard(dict(result.backtest_summary or result.active_summary or {}), result.status, result.todays_trades, strategy)
         _render_execution_feedback(result.execution_messages)
     except Exception as exc:
         message = f'Trading UI failure: {exc}'

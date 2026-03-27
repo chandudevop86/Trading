@@ -99,7 +99,7 @@ class TestTradingRunStrategy(unittest.TestCase):
         ]
         mock_attach.side_effect = lambda rows, **_: rows
 
-        rows = run_strategy(strategy="Demand Supply", **self.common_kwargs)
+        rows = run_strategy(strategy="Demand Supply (Retest)", **self.common_kwargs)
 
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["strategy"], "DEMAND_SUPPLY")
@@ -222,5 +222,6 @@ class TestTradingRunStrategy(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

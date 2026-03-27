@@ -100,8 +100,10 @@ def _coerce_trade_quantity(row: dict[str, object]) -> int:
 
 
 def _canonical_strategy_name(strategy_name: str) -> str:
-    return str(strategy_name or 'Breakout').strip().upper().replace(' ', '_')
-
+    normalized = str(strategy_name or 'Breakout').strip()
+    if normalized == 'Demand Supply (Retest)':
+        return 'DEMAND_SUPPLY'
+    return normalized.upper().replace(' ', '_')
 
 def _base_contract_fields(row: dict[str, object], *, strategy_name: str, symbol: str, trade_no: int) -> dict[str, object]:
     timestamp = str(row.get('timestamp') or row.get('entry_time') or row.get('signal_time') or row.get('time') or row.get('date') or '')
@@ -336,7 +338,8 @@ def _run_amd_strategy(context: StrategyContext, dependencies: StrategyDependenci
 
 STRATEGY_DEFINITIONS: dict[str, StrategyDefinition] = {
     'Breakout': StrategyDefinition(name='Breakout', input_mode='candles', runner=_run_breakout_strategy),
-    'Demand Supply': StrategyDefinition(name='Demand Supply', input_mode='candles', runner=_run_demand_supply_strategy),
+    'Demand Supply (Retest)': StrategyDefinition(name='Demand Supply (Retest)', input_mode='candles', runner=_run_demand_supply_strategy),
+    'Demand Supply': StrategyDefinition(name='Demand Supply (Retest)', input_mode='candles', runner=_run_demand_supply_strategy),
     'Indicator': StrategyDefinition(name='Indicator', input_mode='candle_rows', runner=_run_indicator_strategy),
     'One Trade/Day': StrategyDefinition(name='One Trade/Day', input_mode='candle_rows', runner=_run_one_trade_strategy),
     'MTF 5m': StrategyDefinition(name='MTF 5m', input_mode='candle_rows', runner=_run_mtf_strategy),
@@ -420,6 +423,9 @@ def run_strategy_workflow(
         attach_option_strikes_fn=attach_option_strikes_fn,
         attach_option_metrics_fn=attach_option_metrics_fn,
     )
+
+
+
 
 
 

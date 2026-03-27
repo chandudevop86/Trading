@@ -34,7 +34,7 @@ DEFAULT_INTERVAL = os.getenv('TRADING_INTERVAL', '5m').strip() or '5m'
 DEFAULT_PERIOD = os.getenv('TRADING_PERIOD', '5d').strip() or '5d'
 
 TIMEFRAME_OPTIONS = ['1m', '5m', '15m', '30m', '1h', '1d']
-STRATEGY_OPTIONS = ['Breakout', 'Demand Supply', 'Indicator', 'One Trade/Day', 'MTF 5m', 'AMD + FVG + Supply/Demand']
+STRATEGY_OPTIONS = ['Breakout', 'Demand Supply (Retest)', 'Indicator', 'One Trade/Day', 'MTF 5m', 'AMD + FVG + Supply/Demand']
 BROKER_OPTIONS = ['Paper', 'Dhan Live']
 MODE_OPTIONS = ['Conservative', 'Balanced', 'Aggressive']
 
@@ -58,3 +58,4 @@ def runtime_output_paths() -> list[Path]:
 
 def runtime_log_paths() -> list[Path]:
     return [APP_LOG, BROKER_LOG, EXECUTION_LOG, REJECTIONS_LOG, ERRORS_LOG]
+

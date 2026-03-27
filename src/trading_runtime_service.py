@@ -153,6 +153,7 @@ def run_strategy(
 def _strategy_callable(strategy: str, symbol: str) -> Callable[[pd.DataFrame, float, float, float, Any], list[dict[str, object]]]:
     mapping: dict[str, Callable[[pd.DataFrame, float, float, float, Any], list[dict[str, object]]]] = {
         "Breakout": generate_breakout_trades,
+        "Demand Supply (Retest)": generate_demand_supply_trades,
         "Demand Supply": generate_demand_supply_trades,
         "AMD + FVG + Supply/Demand": lambda df, capital, risk_pct, rr_ratio, config=None: run_strategy(
             strategy="AMD + FVG + Supply/Demand",
@@ -284,6 +285,8 @@ def run_operator_action(request: TradingActionRequest) -> TradingActionResult:
             todays_trades=0,
             execution_messages=[("error", str(exc))],
         )
+
+
 
 
 

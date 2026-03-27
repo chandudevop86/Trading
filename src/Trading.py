@@ -17,34 +17,21 @@ from src.strategy_demand_supply import generate_trades as generate_demand_supply
 from src.indicator_bot import generate_indicator_rows
 from src.runtime_defaults import (
     APP_LOG,
-    BACKTEST_RESULTS_OUTPUT,
-    BACKTEST_SUMMARY_OUTPUT,
-    BACKTEST_TRADES_OUTPUT,
-    BROKER_LOG,
     BROKER_OPTIONS,
     DEFAULT_INTERVAL,
     DEFAULT_SYMBOL,
     ERRORS_LOG,
     EXECUTED_TRADES_OUTPUT,
     EXECUTION_LOG,
-    LIVE_LOG_OUTPUT,
-    LIVE_OHLCV_OUTPUT,
     MODE_OPTIONS,
-    OHLCV_OUTPUT,
-    ORDER_HISTORY_OUTPUT,
-    PAPER_LOG_OUTPUT,
-    PAPER_ORDER_HISTORY_OUTPUT,
     REJECTIONS_LOG,
-    SIGNAL_OUTPUT,
     STRATEGY_OPTIONS,
     TIMEFRAME_OPTIONS,
-    TRADES_OUTPUT,
     runtime_log_paths,
     runtime_output_paths,
 )
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.runtime_strategy_presets import OPERATOR_DEFAULTS
-from src.runtime_strategy_registry import configure_runtime_strategy_dependencies, run_configured_runtime_strategy
 from src.strike_selector import attach_option_strikes
 from src.trading_core import append_log, configure_file_logging
 from src.runtime_models import period_for_interval
@@ -73,10 +60,7 @@ def run_strategy(**kwargs):
 
 
 def _ensure_output_files() -> None:
-    initialize_ui_runtime(
-        runtime_output_paths(),
-        runtime_log_paths(),
-    )
+    initialize_ui_runtime(runtime_output_paths(), runtime_log_paths())
 
 
 def _minimal_theme() -> None:
@@ -97,6 +81,7 @@ def _build_request(strategy: str, symbol: str, timeframe: str, capital: float, r
 
 def _append_text_log(path: Path, message: str) -> None:
     log_ui_event(path, message)
+
 
 def _safe_float(value: object) -> float:
     try:
@@ -199,26 +184,10 @@ def _build_scorecard_rows(summary: dict[str, object], *, status: str, todays_tra
         execution_fix = 'Keep rejection logs monitored and block live trading unless deployment_ready=YES.'
 
     return [
-        {
-            'area': 'Trade Quality',
-            'score': round(min(trade_quality_score, 10.0), 1),
-            'current issue': trade_quality_issue,
-            'exact next fix': trade_quality_fix,
-        },
-        {
-            'area': 'Validation Metrics',
-            'score': round(min(validation_score, 10.0), 1),
-            'current issue': validation_issue,
-            'exact next fix': validation_fix,
-        },
-        {
-            'area': 'Execution Discipline',
-            'score': round(min(execution_score, 10.0), 1),
-            'current issue': execution_issue,
-            'exact next fix': execution_fix,
-        },
+        {'area': 'Trade Quality', 'score': round(min(trade_quality_score, 10.0), 1), 'current issue': trade_quality_issue, 'exact next fix': trade_quality_fix},
+        {'area': 'Validation Metrics', 'score': round(min(validation_score, 10.0), 1), 'current issue': validation_issue, 'exact next fix': validation_fix},
+        {'area': 'Execution Discipline', 'score': round(min(execution_score, 10.0), 1), 'current issue': execution_issue, 'exact next fix': execution_fix},
     ]
-
 
 
 def _scorecard_detail_map(summary: dict[str, object], *, status: str, todays_trades: int, strategy_label: str) -> dict[str, list[str]]:
@@ -246,6 +215,8 @@ def _scorecard_detail_map(summary: dict[str, object], *, status: str, todays_tra
             f"Validation passed: {str(summary.get('validation_passed', summary.get('deployment_ready', 'NO')) or 'NO')}",
         ],
     }
+
+
 def _render_scorecard(summary: dict[str, object], status: str, todays_trades: int, strategy_label: str) -> None:
     rows = _build_scorecard_rows(summary, status=status, todays_trades=todays_trades)
     details = _scorecard_detail_map(summary, status=status, todays_trades=todays_trades, strategy_label=strategy_label)
@@ -256,6 +227,7 @@ def _render_scorecard(summary: dict[str, object], status: str, todays_trades: in
         with st.expander(f"Why: {row['area']}"):
             for line in details.get(str(row['area']), []):
                 st.markdown(f'- {line}')
+
 
 def _latest_actionable_trades(trades: list[dict[str, object]]) -> list[dict[str, object]]:
     return latest_actionable_trades(trades)
@@ -281,13 +253,182 @@ def _render_execution_feedback(messages: list[tuple[str, str]]) -> None:
         else:
             st.info(text)
 
+
+def _build_validation_snapshot(summary: dict[str, object]) -> pd.DataFrame:
+    if not summary:
+        return pd.DataFrame([{'metric': 'Validation state', 'value': 'No backtest loaded', 'target': 'Run Backtest', 'status': 'WATCH'}])
+    total_trades = _safe_int(summary.get('total_trades', summary.get('closed_trades', 0)))
+    expectancy = _safe_float(summary.get('expectancy_per_trade'))
+    profit_factor = _safe_float(summary.get('profit_factor'))
+    drawdown = _safe_float(summary.get('max_drawdown_pct'))
+    duplicates = _safe_int(summary.get('duplicate_rejections'))
+    deployment_ready = str(summary.get('deployment_ready', 'NO') or 'NO').upper()
+    sample_window = str(summary.get('sample_window_passed', 'NO') or 'NO').upper()
+    return pd.DataFrame([
+        {'metric': 'Sample size', 'value': total_trades, 'target': '100-200 trades', 'status': 'PASS' if sample_window == 'YES' else 'WATCH'},
+        {'metric': 'Expectancy', 'value': round(expectancy, 2), 'target': '> 0', 'status': 'PASS' if expectancy > 0 else 'FAIL'},
+        {'metric': 'Profit factor', 'value': round(profit_factor, 2), 'target': '> 1.30', 'status': 'PASS' if profit_factor > 1.3 else 'FAIL'},
+        {'metric': 'Max drawdown %', 'value': round(drawdown, 2), 'target': '<= 10', 'status': 'PASS' if 0 <= drawdown <= 10 else 'FAIL'},
+        {'metric': 'Duplicate rejections', 'value': duplicates, 'target': '0', 'status': 'PASS' if duplicates == 0 else 'FAIL'},
+        {'metric': 'Deployment ready', 'value': deployment_ready, 'target': 'YES after all gates pass', 'status': 'PASS' if deployment_ready == 'YES' else 'WATCH'},
+    ])
+
+
+def _build_signal_table(trades: list[dict[str, object]]) -> pd.DataFrame:
+    actionable = _latest_actionable_trades(trades)
+    if not actionable:
+        return pd.DataFrame([{'timestamp': 'n/a', 'side': 'NONE', 'entry': 0.0, 'stop_loss': 0.0, 'target': 0.0, 'score': 0.0, 'reason': 'No actionable trade generated.'}])
+    frame = pd.DataFrame(actionable)
+    preferred_columns = ['timestamp', 'side', 'entry', 'stop_loss', 'target', 'score', 'reason']
+    available_columns = [column for column in preferred_columns if column in frame.columns]
+    return frame[available_columns].tail(5) if available_columns else frame.tail(5)
+
+
+def _safe_tail_dataframe(path: Path, columns: list[str], rows: int = 8) -> pd.DataFrame:
+    try:
+        if not path.exists() or path.stat().st_size == 0:
+            return pd.DataFrame(columns=columns)
+        frame = pd.read_csv(path)
+        if frame.empty:
+            return pd.DataFrame(columns=columns)
+        available_columns = [column for column in columns if column in frame.columns]
+        if available_columns:
+            frame = frame[available_columns]
+        return frame.tail(rows)
+    except Exception:
+        return pd.DataFrame(columns=columns)
+
+
+def _safe_log_preview(path: Path, lines: int = 10) -> str:
+    try:
+        if not path.exists() or path.stat().st_size == 0:
+            return 'No log entries available.'
+        content = path.read_text(encoding='utf-8', errors='ignore').splitlines()
+        return '\n'.join(content[-lines:]) if content else 'No log entries available.'
+    except Exception as exc:
+        return f'Unable to read log preview: {exc}'
+
+
+def _header_badge(summary: dict[str, object], broker_choice: str) -> str:
+    deployment_ready = str(summary.get('deployment_ready', 'NO') or 'NO').upper() == 'YES'
+    if broker_choice == 'Paper' or not deployment_ready:
+        return 'Paper Active | Live Locked'
+    return 'Live Eligible'
+
+
+def _render_header(strategy: str, symbol: str, timeframe: str, mode: str, broker_choice: str, summary: dict[str, object]) -> None:
+    st.markdown(
+        (
+            '<div class="desk-card">'
+            '<h2 style="margin:0;color:#e2e8f0;">Production Trading Desk</h2>'
+            '<p style="margin:8px 0 0 0;color:#94a3b8;">Retest-confirmed Nifty intraday operator surface with validation-first deployment discipline.</p>'
+            f'<p style="margin:12px 0 0 0;color:#cbd5e1;">{_header_badge(summary, broker_choice)} | {strategy} | {symbol} | {timeframe} | {mode}</p>'
+            '</div>'
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _render_dashboard_tab(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int) -> None:
+    _render_summary_cards(trades, active_summary, todays_trades)
+    left, right = st.columns(2)
+    with left:
+        st.markdown('### Recent Signals')
+        st.caption(f'Latest actionable setups for {symbol} on {timeframe} candles.')
+        st.dataframe(_build_signal_table(trades), use_container_width=True, hide_index=True)
+    with right:
+        _render_operator_panels(status, trades, symbol, timeframe, period, broker_choice, broker_status)
+    _render_scorecard(scorecard_summary, status, todays_trades, strategy)
+
+
+def _render_validation_tab(summary: dict[str, object]) -> None:
+    st.markdown('### Validation Summary')
+    col_one, col_two, col_three, col_four = st.columns(4)
+    col_one.metric('Deployment Ready', str(summary.get('deployment_ready', 'NO') or 'NO'))
+    col_two.metric('Sample Window', str(summary.get('sample_window_passed', 'NO') or 'NO'))
+    col_three.metric('Validation Passed', str(summary.get('validation_passed', summary.get('deployment_ready', 'NO')) or 'NO'))
+    col_four.metric('Blockers', str(summary.get('deployment_blockers', 'None') or 'None'))
+
+    st.markdown('### Validation Gates')
+    gates = pd.DataFrame([
+        {'gate': 'Trade count', 'rule': '100-200 trades'},
+        {'gate': 'Expectancy', 'rule': '> 0'},
+        {'gate': 'Profit factor', 'rule': '> 1.30'},
+        {'gate': 'Duplicate trades', 'rule': '= 0'},
+        {'gate': 'Max drawdown', 'rule': '<= configured limit'},
+    ])
+    st.dataframe(gates, use_container_width=True, hide_index=True)
+
+    st.markdown('### Backtest Metrics')
+    metrics_frame = pd.DataFrame([
+        {'metric': 'Total Trades', 'value': _safe_int(summary.get('total_trades', summary.get('closed_trades', 0)))},
+        {'metric': 'Wins', 'value': _safe_int(summary.get('wins'))},
+        {'metric': 'Losses', 'value': _safe_int(summary.get('losses'))},
+        {'metric': 'Win Rate', 'value': round(_safe_float(summary.get('win_rate')), 2)},
+        {'metric': 'Avg Win', 'value': round(_safe_float(summary.get('avg_win')), 2)},
+        {'metric': 'Avg Loss', 'value': round(_safe_float(summary.get('avg_loss')), 2)},
+        {'metric': 'Total PnL', 'value': round(_safe_float(summary.get('total_pnl', summary.get('pnl'))), 2)},
+        {'metric': 'Expectancy/Trade', 'value': round(_safe_float(summary.get('expectancy_per_trade')), 2)},
+        {'metric': 'Profit Factor', 'value': round(_safe_float(summary.get('profit_factor')), 2)},
+        {'metric': 'Max Drawdown %', 'value': round(_safe_float(summary.get('max_drawdown_pct')), 2)},
+    ])
+    st.dataframe(metrics_frame, use_container_width=True, hide_index=True)
+    st.markdown('### Validation Snapshot')
+    st.dataframe(_build_validation_snapshot(summary), use_container_width=True, hide_index=True)
+    if str(summary.get('deployment_ready', 'NO') or 'NO').upper() == 'YES':
+        st.success('PASS: eligible for paper or live consideration, subject to operator approval.')
+    else:
+        st.warning('FAIL: remain paper-only until every validation blocker is cleared.')
+
+
+def _render_execution_tab(*, status: str, broker_status: str, todays_trades: int, summary: dict[str, object]) -> None:
+    st.markdown('### Execution Status')
+    col_one, col_two, col_three = st.columns(3)
+    col_one.metric('Current Status', status)
+    col_two.metric('Broker Status', broker_status)
+    col_three.metric("Today's Trades", todays_trades)
+
+    st.markdown('### Discipline Metrics')
+    discipline = pd.DataFrame([
+        {'metric': 'Duplicate rejections', 'value': _safe_int(summary.get('duplicate_rejections'))},
+        {'metric': 'Risk-rule rejections', 'value': _safe_int(summary.get('risk_rule_rejections'))},
+        {'metric': 'Avg trades/day', 'value': round(_safe_float(summary.get('avg_trades_per_day')), 2)},
+        {'metric': 'Deployment Ready', 'value': str(summary.get('deployment_ready', 'NO') or 'NO')},
+    ])
+    st.dataframe(discipline, use_container_width=True, hide_index=True)
+
+    st.markdown('### Recent Executions')
+    executions = _safe_tail_dataframe(EXECUTED_TRADES_OUTPUT, ['timestamp', 'strategy', 'symbol', 'side', 'quantity', 'entry', 'status', 'broker_message'])
+    st.dataframe(executions, use_container_width=True, hide_index=True)
+
+    st.markdown('### Log Previews')
+    log_col_one, log_col_two = st.columns(2)
+    with log_col_one:
+        with st.expander('Execution Log'):
+            st.markdown(f"```text\n{_safe_log_preview(EXECUTION_LOG)}\n```")
+        with st.expander('App Log'):
+            st.markdown(f"```text\n{_safe_log_preview(APP_LOG)}\n```")
+    with log_col_two:
+        with st.expander('Rejection Log'):
+            st.markdown(f"```text\n{_safe_log_preview(REJECTIONS_LOG)}\n```")
+        with st.expander('Recent Rejections Table'):
+            rejections = _safe_tail_dataframe(REJECTIONS_LOG, ['timestamp', 'rejection_reason', 'rejection_category', 'rejection_detail'])
+            st.dataframe(rejections, use_container_width=True, hide_index=True)
+
+
+def _render_tabs(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int) -> None:
+    dashboard_tab, validation_tab, execution_tab = st.tabs(['Dashboard', 'Validation', 'Execution Logs'])
+    with dashboard_tab:
+        _render_dashboard_tab(strategy=strategy, symbol=symbol, timeframe=timeframe, period=period, broker_choice=broker_choice, status=status, broker_status=broker_status, trades=trades, active_summary=active_summary, scorecard_summary=scorecard_summary, todays_trades=todays_trades)
+    with validation_tab:
+        _render_validation_tab(scorecard_summary)
+    with execution_tab:
+        _render_execution_tab(status=status, broker_status=broker_status, todays_trades=todays_trades, summary=scorecard_summary)
+
+
 def main() -> None:
     _ensure_output_files()
     _minimal_theme()
-    st.markdown(
-        '<div class="desk-card"><h2 style="margin:0;color:#e2e8f0;">Production Trading Desk</h2><p style="margin:8px 0 0 0;color:#94a3b8;">Minimal operator controls with runtime orchestration delegated to legacy services.</p></div>',
-        unsafe_allow_html=True,
-    )
 
     control_col_1, control_col_2, control_col_3 = st.columns(3)
     with control_col_1:
@@ -304,29 +445,26 @@ def main() -> None:
         period = period_for_interval(timeframe)
         st.caption(f'Fetch window: {period}')
         action_row = st.columns(2)
-        st.markdown('<div class="desk-label">Run</div>', unsafe_allow_html=True)
         run_clicked = action_row[0].button('Run', type='primary', use_container_width=True)
-        st.markdown('<div class="desk-label">Backtest</div>', unsafe_allow_html=True)
         backtest_clicked = action_row[1].button('Backtest', use_container_width=True)
 
     normalized_symbol = symbol.strip() or DEFAULT_SYMBOL
+    resting_summary = dict(st.session_state.get('backtest_summary', {}) or {})
     if not run_clicked and not backtest_clicked:
-        resting_summary = dict(st.session_state.get('backtest_summary', {}) or {})
-        _render_summary_cards([], {}, 0)
-        _render_operator_panels('Ready', [], normalized_symbol, timeframe, period_for_interval(timeframe), broker_choice, 'Paper broker active')
-        _render_scorecard(resting_summary, 'Ready', 0, strategy)
+        _render_header(strategy, normalized_symbol, timeframe, mode, broker_choice, resting_summary)
+        _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=period_for_interval(timeframe), broker_choice=broker_choice, status='Ready', broker_status='Paper broker active', trades=[], active_summary={}, scorecard_summary=resting_summary, todays_trades=0)
         return
 
     try:
         request = _build_request(strategy, normalized_symbol, timeframe, float(capital), float(risk_pct), float(rr_ratio), mode, broker_choice, run_clicked, backtest_clicked)
         result = run_operator_action(request)
+        summary = dict(result.backtest_summary or result.active_summary or {})
+        _render_header(strategy, normalized_symbol, timeframe, mode, broker_choice, summary)
         if _result_failed(result.status):
             st.session_state.pop('backtest_summary', None)
             _append_text_log(APP_LOG, result.status)
             _append_text_log(ERRORS_LOG, result.status)
-            _render_summary_cards(result.trades, result.active_summary, result.todays_trades)
-            _render_operator_panels(result.status, result.trades, normalized_symbol, timeframe, result.period, broker_choice, result.broker_status)
-            _render_scorecard(dict(result.backtest_summary or result.active_summary or {}), result.status, result.todays_trades, strategy)
+            _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=result.period, broker_choice=broker_choice, status=result.status, broker_status=result.broker_status, trades=result.trades, active_summary=result.active_summary, scorecard_summary=summary, todays_trades=result.todays_trades)
             _render_execution_feedback(result.execution_messages)
             st.error(result.status)
             return
@@ -339,9 +477,7 @@ def main() -> None:
             _append_text_log(APP_LOG, f'BACKTEST completed for {strategy} {normalized_symbol} {timeframe}')
 
         _append_text_log(APP_LOG, result.status)
-        _render_summary_cards(result.trades, result.active_summary, result.todays_trades)
-        _render_operator_panels(result.status, result.trades, normalized_symbol, timeframe, result.period, broker_choice, result.broker_status)
-        _render_scorecard(dict(result.backtest_summary or result.active_summary or {}), result.status, result.todays_trades, strategy)
+        _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=result.period, broker_choice=broker_choice, status=result.status, broker_status=result.broker_status, trades=result.trades, active_summary=result.active_summary, scorecard_summary=summary, todays_trades=result.todays_trades)
         _render_execution_feedback(result.execution_messages)
     except Exception as exc:
         message = f'Trading UI failure: {exc}'
@@ -353,18 +489,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

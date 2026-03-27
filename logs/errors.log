@@ -136,3 +136,6 @@
 2026-03-28 00:01:55,914 INFO runtime_error[run_operator_action] ValueError: bad candle payload
 2026-03-28 00:03:07,156 INFO runtime_error[run_operator_action] ValueError: bad candle payload
 2026-03-28 00:03:07,217 INFO runtime_error[run_operator_action] ValueError: bad candle payload
+2026-03-28 02:37:01,088 INFO Trading UI failure: list index out of range
+2026-03-28 02:37:01,826 INFO Trading UI failure: list index out of range
+2026-03-28 02:37:01,874 INFO Trading UI failure: list index out of range

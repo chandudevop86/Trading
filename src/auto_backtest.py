@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import csv
@@ -202,6 +202,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--capital', type=float, default=100000.0)
     parser.add_argument('--risk-pct', type=float, default=0.01)
     parser.add_argument('--rr-ratio', type=float, default=2.0)
+    parser.add_argument('--mode', default='Balanced', choices=['Conservative', 'Balanced', 'Aggressive'])
     parser.add_argument('--trailing-sl-pct', type=float, default=0.0, help='Trailing stop percent, e.g. 0.005 = 0.5%%')
     parser.add_argument('--pivot-window', type=int, default=2)
     parser.add_argument('--entry-cutoff', default='11:30')
@@ -236,6 +237,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     capital = float(getattr(args, 'capital', 100000.0) or 100000.0)
     risk_pct = float(getattr(args, 'risk_pct', 0.01) or 0.01)
     rr_ratio = float(getattr(args, 'rr_ratio', 2.0) or 2.0)
+    mode = str(getattr(args, 'mode', 'Balanced') or 'Balanced').strip() or 'Balanced'
     trailing_sl_pct = float(getattr(args, 'trailing_sl_pct', 0.0) or 0.0)
     pivot_window = int(getattr(args, 'pivot_window', 2) or 2)
     entry_cutoff = str(getattr(args, 'entry_cutoff', '11:30') or '11:30')
@@ -268,6 +270,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         rr_ratio=rr_ratio,
         trailing_sl_pct=trailing_sl_pct,
         symbol=args.symbol,
+        mode=mode,
         cost_bps=cost_bps,
         fixed_cost_per_trade=fixed_cost_per_trade,
         max_daily_loss=max_daily_loss,
@@ -282,6 +285,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         rr_ratio=rr_ratio,
         trailing_sl_pct=trailing_sl_pct,
         symbol=args.symbol,
+        mode=mode,
         pivot_window=pivot_window,
         entry_cutoff=entry_cutoff,
     )
@@ -294,6 +298,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         rr_ratio=rr_ratio,
         trailing_sl_pct=trailing_sl_pct,
         symbol=args.symbol,
+        mode=mode,
         entry_cutoff=entry_cutoff,
         cost_bps=cost_bps,
         fixed_cost_per_trade=fixed_cost_per_trade,
@@ -309,6 +314,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         rr_ratio=rr_ratio,
         trailing_sl_pct=trailing_sl_pct,
         symbol=args.symbol,
+        mode=mode,
         cost_bps=cost_bps,
         fixed_cost_per_trade=fixed_cost_per_trade,
         max_daily_loss=max_daily_loss,
@@ -330,7 +336,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     )
     ds_rows = generate_strategy_rows(demand_supply_context)
     indicator_trade_rows = generate_indicator_trades(rows, capital=capital, risk_pct=risk_pct, rr_ratio=rr_ratio, config=indicator_cfg)
-    amd_rows = generate_amd_fvg_sd_trades(rows, capital=capital, risk_pct=risk_pct, rr_ratio=rr_ratio)
+    amd_rows = generate_amd_fvg_sd_trades(rows, capital=capital, risk_pct=risk_pct, rr_ratio=rr_ratio, mode=mode)
     indicator_rows = generate_indicator_rows(candles, config=indicator_cfg)
     one_trade_rows = generate_strategy_rows(one_trade_context)
     btst_rows = generate_strategy_rows(btst_context)
@@ -507,6 +513,7 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
 

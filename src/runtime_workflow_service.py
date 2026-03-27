@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 from typing import Any, Callable
@@ -74,32 +74,33 @@ def latest_optimizer_gate(strategy: str) -> tuple[bool, str]:
     rows = load_current_rows(OPTIMIZER_OUTPUT) or load_latest_batch_rows(OPTIMIZER_OUTPUT)
     if not rows:
         if not OPTIMIZER_OUTPUT.exists() or OPTIMIZER_OUTPUT.stat().st_size == 0:
-            return False, "optimizer report missing"
+            return False, 'live deployment locked: optimizer report missing'
         try:
             frame = pd.read_csv(OPTIMIZER_OUTPUT)
         except Exception:
-            return False, "optimizer report unreadable"
+            return False, 'live deployment locked: optimizer report unreadable'
         if frame.empty:
-            return False, "optimizer report empty"
-        rows = frame.to_dict(orient="records")
+            return False, 'live deployment locked: optimizer report empty'
+        rows = frame.to_dict(orient='records')
     frame = pd.DataFrame(rows)
     if frame.empty:
-        return False, "optimizer report empty"
+        return False, 'live deployment locked: optimizer report empty'
     strategy_key = normalize_strategy_key(strategy)
-    frame["normalized_strategy"] = frame["strategy"].map(lambda value: normalize_strategy_key(str(value)))
-    matched = frame[frame["normalized_strategy"] == strategy_key].copy()
+    frame['normalized_strategy'] = frame['strategy'].map(lambda value: normalize_strategy_key(str(value)))
+    matched = frame[frame['normalized_strategy'] == strategy_key].copy()
     if matched.empty:
-        return False, f"no optimizer row for {strategy}"
-    if "optimizer_rank" in matched.columns:
-        matched = matched.sort_values("optimizer_rank")
-    elif "rank_score" in matched.columns:
-        matched = matched.sort_values("rank_score", ascending=False)
+        return False, f'live deployment locked: no optimizer row for {strategy}'
+    if 'optimizer_rank' in matched.columns:
+        matched = matched.sort_values('optimizer_rank')
+    elif 'rank_score' in matched.columns:
+        matched = matched.sort_values('rank_score', ascending=False)
     row = matched.iloc[0].to_dict()
-    deployment_ready = str(row.get("deployment_ready", "NO")).strip().upper() == "YES"
-    blockers = str(row.get("deployment_blockers", "") or "").strip()
+    deployment_ready = str(row.get('deployment_ready', 'NO')).strip().upper() == 'YES'
+    blockers = str(row.get('deployment_blockers', '') or '').strip()
     if deployment_ready:
-        return True, "optimizer validated"
-    return False, blockers or "optimizer gate failed"
+        return True, 'deployment_ready=YES'
+    reason = blockers or 'deployment_ready must be YES'
+    return False, f'live deployment locked: {reason}'
 
 
 def status_message(run_clicked: bool, backtest_clicked: bool) -> str:
@@ -207,3 +208,4 @@ def run_execution(
         refresh_paper_trade_summary(candles, request.capital)
         status = "Paper broker active"
     return result, execution_result_summary(result), status
+

@@ -101,3 +101,10 @@
 2026-03-27 20:35:04,580 INFO runtime_error[run_operator_action] ValueError: bad candle payload
 2026-03-27 22:34:12,759 INFO runtime_error[run_operator_action] ValueError: bad candle payload
 2026-03-27 22:34:12,797 INFO runtime_error[run_operator_action] ValueError: bad candle payload
+2026-03-27 22:44:34,776 INFO runtime_error[run_operator_action] ValueError: bad candle payload
+2026-03-27 22:44:34,831 INFO runtime_error[run_operator_action] ValueError: bad candle payload
+2026-03-27 22:48:47,789 INFO runtime_error[run_operator_action] ValueError: bad candle payload
+2026-03-27 22:48:47,844 INFO runtime_error[run_operator_action] ValueError: bad candle payload
+2026-03-27 22:48:54,552 INFO execution_engine skipped invalid trade 679a8cdc-1450-5389-ac5a-d135259cdf54 reason=INVALID_SIDE
+2026-03-27 22:49:01,322 INFO execution_engine skipped invalid trade 9b9cc866-2ed4-593b-948f-3595a1cf2af1 reason=INVALID_SIDE
+2026-03-27 22:49:07,005 INFO execution_engine skipped invalid trade a15fae86-ff29-5510-8931-7674d8706d5e reason=MISSING_QUANTITY

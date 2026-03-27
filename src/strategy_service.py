@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
@@ -40,6 +40,7 @@ class StrategyContext:
     fixed_cost_per_trade: float = 0.0
     max_daily_loss: float | None = None
     max_trades_per_day: int | None = None
+    mode: str = 'Balanced'
     amd_mode: str = 'Balanced'
     amd_swing_window: int = 3
     amd_min_fvg_size: float = 0.35
@@ -217,21 +218,22 @@ def _run_breakout_strategy(context: StrategyContext, dependencies: StrategyDepen
 def _run_demand_supply_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
     preset = strategy_tuning_preset('DEMAND_SUPPLY')
     configured_max_trades = context.max_trades_per_day if context.max_trades_per_day is not None else preset.max_trades_per_day
+    configured_mode = str(context.mode or 'Balanced').strip() or 'Balanced'
     return dependencies.demand_supply_generator(
         context.candles,
         capital=float(context.capital),
         risk_pct=float(context.risk_pct) / 100.0,
         rr_ratio=float(context.rr_ratio),
         config=DemandSupplyConfig(
-            mode='Balanced',
+            mode=configured_mode,
             trailing_sl_pct=float(context.trailing_sl_pct),
             pivot_window=max(1, int(context.pivot_window)),
             max_trades_per_day=max(1, int(configured_max_trades or 1)),
-            duplicate_signal_cooldown_bars=max(12, int(preset.duplicate_signal_cooldown_bars)),
-            min_zone_strength_score=4.0,
+            duplicate_signal_cooldown_bars=max(18, int(preset.duplicate_signal_cooldown_bars)),
             require_vwap_alignment=True,
             require_trend_bias=True,
             allow_afternoon_session=False,
+            avoid_midday=True,
         ),
     )
 
@@ -418,6 +420,8 @@ def run_strategy_workflow(
         attach_option_strikes_fn=attach_option_strikes_fn,
         attach_option_metrics_fn=attach_option_metrics_fn,
     )
+
+
 
 
 

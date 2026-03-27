@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 import shutil
@@ -17,13 +17,15 @@ from src.indicator_bot import generate_indicator_rows
 from src.live_ohlcv import fetch_live_ohlcv
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
+from src.runtime_config import RuntimeConfig
 from src.strike_selector import attach_option_strikes
 from src.strategy_service import StrategyContext, run_strategy_workflow
 from src.strategy_tuning import normalize_strategy_key, strategy_backtest_config
 from src.trading_core import prepare_trading_data, write_rows
 from src.runtime_persistence import load_current_rows, load_latest_batch_rows
 
-DATA_DIR = Path("data")
+RUNTIME_CONFIG = RuntimeConfig.load()
+DATA_DIR = RUNTIME_CONFIG.paths.data_dir
 OHLCV_OUTPUT = DATA_DIR / "ohlcv.csv"
 LIVE_OHLCV_OUTPUT = DATA_DIR / "live_ohlcv.csv"
 TRADES_OUTPUT = DATA_DIR / "trades.csv"
@@ -284,6 +286,11 @@ def _refresh_paper_trade_summary(candles: pd.DataFrame, capital: float) -> dict[
     )
 
 
+def _log_runtime_error(context: str, exc: Exception) -> None:
+    from src.trading_core import append_log
+
+    append_log(f"runtime_error[{context}] {type(exc).__name__}: {exc}")
+
 def _load_csv_rows(path: Path) -> list[dict[str, object]]:
     db_rows = load_current_rows(path)
     if db_rows:
@@ -292,7 +299,8 @@ def _load_csv_rows(path: Path) -> list[dict[str, object]]:
         return []
     try:
         frame = pd.read_csv(path)
-    except Exception:
+    except Exception as exc:
+        _log_runtime_error(f"csv-read:{path}", exc)
         return []
     if frame.empty:
         return []
@@ -501,32 +509,60 @@ def _run_execution(request: TradingActionRequest, trades: list[dict[str, object]
 
 
 def run_operator_action(request: TradingActionRequest) -> TradingActionResult:
-    candles, trades, period = _run_live_strategy(request)
-    broker_status = "Paper broker active" if request.broker_choice == "Paper" else "Idle"
-    backtest_summary: dict[str, object] = {}
-    paper_summary: dict[str, object] = {}
-    execution_messages: list[tuple[str, str]] = []
+    try:
+        candles, trades, period = _run_live_strategy(request)
+        backtest_summary: dict[str, object] = {}
+        paper_summary: dict[str, object] = {}
+        execution_messages: list[tuple[str, str]] = []
 
-    if request.run_requested:
-        _, execution_messages, broker_status = _run_execution(request, trades, candles)
-        paper_summary = paper_execution_summary(EXECUTED_TRADES_OUTPUT, request.strategy, request.symbol, float(request.capital))
-        active_summary = dict(paper_summary)
-    elif request.backtest_requested:
-        backtest_summary = _run_strategy_backtest(candles, request)
-        active_summary = dict(backtest_summary)
-    else:
-        active_summary = {}
+        if request.backtest_requested and not request.run_requested:
+            backtest_summary = _run_strategy_backtest(candles, request)
+            return TradingActionResult(
+                candles=candles,
+                trades=[],
+                period=period,
+                status=_status_message(False, True),
+                broker_status="Backtest mode",
+                active_summary=dict(backtest_summary),
+                backtest_summary=backtest_summary,
+                paper_summary={},
+                todays_trades=0,
+                execution_messages=[],
+            )
 
-    todays_trades = todays_trade_count(EXECUTED_TRADES_OUTPUT, request.strategy, request.symbol)
-    return TradingActionResult(
-        candles=candles,
-        trades=trades,
-        period=period,
-        status=_status_message(request.run_requested, request.backtest_requested),
-        broker_status=broker_status,
-        active_summary=active_summary,
-        backtest_summary=backtest_summary,
-        paper_summary=paper_summary,
-        todays_trades=todays_trades,
-        execution_messages=execution_messages,
-    )
+        broker_status = "Paper broker active" if request.broker_choice == "Paper" else "Idle"
+        if request.run_requested:
+            _, execution_messages, broker_status = _run_execution(request, trades, candles)
+            paper_summary = paper_execution_summary(EXECUTED_TRADES_OUTPUT, request.strategy, request.symbol, float(request.capital))
+            active_summary = dict(paper_summary)
+        else:
+            active_summary = {}
+
+        todays_trades = todays_trade_count(EXECUTED_TRADES_OUTPUT, request.strategy, request.symbol)
+        return TradingActionResult(
+            candles=candles,
+            trades=trades,
+            period=period,
+            status=_status_message(request.run_requested, False),
+            broker_status=broker_status,
+            active_summary=active_summary,
+            backtest_summary=backtest_summary,
+            paper_summary=paper_summary,
+            todays_trades=todays_trades,
+            execution_messages=execution_messages,
+        )
+    except Exception as exc:
+        _log_runtime_error("run_operator_action", exc)
+        return TradingActionResult(
+            candles=pd.DataFrame(),
+            trades=[],
+            period=period_for_interval(request.timeframe),
+            status=f"Run failed: {exc}",
+            broker_status="Runtime error",
+            active_summary={},
+            backtest_summary={},
+            paper_summary={},
+            todays_trades=0,
+            execution_messages=[("error", str(exc))],
+        )
+

@@ -1,10 +1,10 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import time
 from typing import Any
 
 from src.breakout_bot import Candle, _coerce_candles, add_intraday_vwap
+from src.strategy_common import session_allowed, session_window
 from src.trading_core import ScoringConfig, ScoreThresholds, StandardTrade, safe_quantity, weighted_score
 
 
@@ -32,6 +32,7 @@ class DemandSupplyConfig:
     reaction_threshold: float = 0.45
     min_reaction_strength: float = 0.55
     min_zone_strength_score: float = 4.0
+    min_zone_structure_score: float = 1.2
     require_vwap_alignment: bool = True
     require_trend_bias: bool = True
     morning_session_start: str = '09:20'
@@ -56,16 +57,6 @@ def _group_by_day(candles: list[Candle]) -> dict[object, list[Candle]]:
     return by_day
 
 
-def _parse_hhmm(value: str, fallback: str) -> time:
-    raw = str(value or fallback).strip() or fallback
-    try:
-        hh, mm = raw.split(':', 1)
-        return time(hour=max(0, min(23, int(hh))), minute=max(0, min(59, int(mm))))
-    except Exception:
-        fh, fm = fallback.split(':', 1)
-        return time(hour=int(fh), minute=int(fm))
-
-
 def _intraday_range(candle: Candle) -> float:
     return max(float(candle.high) - float(candle.low), 0.0001)
 
@@ -73,18 +64,16 @@ def _intraday_range(candle: Candle) -> float:
 def _body_ratio(candle: Candle) -> float:
     return abs(float(candle.close) - float(candle.open)) / _intraday_range(candle)
 
+
 def calculate_vwap(candles: list[Candle]) -> None:
-    """Compute and attach intraday VWAP once for the supplied candle sequence."""
     add_intraday_vwap(candles)
 
 
 def session_filter(candle: Candle, config: DemandSupplyConfig) -> bool:
-    """Return True when a candle is inside the allowed trading session and outside midday block."""
     return _session_allowed(candle, config) and not _midday_restricted(candle, config)
 
 
 def detect_retest(day_candles: list[Candle], zone: Zone, side: str, start_idx: int, config: DemandSupplyConfig) -> tuple[int, int] | None:
-    """Detect a valid touch plus rejection retest cycle for a zone and return touch/confirmation indexes."""
     tol = float(config.touch_tolerance_pct or 0.0)
     for touch_idx in range(max(zone.idx + 1, start_idx), len(day_candles)):
         candle = day_candles[touch_idx]
@@ -104,8 +93,8 @@ def detect_retest(day_candles: list[Candle], zone: Zone, side: str, start_idx: i
 
 
 def score_zone(day_candles: list[Candle], idx: int, zone: Zone, side: str, config: DemandSupplyConfig, *, touch: bool, retest_confirmed: bool) -> tuple[float, dict[str, float], str, str, dict[str, object]] | None:
-    """Score a supply/demand zone and return diagnostics for execution-quality filtering."""
     return _quality_score(day_candles, idx, zone, side, config, touch=touch, retest_confirmed=retest_confirmed)
+
 
 def _reaction_strength(day_candles: list[Candle], idx: int, side: str) -> float:
     candle = day_candles[idx]
@@ -216,24 +205,29 @@ def _zone_freshness_score(idx: int, zone: Zone, config: DemandSupplyConfig) -> f
 
 
 def _midday_restricted(candle: Candle, config: DemandSupplyConfig) -> bool:
-    start = _parse_hhmm(config.midday_start, '12:00')
-    end = _parse_hhmm(config.midday_end, '13:30')
-    current = candle.timestamp.time().replace(second=0, microsecond=0)
-    return start <= current <= end
+    return session_window(
+        candle.timestamp,
+        morning_start=config.morning_session_start,
+        morning_end=config.morning_session_end,
+        midday_start=config.midday_start,
+        midday_end=config.midday_end,
+        allow_afternoon_session=bool(config.allow_afternoon_session),
+        afternoon_start=config.afternoon_session_start,
+        afternoon_end=config.afternoon_session_end,
+    ) == 'MIDDAY_BLOCKED'
 
 
 def _session_allowed(candle: Candle, config: DemandSupplyConfig) -> bool:
-    current = candle.timestamp.time().replace(second=0, microsecond=0)
-    morning_start = _parse_hhmm(config.morning_session_start, '09:20')
-    morning_end = _parse_hhmm(config.morning_session_end, '11:30')
-    if morning_start <= current <= morning_end:
-        return True
-    if bool(config.allow_afternoon_session):
-        afternoon_start = _parse_hhmm(config.afternoon_session_start, '13:45')
-        afternoon_end = _parse_hhmm(config.afternoon_session_end, '15:00')
-        if afternoon_start <= current <= afternoon_end:
-            return True
-    return False
+    return session_allowed(
+        candle.timestamp,
+        morning_start=config.morning_session_start,
+        morning_end=config.morning_session_end,
+        midday_start=config.midday_start,
+        midday_end=config.midday_end,
+        allow_afternoon_session=bool(config.allow_afternoon_session),
+        afternoon_start=config.afternoon_session_start,
+        afternoon_end=config.afternoon_session_end,
+    )
 
 
 def _higher_tf_bias(day_candles: list[Candle], idx: int) -> str:
@@ -259,17 +253,26 @@ def _zone_strength_score(
     *,
     freshness_score: float,
     reaction_score: float,
+    structure_score: float,
     touch: bool,
     retest_confirmed: bool,
     body_ok: bool,
     config: DemandSupplyConfig,
 ) -> float:
     score = 0.0
-    if freshness_score >= 0.55:
-        score += 1.0
+    if freshness_score >= 0.8:
+        score += 2.0
+    elif freshness_score >= 0.55:
+        score += 1.5
+    elif freshness_score >= 0.35:
+        score += 0.75
     if reaction_score >= float(config.reaction_threshold):
         score += 1.0
     if reaction_score >= float(config.min_reaction_strength):
+        score += 1.5
+    if structure_score >= 1.8:
+        score += 2.0
+    elif structure_score >= float(config.min_zone_structure_score):
         score += 1.0
     if touch and retest_confirmed:
         score += 1.0
@@ -286,6 +289,59 @@ def _retest_confirmation_candle(candle: Candle, zone: Zone, side: str) -> bool:
     if side == 'BUY':
         return close > float(zone.high) and close > open_ and close >= zone_mid and body_ok
     return close < float(zone.low) and close < open_ and close <= zone_mid and body_ok
+
+
+def _zone_structure_score(
+    day_candles: list[Candle],
+    idx: int,
+    zone: Zone,
+    side: str,
+    *,
+    bias_aligned: bool,
+    opening_ok: bool,
+    touch: bool,
+    retest_confirmed: bool,
+) -> float:
+    candle = day_candles[idx]
+    avg_range = max(_avg_range(day_candles, idx, 6), 0.0001)
+    zone_width = max(float(zone.high) - float(zone.low), 0.0001)
+    width_ratio = zone_width / avg_range
+    score = 0.0
+    if 0.2 <= width_ratio <= 1.4:
+        score += 0.75
+    elif width_ratio <= 2.0:
+        score += 0.35
+    if bias_aligned:
+        score += 0.5
+    if opening_ok:
+        score += 0.35
+    zone_mid = _zone_mid(zone)
+    close = float(candle.close)
+    if side == 'BUY' and close >= zone_mid:
+        score += 0.25
+    elif side == 'SELL' and close <= zone_mid:
+        score += 0.25
+    if touch and retest_confirmed:
+        score += 0.4
+    return round(score, 2)
+
+
+def _zone_selection_score(day_candles: list[Candle], idx: int, zone: Zone, side: str, config: DemandSupplyConfig) -> float:
+    freshness_score = _zone_freshness_score(idx, zone, config)
+    trend_bias = _higher_tf_bias(day_candles, idx)
+    bias_aligned = trend_bias == ('BULLISH' if side == 'BUY' else 'BEARISH')
+    opening_ok = _opening_range_alignment(day_candles, idx, side, config.opening_range_minutes)
+    structure_score = _zone_structure_score(
+        day_candles,
+        idx,
+        zone,
+        side,
+        bias_aligned=bias_aligned,
+        opening_ok=opening_ok,
+        touch=False,
+        retest_confirmed=False,
+    )
+    return round((freshness_score * 2.0) + (float(zone.reaction_strength) * 2.0) + structure_score, 4)
 
 
 def _quality_score(
@@ -309,9 +365,20 @@ def _quality_score(
     opening_ok = _opening_range_alignment(day_candles, idx, side, config.opening_range_minutes)
     volatility_ok = _volatility_ok(day_candles, idx, config)
     body_ok = _body_ratio(candle) >= 0.38
+    structure_score = _zone_structure_score(
+        day_candles,
+        idx,
+        zone,
+        side,
+        bias_aligned=bias_aligned,
+        opening_ok=opening_ok,
+        touch=touch,
+        retest_confirmed=retest_confirmed,
+    )
     zone_strength = _zone_strength_score(
         freshness_score=freshness_score,
         reaction_score=reaction_score,
+        structure_score=structure_score,
         touch=touch,
         retest_confirmed=retest_confirmed,
         body_ok=body_ok,
@@ -321,6 +388,8 @@ def _quality_score(
     if config.require_vwap_alignment and not vwap_ok:
         return None
     if config.require_trend_bias and not bias_aligned:
+        return None
+    if structure_score < float(config.min_zone_structure_score):
         return None
     if zone_strength < float(config.min_zone_strength_score):
         return None
@@ -342,13 +411,15 @@ def _quality_score(
         return None
     if not score.accepted:
         return None
-    reason = f'{side.lower()} zone retest score={score.total:.2f} zone_strength={zone_strength:.2f} bias={trend_bias}'
+    reason = f'{side.lower()} zone retest score={score.total:.2f} zone_strength={zone_strength:.2f} structure={structure_score:.2f} bias={trend_bias}'
     rejection_reason = '' if score.accepted else ','.join(f'missing_{name}' for name in score.reasons)
     diagnostics = {
         'trend_bias': trend_bias,
         'bias_aligned': bias_aligned,
         'vwap_aligned': vwap_ok,
         'zone_strength_score': round(zone_strength, 2),
+        'structure_score': round(structure_score, 2),
+        'zone_selection_score': round(_zone_selection_score(day_candles, idx, zone, side, config), 2),
         'freshness_score': round(freshness_score, 4),
         'reaction_score': round(reaction_score, 4),
         'opening_ok': opening_ok,
@@ -357,6 +428,7 @@ def _quality_score(
         'volatility_ok': volatility_ok,
     }
     return score.total, score.components, reason, rejection_reason, diagnostics
+
 
 def _entry_levels(candle: Candle, zone: Zone, side: str, rr_ratio: float, avg_range: float) -> tuple[float, float, float]:
     entry = float(candle.close)
@@ -386,7 +458,6 @@ def generate_trades(
     touch_tolerance_pct: float = 0.006,
     max_trades_per_day: int = 1,
 ) -> list[dict[str, object]]:
-    """Generate scored demand/supply trades with Nifty 5m quality filters."""
     cfg = config or DemandSupplyConfig()
     if config is None:
         cfg.trailing_sl_pct = float(trailing_sl_pct)
@@ -413,11 +484,16 @@ def generate_trades(
         last_signal_index: dict[str, int] = {'BUY': -10_000, 'SELL': -10_000}
         used_signal_keys: set[tuple[str, str, str, str]] = set()
 
-        for zone in sorted(zones, key=lambda z: (z.reaction_strength, z.idx), reverse=True):
+        ranked_zones = sorted(
+            zones,
+            key=lambda z: (_zone_selection_score(day_candles, min(len(day_candles) - 1, z.idx + 1), z, 'BUY' if z.kind == 'demand' else 'SELL', cfg), z.reaction_strength, z.idx),
+            reverse=True,
+        )
+
+        for zone in ranked_zones:
             if trades_taken >= int(cfg.max_trades_per_day or 1):
                 break
             side = 'BUY' if zone.kind == 'demand' else 'SELL'
-            tol = float(cfg.touch_tolerance_pct or 0.0)
 
             for i in range(zone.idx + 1, len(day_candles)):
                 if trades_taken >= int(cfg.max_trades_per_day or 1):
@@ -513,7 +589,9 @@ def generate_trades(
                         'zone_reaction_strength': round(float(zone.reaction_strength), 4),
                         'retest_touch_time': candle.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
                         'retest_confirmation_time': entry_candle.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
-                        'session_window': 'AFTERNOON' if bool(cfg.allow_afternoon_session) and entry_candle.timestamp.time() >= _parse_hhmm(cfg.afternoon_session_start, '13:45') else 'MORNING',
+                        'session_window': 'AFTERNOON' if session_window(entry_candle.timestamp, morning_start=cfg.morning_session_start, morning_end=cfg.morning_session_end, midday_start=cfg.midday_start, midday_end=cfg.midday_end, allow_afternoon_session=bool(cfg.allow_afternoon_session), afternoon_start=cfg.afternoon_session_start, afternoon_end=cfg.afternoon_session_end) == 'AFTERNOON' else 'MORNING',
+                        'structure_score': float(diagnostics['structure_score']),
+                        'zone_selection_score': float(diagnostics['zone_selection_score']),
                         'zone_freshness_score': round(float(_zone_freshness_score(confirmation_idx, zone, cfg)), 4),
                         'zone_strength_score': float(diagnostics['zone_strength_score']),
                         'trend_bias': str(diagnostics['trend_bias']),
@@ -538,5 +616,4 @@ def generate_trades(
                 used_signal_keys.add(signal_key)
                 break
     return trades
-
 

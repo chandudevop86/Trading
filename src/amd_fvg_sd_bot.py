@@ -1,12 +1,12 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import floor
-from datetime import time
 from typing import Any
 
 import pandas as pd
 
+from src.strategy_common import session_window
 from src.trading_core import ScoringConfig, weighted_score
 
 REQUIRED_COLUMNS = ['timestamp', 'open', 'high', 'low', 'close', 'volume']
@@ -181,28 +181,17 @@ def _window_slice(df: pd.DataFrame, start: int, end: int) -> pd.DataFrame:
         return df.iloc[0:0]
     return df.iloc[left:right]
 
-def _parse_hhmm(value: str, fallback: str) -> time:
-    raw = str(value or fallback).strip() or fallback
-    hour_text, minute_text = raw.split(':', 1)
-    return time(hour=int(hour_text), minute=int(minute_text))
-
-
 def _session_window(row: pd.Series, config: ConfluenceConfig) -> str:
-    current_time = pd.Timestamp(row['timestamp']).time()
-    morning_start = _parse_hhmm(config.morning_session_start, '09:20')
-    morning_end = _parse_hhmm(config.morning_session_end, '11:30')
-    midday_start = _parse_hhmm(config.midday_start, '12:00')
-    midday_end = _parse_hhmm(config.midday_end, '13:30')
-    afternoon_start = _parse_hhmm(config.afternoon_session_start, '13:45')
-    afternoon_end = _parse_hhmm(config.afternoon_session_end, '15:00')
-    if morning_start <= current_time <= morning_end:
-        return 'MORNING'
-    if midday_start <= current_time <= midday_end:
-        return 'MIDDAY_BLOCKED'
-    if config.allow_afternoon_session and afternoon_start <= current_time <= afternoon_end:
-        return 'AFTERNOON'
-    return ''
-
+    return session_window(
+        pd.Timestamp(row['timestamp']).to_pydatetime(),
+        morning_start=config.morning_session_start,
+        morning_end=config.morning_session_end,
+        midday_start=config.midday_start,
+        midday_end=config.midday_end,
+        allow_afternoon_session=bool(config.allow_afternoon_session),
+        afternoon_start=config.afternoon_session_start,
+        afternoon_end=config.afternoon_session_end,
+    )
 
 def _vwap_alignment(row: pd.Series, side: str) -> bool:
     vwap = float(row.get('vwap', 0.0) or 0.0)
@@ -840,4 +829,7 @@ __all__ = [
     'score_trade_setup',
     'generate_trades',
 ]
+
+
+
 

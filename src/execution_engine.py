@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import hashlib
@@ -24,7 +24,7 @@ from src.brokers import (
 )
 from src.csv_io import read_csv_rows
 from src.trading_core import append_log
-from src.strategy_tuning import normalize_strategy_key
+from src.strategy_tuning import normalize_strategy_key, strategy_tuning_preset
 from src.runtime_persistence import (
     load_current_rows,
     load_execution_risk_state,
@@ -250,6 +250,14 @@ def _cooldown_group_key(record: dict[str, object]) -> str:
     return "|".join([strategy, symbol, timeframe, side])
 
 
+def _trade_cooldown_group_key(record: dict[str, object]) -> str:
+    strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
+    symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
+    timeframe = _timeframe_key(record)
+    return "|".join([strategy, symbol, timeframe])
+
+
+
 def _infer_timeframe_minutes(value: object) -> int:
     raw = str(value or "").strip().lower()
     mapping = {
@@ -276,7 +284,21 @@ def _cooldown_window_seconds(record: dict[str, object]) -> int:
     timeframe_minutes = _infer_timeframe_minutes(record.get("timeframe", record.get("interval")))
     if bars > 0 and timeframe_minutes > 0:
         return int(bars * timeframe_minutes * 60)
+    preset = strategy_tuning_preset(str(record.get("strategy", "") or ""))
+    if int(getattr(preset, "duplicate_cooldown_minutes", 0) or 0) > 0:
+        return int(preset.duplicate_cooldown_minutes) * 60
     return 0
+
+def _effective_max_trades_per_day(record: dict[str, object], explicit_limit: int | None) -> int | None:
+    if explicit_limit is not None and int(explicit_limit) > 0:
+        return int(explicit_limit)
+    record_limit = int(_safe_float(record.get("max_trades_per_day")))
+    if record_limit > 0:
+        return record_limit
+    preset = strategy_tuning_preset(str(record.get("strategy", "") or ""))
+    if int(getattr(preset, "max_trades_per_day", 0) or 0) > 0:
+        return int(preset.max_trades_per_day)
+    return None
 
 
 def make_trade_key(record: dict[str, object]) -> str:
@@ -566,6 +588,21 @@ def _load_recent_signal_times(path: Path, execution_type: str | None = None) -> 
     return recent
 
 
+
+def _load_recent_trade_times(path: Path, execution_type: str | None = None) -> dict[str, datetime]:
+    recent: dict[str, datetime] = {}
+    for row in _read_trade_rows(path):
+        if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
+            continue
+        signal_time = _parse_dt(row.get("signal_time")) or _parse_dt(row.get("entry_time")) or _parse_dt(row.get("timestamp"))
+        if signal_time is None:
+            continue
+        group_key = _trade_cooldown_group_key(row)
+        current = recent.get(group_key)
+        if current is None or signal_time > current:
+            recent[group_key] = signal_time
+    return recent
+
 def _count_open_trades(path: Path, execution_type: str | None = None) -> int:
     state = _load_risk_state_snapshot(path, execution_type)
     if state:
@@ -644,6 +681,8 @@ def filter_unlogged_candidates(candidates: list[dict[str, object]], output_path:
     batch_seen_trade_keys: set[str] = set()
     batch_seen_signal_keys: set[str] = set()
     batch_recent_signal_times: dict[str, datetime] = {}
+    batch_recent_trade_times: dict[str, datetime] = {}
+    batch_recent_trade_times: dict[str, datetime] = {}
     fresh: list[dict[str, object]] = []
     skipped: list[dict[str, object]] = []
     for candidate in candidates:
@@ -1128,6 +1167,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
     active_trade_keys = load_active_trade_keys(output_path, execution_type)
     active_duplicate_signal_keys = load_active_duplicate_signal_keys(output_path, execution_type)
     recent_signal_times = _load_recent_signal_times(output_path, execution_type)
+    recent_trade_times = _load_recent_trade_times(output_path, execution_type)
     open_trade_count = _count_open_trades(output_path, execution_type)
     daily_state = _load_daily_execution_state(output_path, execution_type)
     rows_to_write: list[dict[str, object]] = []
@@ -1154,6 +1194,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
     batch_seen_trade_keys: set[str] = set()
     batch_seen_signal_keys: set[str] = set()
     batch_recent_signal_times: dict[str, datetime] = {}
+    batch_recent_trade_times: dict[str, datetime] = {}
 
     for candidate in candidates:
         ok, validation_reason, validated = validate_candidate(candidate)
@@ -1186,19 +1227,30 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
         batch_seen_trade_ids.add(trade_id)
         batch_seen_trade_keys.add(trade_key)
         batch_seen_signal_keys.add(duplicate_signal_key)
+        trade_cooldown_group = _trade_cooldown_group_key(base_row)
+        trade_cooldown_seconds = _cooldown_window_seconds(base_row)
+        previous_trade_time = batch_recent_trade_times.get(trade_cooldown_group)
+        if previous_trade_time is None:
+            previous_trade_time = recent_trade_times.get(trade_cooldown_group)
+        if trade_cooldown_seconds > 0 and signal_time is not None and previous_trade_time is not None:
+            if (signal_time - previous_trade_time).total_seconds() < trade_cooldown_seconds:
+                _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN)
+                continue
         if signal_time is not None:
             batch_recent_signal_times[cooldown_group] = signal_time
+            batch_recent_trade_times[trade_cooldown_group] = signal_time
         day_key = _trade_day_key(base_row, today_key)
         state = daily_state.setdefault(day_key, {"count": 0.0, "realized_pnl": 0.0})
-        trade_limit_hit = max_trades_per_day is not None and int(max_trades_per_day) > 0 and int(state["count"]) >= int(max_trades_per_day)
+        effective_max_trades_per_day = _effective_max_trades_per_day(base_row, max_trades_per_day)
+        trade_limit_hit = effective_max_trades_per_day is not None and int(state["count"]) >= int(effective_max_trades_per_day)
         loss_limit_hit = max_daily_loss is not None and float(max_daily_loss) > 0 and float(state["realized_pnl"]) <= -abs(float(max_daily_loss))
         open_trade_limit_hit = max_open_trades is not None and int(max_open_trades) > 0 and int(open_trade_count) >= int(max_open_trades)
         if trade_limit_hit or loss_limit_hit or open_trade_limit_hit:
             blocked = dict(base_row)
             blocked["trade_status"] = TRADE_STATUS_BLOCKED
             blocked["execution_status"] = "BLOCKED"
-            blocked["blocked_reason"] = SKIP_REASON_MAX_TRADES_PER_DAY if trade_limit_hit else SKIP_REASON_MAX_DAILY_LOSS if loss_limit_hit else SKIP_REASON_MAX_OPEN_TRADES
-            blocked["risk_limit_reason"] = _risk_limit_message(max_trades_per_day, max_daily_loss) if not open_trade_limit_hit else f"max open trades={int(max_open_trades)}"
+            blocked["blocked_reason"] = SKIP_REASON_MAX_OPEN_TRADES if open_trade_limit_hit else SKIP_REASON_MAX_TRADES_PER_DAY if trade_limit_hit else SKIP_REASON_MAX_DAILY_LOSS
+            blocked["risk_limit_reason"] = f"max open trades={int(max_open_trades)}" if open_trade_limit_hit else _risk_limit_message(effective_max_trades_per_day, max_daily_loss)
             blocked["broker_name"] = resolved_broker_name
             blocked["broker_status"] = "RISK_LIMIT"
             blocked["broker_message"] = f"Execution blocked by {blocked['risk_limit_reason']}"
@@ -1337,6 +1389,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             active_duplicate_signal_keys.add(duplicate_signal_key)
             if signal_time is not None:
                 recent_signal_times[cooldown_group] = signal_time
+                recent_trade_times[trade_cooldown_group] = signal_time
             open_trade_count += 1
 
     _write_execution_rows(output_path, rows_to_write)
@@ -1808,6 +1861,13 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
+
+
+
+
+
+
+
 
 
 

@@ -1,4 +1,4 @@
-import csv
+﻿import csv
 import io
 import os
 import tempfile
@@ -732,8 +732,36 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(first.executed_count, 1)
             self.assertEqual(second.blocked_count, 1)
             self.assertEqual(second.blocked_rows[0]['blocked_reason'], 'MAX_OPEN_TRADES')
+
+    def test_execute_paper_trades_uses_strategy_default_trade_cap(self):
+        candidates = [
+            {"strategy": "DEMAND_SUPPLY", "symbol": "NIFTY", "timeframe": "5m", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100.0, "quantity": 65, "reason": "a", "stop_loss": 99.0, "target_price": 102.0},
+            {"strategy": "DEMAND_SUPPLY", "symbol": "NIFTY", "timeframe": "5m", "signal_time": "2026-03-06 11:00:00", "side": "SELL", "price": 101.0, "quantity": 65, "reason": "b", "stop_loss": 102.0, "target_price": 99.0},
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            result = execute_paper_trades(candidates, out, deduplicate=True)
+            self.assertEqual(result.executed_count, 1)
+            self.assertEqual(result.blocked_count, 1)
+            self.assertEqual(result.blocked_rows[0]['blocked_reason'], 'MAX_TRADES_PER_DAY')
+
+    def test_execute_paper_trades_uses_strategy_default_cooldown_minutes(self):
+        candidates = [
+            {"strategy": "DEMAND_SUPPLY", "symbol": "NIFTY", "timeframe": "5m", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100.0, "quantity": 65, "reason": "a", "stop_loss": 99.0, "target_price": 102.0},
+            {"strategy": "DEMAND_SUPPLY", "symbol": "NIFTY", "timeframe": "5m", "signal_time": "2026-03-06 10:10:00", "side": "SELL", "price": 100.5, "quantity": 65, "reason": "b", "stop_loss": 101.5, "target_price": 98.5},
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            result = execute_paper_trades(candidates, out, deduplicate=True, max_trades_per_day=5)
+            self.assertEqual(result.executed_count, 1)
+            self.assertEqual(result.skipped_count, 1)
+            self.assertEqual(result.skipped_rows[0]['duplicate_reason'], 'DUPLICATE_SIGNAL_COOLDOWN')
 if __name__ == '__main__':
+
     unittest.main()
+
 
 
 

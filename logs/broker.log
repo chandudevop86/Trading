@@ -912,3 +912,83 @@
 [2026-03-26 19:22:40] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
 [2026-03-26 19:22:43] Broker route trade_id=69b32b95-98da-5957-824b-af6cbf1c4751 broker=PAPER symbol=NIFTY side=BUY qty=65
 [2026-03-26 19:22:43] Broker response trade_id=69b32b95-98da-5957-824b-af6cbf1c4751 broker=PAPER status=EXECUTED
+[2026-03-27 07:18:56] Broker route trade_id=4536031a-6265-58f3-8bcf-111a72ac2741 broker=DHAN symbol=^NSEI side=BUY qty=75
+[2026-03-27 07:18:56] Broker response trade_id=4536031a-6265-58f3-8bcf-111a72ac2741 broker=DHAN status=TRANSIT
+[2026-03-27 07:18:57] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:18:57] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 07:18:58] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:18:58] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 07:18:58] Broker route trade_id=26863966-bf22-5e17-b90a-abee33cda939 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:18:59] Broker response trade_id=26863966-bf22-5e17-b90a-abee33cda939 broker=PAPER status=EXECUTED
+[2026-03-27 07:19:00] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:00] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 07:19:01] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:01] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 07:19:01] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:02] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 07:19:02] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:02] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 07:19:03] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:03] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 07:19:04] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:05] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 07:19:05] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:06] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 07:19:07] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:07] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 07:19:08] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:08] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 07:19:09] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:09] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 07:19:10] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:10] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 07:19:11] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:11] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 07:19:11] Broker route trade_id=69b32b95-98da-5957-824b-af6cbf1c4751 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:19:12] Broker response trade_id=69b32b95-98da-5957-824b-af6cbf1c4751 broker=PAPER status=EXECUTED
+[2026-03-27 07:43:00] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:43:00] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 07:43:01] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 07:43:01] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 08:08:34] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:08:34] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 08:10:04] Broker route trade_id=4536031a-6265-58f3-8bcf-111a72ac2741 broker=DHAN symbol=^NSEI side=BUY qty=75
+[2026-03-27 08:10:04] Broker response trade_id=4536031a-6265-58f3-8bcf-111a72ac2741 broker=DHAN status=TRANSIT
+[2026-03-27 08:10:05] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:06] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 08:10:06] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:07] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 08:10:07] Broker route trade_id=26863966-bf22-5e17-b90a-abee33cda939 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:07] Broker response trade_id=26863966-bf22-5e17-b90a-abee33cda939 broker=PAPER status=EXECUTED
+[2026-03-27 08:10:09] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:09] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 08:10:10] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:10] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 08:10:11] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:11] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 08:10:12] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:12] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 08:10:13] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:14] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 08:10:15] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:15] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 08:10:16] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:16] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 08:10:17] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:17] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 08:10:17] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:18] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 08:10:18] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:18] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 08:10:19] Broker route trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:19] Broker response trade_id=a15fae86-ff29-5510-8931-7674d8706d5e broker=PAPER status=EXECUTED
+[2026-03-27 08:10:20] Broker route trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:20] Broker response trade_id=059b8f2d-88d8-525a-bafe-e656bbf544e0 broker=PAPER status=EXECUTED
+[2026-03-27 08:10:22] Broker route trade_id=69b32b95-98da-5957-824b-af6cbf1c4751 broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:10:22] Broker response trade_id=69b32b95-98da-5957-824b-af6cbf1c4751 broker=PAPER status=EXECUTED
+[2026-03-27 08:17:03] Broker route trade_id=97dc6919-540c-5393-b131-4c620865a4ff broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:17:04] Broker response trade_id=97dc6919-540c-5393-b131-4c620865a4ff broker=PAPER status=EXECUTED
+[2026-03-27 08:17:45] Broker route trade_id=97dc6919-540c-5393-b131-4c620865a4ff broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:17:45] Broker response trade_id=97dc6919-540c-5393-b131-4c620865a4ff broker=PAPER status=EXECUTED
+[2026-03-27 08:33:29] Broker route trade_id=97dc6919-540c-5393-b131-4c620865a4ff broker=PAPER symbol=NIFTY side=BUY qty=65
+[2026-03-27 08:33:30] Broker response trade_id=97dc6919-540c-5393-b131-4c620865a4ff broker=PAPER status=EXECUTED

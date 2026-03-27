@@ -1,13 +1,14 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from dateutil import parser
 
 from src.csv_io import read_csv_rows, write_csv_rows
+from src.strategy_common import session_allowed, session_window
 from src.telegram_notifier import send_telegram_message
 from src.trade_safety import calculate_net_pnl, daily_limit_reached
 from src.trading_core import ScoringConfig, ScoreThresholds, StandardTrade, append_log, prepare_trading_data, safe_quantity, weighted_score
@@ -234,35 +235,29 @@ def _candidate_sides(bias: str, *, use_first_hour_bias: bool) -> list[str]:
     return ['BUY', 'SELL']
 
 
-def _parse_hhmm(value: str, fallback: str) -> time:
-    raw = str(value or fallback).strip() or fallback
-    try:
-        hh, mm = raw.split(':', 1)
-        return time(hour=max(0, min(23, int(hh))), minute=max(0, min(59, int(mm))))
-    except Exception:
-        fh, fm = fallback.split(':', 1)
-        return time(hour=int(fh), minute=int(fm))
-
-
 def _session_allowed(candle: Candle, config: BreakoutConfig) -> bool:
-    current = candle.timestamp.time().replace(second=0, microsecond=0)
-    morning_start = _parse_hhmm(config.morning_session_start, '09:20')
-    morning_end = _parse_hhmm(config.morning_session_end, '11:30')
-    if morning_start <= current <= morning_end:
-        return True
-    if bool(config.allow_afternoon_session):
-        afternoon_start = _parse_hhmm(config.afternoon_session_start, '13:45')
-        afternoon_end = _parse_hhmm(config.afternoon_session_end, '15:00')
-        return afternoon_start <= current <= afternoon_end
-    return False
-
+    return session_allowed(
+        candle.timestamp,
+        morning_start=config.morning_session_start,
+        morning_end=config.morning_session_end,
+        midday_start=config.midday_start,
+        midday_end=config.midday_end,
+        allow_afternoon_session=bool(config.allow_afternoon_session),
+        afternoon_start=config.afternoon_session_start,
+        afternoon_end=config.afternoon_session_end,
+    )
 
 def _midday_restricted(candle: Candle, config: BreakoutConfig) -> bool:
-    current = candle.timestamp.time().replace(second=0, microsecond=0)
-    start = _parse_hhmm(config.midday_start, '12:00')
-    end = _parse_hhmm(config.midday_end, '13:30')
-    return start <= current <= end
-
+    return session_window(
+        candle.timestamp,
+        morning_start=config.morning_session_start,
+        morning_end=config.morning_session_end,
+        midday_start=config.midday_start,
+        midday_end=config.midday_end,
+        allow_afternoon_session=bool(config.allow_afternoon_session),
+        afternoon_start=config.afternoon_session_start,
+        afternoon_end=config.afternoon_session_end,
+    ) == 'MIDDAY_BLOCKED'
 
 def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Candle, *, regime: str, bias: str, trigger: float, volume_ratio: float, strength: float, vwap_slope: float, atr_value: float, config: BreakoutConfig) -> tuple[float, str, dict[str, float], str, bool] | None:
     broke_level = breakout_candle.close > trigger if side == 'BUY' else breakout_candle.close < trigger
@@ -536,3 +531,4 @@ def run(
     if telegram_token and telegram_chat_id:
         send_telegram_message(telegram_token, telegram_chat_id, build_trade_summary(trades))
     return trades
+

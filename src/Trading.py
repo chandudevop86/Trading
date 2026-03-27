@@ -16,31 +16,33 @@ from src.amd_fvg_sd_bot import generate_trades as generate_amd_fvg_sd_trades
 from src.breakout_bot import generate_trades as generate_breakout_trades
 from src.demand_supply_bot import generate_trades as generate_demand_supply_trades
 from src.indicator_bot import generate_indicator_rows
+from src.runtime_config import RuntimeConfig
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.strike_selector import attach_option_strikes
 from src.trading_core import append_log, configure_file_logging
 from src.trading_runtime_service import latest_actionable_trades, period_for_interval, run_operator_action
 from src.trading_ui_service import apply_minimal_theme, build_request, initialize_ui_runtime, log_ui_event, render_operator_panels, render_summary_cards
 
-DATA_DIR = Path('data')
-LOG_DIR = Path('logs')
-OHLCV_OUTPUT = DATA_DIR / 'ohlcv.csv'
-LIVE_OHLCV_OUTPUT = DATA_DIR / 'live_ohlcv.csv'
-TRADES_OUTPUT = DATA_DIR / 'trades.csv'
-SIGNAL_OUTPUT = DATA_DIR / 'output.csv'
-EXECUTED_TRADES_OUTPUT = DATA_DIR / 'executed_trades.csv'
-PAPER_LOG_OUTPUT = DATA_DIR / 'paper_trading_logs_all.csv'
-LIVE_LOG_OUTPUT = DATA_DIR / 'live_trading_logs_all.csv'
-BACKTEST_TRADES_OUTPUT = DATA_DIR / 'backtest_trades.csv'
-BACKTEST_SUMMARY_OUTPUT = DATA_DIR / 'backtest_summary.csv'
-BACKTEST_RESULTS_OUTPUT = DATA_DIR / 'backtest_results_all.csv'
-ORDER_HISTORY_OUTPUT = DATA_DIR / 'order_history.csv'
-PAPER_ORDER_HISTORY_OUTPUT = DATA_DIR / 'paper_order_history.csv'
-APP_LOG = LOG_DIR / 'app.log'
-BROKER_LOG = LOG_DIR / 'broker.log'
-EXECUTION_LOG = LOG_DIR / 'execution.log'
-REJECTIONS_LOG = LOG_DIR / 'rejections.log'
-ERRORS_LOG = LOG_DIR / 'errors.log'
+RUNTIME_CONFIG = RuntimeConfig.load()
+DATA_DIR = RUNTIME_CONFIG.paths.data_dir
+LOG_DIR = RUNTIME_CONFIG.paths.logs_dir
+OHLCV_OUTPUT = RUNTIME_CONFIG.paths.ohlcv_csv
+LIVE_OHLCV_OUTPUT = RUNTIME_CONFIG.paths.live_ohlcv_csv
+TRADES_OUTPUT = RUNTIME_CONFIG.paths.trades_csv
+SIGNAL_OUTPUT = RUNTIME_CONFIG.paths.signal_output_csv
+EXECUTED_TRADES_OUTPUT = RUNTIME_CONFIG.paths.executed_trades_csv
+PAPER_LOG_OUTPUT = RUNTIME_CONFIG.paths.paper_trading_log_csv
+LIVE_LOG_OUTPUT = RUNTIME_CONFIG.paths.live_trading_log_csv
+BACKTEST_TRADES_OUTPUT = RUNTIME_CONFIG.paths.backtest_trades_csv
+BACKTEST_SUMMARY_OUTPUT = RUNTIME_CONFIG.paths.backtest_summary_csv
+BACKTEST_RESULTS_OUTPUT = RUNTIME_CONFIG.paths.backtest_results_csv
+ORDER_HISTORY_OUTPUT = RUNTIME_CONFIG.paths.order_history_csv
+PAPER_ORDER_HISTORY_OUTPUT = RUNTIME_CONFIG.paths.paper_order_history_csv
+APP_LOG = RUNTIME_CONFIG.paths.app_log
+BROKER_LOG = RUNTIME_CONFIG.paths.broker_log
+EXECUTION_LOG = RUNTIME_CONFIG.paths.execution_log
+REJECTIONS_LOG = RUNTIME_CONFIG.paths.rejections_log
+ERRORS_LOG = RUNTIME_CONFIG.paths.errors_log
 DEFAULT_SYMBOL = os.getenv('TRADING_SYMBOL', '^NSEI').strip() or '^NSEI'
 DEFAULT_INTERVAL = os.getenv('TRADING_INTERVAL', '5m').strip() or '5m'
 TIMEFRAME_OPTIONS = ['1m', '5m', '15m', '30m', '1h', '1d']
@@ -168,3 +170,5 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+

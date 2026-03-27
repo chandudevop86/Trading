@@ -23,6 +23,7 @@ from src.brokers import (
     TradeCandidate,
 )
 from src.csv_io import read_csv_rows
+from src.runtime_config import RuntimeConfig
 from src.trading_core import append_log
 from src.strategy_tuning import normalize_strategy_key, strategy_tuning_preset
 from src.runtime_persistence import (
@@ -76,11 +77,13 @@ ACTIVE_TRADE_STATUSES = {
     TRADE_STATUS_OPEN,
 }
 EXECUTION_SUCCESS_STATUSES = {"EXECUTED", "SENT", "FILLED"}
-ORDER_HISTORY_OUTPUT = Path('data/order_history.csv')
-OPTIMIZER_REPORT_OUTPUT = Path('data/strategy_optimizer_report.csv')
-BROKER_LOG_PATH = Path('logs/broker.log')
-EXECUTION_LOG_PATH = Path('logs/execution.log')
-REJECTIONS_LOG_PATH = Path('logs/rejections.log')
+RUNTIME_CONFIG = RuntimeConfig.load()
+ORDER_HISTORY_OUTPUT = RUNTIME_CONFIG.paths.order_history_csv
+OPTIMIZER_REPORT_OUTPUT = RUNTIME_CONFIG.paths.optimizer_report_csv
+BROKER_LOG_PATH = RUNTIME_CONFIG.paths.broker_log
+EXECUTION_LOG_PATH = RUNTIME_CONFIG.paths.execution_log
+REJECTIONS_LOG_PATH = RUNTIME_CONFIG.paths.rejections_log
+ERRORS_LOG_PATH = RUNTIME_CONFIG.paths.errors_log
 EXECUTION_SCHEMA = [
     "trade_id",
     "trade_key",
@@ -883,12 +886,33 @@ def _make_result_row(candidate: dict[str, object], *, execution_type: str, proce
     row.setdefault("stop_loss", row.get("stop_loss", ""))
     row.setdefault("score", row.get("score", ""))
     return row
+def _json_safe_value(value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if isinstance(value, dict):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe_value(item) for item in value]
+    return str(value)
 
-def _append_text_log(path: Path, message: str) -> None:
+def _append_structured_log(path: Path, event: str, **fields: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
+    payload: dict[str, object] = {
+        "timestamp_utc": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
+        "event": event,
+    }
+    for key, value in fields.items():
+        if value is None or value == "":
+            continue
+        payload[str(key)] = _json_safe_value(value)
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(f"[{stamp}] {message}\n")
+        handle.write(json.dumps(payload, ensure_ascii=True, sort_keys=True) + "\n")
 
 
 def _is_live_enabled(explicit_flag: bool | None, broker_client: object | None, broker_name: str | None) -> bool:
@@ -1189,7 +1213,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
         )
         resolved_broker_name = resolved_broker_name or "LIVE"
 
-    _append_text_log(EXECUTION_LOG_PATH, f"Execution start mode={execution_type} broker={resolved_broker_name} candidates={len(candidates)}")
+    _append_structured_log(EXECUTION_LOG_PATH, 'execution_start', execution_type=execution_type, broker=resolved_broker_name, candidate_count=len(candidates), output_path=str(output_path))
     batch_seen_trade_ids: set[str] = set()
     batch_seen_trade_keys: set[str] = set()
     batch_seen_signal_keys: set[str] = set()
@@ -1205,7 +1229,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
         signal_time = _parse_dt(base_row.get("signal_time"))
         cooldown_group = _cooldown_group_key(base_row)
         if not ok:
-            _append_text_log(REJECTIONS_LOG_PATH, f"Rejected invalid trade {trade_id or 'UNKNOWN'} reason={validation_reason}")
+            _append_structured_log(REJECTIONS_LOG_PATH, 'trade_rejected', execution_type=execution_type, trade_id=trade_id or 'UNKNOWN', strategy=base_row.get('strategy'), symbol=base_row.get('symbol'), reason=validation_reason, category='validation')
             append_log(f'execution_engine skipped invalid trade {trade_id} reason={validation_reason}')
             _mark_skipped(result, base_row, validation_reason)
             continue
@@ -1222,6 +1246,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
                 batch_recent_signal_times=batch_recent_signal_times,
             )
             if duplicate_reason:
+                _append_structured_log(REJECTIONS_LOG_PATH, 'trade_skipped', execution_type=execution_type, trade_id=trade_id, strategy=base_row.get('strategy'), symbol=base_row.get('symbol'), reason=duplicate_reason, category='deduplication')
                 _mark_skipped(result, base_row, duplicate_reason)
                 continue
         batch_seen_trade_ids.add(trade_id)
@@ -1234,6 +1259,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             previous_trade_time = recent_trade_times.get(trade_cooldown_group)
         if trade_cooldown_seconds > 0 and signal_time is not None and previous_trade_time is not None:
             if (signal_time - previous_trade_time).total_seconds() < trade_cooldown_seconds:
+                _append_structured_log(REJECTIONS_LOG_PATH, 'trade_skipped', execution_type=execution_type, trade_id=trade_id, strategy=base_row.get('strategy'), symbol=base_row.get('symbol'), reason=SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN, category='cooldown')
                 _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN)
                 continue
         if signal_time is not None:
@@ -1256,7 +1282,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["broker_message"] = f"Execution blocked by {blocked['risk_limit_reason']}"
             rows_to_write.append(blocked)
             _append_written_row(result, blocked)
-            _append_text_log(REJECTIONS_LOG_PATH, f"Risk blocked trade {trade_id} reason={blocked['blocked_reason']}")
+            _append_structured_log(REJECTIONS_LOG_PATH, 'trade_blocked', execution_type=execution_type, trade_id=trade_id, strategy=blocked.get('strategy'), symbol=blocked.get('symbol'), reason=blocked.get('blocked_reason'), broker_status=blocked.get('broker_status'), risk_limit_reason=blocked.get('risk_limit_reason'), category='risk')
             continue
 
         if execution_type == "LIVE" and (enforce_optimizer_gate is not False):
@@ -1272,7 +1298,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
                 blocked["risk_limit_reason"] = optimizer_reason
                 rows_to_write.append(blocked)
                 _append_written_row(result, blocked)
-                _append_text_log(REJECTIONS_LOG_PATH, f"Optimizer gate blocked trade {trade_id} strategy={base_row.get('strategy', '')} reason={optimizer_reason}")
+                _append_structured_log(REJECTIONS_LOG_PATH, 'trade_blocked', execution_type=execution_type, trade_id=trade_id, strategy=base_row.get('strategy'), symbol=base_row.get('symbol'), reason=SKIP_REASON_OPTIMIZER_GATE, broker_status=blocked.get('broker_status'), risk_limit_reason=optimizer_reason, category='optimizer_gate')
                 continue
         if execution_type == "LIVE" and live_kill_switch_enabled():
             blocked = dict(base_row)
@@ -1284,7 +1310,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["broker_message"] = "Live execution blocked by LIVE_TRADING_KILL_SWITCH."
             rows_to_write.append(blocked)
             _append_written_row(result, blocked)
-            _append_text_log(REJECTIONS_LOG_PATH, f"Kill-switch blocked trade {trade_id}")
+            _append_structured_log(REJECTIONS_LOG_PATH, 'trade_blocked', execution_type=execution_type, trade_id=trade_id, strategy=blocked.get('strategy'), symbol=blocked.get('symbol'), reason=SKIP_REASON_KILL_SWITCH, broker_status=blocked.get('broker_status'), category='kill_switch')
             continue
 
         if execution_type == "LIVE" and not live_mode:
@@ -1297,7 +1323,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["broker_message"] = "Live execution requires explicit enablement."
             rows_to_write.append(blocked)
             _append_written_row(result, blocked)
-            _append_text_log(REJECTIONS_LOG_PATH, f"Live-disabled block for trade {trade_id}")
+            _append_structured_log(REJECTIONS_LOG_PATH, 'trade_blocked', execution_type=execution_type, trade_id=trade_id, strategy=blocked.get('strategy'), symbol=blocked.get('symbol'), reason=blocked.get('blocked_reason'), broker_status=blocked.get('broker_status'), category='live_disabled')
             continue
 
         if execution_type == "LIVE" and resolved_allowlist and str(base_row.get("symbol", "")).strip().upper() not in resolved_allowlist:
@@ -1310,7 +1336,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["broker_message"] = "Symbol is not part of the live allowlist."
             rows_to_write.append(blocked)
             _append_written_row(result, blocked)
-            _append_text_log(REJECTIONS_LOG_PATH, f"Allowlist blocked trade {trade_id} symbol={base_row.get('symbol', '')}")
+            _append_structured_log(REJECTIONS_LOG_PATH, 'trade_blocked', execution_type=execution_type, trade_id=trade_id, strategy=blocked.get('strategy'), symbol=blocked.get('symbol'), reason=blocked.get('blocked_reason'), broker_status=blocked.get('broker_status'), category='allowlist')
             continue
 
         if max_order_quantity is not None and int(base_row.get("quantity", 0) or 0) > int(max_order_quantity):
@@ -1323,7 +1349,9 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["broker_message"] = f"Order quantity exceeds configured limit {int(max_order_quantity)}."
             rows_to_write.append(blocked)
             _append_written_row(result, blocked)
+            _append_structured_log(REJECTIONS_LOG_PATH, 'trade_blocked', execution_type=execution_type, trade_id=trade_id, strategy=blocked.get('strategy'), symbol=blocked.get('symbol'), reason=blocked.get('blocked_reason'), broker_status=blocked.get('broker_status'), category='order_limit')
             continue
+
 
         if max_order_value is not None and _price_value(base_row) * int(base_row.get("quantity", 0) or 0) > float(max_order_value):
             blocked = dict(base_row)
@@ -1335,12 +1363,13 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["broker_message"] = f"Order value exceeds configured limit {float(max_order_value):.2f}."
             rows_to_write.append(blocked)
             _append_written_row(result, blocked)
+            _append_structured_log(REJECTIONS_LOG_PATH, 'trade_blocked', execution_type=execution_type, trade_id=trade_id, strategy=blocked.get('strategy'), symbol=blocked.get('symbol'), reason=blocked.get('blocked_reason'), broker_status=blocked.get('broker_status'), category='order_limit')
             continue
 
         broker_row = dict(base_row)
         trade_candidate = _candidate_to_trade_candidate(broker_row, execution_type)
         order_request = _build_broker_order_request(trade_candidate)
-        _append_text_log(BROKER_LOG_PATH, f"Broker route trade_id={trade_candidate.trade_id} broker={resolved_broker_name} symbol={trade_candidate.symbol} side={trade_candidate.side} qty={trade_candidate.quantity}")
+        _append_structured_log(BROKER_LOG_PATH, 'broker_order_routed', execution_type=execution_type, trade_id=trade_candidate.trade_id, broker=resolved_broker_name, strategy=trade_candidate.strategy, symbol=trade_candidate.symbol, side=trade_candidate.side, quantity=trade_candidate.quantity)
 
         try:
             if isinstance(broker, Broker):
@@ -1368,6 +1397,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             broker_row["broker_name"] = resolved_broker_name
             broker_row["broker_status"] = "ERROR"
             broker_row["broker_message"] = str(exc)
+            _append_structured_log(ERRORS_LOG_PATH, 'broker_execution_error', execution_type=execution_type, trade_id=trade_id, broker=resolved_broker_name, strategy=broker_row.get('strategy'), symbol=broker_row.get('symbol'), error_type=type(exc).__name__, error_message=str(exc))
         except Exception as exc:
             broker_row["trade_status"] = TRADE_STATUS_ERROR
             broker_row["execution_status"] = "ERROR"
@@ -1375,10 +1405,12 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             broker_row["broker_name"] = resolved_broker_name
             broker_row["broker_status"] = "ERROR"
             broker_row["broker_message"] = str(exc)
+            _append_structured_log(ERRORS_LOG_PATH, 'broker_execution_error', execution_type=execution_type, trade_id=trade_id, broker=resolved_broker_name, strategy=broker_row.get('strategy'), symbol=broker_row.get('symbol'), error_type=type(exc).__name__, error_message=str(exc))
+
 
         rows_to_write.append(broker_row)
         _append_written_row(result, broker_row)
-        _append_text_log(BROKER_LOG_PATH, f"Broker response trade_id={trade_id} broker={resolved_broker_name} status={broker_row.get('broker_status', broker_row.get('execution_status', 'NA'))}")
+        _append_structured_log(BROKER_LOG_PATH, 'broker_order_result', execution_type=execution_type, trade_id=trade_id, broker=resolved_broker_name, strategy=broker_row.get('strategy'), symbol=broker_row.get('symbol'), status=broker_row.get('broker_status', broker_row.get('execution_status', 'NA')), execution_status=broker_row.get('execution_status'), broker_message=broker_row.get('broker_message'))
         if execution_type == "LIVE":
             _append_order_history(resolved_order_history, broker_row)
         if _normalize_text(broker_row.get("execution_status")) in {"EXECUTED", "SENT", "FILLED"}:
@@ -1393,6 +1425,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             open_trade_count += 1
 
     _write_execution_rows(output_path, rows_to_write)
+    _append_structured_log(EXECUTION_LOG_PATH, 'execution_complete', execution_type=execution_type, broker=resolved_broker_name, candidate_count=len(candidates), written_count=len(rows_to_write), executed_count=result.executed_count, blocked_count=result.blocked_count, skipped_count=result.skipped_count, error_count=result.error_count)
     return result
 
 
@@ -1861,6 +1894,13 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
+
+
+
+
+
+
+
 
 
 

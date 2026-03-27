@@ -1,11 +1,14 @@
 ﻿import csv
 import io
+import json
 import os
 import tempfile
 import unittest
 from datetime import UTC, datetime
+from unittest.mock import patch
 from pathlib import Path
 
+import src.execution_engine as execution_engine
 from src.execution_engine import (
     build_analysis_queue,
     build_execution_candidates,
@@ -45,6 +48,11 @@ class _StubBrokerClient:
             {'tradingSymbol': 'NIFTY', 'netQty': 65},
             {'tradingSymbol': 'BANKNIFTY', 'netQty': -50},
         ]
+
+
+class _FailingBrokerClient:
+    def place_order(self, request):
+        raise RuntimeError('network down')
 
 
 class TestExecutionEngine(unittest.TestCase):
@@ -758,14 +766,68 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(result.executed_count, 1)
             self.assertEqual(result.skipped_count, 1)
             self.assertEqual(result.skipped_rows[0]['duplicate_reason'], 'DUPLICATE_SIGNAL_COOLDOWN')
+    def test_execute_paper_trades_writes_structured_validation_and_execution_logs(self):
+        candidates = [
+            {"strategy": "BREAKOUT", "symbol": "NIFTY", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100.0, "reason": "missing quantity", "stop_loss": 99.0, "target_price": 102.0},
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            execution_log = Path(td) / 'execution.log'
+            rejection_log = Path(td) / 'rejections.log'
+            with patch.object(execution_engine, 'EXECUTION_LOG_PATH', execution_log), patch.object(execution_engine, 'REJECTIONS_LOG_PATH', rejection_log):
+                result = execute_paper_trades(candidates, out)
+
+            self.assertEqual(result.skipped_count, 1)
+            execution_events = [json.loads(line) for line in execution_log.read_text(encoding='utf-8').splitlines() if line.strip()]
+            rejection_events = [json.loads(line) for line in rejection_log.read_text(encoding='utf-8').splitlines() if line.strip()]
+            self.assertEqual(execution_events[0]['event'], 'execution_start')
+            self.assertEqual(execution_events[-1]['event'], 'execution_complete')
+            self.assertEqual(execution_events[-1]['skipped_count'], 1)
+            self.assertEqual(rejection_events[0]['event'], 'trade_rejected')
+            self.assertEqual(rejection_events[0]['reason'], 'MISSING_QUANTITY')
+            self.assertEqual(rejection_events[0]['category'], 'validation')
+
+    def test_execute_live_trades_writes_structured_error_log_on_broker_failure(self):
+        candidates = [
+            {
+                'strategy': 'BREAKOUT',
+                'symbol': 'NIFTY',
+                'signal_time': '2026-03-06 10:00:00',
+                'side': 'BUY',
+                'price': 100.0,
+                'quantity': 65,
+                'reason': 'x',
+                'security_id': '12345',
+                'stop_loss': 99.0,
+                'target_price': 102.0,
+            }
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'live.csv'
+            error_log = Path(td) / 'errors.log'
+            broker_log = Path(td) / 'broker.log'
+            with patch.object(execution_engine, 'ERRORS_LOG_PATH', error_log), patch.object(execution_engine, 'BROKER_LOG_PATH', broker_log):
+                result = execute_live_trades(
+                    candidates,
+                    out,
+                    broker_client=_FailingBrokerClient(),
+                    broker_name='TEST',
+                    live_enabled=True,
+                    security_map={},
+                    optimizer_report_path=self._write_optimizer_report(td),
+                )
+
+            self.assertEqual(result.error_count, 1)
+            error_events = [json.loads(line) for line in error_log.read_text(encoding='utf-8').splitlines() if line.strip()]
+            broker_events = [json.loads(line) for line in broker_log.read_text(encoding='utf-8').splitlines() if line.strip()]
+            self.assertEqual(error_events[0]['event'], 'broker_execution_error')
+            self.assertEqual(error_events[0]['error_type'], 'RuntimeError')
+            self.assertEqual(error_events[0]['error_message'], 'network down')
+            self.assertEqual(broker_events[0]['event'], 'broker_order_routed')
+            self.assertEqual(broker_events[-1]['event'], 'broker_order_result')
+
+
 if __name__ == '__main__':
-
     unittest.main()
-
-
-
-
-
-
-
-

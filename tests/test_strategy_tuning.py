@@ -1,4 +1,4 @@
-import unittest
+﻿import unittest
 
 from src.strategy_tuning import apply_strategy_benchmark, optimizer_report_rows, strategy_tuning_preset
 
@@ -14,10 +14,11 @@ class TestStrategyTuning(unittest.TestCase):
 
     def test_demand_supply_preset_targets_fewer_higher_quality_trades(self):
         preset = strategy_tuning_preset('Demand Supply')
-        self.assertEqual(preset.duplicate_signal_cooldown_bars, 12)
+        self.assertEqual(preset.duplicate_signal_cooldown_bars, 18)
         self.assertEqual(preset.max_trades_per_day, 1)
-        self.assertEqual(preset.min_trades, 20)
-        self.assertEqual((preset.target_trades_low, preset.target_trades_high), (20, 30))
+        self.assertEqual(preset.min_trades, 100)
+        self.assertEqual((preset.target_trades_low, preset.target_trades_high), (120, 180))
+        self.assertEqual((preset.conservative_threshold, preset.balanced_threshold, preset.aggressive_threshold), (8.2, 6.8, 5.8))
 
     def test_amd_preset_targets_fewer_higher_quality_trades(self):
         preset = strategy_tuning_preset('AMD_FVG_SD')
@@ -29,14 +30,14 @@ class TestStrategyTuning(unittest.TestCase):
     def test_apply_strategy_benchmark_sets_pass_fail(self):
         passed = apply_strategy_benchmark(
             {
-                'strategy': 'AMD_FVG_SD',
-                'total_trades': 120,
-                'win_rate': 44.0,
+                'strategy': 'DEMAND_SUPPLY',
+                'total_trades': 140,
+                'win_rate': 43.0,
                 'profit_factor': 1.55,
                 'expectancy_per_trade': 8.0,
                 'avg_rr': 1.5,
                 'max_drawdown_pct': 8.0,
-                'duplicate_rejections': 2,
+                'duplicate_rejections': 0,
                 'risk_rule_rejections': 3,
             }
         )
@@ -56,6 +57,7 @@ class TestStrategyTuning(unittest.TestCase):
         self.assertEqual(passed['deployment_ready'], 'YES')
         self.assertEqual(failed['deployment_ready'], 'NO')
         self.assertIn('MIN_TRADES<100', failed['deployment_blockers'])
+        self.assertIn('DUPLICATES>0', failed['deployment_blockers'])
 
     def test_optimizer_report_rows_orders_by_rank_score(self):
         rows = optimizer_report_rows(
@@ -71,7 +73,7 @@ class TestStrategyTuning(unittest.TestCase):
                     'max_drawdown_pct': 14.0,
                 },
                 {
-                    'strategy': 'AMD_FVG_SD',
+                    'strategy': 'DEMAND_SUPPLY',
                     'deployment_ready': 'YES',
                     'positive_expectancy': 'YES',
                     'expectancy_per_trade': 5.0,
@@ -82,7 +84,7 @@ class TestStrategyTuning(unittest.TestCase):
                 },
             ]
         )
-        self.assertEqual(rows[0]['strategy'], 'AMD_FVG_SD')
+        self.assertEqual(rows[0]['strategy'], 'DEMAND_SUPPLY')
         self.assertEqual(rows[0]['optimizer_rank'], 1)
 
 

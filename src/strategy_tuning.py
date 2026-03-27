@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,19 +51,19 @@ STRATEGY_TUNING_PRESETS: dict[str, StrategyTuningPreset] = {
     ),
     'DEMAND_SUPPLY': StrategyTuningPreset(
         strategy_key='DEMAND_SUPPLY',
-        conservative_threshold=6.5,
-        balanced_threshold=5.0,
-        aggressive_threshold=4.0,
-        duplicate_signal_cooldown_bars=12,
+        conservative_threshold=8.2,
+        balanced_threshold=6.8,
+        aggressive_threshold=5.8,
+        duplicate_signal_cooldown_bars=18,
         max_trades_per_day=1,
-        min_trades=20,
-        target_trades_low=20,
-        target_trades_high=30,
-        min_win_rate=42.0,
+        min_trades=100,
+        target_trades_low=120,
+        target_trades_high=180,
+        min_win_rate=40.0,
         min_profit_factor=1.30,
         min_expectancy_per_trade=0.0,
-        min_avg_rr=1.20,
-        max_drawdown_pct=12.0,
+        min_avg_rr=1.30,
+        max_drawdown_pct=10.0,
     ),
     'INDICATOR': StrategyTuningPreset(
         strategy_key='INDICATOR',
@@ -121,7 +121,13 @@ def strategy_tuning_preset(strategy_name: str) -> StrategyTuningPreset:
     return STRATEGY_TUNING_PRESETS.get(normalized, STRATEGY_TUNING_PRESETS['BREAKOUT'])
 
 
-def strategy_validation_config(strategy_name: str) -> BacktestValidationConfig:
+def _rr_adjusted_min_win_rate(rr_ratio: float, preset: StrategyTuningPreset) -> float:
+    reward_multiple = max(float(rr_ratio or 0.0), 0.5)
+    breakeven_win_rate = 100.0 / (reward_multiple + 1.0)
+    return round(max(float(preset.min_win_rate), breakeven_win_rate + 6.0), 2)
+
+
+def strategy_validation_config(strategy_name: str, rr_ratio: float = 2.0) -> BacktestValidationConfig:
     preset = strategy_tuning_preset(strategy_name)
     return BacktestValidationConfig(
         min_trades=preset.min_trades,
@@ -129,9 +135,10 @@ def strategy_validation_config(strategy_name: str) -> BacktestValidationConfig:
         max_trades=preset.target_trades_high,
         min_profit_factor=preset.min_profit_factor,
         min_expectancy_per_trade=preset.min_expectancy_per_trade,
-        min_win_rate=preset.min_win_rate,
+        min_win_rate=_rr_adjusted_min_win_rate(rr_ratio, preset),
         min_avg_rr=preset.min_avg_rr,
         max_drawdown_pct=preset.max_drawdown_pct,
+        max_duplicate_rejections=0,
         require_positive_expectancy=preset.require_positive_expectancy,
     )
 
@@ -160,9 +167,8 @@ def strategy_backtest_config(
         duplicate_cooldown_minutes=preset.duplicate_cooldown_minutes,
         commission_per_trade=preset.commission_per_trade,
         slippage_bps=preset.slippage_bps,
-        validation=strategy_validation_config(strategy_name),
+        validation=strategy_validation_config(strategy_name, rr_ratio=float(rr_ratio)),
     )
-
 
 
 def apply_strategy_benchmark(summary_row: dict[str, Any]) -> dict[str, Any]:
@@ -191,8 +197,8 @@ def apply_strategy_benchmark(summary_row: dict[str, Any]) -> dict[str, Any]:
         blockers.append(f'WIN_RATE<{preset.min_win_rate:.2f}')
     if max_drawdown_pct > preset.max_drawdown_pct:
         blockers.append(f'MAX_DD_PCT>{preset.max_drawdown_pct:.2f}')
-    if total_trades > 0 and (duplicate_rejections / total_trades) > 0.10:
-        blockers.append('DUPLICATE_REJECTIONS_ELEVATED')
+    if duplicate_rejections > 0:
+        blockers.append('DUPLICATES>0')
     if total_trades > 0 and (risk_rule_rejections / total_trades) > 0.15:
         blockers.append('RISK_RULE_REJECTIONS_ELEVATED')
     item['positive_expectancy'] = positive_expectancy
@@ -200,6 +206,7 @@ def apply_strategy_benchmark(summary_row: dict[str, Any]) -> dict[str, Any]:
     item['deployment_blockers'] = '; '.join(blockers)
     item['mode'] = item.get('mode', 'Balanced')
     return item
+
 
 def optimizer_report_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
@@ -224,7 +231,7 @@ def optimizer_report_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str, 
             + (avg_rr * 20.0)
             + (win_rate * 1.5)
             - (max_drawdown_pct * 8.0)
-            - (duplicate_rejections * 2.0)
+            - (duplicate_rejections * 6.0)
             - (risk_rule_rejections * 2.0)
         )
         rows.append(

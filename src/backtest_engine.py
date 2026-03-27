@@ -26,6 +26,7 @@ class BacktestValidationConfig:
     min_win_rate: float = 0.0
     min_avg_rr: float = 0.8
     max_drawdown_pct: float = 20.0
+    max_duplicate_rejections: int = 0
     require_positive_expectancy: bool = True
 
 
@@ -497,6 +498,7 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
     avg_rr = _safe_float(summary.get('avg_rr'))
     max_drawdown_pct = _safe_float(summary.get('max_drawdown_pct'))
     positive_expectancy = str(summary.get('positive_expectancy', 'NO')).upper() == 'YES' or expectancy > 0
+    duplicate_rejections = _safe_int(summary.get('duplicate_rejections'))
 
     blockers: list[str] = []
     notes: list[str] = []
@@ -520,6 +522,8 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
         blockers.append(f'AVG_RR<{float(rules.min_avg_rr):.2f}')
     if max_drawdown_pct > float(rules.max_drawdown_pct):
         blockers.append(f'MAX_DD_PCT>{float(rules.max_drawdown_pct):.2f}')
+    if duplicate_rejections > int(rules.max_duplicate_rejections):
+        blockers.append(f'DUPLICATES>{int(rules.max_duplicate_rejections)}')
 
     deployment_ready = 'YES' if not blockers else 'NO'
     target_gap = max(int(rules.target_trades) - total_trades, 0)
@@ -539,6 +543,10 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
         'win_rate': round(win_rate, 2),
         'avg_rr': round(avg_rr, 2),
         'max_drawdown_pct': round(max_drawdown_pct, 2),
+        'required_win_rate': round(float(rules.min_win_rate), 2),
+        'required_profit_factor': round(float(rules.min_profit_factor), 2),
+        'max_duplicate_rejections': int(rules.max_duplicate_rejections),
+        'duplicate_rejections': duplicate_rejections,
         'deployment_ready': deployment_ready,
         'deployment_blockers': '; '.join(blockers),
         'validation_notes': '; '.join(notes),
@@ -704,6 +712,7 @@ def summarize_trade_log(
     write_rows(summary_output, [summary])
     write_rows(validation_output, [validation_row])
     return summary
+
 
 
 

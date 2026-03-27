@@ -2,7 +2,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from src.reporting_service import current_execution_rows, recent_trade_summary, status_message
+from src.reporting_service import current_execution_rows, paper_execution_summary, recent_trade_summary, status_message
 
 
 class TestReportingService(unittest.TestCase):
@@ -31,6 +31,21 @@ class TestReportingService(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]['symbol'], 'NIFTY')
 
+    def test_paper_execution_summary_counts_open_executed_rows_when_no_closed_trades_exist(self):
+        with TemporaryDirectory() as td:
+            path = Path(td) / 'executed.csv'
+            path.write_text(
+                'strategy,symbol,execution_type,execution_status,executed_at_utc,pnl\n'
+                'Breakout,NIFTY,PAPER,EXECUTED,2026-03-27 09:30:00,0\n',
+                encoding='utf-8',
+            )
+            summary = paper_execution_summary(path, 'Breakout', 'NIFTY', capital=20000.0)
+            self.assertEqual(summary['total_trades'], 1)
+            self.assertEqual(summary['open_trades'], 1)
+            self.assertEqual(summary['closed_trades'], 0)
+            self.assertEqual(summary['total_pnl'], 0.0)
+
 
 if __name__ == '__main__':
     unittest.main()
+

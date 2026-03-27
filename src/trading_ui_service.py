@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
@@ -6,7 +6,7 @@ import streamlit as st
 
 from src.reporting_service import recent_trade_summary, safe_float, safe_int, short_broker_status
 from src.runtime_file_service import append_text_log, ensure_output_files
-from src.trading_runtime_service import TradingActionRequest
+from src.runtime_models import TradingActionRequest
 
 
 def initialize_ui_runtime(output_paths: list[Path], log_paths: list[Path]) -> None:
@@ -102,3 +102,6 @@ def build_request(strategy: str, symbol: str, timeframe: str, capital: float, ri
         run_requested=bool(run_clicked),
         backtest_requested=bool(backtest_clicked),
     )
+
+
+

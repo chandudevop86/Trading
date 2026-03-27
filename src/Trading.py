@@ -1,6 +1,5 @@
 ﻿from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -16,38 +15,42 @@ from src.amd_fvg_sd_bot import generate_trades as generate_amd_fvg_sd_trades
 from src.breakout_bot import generate_trades as generate_breakout_trades
 from src.demand_supply_bot import generate_trades as generate_demand_supply_trades
 from src.indicator_bot import generate_indicator_rows
-from src.runtime_config import RuntimeConfig
+from src.runtime_defaults import (
+    APP_LOG,
+    BACKTEST_RESULTS_OUTPUT,
+    BACKTEST_SUMMARY_OUTPUT,
+    BACKTEST_TRADES_OUTPUT,
+    BROKER_LOG,
+    BROKER_OPTIONS,
+    DEFAULT_INTERVAL,
+    DEFAULT_SYMBOL,
+    ERRORS_LOG,
+    EXECUTED_TRADES_OUTPUT,
+    EXECUTION_LOG,
+    LIVE_LOG_OUTPUT,
+    LIVE_OHLCV_OUTPUT,
+    MODE_OPTIONS,
+    OHLCV_OUTPUT,
+    ORDER_HISTORY_OUTPUT,
+    PAPER_LOG_OUTPUT,
+    PAPER_ORDER_HISTORY_OUTPUT,
+    REJECTIONS_LOG,
+    SIGNAL_OUTPUT,
+    STRATEGY_OPTIONS,
+    TIMEFRAME_OPTIONS,
+    TRADES_OUTPUT,
+    runtime_log_paths,
+    runtime_output_paths,
+)
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
+from src.runtime_strategy_presets import OPERATOR_DEFAULTS
+from src.runtime_strategy_registry import configure_runtime_strategy_dependencies, run_configured_runtime_strategy
 from src.strike_selector import attach_option_strikes
 from src.trading_core import append_log, configure_file_logging
-from src.trading_runtime_service import latest_actionable_trades, period_for_interval, run_operator_action
+from src.runtime_models import period_for_interval
+from src.trading_runtime_service import latest_actionable_trades, run_operator_action
 from src.trading_ui_service import apply_minimal_theme, build_request, initialize_ui_runtime, log_ui_event, render_operator_panels, render_summary_cards
 
-RUNTIME_CONFIG = RuntimeConfig.load()
-DATA_DIR = RUNTIME_CONFIG.paths.data_dir
-LOG_DIR = RUNTIME_CONFIG.paths.logs_dir
-OHLCV_OUTPUT = RUNTIME_CONFIG.paths.ohlcv_csv
-LIVE_OHLCV_OUTPUT = RUNTIME_CONFIG.paths.live_ohlcv_csv
-TRADES_OUTPUT = RUNTIME_CONFIG.paths.trades_csv
-SIGNAL_OUTPUT = RUNTIME_CONFIG.paths.signal_output_csv
-EXECUTED_TRADES_OUTPUT = RUNTIME_CONFIG.paths.executed_trades_csv
-PAPER_LOG_OUTPUT = RUNTIME_CONFIG.paths.paper_trading_log_csv
-LIVE_LOG_OUTPUT = RUNTIME_CONFIG.paths.live_trading_log_csv
-BACKTEST_TRADES_OUTPUT = RUNTIME_CONFIG.paths.backtest_trades_csv
-BACKTEST_SUMMARY_OUTPUT = RUNTIME_CONFIG.paths.backtest_summary_csv
-BACKTEST_RESULTS_OUTPUT = RUNTIME_CONFIG.paths.backtest_results_csv
-ORDER_HISTORY_OUTPUT = RUNTIME_CONFIG.paths.order_history_csv
-PAPER_ORDER_HISTORY_OUTPUT = RUNTIME_CONFIG.paths.paper_order_history_csv
-APP_LOG = RUNTIME_CONFIG.paths.app_log
-BROKER_LOG = RUNTIME_CONFIG.paths.broker_log
-EXECUTION_LOG = RUNTIME_CONFIG.paths.execution_log
-REJECTIONS_LOG = RUNTIME_CONFIG.paths.rejections_log
-ERRORS_LOG = RUNTIME_CONFIG.paths.errors_log
-DEFAULT_SYMBOL = os.getenv('TRADING_SYMBOL', '^NSEI').strip() or '^NSEI'
-DEFAULT_INTERVAL = os.getenv('TRADING_INTERVAL', '5m').strip() or '5m'
-TIMEFRAME_OPTIONS = ['1m', '5m', '15m', '30m', '1h', '1d']
-STRATEGY_OPTIONS = ['Breakout', 'Demand Supply', 'Indicator', 'One Trade/Day', 'MTF 5m', 'AMD + FVG + Supply/Demand']
-BROKER_OPTIONS = ['Paper', 'Dhan Live']
 
 configure_file_logging()
 
@@ -71,21 +74,8 @@ def run_strategy(**kwargs):
 
 def _ensure_output_files() -> None:
     initialize_ui_runtime(
-        [
-            OHLCV_OUTPUT,
-            LIVE_OHLCV_OUTPUT,
-            TRADES_OUTPUT,
-            SIGNAL_OUTPUT,
-            EXECUTED_TRADES_OUTPUT,
-            PAPER_LOG_OUTPUT,
-            LIVE_LOG_OUTPUT,
-            BACKTEST_TRADES_OUTPUT,
-            BACKTEST_SUMMARY_OUTPUT,
-            BACKTEST_RESULTS_OUTPUT,
-            ORDER_HISTORY_OUTPUT,
-            PAPER_ORDER_HISTORY_OUTPUT,
-        ],
-        [APP_LOG, BROKER_LOG, EXECUTION_LOG, REJECTIONS_LOG, ERRORS_LOG],
+        runtime_output_paths(),
+        runtime_log_paths(),
     )
 
 
@@ -113,6 +103,26 @@ def _latest_actionable_trades(trades: list[dict[str, object]]) -> list[dict[str,
     return latest_actionable_trades(trades)
 
 
+def _result_failed(status: str) -> bool:
+    normalized = str(status or '').strip().lower()
+    return normalized.startswith('run failed:') or normalized.startswith('backtest failed:')
+
+
+def _render_execution_feedback(messages: list[tuple[str, str]]) -> None:
+    for level, message in messages:
+        normalized_level = str(level or '').strip().lower()
+        text = str(message or '').strip()
+        if not text:
+            continue
+        if normalized_level == 'error':
+            st.error(text)
+        elif normalized_level == 'warning':
+            st.warning(text)
+        elif normalized_level == 'success':
+            st.success(text)
+        else:
+            st.info(text)
+
 def main() -> None:
     _ensure_output_files()
     _minimal_theme()
@@ -128,11 +138,11 @@ def main() -> None:
         broker_choice = st.selectbox('Broker', BROKER_OPTIONS)
     with control_col_2:
         timeframe = st.selectbox('Timeframe', TIMEFRAME_OPTIONS, index=TIMEFRAME_OPTIONS.index(DEFAULT_INTERVAL) if DEFAULT_INTERVAL in TIMEFRAME_OPTIONS else 1)
-        capital = st.number_input('Capital', min_value=1000.0, value=20000.0, step=1000.0)
-        risk_pct = st.number_input('Risk %', min_value=0.1, value=1.0, step=0.1)
+        capital = st.number_input('Capital', min_value=1000.0, value=OPERATOR_DEFAULTS.capital, step=1000.0)
+        risk_pct = st.number_input('Risk %', min_value=0.1, value=OPERATOR_DEFAULTS.risk_pct, step=0.1)
     with control_col_3:
-        rr_ratio = st.number_input('RR Ratio', min_value=1.0, value=2.0, step=0.1)
-        mode = st.selectbox('Mode', ['Conservative', 'Balanced', 'Aggressive'], index=1)
+        rr_ratio = st.number_input('RR Ratio', min_value=1.0, value=OPERATOR_DEFAULTS.rr_ratio, step=0.1)
+        mode = st.selectbox('Mode', MODE_OPTIONS, index=MODE_OPTIONS.index(OPERATOR_DEFAULTS.mode) if OPERATOR_DEFAULTS.mode in MODE_OPTIONS else 0)
         period = period_for_interval(timeframe)
         st.caption(f'Fetch window: {period}')
         action_row = st.columns(2)
@@ -150,6 +160,16 @@ def main() -> None:
     try:
         request = _build_request(strategy, normalized_symbol, timeframe, float(capital), float(risk_pct), float(rr_ratio), mode, broker_choice, run_clicked, backtest_clicked)
         result = run_operator_action(request)
+        if _result_failed(result.status):
+            st.session_state.pop('backtest_summary', None)
+            _append_text_log(APP_LOG, result.status)
+            _append_text_log(ERRORS_LOG, result.status)
+            _render_summary_cards(result.trades, result.active_summary, result.todays_trades)
+            _render_operator_panels(result.status, result.trades, normalized_symbol, timeframe, result.period, broker_choice, result.broker_status)
+            _render_execution_feedback(result.execution_messages)
+            st.error(result.status)
+            return
+
         if run_clicked:
             st.session_state.pop('backtest_summary', None)
             _append_text_log(APP_LOG, f'EXECUTION completed for {strategy} {normalized_symbol} broker={broker_choice}')
@@ -160,6 +180,7 @@ def main() -> None:
         _append_text_log(APP_LOG, result.status)
         _render_summary_cards(result.trades, result.active_summary, result.todays_trades)
         _render_operator_panels(result.status, result.trades, normalized_symbol, timeframe, result.period, broker_choice, result.broker_status)
+        _render_execution_feedback(result.execution_messages)
     except Exception as exc:
         message = f'Trading UI failure: {exc}'
         _append_text_log(APP_LOG, message)
@@ -170,5 +191,12 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+
+
+
+
+
+
 
 

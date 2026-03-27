@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import io
@@ -77,7 +77,7 @@ import streamlit as st
 
 st.set_page_config(
     page_title="Trading Dashboard",
-    page_icon="📈",
+    page_icon="ðŸ“ˆ",
     layout="wide"
 )
 
@@ -293,7 +293,10 @@ def _decode_bytes(data: bytes) -> str:
             return data.decode(enc)
         except UnicodeDecodeError:
             continue
-    return data.decode("utf-8", errors="replace")def _load_rows_from_upload(uploaded_file) -> list[dict[str, str]]:
+    return data.decode("utf-8", errors="replace")
+
+
+def _load_rows_from_upload(uploaded_file) -> list[dict[str, str]]:
     content = _decode_bytes(uploaded_file.getvalue())
     reader = csv.DictReader(io.StringIO(content))
     if reader.fieldnames is None:
@@ -406,7 +409,7 @@ def _render_live_chart(
 def main() -> None:
     st.set_page_config(
         page_title="Intratrade Algo Bot",
-        page_icon="📈",
+        page_icon="ðŸ“ˆ",
         layout="wide"
     )
 
@@ -419,8 +422,8 @@ def main() -> None:
         st.markdown(
             """
             <div class="trade-hero">
-                <h1>📈 Intratrade Algo Desk</h1>
-                <p>Live Trading Dashboard • Breakout • Demand/Supply • Indicator Bots</p>
+                <h1>ðŸ“ˆ Intratrade Algo Desk</h1>
+                <p>Live Trading Dashboard â€¢ Breakout â€¢ Demand/Supply â€¢ Indicator Bots</p>
                 <p><b>UI Version:</b> V2</p>
             </div>
             """,
@@ -434,10 +437,10 @@ def main() -> None:
 
 # WEBSITE STYLE NAVIGATION
 tab1, tab2, tab3, tab4 = st.tabs([
-    "📊 Dashboard",
-    "📈 Charts",
-    "🤖 Strategies",
-    "⚙️ Settings"
+    "ðŸ“Š Dashboard",
+    "ðŸ“ˆ Charts",
+    "ðŸ¤– Strategies",
+    "âš™ï¸ Settings"
 ])
 
 # DASHBOARD
@@ -445,7 +448,7 @@ with tab1:
     c1, c2, c3, c4 = st.columns(4)
 
     with c1:
-        st.metric("Capital", "₹100000")
+        st.metric("Capital", "â‚¹100000")
 
     with c2:
         st.metric("Trades", "12")
@@ -454,7 +457,7 @@ with tab1:
         st.metric("Win Rate", "67%")
 
     with c4:
-        st.metric("PnL", "₹5,200")
+        st.metric("PnL", "â‚¹5,200")
 
 # CHART PAGE
 with tab2:
@@ -472,7 +475,7 @@ with tab4:
     st.write("Risk management and configuration")
 
 # PAGE SELECTOR
-st.markdown("### 📄 Pages")
+st.markdown("### ðŸ“„ Pages")
 strategy = _strategy_selector()
 
 # Strategy modes
@@ -493,7 +496,7 @@ with p1:
     
     with r1:
         capital = st.number_input(
-            "Capital (₹)",
+            "Capital (â‚¹)",
             min_value=1000,
             max_value=10000000,
             value=100000,
@@ -969,7 +972,7 @@ else:
     
     if uploaded_file is None:
             st.info("Upload a CSV to run selected bot.")
-            return
+            st.stop()
 
 try:
         rows = _load_rows_from_upload(uploaded_file)
@@ -1039,11 +1042,11 @@ try:
 
 except Exception as exc:
         st.error(f"Could not run strategy: {exc}")
-        return
+        st.stop()
 
 if not output_rows:
         st.warning("No output generated.")
-        return
+        st.stop()
 
 st.caption(f"Active strategy: {strategy}")
 
@@ -1099,6 +1102,8 @@ st.download_button(
 
 if __name__ == "__main__":
     main()
+
+
 
 
 

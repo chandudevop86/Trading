@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -146,13 +146,13 @@ st.dataframe(candles.tail(10), use_container_width=True)
     # -----------------------------
 st.set_page_config(
         page_title="Trading Dashboard",
-        page_icon="📈", 
+        page_icon="ðŸ“ˆ", 
         layout="wide"
         )
 
-st.title("📈 Intratrade Algo Desk")   
+st.title("ðŸ“ˆ Intratrade Algo Desk")   
 tab1, tab2, tab3 = st.tabs(
-        ["📊 Dashboard", "📈 Charts",  "⚙️ Settings"]
+        ["ðŸ“Š Dashboard", "ðŸ“ˆ Charts",  "âš™ï¸ Settings"]
     )
 with tab1:
    st.subheader("Market Overview")
@@ -188,9 +188,9 @@ with tab3:
         st.info("No trades generated yet.")       
 
 # Sidebar Settings
-st.sidebar.header("⚙ Bot Settings")
+st.sidebar.header("âš™ Bot Settings")
 trailing_sl_pct = st.sidebar.slider("Trailing Stop Loss %",min_value=0.1,max_value=10.0,value=1.0,step=0.1)
-capital = st.sidebar.number_input("Capital (₹)", min_value=1000, value=100000, step=1000)
+capital = st.sidebar.number_input("Capital (â‚¹)", min_value=1000, value=100000, step=1000)
 risk_pct = st.sidebar.slider("Risk per trade (%)", 0.1, 10.0, 1.0)
 rr_ratio = st.sidebar.slider("Risk/Reward Ratio", 1.0, 10.0, 2.0)
 trailing_sl = st.sidebar.slider("Trailing SL (%)", 0.1, 5.0, 1.0)
@@ -203,14 +203,6 @@ config = {
 strategy = st.sidebar.selectbox(
     "Strategy",
     ["Breakout", "Demand Supply", "Indicator", "One Trade/Day"]
-)
-strategy = st.sidebar.
-selectbox(
-    "Select Strategy",
-    [
-        "Breakout Strategy",
-        "Indicator Bot"
-    ]
 )
 # --------------------------------
 # Run Strategy
@@ -316,7 +308,7 @@ summary = build_trade_summary(output_rows)
 def send_signal_alert(trade):
 
     msg = f"""
-🚨 Trade Signal
+ðŸš¨ Trade Signal
 
 Strategy: {trade.get('strategy','Breakout')}
 Symbol: {trade.get('symbol','NIFTY')}

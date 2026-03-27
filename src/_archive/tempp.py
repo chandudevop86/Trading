@@ -1,15 +1,24 @@
+﻿from __future__ import annotations
+
+from datetime import datetime
+
+import pandas as pd
+
+
 def build_signal_message(trade: dict[str, object], symbol: str = "NIFTY") -> str:
     return (
         f"Strategy: {trade.get('strategy', 'Unknown')}\n"
-        f"Symbol: {trade.get('symbol', 'NIFTY')}\n"
+        f"Symbol: {trade.get('symbol', symbol)}\n"
         f"Side: {trade.get('side', '-')}\n"
         f"Entry: {trade.get('entry_price', '-')}\n"
         f"SL: {trade.get('stop_loss', '-')}\n"
         f"Target: {trade.get('target', '-')}\n"
         f"Time: {trade.get('timestamp', '-')}"
-     )
+    )
+
+
 def parse_timestamp(text: str) -> datetime:
- if not text:
+    if not text:
         raise ValueError("Empty timestamp")
 
     try:
@@ -31,20 +40,8 @@ def parse_timestamp(text: str) -> datetime:
             continue
 
     raise ValueError(f"Unsupported timestamp format: {text}")
-candidates.append(
-            {
-                "strategy": "INDICATOR",
-                "symbol": symbol,
-                "signal_time": str(last["timestamp"]),
-                "side": side,
-                "price": last["close"],
-                "share_price": last["close"],
-                "strike_price": last.get("strike_price", ""),
-                "quantity": default_quantity_for_symbol(symbol),
-                "reason": signal,
-            }
-        )
-        return candidates
+
+
 def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])

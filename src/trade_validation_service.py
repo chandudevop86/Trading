@@ -1,10 +1,22 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from statistics import median, pstdev
 from typing import Any
 
 import pandas as pd
+
+
+SMALL_VALUE = 1e-9
+MIN_TRADES = 30
+MIN_EXPECTANCY = 0.0
+MIN_PROFIT_FACTOR = 1.2
+MAX_DRAWDOWN_PCT = 12.0
+MIN_RECOVERY_FACTOR = 1.5
+MAX_LONGEST_DRAWDOWN_STREAK_WARNING = 10
+OUTSIZED_WINNER_WARNING_PCT = 0.40
+RECENT_TRADE_WINDOW = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,10 +39,11 @@ class TradeEvaluationRecord:
 
 @dataclass(frozen=True, slots=True)
 class PaperReadinessConfig:
-    min_trades: int = 30
-    min_expectancy_per_trade: float = 0.0
-    min_profit_factor: float = 1.2
-    max_drawdown_pct: float = 12.0
+    min_trades: int = MIN_TRADES
+    min_expectancy_per_trade: float = MIN_EXPECTANCY
+    min_profit_factor: float = MIN_PROFIT_FACTOR
+    max_drawdown_pct: float = MAX_DRAWDOWN_PCT
+    min_recovery_factor: float = MIN_RECOVERY_FACTOR
     max_execution_errors: int = 0
     max_duplicate_trades: int = 0
     max_invalid_trades: int = 0
@@ -122,6 +135,123 @@ def standardize_trade_records(rows: list[dict[str, Any]]) -> list[TradeEvaluatio
     return [standardize_trade_record(dict(row)) for row in rows]
 
 
+def _safe_ratio(numerator: float, denominator: float) -> float:
+    return float(numerator) / max(float(denominator), SMALL_VALUE)
+
+
+def _profit_factor_value(gross_profit: float, gross_loss_abs: float) -> tuple[float | str, str]:
+    if gross_loss_abs <= 0 and gross_profit > 0:
+        return 'inf', 'No losing trades in sample; profit factor is unbounded.'
+    if gross_loss_abs <= 0:
+        return 0.0, 'No losing trades were recorded, so profit factor is not informative yet.'
+    return round(gross_profit / gross_loss_abs, 2), ''
+
+
+def _equity_metrics(pnl_values: list[float]) -> dict[str, Any]:
+    equity_curve: list[float] = []
+    peak_curve: list[float] = []
+    drawdown_amount_series: list[float] = []
+    drawdown_pct_series: list[float] = []
+    running_equity = 0.0
+    running_peak = 0.0
+    max_drawdown_amount = 0.0
+    max_drawdown_pct = 0.0
+    longest_drawdown_streak = 0
+    current_drawdown_streak = 0
+
+    for pnl in pnl_values:
+        running_equity += pnl
+        running_peak = max(running_peak, running_equity)
+        drawdown_amount = running_equity - running_peak
+        drawdown_pct = (drawdown_amount / running_peak) * 100.0 if running_peak > 0 else 0.0
+        equity_curve.append(round(running_equity, 2))
+        peak_curve.append(round(running_peak, 2))
+        drawdown_amount_series.append(round(drawdown_amount, 2))
+        drawdown_pct_series.append(round(drawdown_pct, 2))
+        max_drawdown_amount = min(max_drawdown_amount, drawdown_amount)
+        max_drawdown_pct = min(max_drawdown_pct, drawdown_pct)
+        if drawdown_amount < 0:
+            current_drawdown_streak += 1
+            longest_drawdown_streak = max(longest_drawdown_streak, current_drawdown_streak)
+        else:
+            current_drawdown_streak = 0
+
+    return {
+        'equity_curve': equity_curve,
+        'peak_equity_curve': peak_curve,
+        'drawdown_amount_series': drawdown_amount_series,
+        'drawdown_pct_series': drawdown_pct_series,
+        'max_drawdown_amount': round(max_drawdown_amount, 2),
+        'max_drawdown_pct': round(abs(max_drawdown_pct), 2),
+        'longest_drawdown_streak': int(longest_drawdown_streak),
+    }
+
+
+def _max_consecutive_counts(pnl_values: list[float]) -> tuple[int, int]:
+    consecutive_wins_max = 0
+    consecutive_losses_max = 0
+    current_wins = 0
+    current_losses = 0
+    for pnl in pnl_values:
+        if pnl > 0:
+            current_wins += 1
+            current_losses = 0
+        elif pnl < 0:
+            current_losses += 1
+            current_wins = 0
+        else:
+            current_wins = 0
+            current_losses = 0
+        consecutive_wins_max = max(consecutive_wins_max, current_wins)
+        consecutive_losses_max = max(consecutive_losses_max, current_losses)
+    return consecutive_wins_max, consecutive_losses_max
+
+
+def _validation_warnings(summary: dict[str, Any], cfg: PaperReadinessConfig) -> list[str]:
+    warnings: list[str] = []
+    if safe_int(summary.get('closed_trades')) < max(int(cfg.min_trades), 1) * 2:
+        warnings.append('Sample size is still small for strong confidence.')
+    if safe_float(summary.get('largest_win_pct_of_total_profit')) > OUTSIZED_WINNER_WARNING_PCT * 100.0:
+        warnings.append('Results concentrated in one outsized winner.')
+    recent_pnl = summary.get('recent_closed_pnl', []) or []
+    if recent_pnl and sum(float(value) for value in recent_pnl) <= 0:
+        warnings.append('Recent closed trades are not profitable.')
+    if safe_int(summary.get('longest_drawdown_streak')) > MAX_LONGEST_DRAWDOWN_STREAK_WARNING:
+        warnings.append('Equity curve shows a long drawdown streak.')
+    if safe_float(summary.get('pnl_std_dev')) > max(abs(safe_float(summary.get('expectancy_per_trade'))) * 4.0, 1.0):
+        warnings.append('Equity curve looks unstable relative to expectancy.')
+    if str(summary.get('profit_factor_note', '')).strip():
+        warnings.append(str(summary['profit_factor_note']).strip())
+    return warnings
+
+
+def _confidence_label(summary: dict[str, Any], status: str, cfg: PaperReadinessConfig) -> str:
+    expectancy = safe_float(summary.get('expectancy_per_trade'))
+    expectancy_pct = safe_float(summary.get('expectancy_pct'))
+    profit_factor = summary.get('profit_factor', 0.0)
+    profit_factor_value = float('inf') if str(profit_factor).strip().lower() == 'inf' else safe_float(profit_factor)
+    max_drawdown_pct = safe_float(summary.get('max_drawdown_pct'))
+    recovery_factor = safe_float(summary.get('recovery_factor'))
+    total_trades = safe_int(summary.get('closed_trades', summary.get('total_trades')))
+    if status == 'NEED_MORE_DATA':
+        return 'NEED_MORE_DATA'
+    if status == 'FAIL':
+        if expectancy <= 0 and profit_factor_value < 1.0 and max_drawdown_pct > cfg.max_drawdown_pct:
+            return 'HARD FAIL'
+        return 'FAIL'
+    near_threshold = (
+        expectancy_pct <= 0.10
+        or profit_factor_value < (cfg.min_profit_factor + 0.1)
+        or max_drawdown_pct > (cfg.max_drawdown_pct * 0.85)
+        or recovery_factor < (cfg.min_recovery_factor + 0.3)
+    )
+    if total_trades >= cfg.min_trades * 2 and expectancy_pct >= 0.5 and profit_factor_value >= 2.0 and max_drawdown_pct <= cfg.max_drawdown_pct * 0.7 and recovery_factor >= 2.0:
+        return 'STRONG PASS'
+    if near_threshold:
+        return 'BORDERLINE'
+    return 'PASS'
+
+
 def calculate_trade_metrics(rows: list[dict[str, Any]], *, strategy_name: str = 'TRADE_SYSTEM') -> dict[str, Any]:
     records = standardize_trade_records(rows)
     trade_records = [record for record in records if _record_counts_as_trade(record)]
@@ -132,146 +262,187 @@ def calculate_trade_metrics(rows: list[dict[str, Any]], *, strategy_name: str = 
     losing_pnl = [value for value in pnl_values if value < 0]
     wins = len(winning_pnl)
     losses = len(losing_pnl)
-    gross_profit = sum(winning_pnl)
-    gross_loss_abs = abs(sum(losing_pnl))
-    profit_factor: float | str = gross_profit / gross_loss_abs if gross_loss_abs > 0 else 'inf' if gross_profit > 0 else 0.0
-    total_pnl = round(sum(pnl_values), 2)
     closed_trade_count = len(ordered_closed)
-    expectancy = round(total_pnl / closed_trade_count, 2) if closed_trade_count else 0.0
-
-    running_equity = 0.0
-    peak_equity = 0.0
-    max_drawdown = 0.0
-    max_drawdown_pct = 0.0
-    for pnl in pnl_values:
-        running_equity += pnl
-        peak_equity = max(peak_equity, running_equity)
-        drawdown = peak_equity - running_equity
-        max_drawdown = max(max_drawdown, drawdown)
-        if peak_equity > 0:
-            max_drawdown_pct = max(max_drawdown_pct, (drawdown / peak_equity) * 100.0)
-
-    longest_win_streak = 0
-    longest_loss_streak = 0
-    current_win_streak = 0
-    current_loss_streak = 0
-    for pnl in pnl_values:
-        if pnl > 0:
-            current_win_streak += 1
-            current_loss_streak = 0
-        elif pnl < 0:
-            current_loss_streak += 1
-            current_win_streak = 0
-        else:
-            current_win_streak = 0
-            current_loss_streak = 0
-        longest_win_streak = max(longest_win_streak, current_win_streak)
-        longest_loss_streak = max(longest_loss_streak, current_loss_streak)
-
+    win_rate_ratio = wins / closed_trade_count if closed_trade_count else 0.0
+    loss_rate = losses / closed_trade_count if closed_trade_count else 0.0
+    average_win = round(sum(winning_pnl) / wins, 2) if wins else 0.0
+    average_loss_magnitude = round(abs(sum(losing_pnl)) / losses, 2) if losses else 0.0
+    average_loss = round(sum(losing_pnl) / losses, 2) if losses else 0.0
+    payoff_ratio = round(_safe_ratio(average_win, average_loss_magnitude), 2) if average_loss_magnitude > 0 else (float('inf') if average_win > 0 else 0.0)
+    expectancy_per_trade = round((win_rate_ratio * average_win) - (loss_rate * average_loss_magnitude), 2) if closed_trade_count else 0.0
+    expectancy_pct = round(_safe_ratio(expectancy_per_trade, average_loss_magnitude) * 100.0, 2) if average_loss_magnitude > 0 else (0.0 if expectancy_per_trade <= 0 else 100.0)
+    gross_profit = round(sum(winning_pnl), 2)
+    gross_loss = round(sum(losing_pnl), 2)
+    gross_loss_abs = abs(gross_loss)
+    profit_factor, profit_factor_note = _profit_factor_value(gross_profit, gross_loss_abs)
+    net_profit = round(sum(pnl_values), 2)
+    equity = _equity_metrics(pnl_values)
+    recovery_factor = round(_safe_ratio(net_profit, abs(equity['max_drawdown_amount'])), 2) if abs(equity['max_drawdown_amount']) > 0 else (0.0 if net_profit <= 0 else float('inf'))
+    consecutive_wins_max, consecutive_losses_max = _max_consecutive_counts(pnl_values)
+    largest_win = round(max(winning_pnl), 2) if winning_pnl else 0.0
+    largest_loss = round(min(losing_pnl), 2) if losing_pnl else 0.0
+    largest_win_pct_of_total_profit = round(_safe_ratio(largest_win, gross_profit) * 100.0, 2) if gross_profit > 0 else 0.0
+    median_trade_pnl = round(float(median(pnl_values)), 2) if pnl_values else 0.0
+    pnl_std_dev = round(float(pstdev(pnl_values)), 2) if len(pnl_values) > 1 else 0.0
     duplicate_trade_count = sum(1 for record in records if record.duplicate_reason.startswith('DUPLICATE_'))
     execution_error_count = sum(1 for record in records if record.execution_status == 'ERROR' or record.validation_error == 'BROKER_ERROR')
     invalid_trade_count = sum(1 for record in records if bool(record.validation_error and record.validation_error != 'BROKER_ERROR'))
+    recent_closed_pnl = pnl_values[-RECENT_TRADE_WINDOW:]
 
-    return {
+    summary = {
         'strategy': strategy_name,
         'total_trades': len(trade_records),
         'closed_trades': closed_trade_count,
         'open_trades': max(len(trade_records) - closed_trade_count, 0),
         'wins': wins,
         'losses': losses,
-        'win_rate': round((wins / closed_trade_count) * 100.0, 2) if closed_trade_count else 0.0,
-        'avg_win': round(sum(winning_pnl) / len(winning_pnl), 2) if winning_pnl else 0.0,
-        'avg_loss': round(sum(losing_pnl) / len(losing_pnl), 2) if losing_pnl else 0.0,
-        'total_pnl': total_pnl,
-        'expectancy_per_trade': expectancy,
-        'profit_factor': round(profit_factor, 2) if isinstance(profit_factor, float) else profit_factor,
-        'max_drawdown': round(max_drawdown, 2),
-        'max_drawdown_pct': round(max_drawdown_pct, 2),
-        'longest_win_streak': longest_win_streak,
-        'longest_loss_streak': longest_loss_streak,
+        'win_rate': round(win_rate_ratio * 100.0, 2),
+        'win_rate_ratio': round(win_rate_ratio, 4),
+        'loss_rate': round(loss_rate, 4),
+        'loss_rate_pct': round(loss_rate * 100.0, 2),
+        'avg_win': average_win,
+        'average_win': average_win,
+        'avg_loss': average_loss,
+        'average_loss': average_loss_magnitude,
+        'reward_risk_ratio': payoff_ratio,
+        'payoff_ratio': payoff_ratio,
+        'gross_profit': gross_profit,
+        'gross_loss': gross_loss,
+        'net_profit': net_profit,
+        'total_pnl': net_profit,
+        'expectancy_per_trade': expectancy_per_trade,
+        'expectancy_pct': expectancy_pct,
+        'profit_factor': profit_factor,
+        'profit_factor_note': profit_factor_note,
+        'largest_win': largest_win,
+        'largest_loss': largest_loss,
+        'largest_win_pct_of_total_profit': largest_win_pct_of_total_profit,
+        'consecutive_wins_max': consecutive_wins_max,
+        'consecutive_losses_max': consecutive_losses_max,
+        'longest_win_streak': consecutive_wins_max,
+        'longest_loss_streak': consecutive_losses_max,
+        'median_trade_pnl': median_trade_pnl,
+        'pnl_std_dev': pnl_std_dev,
         'duplicate_trade_count': duplicate_trade_count,
         'execution_error_count': execution_error_count,
         'invalid_trade_count': invalid_trade_count,
-        'drawdown_proven': 'YES' if max_drawdown > 0 and losses > 0 else 'NO',
+        'recent_closed_pnl': [round(value, 2) for value in recent_closed_pnl],
+        'drawdown_proven': 'YES' if abs(equity['max_drawdown_amount']) > 0 and losses > 0 else 'NO',
+        **equity,
     }
+    summary['max_drawdown'] = abs(summary['max_drawdown_amount'])
+    return summary
 
 
 def metrics_frame(summary: dict[str, Any]) -> pd.DataFrame:
     rows = [
         {'metric': 'Total trades', 'value': safe_int(summary.get('total_trades'))},
+        {'metric': 'Closed trades', 'value': safe_int(summary.get('closed_trades'))},
         {'metric': 'Wins', 'value': safe_int(summary.get('wins'))},
         {'metric': 'Losses', 'value': safe_int(summary.get('losses'))},
-        {'metric': 'Win rate', 'value': round(safe_float(summary.get('win_rate')), 2)},
-        {'metric': 'Average win', 'value': round(safe_float(summary.get('avg_win')), 2)},
-        {'metric': 'Average loss', 'value': round(safe_float(summary.get('avg_loss')), 2)},
-        {'metric': 'Expectancy', 'value': round(safe_float(summary.get('expectancy_per_trade')), 2)},
+        {'metric': 'Win rate %', 'value': round(safe_float(summary.get('win_rate')), 2)},
+        {'metric': 'Average win', 'value': round(safe_float(summary.get('average_win', summary.get('avg_win'))), 2)},
+        {'metric': 'Average loss', 'value': round(safe_float(summary.get('average_loss', summary.get('avg_loss'))), 2)},
+        {'metric': 'Expectancy / trade', 'value': round(safe_float(summary.get('expectancy_per_trade')), 2)},
+        {'metric': 'Expectancy %', 'value': round(safe_float(summary.get('expectancy_pct')), 2)},
         {'metric': 'Profit factor', 'value': summary.get('profit_factor', 0.0)},
-        {'metric': 'Max drawdown', 'value': round(safe_float(summary.get('max_drawdown')), 2)},
         {'metric': 'Max drawdown %', 'value': round(safe_float(summary.get('max_drawdown_pct')), 2)},
-        {'metric': 'Longest win streak', 'value': safe_int(summary.get('longest_win_streak'))},
-        {'metric': 'Longest loss streak', 'value': safe_int(summary.get('longest_loss_streak'))},
+        {'metric': 'Recovery factor', 'value': summary.get('recovery_factor', 0.0)},
+        {'metric': 'Decision', 'value': str(summary.get('pass_fail_status', 'NA'))},
+        {'metric': 'Confidence', 'value': str(summary.get('confidence_label', 'NA'))},
     ]
     return pd.DataFrame(rows)
 
 
 def terminal_lines(summary: dict[str, Any]) -> list[str]:
-    return [
+    decision = str(summary.get('pass_fail_status', 'NA'))
+    confidence = str(summary.get('confidence_label', 'NA'))
+    lines = [
+        'Validation Summary',
         f"Total trades: {safe_int(summary.get('total_trades'))}",
-        f"Wins/Losses: {safe_int(summary.get('wins'))}/{safe_int(summary.get('losses'))}",
-        f"Win rate: {safe_float(summary.get('win_rate')):.2f}%",
-        f"Average win: {safe_float(summary.get('avg_win')):.2f}",
-        f"Average loss: {safe_float(summary.get('avg_loss')):.2f}",
-        f"Expectancy: {safe_float(summary.get('expectancy_per_trade')):.2f}",
-        f"Profit factor: {summary.get('profit_factor', 0.0)}",
-        f"Max drawdown: {safe_float(summary.get('max_drawdown')):.2f} ({safe_float(summary.get('max_drawdown_pct')):.2f}%)",
-        f"Execution errors: {safe_int(summary.get('execution_error_count'))}",
-        f"Duplicate trades: {safe_int(summary.get('duplicate_trade_count'))}",
+        f"- Trades: {safe_int(summary.get('closed_trades', summary.get('total_trades')))}",
+        f"- Expectancy: {safe_float(summary.get('expectancy_per_trade')):.2f}",
+        f"- Profit Factor: {summary.get('profit_factor', 0.0)}",
+        f"- Max Drawdown: {safe_float(summary.get('max_drawdown_pct')):.2f}%",
+        f"- Recovery Factor: {summary.get('recovery_factor', 0.0)}",
+        f"- Decision: {decision} ({confidence})",
     ]
+    for reason in summary.get('pass_fail_reasons', []) or []:
+        lines.append(f"- {reason}")
+    for warning in summary.get('warnings', []) or []:
+        lines.append(f"- WARNING: {warning}")
+    return lines
 
 
 def evaluate_paper_readiness(summary: dict[str, Any], config: PaperReadinessConfig | None = None) -> dict[str, Any]:
     cfg = config or PaperReadinessConfig()
-    total_trades = safe_int(summary.get('total_trades'))
+    total_trades = safe_int(summary.get('closed_trades', summary.get('total_trades')))
     expectancy = safe_float(summary.get('expectancy_per_trade'))
     profit_factor_raw = summary.get('profit_factor', 0.0)
     profit_factor = float('inf') if str(profit_factor_raw).strip().lower() == 'inf' else safe_float(profit_factor_raw)
     max_drawdown_pct = safe_float(summary.get('max_drawdown_pct'))
+    recovery_factor = summary.get('recovery_factor', 0.0)
+    recovery_factor_value = float('inf') if str(recovery_factor).strip().lower() == 'inf' else safe_float(recovery_factor)
     execution_error_count = safe_int(summary.get('execution_error_count'))
     duplicate_trade_count = safe_int(summary.get('duplicate_trade_count'))
     invalid_trade_count = safe_int(summary.get('invalid_trade_count'))
 
-    blockers: list[str] = []
+    reasons: list[str] = []
+    blocker_messages: list[str] = []
+    status = 'PASS'
     if total_trades < cfg.min_trades:
-        blockers.append('not enough paper trades yet')
+        status = 'NEED_MORE_DATA'
+        reasons.append(f'NEED_MORE_DATA: only {total_trades} trades')
+        blocker_messages.append('not enough paper trades yet')
     if cfg.require_positive_expectancy and expectancy <= cfg.min_expectancy_per_trade:
-        blockers.append('expectancy is not positive yet')
+        reasons.append('FAIL: negative expectancy')
+        blocker_messages.append('expectancy is not positive yet')
     if profit_factor != float('inf') and profit_factor < cfg.min_profit_factor:
-        blockers.append('profit factor is below target')
+        reasons.append('FAIL: profit factor below threshold')
+        blocker_messages.append('profit factor is below target')
     if max_drawdown_pct > cfg.max_drawdown_pct:
-        blockers.append('drawdown is above the current paper limit')
+        reasons.append('FAIL: drawdown too large')
+        blocker_messages.append('drawdown is above the current paper limit')
+    if recovery_factor_value != float('inf') and recovery_factor_value < cfg.min_recovery_factor:
+        reasons.append('FAIL: recovery factor below threshold')
+        blocker_messages.append('recovery factor is below target')
     if execution_error_count > cfg.max_execution_errors:
-        blockers.append('execution errors are still present')
+        reasons.append('FAIL: execution errors present')
+        blocker_messages.append('execution errors are still present')
     if duplicate_trade_count > cfg.max_duplicate_trades:
-        blockers.append('duplicate trades were not fully blocked')
+        reasons.append('FAIL: duplicate trades not fully blocked')
+        blocker_messages.append('duplicate trades were not fully blocked')
     if invalid_trade_count > cfg.max_invalid_trades:
-        blockers.append('invalid trade rows are still present')
+        reasons.append('FAIL: invalid trade rows still present')
+        blocker_messages.append('invalid trade rows are still present')
+    if status == 'PASS' and reasons:
+        status = 'FAIL'
 
-    ready = not blockers
-    next_step = (
-        'Paper trading has passed the current readiness gate. Keep monitoring before any live promotion.'
-        if ready
-        else 'Stay in paper trading. Clear the listed blockers before any live decision.'
-    )
+    warnings = _validation_warnings(summary, cfg)
+    confidence_label = _confidence_label(summary, status, cfg)
+    if status == 'PASS':
+        blocker_text = ''
+        readiness_summary = 'Validation passed. The strategy currently meets the paper-trading validation gate.'
+        next_step = 'Continue paper deployment and keep monitoring before any live decision.'
+    elif status == 'NEED_MORE_DATA':
+        blocker_text = '; '.join(blocker_messages or ['not enough paper trades yet'])
+        readiness_summary = f'Validation needs more data because {blocker_text.lower()}.'
+        next_step = 'Stay in paper trading. Keep collecting closed trades before making any pass/fail decision.'
+    else:
+        blocker_text = '; '.join(blocker_messages or reasons)
+        readiness_summary = f'Validation failed because {blocker_text.lower()}.'
+        next_step = 'Stay in paper trading. Clear the listed blockers before any live decision.'
+
     return {
-        'paper_ready': 'YES' if ready else 'NO',
-        'paper_readiness_status': 'READY_FOR_PAPER_PHASE' if ready else 'NOT_READY_FOR_PAPER_PHASE',
-        'paper_readiness_blockers': '; '.join(blockers),
-        'paper_readiness_summary': (
-            'Paper trading is ready for the current phase.'
-            if ready
-            else f"Paper trading is not ready yet because {', '.join(blockers)}."
-        ),
+        'paper_ready': 'YES' if status == 'PASS' else 'NO',
+        'paper_readiness_status': 'READY_FOR_PAPER_PHASE' if status == 'PASS' else 'NOT_READY_FOR_PAPER_PHASE',
+        'paper_readiness_blockers': blocker_text,
+        'paper_readiness_summary': readiness_summary,
         'paper_readiness_next_step': next_step,
+        'pass_fail_status': status,
+        'pass_fail_reasons': reasons,
+        'warnings': warnings,
+        'confidence_label': confidence_label,
     }
 
 
@@ -284,13 +455,19 @@ def build_trade_evaluation_summary(
     """Return one shared metrics/readiness payload for paper, execution, and backtest rows."""
     summary = calculate_trade_metrics(rows, strategy_name=strategy_name)
     summary.update(evaluate_paper_readiness(summary, readiness_config))
-    summary['terminal_metrics_lines'] = terminal_lines(summary)
+    summary['validation_summary_lines'] = terminal_lines(summary)
+    summary['terminal_metrics_lines'] = summary['validation_summary_lines']
     summary['dashboard_metrics_rows'] = metrics_frame(summary).to_dict(orient='records')
     summary['trade_evaluation_records'] = [asdict(record) for record in standardize_trade_records(rows)]
     return summary
 
 
 __all__ = [
+    'MIN_EXPECTANCY',
+    'MIN_PROFIT_FACTOR',
+    'MIN_RECOVERY_FACTOR',
+    'MIN_TRADES',
+    'MAX_DRAWDOWN_PCT',
     'PaperReadinessConfig',
     'TradeEvaluationRecord',
     'build_trade_evaluation_summary',

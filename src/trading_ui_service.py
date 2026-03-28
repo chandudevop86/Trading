@@ -7,6 +7,7 @@ import streamlit as st
 from src.reporting_service import recent_trade_summary, safe_float, safe_int, short_broker_status
 from src.runtime_file_service import append_text_log, ensure_output_files
 from src.runtime_models import TradingActionRequest
+from src.volatility_filter import latest_volatility_snapshot
 
 
 def initialize_ui_runtime(output_paths: list[Path], log_paths: list[Path]) -> None:
@@ -380,7 +381,7 @@ def apply_minimal_theme() -> None:
     )
 
 
-def render_summary_cards(trades: list[dict[str, object]], summary: dict[str, object], todays_trades: int) -> None:
+def render_summary_cards(trades: list[dict[str, object]], summary: dict[str, object], todays_trades: int, candles: pd.DataFrame | None = None) -> None:
     total_trades = safe_int(summary.get('total_trades', 0))
     win_rate = safe_float(summary.get('win_rate', 0.0))
     pnl = safe_float(summary.get('total_pnl', summary.get('pnl', 0.0)))
@@ -402,6 +403,23 @@ def render_summary_cards(trades: list[dict[str, object]], summary: dict[str, obj
     row_two[1].metric('Avg Loss', f'{avg_loss:.2f}')
     row_two[2].metric('Max Drawdown', f'{max_drawdown:.2f}')
     row_two[3].metric("Today's Trades", str(todays_trades))
+
+    snapshot = latest_volatility_snapshot(candles if candles is not None else pd.DataFrame())
+    score = int(snapshot.get('volatility_score', 0) or 0)
+    market_state = str(snapshot.get('market_state', 'QUIET') or 'QUIET')
+    decision = 'TRADE ALLOWED' if bool(snapshot.get('trade_allowed')) else str(snapshot.get('volatility_decision', 'NO_TRADE_LOW_VOL') or 'NO_TRADE_LOW_VOL').replace('_', ' ')
+    badge = '?' if bool(snapshot.get('trade_allowed')) else '??'
+    st.markdown(
+        (
+            '<div class="desk-card" style="margin-top:12px;">'
+            '<div class="desk-panel-title">Volatility Filter</div>'
+            f'<div class="desk-note" style="margin-bottom:10px;">Volatility Score: <strong>{score} / 10</strong> | Market State: <strong>{market_state}</strong></div>'
+            f'<div class="desk-note">ATR%: {float(snapshot.get("atr_pct", 0.0)):.2f}% | Open Vol: {float(snapshot.get("opening_volatility_pct", 0.0)):.2f}% | VWAP Dev: {float(snapshot.get("vwap_deviation_pct", 0.0)):.2f}% | Expansion: {float(snapshot.get("expansion_ratio", 0.0)):.2f}x</div>'
+            f'<div class="desk-note" style="margin-top:8px;">Decision: {badge} <strong>{decision}</strong></div>'
+            '</div>'
+        ),
+        unsafe_allow_html=True,
+    )
 
 
 def render_operator_panels(status: str, trades: list[dict[str, object]], symbol: str, timeframe: str, period: str, broker_choice: str, broker_status: str) -> None:

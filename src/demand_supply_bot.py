@@ -18,6 +18,64 @@ class Zone:
     pattern: str = 'UNKNOWN'
 
 
+@dataclass(frozen=True, slots=True)
+class ZoneQualityMetrics:
+    """Container for detailed zone-quality diagnostics."""
+
+    freshness_weight_raw: float
+    freshness_weight_pct: float
+    freshness_label: str
+    retest_count: int
+    bars_since_creation: int
+    time_in_zone_bars: int
+    departure_ratio: float
+    departure_speed_bars: int
+    strong_departure_candles: int
+    post_departure_overlap_ratio: float
+    move_away_score: float
+    move_away_label: str
+    base_candle_count: int
+    zone_width_pct: float
+    internal_overlap_ratio: float
+    pivot_cleanliness_score: float
+    edge_clarity_score: float
+    structure_clarity_score: float
+    structure_label: str
+    freshness_weight_component: float
+    move_away_component: float
+    structure_clarity_component: float
+    zone_quality_score: float
+    zone_quality_label: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            'freshness_weight_raw': round(self.freshness_weight_raw, 2),
+            'freshness_weight_pct': round(self.freshness_weight_pct, 2),
+            'freshness_label': self.freshness_label,
+            'retest_count': int(self.retest_count),
+            'bars_since_creation': int(self.bars_since_creation),
+            'time_in_zone_bars': int(self.time_in_zone_bars),
+            'departure_ratio': round(self.departure_ratio, 4),
+            'departure_speed_bars': int(self.departure_speed_bars),
+            'strong_departure_candles': int(self.strong_departure_candles),
+            'post_departure_overlap_ratio': round(self.post_departure_overlap_ratio, 4),
+            'move_away_score': round(self.move_away_score, 2),
+            'move_away_label': self.move_away_label,
+            'base_candle_count': int(self.base_candle_count),
+            'zone_width_pct': round(self.zone_width_pct, 4),
+            'internal_overlap_ratio': round(self.internal_overlap_ratio, 4),
+            'pivot_cleanliness_score': round(self.pivot_cleanliness_score, 2),
+            'edge_clarity_score': round(self.edge_clarity_score, 2),
+            'structure_clarity_score': round(self.structure_clarity_score, 2),
+            'structure_label': self.structure_label,
+            'freshness_weight_component': round(self.freshness_weight_component, 2),
+            'move_away_component': round(self.move_away_component, 2),
+            'structure_clarity_component': round(self.structure_clarity_component, 2),
+            'zone_quality_score': round(self.zone_quality_score, 2),
+            'zone_quality_label': self.zone_quality_label,
+        }
+
+
 @dataclass(slots=True)
 class DemandSupplyConfig:
     """Production-oriented Nifty 5m demand/supply configuration."""
@@ -35,7 +93,7 @@ class DemandSupplyConfig:
     min_volatility_ratio: float = 1.05
     zone_freshness_bars: int = 20
     min_reaction_strength: float = 0.75
-    min_zone_selection_score: float = 5.00
+    min_zone_selection_score: float = 6.00
     minimum_take_score: float = 7.0
     min_confirmation_body_ratio: float = 0.60
     min_rejection_wick_ratio: float = 0.50
@@ -53,6 +111,21 @@ class DemandSupplyConfig:
     impulse_multiplier_threshold: float = 2.0
     volume_spike_multiplier: float = 1.5
     fast_base_candle_limit: int = 3
+    strict_rejection_wick_body_ratio: float = 2.5
+    strict_wick_dominance_ratio: float = 1.5
+    strict_close_position_buy: float = 0.70
+    strict_close_position_sell: float = 0.30
+    strict_rejection_expansion_ratio: float = 1.2
+    min_penetration_ratio: float = 0.10
+    max_penetration_ratio: float = 0.50
+    max_zone_width_pct: float = 0.20
+    max_base_candles: int = 2
+    min_departure_ratio: float = 3.0
+    max_retest_count: int = 0
+    max_time_in_zone_bars: int = 2
+    min_rejection_score: float = 7.0
+    min_zone_quality_score: float = 8.0
+    min_a_grade_score: float = 8.5
     avoid_midday: bool = True
     morning_session_start: str = '09:35'
     morning_session_end: str = '10:45'
@@ -171,7 +244,7 @@ def _find_zones(day_candles: list[Candle], pivot_window: int) -> list[Zone]:
                     high=float(max(candle.open, candle.close)),
                     idx=index,
                     reaction_strength=_reaction_strength(day_candles, index, 'BUY'),
-                    pattern='DBR' if float(candle.close) >= float(candle.open) else 'UNKNOWN',
+                    pattern='DBR',
                 )
             )
         if highs and float(candle.high) > max(float(value) for value in highs):
@@ -182,7 +255,7 @@ def _find_zones(day_candles: list[Candle], pivot_window: int) -> list[Zone]:
                     high=float(candle.high),
                     idx=index,
                     reaction_strength=_reaction_strength(day_candles, index, 'SELL'),
-                    pattern='RBD' if float(candle.close) <= float(candle.open) else 'UNKNOWN',
+                    pattern='RBD',
                 )
             )
     return zones
@@ -383,6 +456,407 @@ def _touches_zone(candle: Candle, zone: Zone, side: str, tolerance_pct: float) -
     return float(candle.high) >= float(zone.low) * (1.0 - tolerance_pct) and float(candle.close) <= float(zone.high) * (1.0 + tolerance_pct)
 
 
+def _wick_body_ratio(candle: Candle, side: str) -> float:
+    body = max(abs(float(candle.close) - float(candle.open)), 0.01)
+    wick = max(min(float(candle.open), float(candle.close)) - float(candle.low), 0.0) if side == 'BUY' else max(float(candle.high) - max(float(candle.open), float(candle.close)), 0.0)
+    return round(wick / body, 4)
+
+
+def _wick_dominance_ratio(candle: Candle, side: str) -> float:
+    dominant = max(min(float(candle.open), float(candle.close)) - float(candle.low), 0.0) if side == 'BUY' else max(float(candle.high) - max(float(candle.open), float(candle.close)), 0.0)
+    opposite = max(float(candle.high) - max(float(candle.open), float(candle.close)), 0.01) if side == 'BUY' else max(min(float(candle.open), float(candle.close)) - float(candle.low), 0.01)
+    return round(dominant / opposite, 4)
+
+
+def _close_position(candle: Candle) -> float:
+    return round((float(candle.close) - float(candle.low)) / _intraday_range(candle), 4)
+
+
+def _penetration_ratio(candle: Candle, zone: Zone, side: str) -> float:
+    zone_width = max(float(zone.high) - float(zone.low), 0.01)
+    if side == 'BUY':
+        return round((float(zone.high) - float(candle.low)) / zone_width, 4)
+    return round((float(candle.high) - float(zone.low)) / zone_width, 4)
+
+
+def _rejection_expansion_ratio(day_candles: list[Candle], idx: int, candle: Candle, config: DemandSupplyConfig) -> float:
+    avg_range = max(_avg_range(day_candles, idx, config.atr_window), 0.01)
+    return round(_intraday_range(candle) / avg_range, 4)
+
+
+def _zone_width_pct(zone: Zone, reference_price: float) -> float:
+    if reference_price <= 0:
+        return 999.0
+    return round(((float(zone.high) - float(zone.low)) / reference_price) * 100.0, 4)
+
+
+def _departure_ratio(day_candles: list[Candle], zone: Zone, side: str, idx: int) -> float:
+    zone_width = max(float(zone.high) - float(zone.low), 0.01)
+    end = min(len(day_candles), zone.idx + 4, idx + 1)
+    sample = day_candles[zone.idx:end]
+    if not sample:
+        return 0.0
+    if side == 'BUY':
+        departure_move = max(float(c.high) for c in sample) - float(zone.high)
+    else:
+        departure_move = float(zone.low) - min(float(c.low) for c in sample)
+    return round(max(departure_move, 0.0) / zone_width, 4)
+
+
+def _time_in_zone_bars(day_candles: list[Candle], zone: Zone, side: str, idx: int, config: DemandSupplyConfig) -> int:
+    count = 0
+    started = False
+    for candle in day_candles[zone.idx:min(idx + 1, len(day_candles))]:
+        touches = _touches_zone(candle, zone, side, float(config.touch_tolerance_pct))
+        if touches:
+            count += 1
+            started = True
+            continue
+        if started:
+            break
+    return count
+
+
+def _retest_count_after_departure(day_candles: list[Candle], zone: Zone, side: str, idx: int, config: DemandSupplyConfig) -> int:
+    departed = False
+    count = 0
+    for candle in day_candles[zone.idx + 1:min(idx, len(day_candles))]:
+        if not departed:
+            if _zone_departed(candle, zone, side, config):
+                departed = True
+            continue
+        if _touches_zone(candle, zone, side, float(config.touch_tolerance_pct)):
+            count += 1
+    return count
+
+
+def _rejection_score(day_candles: list[Candle], idx: int, candle: Candle, zone: Zone, side: str, config: DemandSupplyConfig) -> tuple[float, dict[str, float]]:
+    wick_body_ratio = _wick_body_ratio(candle, side)
+    wick_dominance = _wick_dominance_ratio(candle, side)
+    close_pos = _close_position(candle)
+    expansion_ratio = _rejection_expansion_ratio(day_candles, idx, candle, config)
+    penetration = _penetration_ratio(candle, zone, side)
+    score = 0.0
+    if wick_body_ratio >= 2.5:
+        score += 2.0
+    elif wick_body_ratio >= 2.0:
+        score += 1.0
+    if wick_dominance >= 1.5:
+        score += 2.0
+    if side == 'BUY':
+        if close_pos >= 0.75:
+            score += 2.0
+        elif close_pos >= 0.65:
+            score += 1.0
+    else:
+        if close_pos <= 0.25:
+            score += 2.0
+        elif close_pos <= 0.35:
+            score += 1.0
+    if expansion_ratio >= 1.5:
+        score += 2.0
+    elif expansion_ratio >= 1.2:
+        score += 1.0
+    if 0.1 <= penetration <= 0.5:
+        score += 2.0
+    elif 0.1 <= penetration <= 0.7:
+        score += 1.0
+    diagnostics = {
+        'wick_body_ratio': round(wick_body_ratio, 4),
+        'wick_dominance_ratio': round(wick_dominance, 4),
+        'close_position': round(close_pos, 4),
+        'rejection_expansion_ratio': round(expansion_ratio, 4),
+        'penetration_ratio': round(penetration, 4),
+    }
+    return round(score, 2), diagnostics
+
+
+def _base_sample(day_candles: list[Candle], zone: Zone, config: DemandSupplyConfig) -> list[Candle]:
+    _, base_candle_count, _ = _base_candle_profile(day_candles, min(max(zone.idx, 0), len(day_candles) - 1), config)
+    if base_candle_count <= 0:
+        return [day_candles[min(max(zone.idx, 0), len(day_candles) - 1)]]
+    start = max(0, zone.idx - base_candle_count + 1)
+    return day_candles[start:zone.idx + 1]
+
+
+def _count_meaningful_retests(day_candles: list[Candle], zone: Zone, side: str, idx: int, config: DemandSupplyConfig) -> int:
+    """Count real revisits after departure, ignoring tiny overlap noise."""
+    departed = False
+    active_retest = False
+    retest_count = 0
+    for candle in day_candles[zone.idx + 1:min(idx, len(day_candles))]:
+        if not departed:
+            if _zone_departed(candle, zone, side, config):
+                departed = True
+            continue
+        penetration = _penetration_ratio(candle, zone, side)
+        touches = _touches_zone(candle, zone, side, float(config.touch_tolerance_pct))
+        meaningful_touch = touches and penetration >= float(config.min_penetration_ratio)
+        if meaningful_touch and not active_retest:
+            retest_count += 1
+            active_retest = True
+        elif not touches:
+            active_retest = False
+    return retest_count
+
+
+def _freshness_label(component: float) -> str:
+    if component >= 8.5:
+        return 'FRESH'
+    if component >= 6.0:
+        return 'USABLE'
+    if component >= 3.5:
+        return 'STALE'
+    return 'EXHAUSTED'
+
+
+def _freshness_metrics(day_candles: list[Candle], idx: int, zone: Zone, side: str, config: DemandSupplyConfig) -> tuple[float, dict[str, object]]:
+    retest_count = _count_meaningful_retests(day_candles, zone, side, idx, config)
+    bars_since_creation = max(idx - zone.idx, 0)
+    freshness_raw = 5.0 if retest_count == 0 else 2.0 if retest_count == 1 else 0.5 if retest_count == 2 else 0.0
+    age_score = 3.0 if bars_since_creation <= 15 else 2.0 if bars_since_creation <= 35 else 1.0 if bars_since_creation <= 60 else 0.0
+    raw = freshness_raw + age_score
+    component = round((raw / 8.0) * 10.0, 2)
+    diagnostics = {
+        'retest_count': int(retest_count),
+        'bars_since_creation': int(bars_since_creation),
+        'freshness_weight_raw': round(raw, 2),
+        'freshness_weight_pct': round((raw / 8.0) * 100.0, 2),
+        'freshness_label': _freshness_label(component),
+        'freshness_weight_component': component,
+    }
+    return component, diagnostics
+
+
+def _strong_departure_candle(candle: Candle, side: str) -> bool:
+    body_ratio = _body_ratio(candle)
+    close_pos = _close_position(candle)
+    if side == 'BUY':
+        opposite_wick = _upper_wick_ratio(candle)
+        return float(candle.close) > float(candle.open) and body_ratio >= 0.55 and opposite_wick <= 0.25 and close_pos >= 0.70
+    opposite_wick = _lower_wick_ratio(candle)
+    return float(candle.close) < float(candle.open) and body_ratio >= 0.55 and opposite_wick <= 0.25 and close_pos <= 0.30
+
+
+def _departure_speed_bars(day_candles: list[Candle], zone: Zone, side: str, idx: int) -> int:
+    for offset in range(1, min(7, idx - zone.idx + 1)):
+        probe_idx = zone.idx + offset
+        if probe_idx > idx:
+            break
+        if _departure_ratio(day_candles, zone, side, probe_idx) >= 1.2:
+            return offset
+    return max(min(idx - zone.idx, 6), 0)
+
+
+def _strong_departure_count(day_candles: list[Candle], zone: Zone, side: str, idx: int) -> int:
+    end = min(len(day_candles), zone.idx + 5, idx + 1)
+    count = 0
+    for candle in day_candles[zone.idx + 1:end]:
+        if _strong_departure_candle(candle, side):
+            count += 1
+    return count
+
+
+def _post_departure_overlap_ratio(day_candles: list[Candle], zone: Zone, idx: int) -> float:
+    sample = day_candles[zone.idx + 1:min(len(day_candles), zone.idx + 5, idx + 1)]
+    if len(sample) < 2:
+        return 0.0
+    overlap_values: list[float] = []
+    for left, right in zip(sample, sample[1:]):
+        overlap = max(0.0, min(float(left.high), float(right.high)) - max(float(left.low), float(right.low)))
+        footprint = max(max(float(left.high), float(right.high)) - min(float(left.low), float(right.low)), 0.0001)
+        overlap_values.append(overlap / footprint)
+    if not overlap_values:
+        return 0.0
+    return round(sum(overlap_values) / len(overlap_values), 4)
+
+
+def _move_away_label(component: float) -> str:
+    if component >= 9.0:
+        return 'EXPLOSIVE'
+    if component >= 7.0:
+        return 'STRONG'
+    if component >= 5.0:
+        return 'OK'
+    return 'WEAK'
+
+
+def _move_away_metrics(day_candles: list[Candle], idx: int, zone: Zone, side: str) -> tuple[float, dict[str, object]]:
+    departure_ratio = _departure_ratio(day_candles, zone, side, idx)
+    departure_speed_bars = _departure_speed_bars(day_candles, zone, side, idx)
+    strong_departure_candles = _strong_departure_count(day_candles, zone, side, idx)
+    post_departure_overlap_ratio = _post_departure_overlap_ratio(day_candles, zone, idx)
+    raw = 0.0
+    if departure_ratio >= 3.0:
+        raw += 4.0
+    elif departure_ratio >= 2.0:
+        raw += 2.5
+    elif departure_ratio >= 1.2:
+        raw += 1.0
+    if departure_speed_bars <= 2:
+        raw += 2.5
+    elif departure_speed_bars <= 4:
+        raw += 1.0
+    if strong_departure_candles >= 3:
+        raw += 2.0
+    elif strong_departure_candles >= 2:
+        raw += 1.0
+    if post_departure_overlap_ratio <= 0.15:
+        raw += 1.5
+    elif post_departure_overlap_ratio <= 0.25:
+        raw += 0.5
+    component = round(min(raw, 10.0), 2)
+    diagnostics = {
+        'departure_ratio': round(departure_ratio, 4),
+        'departure_speed_bars': int(departure_speed_bars),
+        'strong_departure_candles': int(strong_departure_candles),
+        'post_departure_overlap_ratio': round(post_departure_overlap_ratio, 4),
+        'move_away_score': component,
+        'move_away_label': _move_away_label(component),
+        'move_away_component': component,
+    }
+    return component, diagnostics
+
+
+def _internal_overlap_ratio(base_candles: list[Candle]) -> float:
+    if len(base_candles) < 2:
+        return 0.0
+    overlap_values: list[float] = []
+    for left, right in zip(base_candles, base_candles[1:]):
+        overlap = max(0.0, min(float(left.high), float(right.high)) - max(float(left.low), float(right.low)))
+        footprint = max(max(float(left.high), float(right.high)) - min(float(left.low), float(right.low)), 0.0001)
+        overlap_values.append(overlap / footprint)
+    return round(sum(overlap_values) / len(overlap_values), 4) if overlap_values else 0.0
+
+
+def _pivot_cleanliness_score(base_candles: list[Candle]) -> float:
+    if len(base_candles) <= 1:
+        return 2.0
+    directions = [1 if float(c.close) >= float(c.open) else -1 for c in base_candles]
+    alternations = sum(1 for left, right in zip(directions, directions[1:]) if left != right)
+    micro_pivots = 0
+    for idx in range(1, len(base_candles) - 1):
+        candle = base_candles[idx]
+        if (float(candle.high) > float(base_candles[idx - 1].high) and float(candle.high) > float(base_candles[idx + 1].high)) or (float(candle.low) < float(base_candles[idx - 1].low) and float(candle.low) < float(base_candles[idx + 1].low)):
+            micro_pivots += 1
+    noise = alternations + micro_pivots
+    if noise <= 1:
+        return 2.0
+    if noise <= 3:
+        return 1.0
+    return 0.0
+
+
+def _edge_clarity_score(base_candles: list[Candle], zone: Zone) -> float:
+    zone_width = max(float(zone.high) - float(zone.low), 0.0001)
+    high_variation = max(float(c.high) for c in base_candles) - min(float(c.high) for c in base_candles)
+    low_variation = max(float(c.low) for c in base_candles) - min(float(c.low) for c in base_candles)
+    edge_variation_ratio = max(high_variation, low_variation) / zone_width
+    if edge_variation_ratio <= 0.30:
+        return 2.0
+    if edge_variation_ratio <= 0.55:
+        return 1.0
+    return 0.0
+
+
+def _structure_label(component: float) -> str:
+    if component >= 8.5:
+        return 'CLEAN'
+    if component >= 6.5:
+        return 'DECENT'
+    if component >= 4.5:
+        return 'MESSY'
+    return 'INVALID'
+
+
+def _structure_clarity_metrics(day_candles: list[Candle], idx: int, zone: Zone, side: str, base_candle_count: int, config: DemandSupplyConfig) -> tuple[float, dict[str, object]]:
+    reference_price = max(abs(float(day_candles[idx].close)), 0.01)
+    zone_width_pct = _zone_width_pct(zone, reference_price)
+    base_candles = _base_sample(day_candles, zone, config)
+    effective_base_candle_count = len(base_candles) or base_candle_count
+    internal_overlap_ratio = _internal_overlap_ratio(base_candles)
+    pivot_cleanliness_score = _pivot_cleanliness_score(base_candles)
+    edge_clarity_score = _edge_clarity_score(base_candles, zone)
+    raw = 0.0
+    if effective_base_candle_count <= 2:
+        raw += 2.5
+    elif effective_base_candle_count <= 3:
+        raw += 1.5
+    elif effective_base_candle_count <= 4:
+        raw += 0.5
+    if zone_width_pct <= 0.20:
+        raw += 2.5
+    elif zone_width_pct <= 0.30:
+        raw += 1.5
+    elif zone_width_pct <= 0.40:
+        raw += 0.5
+    if internal_overlap_ratio <= 0.25:
+        raw += 2.0
+    elif internal_overlap_ratio <= 0.40:
+        raw += 1.0
+    raw += pivot_cleanliness_score
+    raw += edge_clarity_score
+    component = round(min(raw, 10.0), 2)
+    diagnostics = {
+        'base_candle_count': int(effective_base_candle_count),
+        'zone_width_pct': round(zone_width_pct, 4),
+        'internal_overlap_ratio': round(internal_overlap_ratio, 4),
+        'pivot_cleanliness_score': round(pivot_cleanliness_score, 2),
+        'edge_clarity_score': round(edge_clarity_score, 2),
+        'structure_clarity_score': component,
+        'structure_label': _structure_label(component),
+        'structure_clarity_component': component,
+    }
+    return component, diagnostics
+
+
+def _zone_quality_metrics(day_candles: list[Candle], idx: int, zone: Zone, side: str, base_candle_count: int, config: DemandSupplyConfig) -> ZoneQualityMetrics:
+    freshness_component, freshness = _freshness_metrics(day_candles, idx, zone, side, config)
+    move_away_component, move_away = _move_away_metrics(day_candles, idx, zone, side)
+    structure_component, structure = _structure_clarity_metrics(day_candles, idx, zone, side, base_candle_count, config)
+    time_in_zone_bars = _time_in_zone_bars(day_candles, zone, side, idx, config)
+    final_score = round((freshness_component * 0.25) + (move_away_component * 0.40) + (structure_component * 0.35), 2)
+    if final_score >= 8.8:
+        final_label = 'A'
+    elif final_score >= 7.4:
+        final_label = 'B'
+    elif final_score >= 6.0:
+        final_label = 'C'
+    else:
+        final_label = 'REJECT'
+    return ZoneQualityMetrics(
+        freshness_weight_raw=float(freshness['freshness_weight_raw']),
+        freshness_weight_pct=float(freshness['freshness_weight_pct']),
+        freshness_label=str(freshness['freshness_label']),
+        retest_count=int(freshness['retest_count']),
+        bars_since_creation=int(freshness['bars_since_creation']),
+        time_in_zone_bars=int(time_in_zone_bars),
+        departure_ratio=float(move_away['departure_ratio']),
+        departure_speed_bars=int(move_away['departure_speed_bars']),
+        strong_departure_candles=int(move_away['strong_departure_candles']),
+        post_departure_overlap_ratio=float(move_away['post_departure_overlap_ratio']),
+        move_away_score=float(move_away['move_away_score']),
+        move_away_label=str(move_away['move_away_label']),
+        base_candle_count=int(structure['base_candle_count']),
+        zone_width_pct=float(structure['zone_width_pct']),
+        internal_overlap_ratio=float(structure['internal_overlap_ratio']),
+        pivot_cleanliness_score=float(structure['pivot_cleanliness_score']),
+        edge_clarity_score=float(structure['edge_clarity_score']),
+        structure_clarity_score=float(structure['structure_clarity_score']),
+        structure_label=str(structure['structure_label']),
+        freshness_weight_component=float(freshness_component),
+        move_away_component=float(move_away_component),
+        structure_clarity_component=float(structure_component),
+        zone_quality_score=float(final_score),
+        zone_quality_label=final_label,
+    )
+
+
+def _zone_quality_score(day_candles: list[Candle], idx: int, zone: Zone, side: str, touch_count: int, base_candle_count: int, config: DemandSupplyConfig) -> tuple[float, dict[str, object]]:
+    metrics = _zone_quality_metrics(day_candles, idx, zone, side, base_candle_count, config)
+    return metrics.zone_quality_score, metrics.to_dict()
+
+
 def _zone_departed(candle: Candle, zone: Zone, side: str, config: DemandSupplyConfig) -> bool:
     buffer_pct = max(float(config.zone_departure_buffer_pct), float(config.touch_tolerance_pct) * 0.25)
     if side == 'BUY':
@@ -419,10 +893,14 @@ def is_retest(day_candles: list[Candle], zone: Zone, side: str, state: dict[str,
 
 def _rejection_candle(candle: Candle, zone: Zone, side: str, config: DemandSupplyConfig) -> bool:
     zone_mid = _zone_mid(zone)
-    body_ok = _body_ratio(candle) >= float(config.min_confirmation_body_ratio) * 0.70
+    wick_ok = _lower_wick_ratio(candle) >= float(config.min_rejection_wick_ratio) if side == 'BUY' else _upper_wick_ratio(candle) >= float(config.min_rejection_wick_ratio)
+    dominance_ok = _wick_dominance_ratio(candle, side) >= 1.0
+    penetration = _penetration_ratio(candle, zone, side)
     if side == 'BUY':
-        return _lower_wick_ratio(candle) >= float(config.min_rejection_wick_ratio) and body_ok and float(candle.close) >= zone_mid
-    return _upper_wick_ratio(candle) >= float(config.min_rejection_wick_ratio) and body_ok and float(candle.close) <= zone_mid
+        close_ok = float(candle.close) >= zone_mid
+    else:
+        close_ok = float(candle.close) <= zone_mid
+    return wick_ok and dominance_ok and close_ok and float(config.min_penetration_ratio) <= penetration <= 1.0
 
 
 def _confirmation_candle(candle: Candle, touch_candle: Candle, zone: Zone, side: str, config: DemandSupplyConfig) -> bool:
@@ -452,11 +930,6 @@ def detect_retest(day_candles: list[Candle], zone: Zone, side: str, start_idx: i
         if not session_filter(candle, config):
             continue
 
-        if int(state.get('first_touch_idx', -1)) < 0:
-            if _touches_zone(candle, zone, side, float(config.touch_tolerance_pct)):
-                state = mark_zone_retest_state(state, event='first_touch', candle_idx=idx)
-            continue
-
         if int(state.get('departure_idx', -1)) < 0:
             if _zone_departed(candle, zone, side, config):
                 state = mark_zone_retest_state(state, event='departure', candle_idx=idx)
@@ -468,6 +941,8 @@ def detect_retest(day_candles: list[Candle], zone: Zone, side: str, start_idx: i
         if not is_retest(day_candles, zone, side, state, idx, config):
             continue
 
+        if int(state.get('first_touch_idx', -1)) < 0:
+            state = mark_zone_retest_state(state, event='first_touch', candle_idx=idx)
         state = mark_zone_retest_state(state, event='retest', candle_idx=idx)
         touch_candle = day_candles[idx]
         confirmation_limit = min(len(day_candles), idx + 1 + max(1, int(config.retest_confirmation_bars)))
@@ -553,6 +1028,7 @@ def _zone_selection_score(day_candles: list[Candle], idx: int, zone: Zone, side:
     fresh_touch_component, _ = _fresh_touch_score(day_candles, zone, side, idx, config)
     time_component, _ = _time_component(base_candle_count, config)
     trend_component, _ = _trend_component(bias_aligned, structure_ok)
+    zone_quality_component = round((_zone_quality_metrics(day_candles, idx, zone, side, base_candle_count, config).zone_quality_score / 10.0) * 1.6, 4)
     base_component = round((1.0 if base_score >= 2.0 else 0.5) * _SCORE_WEIGHTS['base_quality'], 4)
     impulse_component = round((1.0 if impulse_score >= 3.0 else 0.33) * _SCORE_WEIGHTS['impulse_quality'], 4)
     return round(
@@ -564,7 +1040,8 @@ def _zone_selection_score(day_candles: list[Candle], idx: int, zone: Zone, side:
         + volume_component
         + fresh_touch_component
         + time_component
-        + trend_component,
+        + trend_component
+        + zone_quality_component,
         4,
     )
 
@@ -603,6 +1080,8 @@ def _quality_score(
     volatility_component, volatility_ratio = _volatility_component(day_candles, idx, config)
     session_component, session_name = _session_component(candle, config)
     zone_selection_score = _zone_selection_score(day_candles, idx, zone, side, config)
+    rejection_score, rejection_diagnostics = _rejection_score(day_candles, touch_idx, touch_candle, zone, side, config)
+    zone_quality_score, zone_quality_diagnostics = _zone_quality_score(day_candles, idx, zone, side, touch_count, base_candle_count, config)
 
     if config.require_vwap_alignment and not _vwap_aligned(candle, side, float(config.vwap_reclaim_buffer_pct)):
         return None
@@ -625,6 +1104,20 @@ def _quality_score(
         return None
     if not _vwap_aligned(touch_candle, side):
         return None
+    if rejection_score < float(config.min_rejection_score):
+        return None
+    if float(zone_quality_diagnostics['zone_width_pct']) > float(config.max_zone_width_pct):
+        return None
+    if int(zone_quality_diagnostics['base_candle_count']) > int(config.max_base_candles):
+        return None
+    if float(zone_quality_diagnostics['departure_ratio']) < float(config.min_departure_ratio):
+        return None
+    if int(zone_quality_diagnostics['retest_count']) > int(config.max_retest_count):
+        return None
+    if int(zone_quality_diagnostics['time_in_zone_bars']) > int(config.max_time_in_zone_bars):
+        return None
+    if zone_quality_score < float(config.min_zone_quality_score):
+        return None
 
     components = {
         'freshness': freshness_component,
@@ -642,8 +1135,8 @@ def _quality_score(
         'session_quality': round(session_component, 4),
     }
     raw_total_score = round(base_score + impulse_score + (2.0 if volume_spike else 0.0) + (3.0 if touch_count == 0 else 1.0) + time_score + trend_score + retest_score, 2)
-    score_interpretation = _score_interpretation(raw_total_score)
-    total_score = raw_total_score
+    total_score = round((raw_total_score + rejection_score + zone_quality_score) / 3.0, 2)
+    score_interpretation = 'A_GRADE_TRADE' if rejection_score >= float(config.min_a_grade_score) and zone_quality_score >= float(config.min_a_grade_score) else _score_interpretation(raw_total_score)
     threshold = 10.0
     if total_score < threshold:
         return None
@@ -679,13 +1172,18 @@ def _quality_score(
         'avg_candle_range': round(avg_candle_range, 4),
         'trend_score': round(trend_score, 2),
         'zone_strength_score': total_score,
-        'raw_total_score': total_score,
+        'raw_total_score': raw_total_score,
+        'rejection_score': round(rejection_score, 2),
+        'zone_quality_score': round(zone_quality_score, 2),
         'score_interpretation': score_interpretation,
         'zone_selection_score': round(zone_selection_score, 2),
         'score_threshold': threshold,
+        **rejection_diagnostics,
+        **zone_quality_diagnostics,
     }
     reason = (
         f'{side.lower()} demand_supply retest score={total_score:.2f} {score_interpretation.lower()} '
+        f'rejection={rejection_score:.2f} zone={zone_quality_score:.2f} '
         f'freshness={components["freshness"]:.2f} reaction={components["reaction_strength"]:.2f} '
         f'structure={components["structure_clarity"]:.2f} {structure_label.lower()} retest={components["retest_confirmation"]:.2f}'
     )
@@ -892,6 +1390,23 @@ def generate_trades(
                     'zone_gate_threshold': round(float(cfg.min_zone_selection_score), 2),
                     'zone_prequalified': 'YES',
                     'structure_score': round(float(diagnostics['structure_score']), 4),
+                    'rejection_score': round(float(diagnostics['rejection_score']), 2),
+                    'zone_quality_score': round(float(diagnostics['zone_quality_score']), 2),
+                    'zone_quality_label': str(diagnostics['zone_quality_label']),
+                    'freshness_weight_raw': round(float(diagnostics['freshness_weight_raw']), 2),
+                    'freshness_weight_pct': round(float(diagnostics['freshness_weight_pct']), 2),
+                    'freshness_label': str(diagnostics['freshness_label']),
+                    'bars_since_creation': int(diagnostics['bars_since_creation']),
+                    'move_away_score': round(float(diagnostics['move_away_score']), 2),
+                    'move_away_label': str(diagnostics['move_away_label']),
+                    'departure_speed_bars': int(diagnostics['departure_speed_bars']),
+                    'strong_departure_candles': int(diagnostics['strong_departure_candles']),
+                    'post_departure_overlap_ratio': round(float(diagnostics['post_departure_overlap_ratio']), 4),
+                    'internal_overlap_ratio': round(float(diagnostics['internal_overlap_ratio']), 4),
+                    'pivot_cleanliness_score': round(float(diagnostics['pivot_cleanliness_score']), 2),
+                    'edge_clarity_score': round(float(diagnostics['edge_clarity_score']), 2),
+                    'structure_clarity_score': round(float(diagnostics['structure_clarity_score']), 2),
+                    'structure_label': str(diagnostics['structure_label']),
                     'base_score': round(float(diagnostics['base_score']), 2),
                     'base_candle_count': int(diagnostics['base_candle_count']),
                     'base_range_threshold': round(float(diagnostics['base_range_threshold']), 4),
@@ -899,6 +1414,15 @@ def generate_trades(
                     'impulse_range': round(float(diagnostics['impulse_range']), 4),
                     'avg_candle_range': round(float(diagnostics['avg_candle_range']), 4),
                     'volume_score': round(float(diagnostics['volume_score']), 2),
+                    'zone_width_pct': round(float(diagnostics['zone_width_pct']), 4),
+                    'departure_ratio': round(float(diagnostics['departure_ratio']), 4),
+                    'retest_count': int(diagnostics['retest_count']),
+                    'time_in_zone_bars': int(diagnostics['time_in_zone_bars']),
+                    'wick_body_ratio': round(float(diagnostics['wick_body_ratio']), 4),
+                    'wick_dominance_ratio': round(float(diagnostics['wick_dominance_ratio']), 4),
+                    'close_position': round(float(diagnostics['close_position']), 4),
+                    'penetration_ratio': round(float(diagnostics['penetration_ratio']), 4),
+                    'rejection_expansion_ratio': round(float(diagnostics['rejection_expansion_ratio']), 4),
                     'volume_spike': 'YES' if bool(diagnostics['volume_spike']) else 'NO',
                     'breakout_volume': round(float(diagnostics['breakout_volume']), 4),
                     'avg_volume': round(float(diagnostics['avg_volume']), 4),

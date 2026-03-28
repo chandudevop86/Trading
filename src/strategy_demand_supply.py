@@ -92,14 +92,17 @@ def rejection_candle(row: Mapping[str, Any], side: str, config: DemandSupplyConf
     """Check for a directional rejection candle suitable for retest confirmation."""
     cfg = _coerce_config(config)
     candle_range = max(float(row['high']) - float(row['low']), 0.0001)
-    body_ratio = abs(float(row['close']) - float(row['open'])) / candle_range
-    lower_wick_ratio = (min(float(row['open']), float(row['close'])) - float(row['low'])) / candle_range
-    upper_wick_ratio = (float(row['high']) - max(float(row['open']), float(row['close']))) / candle_range
+    body = max(abs(float(row['close']) - float(row['open'])), 0.01)
+    lower_wick = max(min(float(row['open']), float(row['close'])) - float(row['low']), 0.0)
+    upper_wick = max(float(row['high']) - max(float(row['open']), float(row['close'])), 0.0)
+    wick_body_ratio = (lower_wick / body) if str(side or '').strip().upper() == 'BUY' else (upper_wick / body)
+    wick_dominance = (lower_wick / max(upper_wick, 0.01)) if str(side or '').strip().upper() == 'BUY' else (upper_wick / max(lower_wick, 0.01))
+    close_pos = (float(row['close']) - float(row['low'])) / candle_range
     normalized_side = str(side or '').strip().upper()
     if normalized_side == 'BUY':
-        return lower_wick_ratio >= float(cfg.min_rejection_wick_ratio) and body_ratio >= float(cfg.min_confirmation_body_ratio) * 0.70 and float(row['close']) > float(row['open'])
+        return wick_body_ratio >= float(cfg.strict_rejection_wick_body_ratio) and wick_dominance >= float(cfg.strict_wick_dominance_ratio) and close_pos >= float(cfg.strict_close_position_buy)
     if normalized_side == 'SELL':
-        return upper_wick_ratio >= float(cfg.min_rejection_wick_ratio) and body_ratio >= float(cfg.min_confirmation_body_ratio) * 0.70 and float(row['close']) < float(row['open'])
+        return wick_body_ratio >= float(cfg.strict_rejection_wick_body_ratio) and wick_dominance >= float(cfg.strict_wick_dominance_ratio) and close_pos <= float(cfg.strict_close_position_sell)
     return False
 
 

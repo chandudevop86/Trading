@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import sys
 import types
@@ -79,8 +79,8 @@ def _minimal_theme() -> None:
     apply_minimal_theme()
 
 
-def _render_summary_cards(trades: list[dict[str, object]], summary: dict[str, object], todays_trades: int) -> None:
-    render_summary_cards(trades, summary, todays_trades)
+def _render_summary_cards(trades: list[dict[str, object]], summary: dict[str, object], todays_trades: int, candles: pd.DataFrame | None = None) -> None:
+    render_summary_cards(trades, summary, todays_trades, candles)
 
 
 def _render_operator_panels(status: str, trades: list[dict[str, object]], symbol: str, timeframe: str, period: str, broker_choice: str, broker_status: str) -> None:
@@ -457,8 +457,8 @@ def _button_clicked(button_host: object, label: str, *, legacy_label: str = '', 
     return False
 
 
-def _render_dashboard_tab(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int) -> None:
-    _render_summary_cards(trades, active_summary, todays_trades)
+def _render_dashboard_tab(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int, candles: pd.DataFrame | None = None) -> None:
+    _render_summary_cards(trades, active_summary, todays_trades, candles)
     left, right = st.columns(2)
     with left:
         st.markdown('### Recent Signals')

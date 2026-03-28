@@ -252,10 +252,11 @@ def enrich_ohlcv_metrics(frame: pd.DataFrame, *, expected_interval_minutes: int 
         extra_columns = [
             "session_date", "session_day", "session_time", "time_block",
             "range", "body", "body_ratio", "upper_wick", "lower_wick",
+            "true_range", "atr_14", "atr_pct",
             "avg_range_20", "avg_volume_20", "avg_range", "avg_volume", "volume_ratio", "range_ratio",
-            "vwap", "above_vwap", "day_bias", "is_bullish", "is_bearish",
+            "vwap", "above_vwap", "day_bias", "is_bullish", "is_bearish", "vwap_deviation_pct", "expansion_ratio",
             "interval_minutes", "interval_valid", "gap_flag",
-            "opening_range_high", "opening_range_low", "opening_high", "opening_low", "opening_range",
+            "opening_range_high", "opening_range_low", "opening_high", "opening_low", "opening_range", "opening_volatility_pct",
             "opening_range_breakout_up", "opening_range_breakout_down",
             "intraday_high_so_far", "intraday_low_so_far",
             "previous_day_high", "previous_day_low", "previous_day_close", "pdh", "pdl",
@@ -273,6 +274,18 @@ def enrich_ohlcv_metrics(frame: pd.DataFrame, *, expected_interval_minutes: int 
     out["body_ratio"] = (out["body"] / out["range"].replace(0, pd.NA)).fillna(0.0)
     out["upper_wick"] = (out["high"] - out[["open", "close"]].max(axis=1)).clip(lower=0.0)
     out["lower_wick"] = (out[["open", "close"]].min(axis=1) - out["low"]).clip(lower=0.0)
+
+    previous_close = out.groupby("session_date")["close"].shift(1)
+    out["true_range"] = pd.concat(
+        [
+            out["high"] - out["low"],
+            (out["high"] - previous_close).abs(),
+            (out["low"] - previous_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1).fillna(out["range"])
+    out["atr_14"] = out.groupby("session_date")["true_range"].transform(lambda series: series.rolling(14, min_periods=1).mean())
+    out["atr_pct"] = ((out["atr_14"] / out["close"].where(out["close"] > 0)) * 100.0).fillna(0.0)
 
     out["avg_range_20"] = out.groupby("session_date")["range"].transform(lambda series: series.rolling(20, min_periods=1).mean())
     out["avg_volume_20"] = out.groupby("session_date")["volume"].transform(lambda series: series.rolling(20, min_periods=1).mean())
@@ -310,8 +323,14 @@ def enrich_ohlcv_metrics(frame: pd.DataFrame, *, expected_interval_minutes: int 
     out["opening_high"] = out["opening_range_high"]
     out["opening_low"] = out["opening_range_low"]
     out["opening_range"] = (out["opening_range_high"] - out["opening_range_low"]).clip(lower=0.0)
+    session_open = out.groupby("session_date")["open"].transform("first")
+    out["opening_volatility_pct"] = ((out["opening_range"] / session_open.where(session_open > 0)) * 100.0).fillna(0.0)
     out["opening_range_breakout_up"] = out["close"] > out["opening_range_high"]
     out["opening_range_breakout_down"] = out["close"] < out["opening_range_low"]
+
+    out["vwap_deviation_pct"] = (((out["close"] - out["vwap"]).abs() / out["vwap"].where(out["vwap"] > 0)) * 100.0).fillna(0.0)
+    avg_candle_10 = out.groupby("session_date")["range"].transform(lambda series: series.rolling(10, min_periods=1).mean())
+    out["expansion_ratio"] = (out["range"] / avg_candle_10.where(avg_candle_10 > 0)).fillna(0.0)
 
     out["intraday_high_so_far"] = out.groupby("session_date")["high"].cummax()
     out["intraday_low_so_far"] = out.groupby("session_date")["low"].cummin()

@@ -11,6 +11,7 @@ from src.csv_io import read_csv_rows, write_csv_rows
 from src.strategy_common import session_allowed, session_window
 from src.telegram_notifier import send_telegram_message
 from src.trade_safety import calculate_net_pnl, daily_limit_reached
+from src.volatility_filter import evaluate_volatility_snapshot
 from src.trading_core import ScoringConfig, ScoreThresholds, StandardTrade, append_log, prepare_trading_data, safe_quantity, weighted_score
 
 
@@ -23,6 +24,13 @@ class Candle:
     close: float
     volume: float
     vwap: float = 0.0
+    atr_pct: float = 0.0
+    opening_volatility_pct: float = 0.0
+    vwap_deviation_pct: float = 0.0
+    expansion_ratio: float = 0.0
+    volatility_score: float = 0.0
+    volatility_decision: str = ''
+    market_state: str = ''
 
 
 @dataclass(slots=True)
@@ -50,6 +58,8 @@ class BreakoutConfig:
     afternoon_session_start: str = '13:46'
     afternoon_session_end: str = '14:45'
     min_breakout_take_score: float = 12.0
+    use_volatility_filter: bool = True
+    min_volatility_score: int = 6
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
 
     def __post_init__(self) -> None:
@@ -97,6 +107,14 @@ def load_candles(rows: list[dict[str, str]]) -> list[Candle]:
                     low=float(normalized.get('low', 0) or 0),
                     close=float(normalized.get('close', 0) or 0),
                     volume=float(normalized.get('volume', 0) or 0),
+                    vwap=float(normalized.get('vwap', 0) or 0),
+                    atr_pct=float(normalized.get('atr_pct', 0) or 0),
+                    opening_volatility_pct=float(normalized.get('opening_volatility_pct', 0) or 0),
+                    vwap_deviation_pct=float(normalized.get('vwap_deviation_pct', 0) or 0),
+                    expansion_ratio=float(normalized.get('expansion_ratio', 0) or 0),
+                    volatility_score=float(normalized.get('volatility_score', 0) or 0),
+                    volatility_decision=str(normalized.get('volatility_decision', '') or ''),
+                    market_state=str(normalized.get('market_state', '') or ''),
                 )
             )
         except Exception as exc:
@@ -359,6 +377,30 @@ def _minutes_between(start: datetime, end: datetime) -> int | None:
         return None
 
 
+def _volatility_snapshot(day_candles: list[Candle], idx: int, breakout_candle: Candle, opening_range: Candle, atr_value: float) -> dict[str, object]:
+    atr_pct = breakout_candle.atr_pct if breakout_candle.atr_pct > 0 else ((atr_value / breakout_candle.close) * 100.0 if breakout_candle.close > 0 else 0.0)
+    opening_volatility_pct = breakout_candle.opening_volatility_pct
+    if opening_volatility_pct <= 0:
+        opening_width = max(float(opening_range.high) - float(opening_range.low), 0.0)
+        opening_reference = max(abs(float(opening_range.open)), 0.0001)
+        opening_volatility_pct = (opening_width / opening_reference) * 100.0
+    vwap_deviation_pct = breakout_candle.vwap_deviation_pct
+    if vwap_deviation_pct <= 0 and breakout_candle.vwap > 0:
+        vwap_deviation_pct = abs(float(breakout_candle.close) - float(breakout_candle.vwap)) / float(breakout_candle.vwap) * 100.0
+    expansion_ratio = breakout_candle.expansion_ratio
+    if expansion_ratio <= 0:
+        avg_range_10 = max(_avg_candle_range(day_candles, idx, lookback=10), 0.0001)
+        expansion_ratio = max(float(breakout_candle.high) - float(breakout_candle.low), 0.0) / avg_range_10
+    return evaluate_volatility_snapshot(
+        {
+            'atr_pct': atr_pct,
+            'opening_volatility_pct': opening_volatility_pct,
+            'vwap_deviation_pct': vwap_deviation_pct,
+            'expansion_ratio': expansion_ratio,
+        }
+    )
+
+
 def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Candle, *, day_candles: list[Candle], idx: int, regime: str, bias: str, trigger: float, volume_ratio: float, vwap_slope: float, atr_value: float, structure_ok: bool, structure_label: str, config: BreakoutConfig) -> tuple[float, str, dict[str, float], str, bool] | None:
     previous_candle = day_candles[idx - 1] if idx > 0 else breakout_candle
     broke_level = breakout_candle.close > trigger if side == 'BUY' else breakout_candle.close < trigger
@@ -512,6 +554,12 @@ def generate_trades(
                 if score_result is None:
                     continue
                 score_value, reason, components, rejection_reason, secondary_entry = score_result
+                volatility_snapshot = _volatility_snapshot(day_candles, idx, breakout_candle, opening_range, atr_value)
+                if cfg.use_volatility_filter and (
+                    not bool(volatility_snapshot.get('trade_allowed'))
+                    or int(volatility_snapshot.get('volatility_score', 0)) < int(cfg.min_volatility_score)
+                ):
+                    continue
 
                 entry = _entry_with_slippage(side, trigger, atr_value)
                 structure_stop = min(breakout_candle.low, confirmation_candle.low) if side == 'BUY' else max(breakout_candle.high, confirmation_candle.high)
@@ -627,6 +675,13 @@ def generate_trades(
                         'vwap_aligned': 'YES' if cfg.require_vwap_alignment else 'OPTIONAL',
                         'vwap_gate': 'PASS' if cfg.require_vwap_alignment else 'OPTIONAL',
                         'secondary_entries': 'ON' if cfg.allow_secondary_entries else 'OFF',
+                        'volatility_score': int(volatility_snapshot.get('volatility_score', 0)),
+                        'volatility_decision': str(volatility_snapshot.get('volatility_decision', 'NO_TRADE_LOW_VOL')),
+                        'volatility_market_state': str(volatility_snapshot.get('market_state', 'QUIET')),
+                        'atr_pct': round(float(volatility_snapshot.get('atr_pct', 0.0)), 2),
+                        'opening_volatility_pct': round(float(volatility_snapshot.get('opening_volatility_pct', 0.0)), 2),
+                        'vwap_deviation_pct': round(float(volatility_snapshot.get('vwap_deviation_pct', 0.0)), 2),
+                        'expansion_ratio': round(float(volatility_snapshot.get('expansion_ratio', 0.0)), 2),
                         'exit_time': exit_time.strftime('%Y-%m-%d %H:%M:%S'),
                         'exit_price': round(float(exit_price), 4),
                         'exit_reason': exit_reason,

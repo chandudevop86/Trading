@@ -312,17 +312,66 @@ def _safe_log_preview(path: Path, lines: int = 10) -> str:
 def _header_badge(summary: dict[str, object], broker_choice: str) -> str:
     deployment_ready = str(summary.get('deployment_ready', 'NO') or 'NO').upper() == 'YES'
     if broker_choice == 'Paper' or not deployment_ready:
-        return 'Paper Active | Live Locked'
-    return 'Live Eligible'
+        return 'PAPER ACTIVE | LIVE LOCKED'
+    return 'LIVE ELIGIBLE'
+
+
+def _header_go_live(summary: dict[str, object]) -> str:
+    deployment_ready = str(summary.get('deployment_ready', 'NO') or 'NO').upper() == 'YES'
+    validation_passed = str(summary.get('validation_passed', summary.get('deployment_ready', 'NO')) or 'NO').upper() == 'YES'
+    if deployment_ready and validation_passed:
+        return 'PASS_FOR_SMALL_CAPITAL'
+    if validation_passed:
+        return 'PAPER_ONLY'
+    return 'FAIL_NOT_READY'
+
+
+def _header_next_action(summary: dict[str, object], broker_choice: str) -> str:
+    blockers = str(summary.get('deployment_blockers', '') or '').strip()
+    deployment_ready = str(summary.get('deployment_ready', 'NO') or 'NO').upper() == 'YES'
+    if deployment_ready and broker_choice != 'Paper':
+        return 'Live can remain locked until operator approval is explicit.'
+    if deployment_ready:
+        return 'Run paper execution and verify clean logs before any live promotion.'
+    if blockers:
+        return blockers
+    return 'Run a strict backtest and clear every validation blocker before deployment.'
 
 
 def _render_header(strategy: str, symbol: str, timeframe: str, mode: str, broker_choice: str, summary: dict[str, object]) -> None:
+    go_live_status = _header_go_live(summary)
+    live_permission = 'LIVE LOCKED' if broker_choice == 'Paper' or go_live_status != 'PASS_FOR_SMALL_CAPITAL' else 'LIVE ELIGIBLE'
+    total_trades = _safe_int(summary.get('total_trades', summary.get('closed_trades', 0)))
+    expectancy = round(_safe_float(summary.get('expectancy_per_trade')), 2)
+    second_half_expectancy = round(_safe_float(summary.get('second_half_expectancy_per_trade')), 2)
+    profit_factor = summary.get('profit_factor', 0.0)
+    max_drawdown_pct = round(_safe_float(summary.get('max_drawdown_pct')), 2)
+    drawdown_proven = str(summary.get('drawdown_proven', 'NO') or 'NO')
+    next_action = _header_next_action(summary, broker_choice)
     st.markdown(
         (
-            '<div class="desk-card">'
-            '<h2 style="margin:0;color:#e2e8f0;">Production Trading Desk</h2>'
-            '<p style="margin:8px 0 0 0;color:#94a3b8;">Retest-confirmed Nifty intraday operator surface with validation-first deployment discipline.</p>'
-            f'<p style="margin:12px 0 0 0;color:#cbd5e1;">{_header_badge(summary, broker_choice)} | {strategy} | {symbol} | {timeframe} | {mode}</p>'
+            '<div style="background:linear-gradient(145deg,#0f172a 0%,#111827 55%,#1f2937 100%);border:1px solid rgba(148,163,184,0.18);border-radius:24px;padding:24px 24px 18px 24px;box-shadow:0 18px 45px rgba(15,23,42,0.18);margin-bottom:16px;">'
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">'
+            '<div>'
+            '<div style="font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#fca5a5;font-weight:700;">Validation-First Operator Surface</div>'
+            '<h2 style="margin:8px 0 0 0;color:#f8fafc;font-size:40px;line-height:1.05;">Production Trading Desk</h2>'
+            '<p style="margin:10px 0 0 0;color:#cbd5e1;font-size:15px;max-width:760px;">Retest-only Nifty intraday deployment console with VWAP discipline, strict session filtering, real drawdown proof, and hard go-live gates.</p>'
+            '</div>'
+            f'<div style="padding:10px 14px;border-radius:999px;background:#1e293b;border:1px solid rgba(248,250,252,0.12);color:#f8fafc;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">{_header_badge(summary, broker_choice)}</div>'
+            '</div>'
+            '<div style="display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;margin-top:18px;">'
+            f'<div style="background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:14px;"><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Go-Live Status</div><div style="margin-top:6px;font-size:20px;font-weight:800;color:#f8fafc;">{go_live_status}</div></div>'
+            f'<div style="background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:14px;"><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Live Permission</div><div style="margin-top:6px;font-size:20px;font-weight:800;color:#f8fafc;">{live_permission}</div></div>'
+            f'<div style="background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:14px;"><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Active Strategy</div><div style="margin-top:6px;font-size:20px;font-weight:800;color:#f8fafc;">{strategy}</div><div style="margin-top:6px;font-size:13px;color:#cbd5e1;">{symbol} | {timeframe} | {mode}</div></div>'
+            f'<div style="background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:14px;"><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Validation Window</div><div style="margin-top:6px;font-size:20px;font-weight:800;color:#f8fafc;">{total_trades} Trades</div><div style="margin-top:6px;font-size:13px;color:#cbd5e1;">Target: 150-200 clean trades</div></div>'
+            '</div>'
+            '<div style="display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;margin-top:12px;">'
+            f'<div style="background:rgba(30,41,59,0.82);border-radius:16px;padding:12px;"><div style="font-size:12px;color:#94a3b8;">Expectancy/Trade</div><div style="margin-top:4px;font-size:18px;font-weight:800;color:#f8fafc;">{expectancy:.2f}</div></div>'
+            f'<div style="background:rgba(30,41,59,0.82);border-radius:16px;padding:12px;"><div style="font-size:12px;color:#94a3b8;">2H Expectancy</div><div style="margin-top:4px;font-size:18px;font-weight:800;color:#f8fafc;">{second_half_expectancy:.2f}</div></div>'
+            f'<div style="background:rgba(30,41,59,0.82);border-radius:16px;padding:12px;"><div style="font-size:12px;color:#94a3b8;">Profit Factor</div><div style="margin-top:4px;font-size:18px;font-weight:800;color:#f8fafc;">{profit_factor}</div></div>'
+            f'<div style="background:rgba(30,41,59,0.82);border-radius:16px;padding:12px;"><div style="font-size:12px;color:#94a3b8;">Drawdown</div><div style="margin-top:4px;font-size:18px;font-weight:800;color:#f8fafc;">{max_drawdown_pct:.2f}%</div><div style="margin-top:4px;font-size:12px;color:#cbd5e1;">Proof: {drawdown_proven}</div></div>'
+            '</div>'
+            f'<div style="margin-top:14px;padding:14px 16px;border-radius:16px;background:rgba(248,250,252,0.06);border:1px solid rgba(248,250,252,0.08);"><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Next Action</div><div style="margin-top:6px;color:#f8fafc;font-size:15px;font-weight:600;">{next_action}</div></div>'
             '</div>'
         ),
         unsafe_allow_html=True,
@@ -351,7 +400,7 @@ def _render_validation_tab(summary: dict[str, object]) -> None:
 
     st.markdown('### Validation Gates')
     gates = pd.DataFrame([
-        {'gate': 'Trade count', 'rule': '100-200 trades'},
+        {'gate': 'Trade count', 'rule': '150-200 trades'},
         {'gate': 'Expectancy', 'rule': '> 0'},
         {'gate': 'Profit factor', 'rule': '> 1.30'},
         {'gate': 'Duplicate trades', 'rule': '= 0'},
@@ -445,8 +494,8 @@ def main() -> None:
         period = period_for_interval(timeframe)
         st.caption(f'Fetch window: {period}')
         action_row = st.columns(2)
-        run_clicked = action_row[0].button('Run', type='primary', use_container_width=True)
-        backtest_clicked = action_row[1].button('Backtest', use_container_width=True)
+        run_clicked = action_row[0].button('Start Paper', type='primary', use_container_width=True)
+        backtest_clicked = action_row[1].button('Run Backtest', use_container_width=True)
 
     normalized_symbol = symbol.strip() or DEFAULT_SYMBOL
     resting_summary = dict(st.session_state.get('backtest_summary', {}) or {})

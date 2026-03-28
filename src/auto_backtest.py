@@ -7,19 +7,26 @@ from pathlib import Path
 from typing import Any
 
 from src.backtest_engine import nifty_intraday_validation_config, summarize_trade_log
+from src.execution_engine import summarize_execution_result
 from src.live_ohlcv import fetch_live_ohlcv, write_csv
 from src.strategy_evaluator import rank_strategy_summaries
 from src.strategy_tuning import apply_strategy_benchmark, optimizer_report_rows
 from src.strategy_service import StrategyContext, generate_strategy_rows
 from src.trading_workflows import build_backtest_workflow, run_live_candidates, run_paper_candidates
 from src.runtime_persistence import persist_rows
+from src.validation_engine import (
+    default_nifty_intraday_go_live_config,
+    evaluate_go_live,
+    write_pass_fail_checklist_csv,
+    write_validation_summary_json,
+)
 
 DEFAULT_VALIDATION_THRESHOLDS: dict[str, float] = {
-    'min_trades': 20.0,
-    'min_win_rate_pct': 40.0,
-    'min_profit_factor': 1.2,
+    'min_trades': 100.0,
+    'min_win_rate_pct': 38.0,
+    'min_profit_factor': 1.3,
     'min_expectancy': 0.0,
-    'max_drawdown_pct': 15.0,
+    'max_drawdown_pct': 12.0,
     'min_net_pnl': 0.0,
 }
 
@@ -367,6 +374,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--optimizer-output', type=Path, default=Path('data/strategy_optimizer_report.csv'))
     parser.add_argument('--validation-output', type=Path, default=Path('data/backtest_validation.csv'))
     parser.add_argument('--validation-report-output', type=Path, default=Path('data/backtest_validation_report.csv'))
+    parser.add_argument('--go-live-output-json', type=Path, default=Path('data/go_live_validation_summary.json'))
+    parser.add_argument('--go-live-checklist-output', type=Path, default=Path('data/go_live_validation_checklist.csv'))
     parser.add_argument('--equity-curve-output', type=Path, default=Path('data/backtest_equity_curves.csv'))
     parser.add_argument('--paper-log-output', type=Path, default=Path('data/paper_trading_logs_all.csv'))
     parser.add_argument('--execution-type', default='PAPER', choices=['PAPER', 'LIVE', 'NONE'])
@@ -585,6 +594,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     executed_log_path = args.paper_log_output
     paper_rows: list[dict[str, object]] = []
+    execution_summary: dict[str, Any] = {
+        'execution_type': execution_type,
+        'execution_rows': 0,
+        'executed_count': 0,
+        'blocked_count': 0,
+        'skipped_count': 0,
+        'duplicate_trade_count': 0,
+        'invalid_trade_count': 0,
+        'execution_error_count': 0,
+        'execution_crash_count': 0,
+        'cooldown_controls_enforced': 'NO',
+        'duplicate_controls_enforced': 'NO',
+        'paper_execution_crashes': 'NO',
+    }
 
     if execution_type == 'NONE':
         paper_rows = []
@@ -603,13 +626,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             live_result = run_live_candidates(
                 candidates,
                 output_path=executed_log_path,
-                deduplicate=False,
+                deduplicate=True,
                 broker_name=live_broker,
                 security_map=security_map,
                 max_trades_per_day=max_trades_per_day,
                 max_daily_loss=max_daily_loss,
             )
             paper_rows = list(getattr(live_result.execution_result, 'rows', []))
+            execution_summary = summarize_execution_result(live_result.execution_result, deduplicate_enabled=True, execution_type='LIVE')
         else:
             print('[RESULT] No eligible live candidates after validation gates')
     else:
@@ -618,11 +642,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             paper_result = run_paper_candidates(
                 candidates,
                 output_path=args.paper_log_output,
-                deduplicate=False,
+                deduplicate=True,
                 max_trades_per_day=max_trades_per_day,
                 max_daily_loss=max_daily_loss,
             )
             paper_rows = list(getattr(paper_result.execution_result, 'rows', []))
+            execution_summary = summarize_execution_result(paper_result.execution_result, deduplicate_enabled=True, execution_type='PAPER')
         else:
             print('[RESULT] No eligible paper candidates after validation gates')
     validation_output = Path(getattr(args, 'validation_output', Path('data/backtest_validation.csv')))
@@ -635,6 +660,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             summary_output=validation_summary_output,
             validation_output=validation_output,
             validation=nifty_intraday_validation_config(),
+            duplicate_controls_enforced=True,
         )
     elif not paper_rows:
         validation_summary = summarize_trade_log(
@@ -644,7 +670,24 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             summary_output=validation_summary_output,
             validation_output=validation_output,
             validation=nifty_intraday_validation_config(),
+            duplicate_controls_enforced=execution_type == 'NONE',
         )
+
+    selected_backtest_summary = best_promotable or (ranked_summary_rows[0] if ranked_summary_rows else {})
+    merged_paper_summary = {**validation_summary, **execution_summary}
+    go_live_evaluation = evaluate_go_live(
+        selected_backtest_summary,
+        merged_paper_summary,
+        default_nifty_intraday_go_live_config(),
+    )
+    go_live_output_json = write_validation_summary_json(
+        getattr(args, 'go_live_output_json', Path('data/go_live_validation_summary.json')),
+        go_live_evaluation,
+    )
+    go_live_checklist_output = write_pass_fail_checklist_csv(
+        getattr(args, 'go_live_checklist_output', Path('data/go_live_validation_checklist.csv')),
+        go_live_evaluation,
+    )
 
     return {
         'summary_rows': summary_rows,
@@ -658,6 +701,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         'validation_report_output': str(getattr(args, 'validation_report_output', Path('data/backtest_validation_report.csv'))),
         'validation_summary_output': str(validation_summary_output),
         'validation_summary': validation_summary,
+        'execution_summary': execution_summary,
+        'go_live_evaluation': go_live_evaluation,
+        'go_live_output_json': str(go_live_output_json),
+        'go_live_checklist_output': str(go_live_checklist_output),
         'equity_curve_rows': equity_curve_rows,
         'equity_curve_output': str(equity_curve_output),
         'execution_type': execution_type,
@@ -706,9 +753,20 @@ def main() -> None:
         print('Best promotable strategy: none')
     print(f"Strategy ranking: {out.get('ranking_output', '')}")
     print(f"Optimizer report: {out.get('optimizer_output', '')}")
+    go_live_ui = out.get('go_live_evaluation', {}).get('ui_summary', {})
+    print(f"Go-live status: {go_live_ui.get('go_live_status', 'UNKNOWN')}")
+    print(f"Passed checks: {', '.join(go_live_ui.get('passed_checks', [])) or 'NONE'}")
+    print(f"Failed checks: {', '.join(go_live_ui.get('failed_checks', [])) or 'NONE'}")
+    print(f"Next action: {go_live_ui.get('next_action', '')}")
     print(f"Validation report: {out.get('validation_report_output', '')}")
+    print(f"Go-live JSON: {out.get('go_live_output_json', '')}")
+    print(f"Go-live checklist: {out.get('go_live_checklist_output', '')}")
     print(f"Equity curves: {out['equity_curve_output']}")
 
 
 if __name__ == '__main__':
     main()
+
+
+
+

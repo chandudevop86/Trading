@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
@@ -9,6 +9,7 @@ import pandas as pd
 
 from src.runtime_config import RuntimeConfig
 from src.trading_core import append_log, prepare_trading_data, write_rows
+from src.validation_engine import required_win_rate_pct
 
 RUNTIME_CONFIG = RuntimeConfig.load()
 BACKTEST_TRADES_OUTPUT = RUNTIME_CONFIG.paths.backtest_trades_csv
@@ -21,11 +22,11 @@ class BacktestValidationConfig:
     min_trades: int = 100
     target_trades: int = 150
     max_trades: int = 200
-    min_profit_factor: float = 1.1
+    min_profit_factor: float = 1.3
     min_expectancy_per_trade: float = 0.0
     min_win_rate: float = 0.0
     min_avg_rr: float = 0.8
-    max_drawdown_pct: float = 20.0
+    max_drawdown_pct: float = 12.0
     max_duplicate_rejections: int = 0
     require_positive_expectancy: bool = True
 
@@ -37,11 +38,11 @@ def nifty_intraday_validation_config() -> BacktestValidationConfig:
         min_trades=100,
         target_trades=150,
         max_trades=200,
-        min_profit_factor=1.2,
+        min_profit_factor=1.3,
         min_expectancy_per_trade=0.0,
         min_win_rate=38.0,
         min_avg_rr=1.0,
-        max_drawdown_pct=15.0,
+        max_drawdown_pct=12.0,
         require_positive_expectancy=True,
     )
 
@@ -491,6 +492,13 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
         'trades_output': str(cfg.trades_output),
         'summary_output': str(cfg.summary_output),
         'validation_output': str(cfg.validation_output),
+        'market_session': '09:15-15:30',
+        'duplicate_controls_enforced': 'YES' if int(cfg.duplicate_cooldown_minutes) > 0 else 'NO',
+        'cooldown_controls_enforced': 'YES' if int(cfg.duplicate_cooldown_minutes) > 0 else 'NO',
+        'duplicate_trade_count': 0,
+        'malformed_trade_count': 0,
+        'invalid_trade_count': 0,
+        'execution_error_count': 0,
     }
 
 
@@ -500,10 +508,12 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
     win_rate = _safe_float(summary.get('win_rate'))
     profit_factor = float('inf') if str(summary.get('profit_factor', '')).strip().lower() == 'inf' else _safe_float(summary.get('profit_factor'))
     expectancy = _safe_float(summary.get('expectancy_per_trade'))
-    avg_rr = _safe_float(summary.get('avg_rr'))
+    avg_rr = _safe_float(summary.get('avg_rr'), default=2.0)
     max_drawdown_pct = _safe_float(summary.get('max_drawdown_pct'))
     positive_expectancy = str(summary.get('positive_expectancy', 'NO')).upper() == 'YES' or expectancy > 0
-    duplicate_rejections = _safe_int(summary.get('duplicate_rejections'))
+    duplicate_rejections = _safe_int(summary.get('duplicate_rejections', summary.get('duplicate_trade_count')))
+    invalid_trade_count = _safe_int(summary.get('invalid_trade_count', summary.get('malformed_trade_count')))
+    required_win_rate = max(float(rules.min_win_rate), required_win_rate_pct(avg_rr))
 
     blockers: list[str] = []
     notes: list[str] = []
@@ -523,14 +533,16 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
         blockers.append(f'EXPECTANCY<{float(rules.min_expectancy_per_trade):.2f}')
     if profit_factor != float('inf') and profit_factor < float(rules.min_profit_factor):
         blockers.append(f'PROFIT_FACTOR<{float(rules.min_profit_factor):.2f}')
-    if win_rate < float(rules.min_win_rate):
-        blockers.append(f'WIN_RATE<{float(rules.min_win_rate):.2f}')
+    if win_rate < float(required_win_rate):
+        blockers.append(f'WIN_RATE<{float(required_win_rate):.2f}')
     if avg_rr < float(rules.min_avg_rr):
         blockers.append(f'AVG_RR<{float(rules.min_avg_rr):.2f}')
     if max_drawdown_pct > float(rules.max_drawdown_pct):
         blockers.append(f'MAX_DD_PCT>{float(rules.max_drawdown_pct):.2f}')
     if duplicate_rejections > int(rules.max_duplicate_rejections):
         blockers.append(f'DUPLICATES>{int(rules.max_duplicate_rejections)}')
+    if invalid_trade_count > 0:
+        blockers.append('INVALID_TRADES>0')
 
     deployment_ready = 'YES' if not blockers else 'NO'
     target_gap = max(int(rules.target_trades) - total_trades, 0)
@@ -551,10 +563,12 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
         'win_rate': round(win_rate, 2),
         'avg_rr': round(avg_rr, 2),
         'max_drawdown_pct': round(max_drawdown_pct, 2),
-        'required_win_rate': round(float(rules.min_win_rate), 2),
+        'required_win_rate': round(float(required_win_rate), 2),
         'required_profit_factor': round(float(rules.min_profit_factor), 2),
         'max_duplicate_rejections': int(rules.max_duplicate_rejections),
         'duplicate_rejections': duplicate_rejections,
+        'duplicate_trade_count': duplicate_rejections,
+        'invalid_trade_count': invalid_trade_count,
         'validation_passed': deployment_ready,
         'deployment_ready': deployment_ready,
         'deployment_blockers': '; '.join(blockers),
@@ -674,10 +688,16 @@ def run_backtest(df: Any, strategy_func: Callable[..., list[dict[str, object]]],
     write_rows(cfg.trades_output, all_rows)
 
     summary = _summary_from_trades(closed_trades, cfg)
+    malformed_reasons = {'invalid_side', 'invalid_timestamp', 'invalid_entry', 'invalid_stop_loss', 'invalid_target', 'buy_levels_not_ordered', 'sell_levels_not_ordered'}
     summary['rejected_candidates'] = len(rejected_rows)
     summary['closed_trades'] = len(closed_trades)
     summary['duplicate_rejections'] = len([row for row in rejected_rows if str(row.get('rejection_reason', '')) in {'DUPLICATE_CANDIDATE', 'DUPLICATE_COOLDOWN'}])
+    summary['duplicate_trade_count'] = int(summary['duplicate_rejections'])
     summary['risk_rule_rejections'] = len([row for row in rejected_rows if str(row.get('rejection_reason', '')) in {'MAX_TRADES_PER_DAY', 'MAX_DAILY_LOSS', 'OVERLAPPING_TRADE'}])
+    summary['malformed_trade_count'] = len([row for row in rejected_rows if str(row.get('rejection_reason', '')).lower() in malformed_reasons])
+    summary['invalid_trade_count'] = int(summary['malformed_trade_count'])
+    summary['duplicate_controls_enforced'] = 'YES' if int(cfg.duplicate_cooldown_minutes) > 0 else 'NO'
+    summary['cooldown_controls_enforced'] = 'YES' if int(cfg.duplicate_cooldown_minutes) > 0 else 'NO'
     validation = _validation_report(summary, cfg)
     summary.update(validation)
     write_rows(cfg.summary_output, [summary])
@@ -693,6 +713,7 @@ def summarize_trade_log(
     summary_output: Path = BACKTEST_SUMMARY_OUTPUT,
     validation_output: Path = BACKTEST_VALIDATION_OUTPUT,
     validation: BacktestValidationConfig | None = None,
+    duplicate_controls_enforced: bool | None = None,
 ) -> dict[str, object]:
     """Summarize paper/backtest rows and return the same live-readiness verdict used by backtests."""
     if isinstance(trade_log, (str, Path)):
@@ -714,13 +735,30 @@ def summarize_trade_log(
         validation=validation or BacktestValidationConfig(),
     )
     summary = _summary_from_trades(closed_rows, cfg)
+    duplicate_reasons = {'DUPLICATE_CANDIDATE', 'DUPLICATE_COOLDOWN', 'DUPLICATE_ACTIVE_TRADE', 'DUPLICATE_EXECUTED_TRADE', 'DUPLICATE_BATCH_TRADE', 'DUPLICATE_SIGNAL_KEY', 'DUPLICATE_SIGNAL_COOLDOWN'}
+    malformed_reasons = {'INVALID_SIDE', 'INVALID_TIMESTAMP', 'INVALID_ENTRY', 'INVALID_STOP_LOSS', 'INVALID_TARGET', 'BUY_LEVELS_NOT_ORDERED', 'SELL_LEVELS_NOT_ORDERED', 'MISSING_PRICE', 'MISSING_QUANTITY', 'MISSING_TIMESTAMP', 'MISSING_STOP_LOSS', 'MISSING_TARGET', 'INVALID_TRADE_LEVELS'}
     summary['rejected_candidates'] = len([row for row in rows if str(row.get('trade_status', '')).lower() == 'rejected'])
     summary['closed_trades'] = len(closed_rows)
+    summary['duplicate_rejections'] = len([row for row in rows if str(row.get('duplicate_reason', row.get('rejection_reason', ''))).strip().upper() in duplicate_reasons])
+    summary['duplicate_trade_count'] = int(summary['duplicate_rejections'])
+    summary['malformed_trade_count'] = len([row for row in rows if str(row.get('validation_error', row.get('rejection_reason', ''))).strip().upper() in malformed_reasons])
+    summary['invalid_trade_count'] = int(summary['malformed_trade_count'])
+    summary['execution_error_count'] = len([row for row in rows if str(row.get('execution_status', '')).strip().upper() == 'ERROR' or str(row.get('trade_status', '')).strip().upper() == 'ERROR'])
+    enforced = duplicate_controls_enforced if duplicate_controls_enforced is not None else summary['duplicate_trade_count'] == 0
+    summary['duplicate_controls_enforced'] = 'YES' if enforced else 'NO'
+    summary['cooldown_controls_enforced'] = 'YES' if enforced else 'NO'
+    summary['market_session'] = '09:15-15:30'
     validation_row = _validation_report(summary, cfg)
     summary.update(validation_row)
     write_rows(summary_output, [summary])
     write_rows(validation_output, [validation_row])
     return summary
+
+
+
+
+
+
 
 
 

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import hashlib
@@ -1453,6 +1453,49 @@ def execute_paper_trades(candidates: list[dict[str, object]], output_path: Path,
 def execute_live_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, max_trades_per_day: int | None = None, max_daily_loss: float | None = None, max_open_trades: int | None = None, live_enabled: bool | None = None, symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None, max_order_quantity: int | None = None, max_order_value: float | None = None, order_history_path: Path | None = None, optimizer_report_path: Path | None = None, enforce_optimizer_gate: bool | None = None) -> ExecutionResult:
     return _execute_candidates(candidates, output_path, execution_type="LIVE", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, max_open_trades=max_open_trades, broker_client=broker_client, broker_name=broker_name, security_map=security_map, live_enabled=live_enabled, symbol_allowlist=symbol_allowlist, max_order_quantity=max_order_quantity, max_order_value=max_order_value, order_history_path=order_history_path, optimizer_report_path=optimizer_report_path, enforce_optimizer_gate=enforce_optimizer_gate)
 
+
+
+def summarize_execution_result(
+    result: ExecutionResult,
+    *,
+    deduplicate_enabled: bool,
+    execution_type: str,
+) -> dict[str, object]:
+    """Summarize execution outcomes for go-live validation."""
+    malformed_reasons = {
+        'INVALID_SIDE',
+        'INVALID_TIMESTAMP',
+        'INVALID_ENTRY',
+        'INVALID_STOP_LOSS',
+        'INVALID_TARGET',
+        'BUY_LEVELS_NOT_ORDERED',
+        'SELL_LEVELS_NOT_ORDERED',
+        'MISSING_PRICE',
+        'MISSING_QUANTITY',
+        'MISSING_TIMESTAMP',
+        'MISSING_STOP_LOSS',
+        'MISSING_TARGET',
+        'INVALID_TRADE_LEVELS',
+    }
+    invalid_trade_count = 0
+    for row in list(result.skipped_rows) + list(result.error_rows):
+        reason = _normalize_text(row.get("validation_error") or row.get("blocked_reason") or row.get("risk_limit_reason"))
+        if reason in malformed_reasons:
+            invalid_trade_count += 1
+    return {
+        'execution_type': str(execution_type or '').upper(),
+        'execution_rows': len(result.rows),
+        'executed_count': int(result.executed_count),
+        'blocked_count': int(result.blocked_count),
+        'skipped_count': int(result.skipped_count),
+        'duplicate_trade_count': int(result.duplicate_count),
+        'invalid_trade_count': int(invalid_trade_count),
+        'execution_error_count': int(result.error_count),
+        'execution_crash_count': int(result.error_count),
+        'cooldown_controls_enforced': 'YES' if deduplicate_enabled else 'NO',
+        'duplicate_controls_enforced': 'YES' if deduplicate_enabled else 'NO',
+        'paper_execution_crashes': 'NO' if int(result.error_count) == 0 else 'YES',
+    }
 
 def _reconcile_execution_status(broker_status: str) -> str:
     normalized = str(broker_status or "").strip().upper()

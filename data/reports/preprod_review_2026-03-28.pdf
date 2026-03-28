@@ -1,0 +1,49 @@
+%PDF-1.4
+1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj
+2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj
+3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources<< /Font<< /F1 4 0 R >> >> /Contents 5 0 R >>endobj
+4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj
+5 0 obj<< /Length 1877 >>stream
+BT
+/F1 12 Tf
+72 770 Td
+(Pre-Production Paper-Trading Review) Tj
+0 -14 Td (Review generated: 2026-03-28 18:29:22) Tj
+0 -14 Td () Tj
+0 -14 Td (Overall result: PASS) Tj
+0 -14 Td (This review checks the current paper-trading surface only. It is not approval for live trading.) Tj
+0 -14 Td () Tj
+0 -14 Td (Suite results:) Tj
+0 -14 Td (Functional: PASS | test_compatibility_suite.py | tests=6 | failures=0 | errors=0) Tj
+0 -14 Td (Notes: Imports, preprocessing, end-to-end operator flow, and paper-broker safety.) Tj
+0 -14 Td (Functional: PASS | test_trade_validation_service.py | tests=9 | failures=0 | errors=0) Tj
+0 -14 Td (Notes: Shared trade metrics, timestamp parsing, OHLCV normalization, and paper readiness.) Tj
+0 -14 Td (Functional: PASS | test_execution_engine.py | tests=36 | failures=0 | errors=0) Tj
+0 -14 Td (Notes: Execution safety, duplicate prevention, daily limits, and live compatibility guards.) Tj
+0 -14 Td (UAT: PASS | test_trading_runtime_service.py | tests=6 | failures=0 | errors=0) Tj
+0 -14 Td (Notes: Operator run and backtest actions through the runtime service.) Tj
+0 -14 Td (UAT/UI: PASS | test_trading_page.py | tests=5 | failures=0 | errors=0) Tj
+0 -14 Td (Notes: Page-level operator flows, state cleanup, and safe failure rendering.) Tj
+0 -14 Td (UI: PASS | test_trading_ui_service.py | tests=3 | failures=0 | errors=0) Tj
+0 -14 Td (Notes: UI runtime initialization, request building, and UI logging support.) Tj
+0 -14 Td () Tj
+0 -14 Td (Missing output suggestions:) Tj
+0 -14 Td (- Add data/test_reports/latest_test_summary.json for quick CI-friendly health checks.) Tj
+0 -14 Td (- Add one plain-English operator readiness file for paper-trading status.) Tj
+0 -14 Td (- Show latest verification date and latest readiness result on the dashboard.) Tj
+0 -14 Td (- Keep one rolling PDF review file such as data/reports/preprod_review_latest.pdf.) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000056 00000 n 
+0000000111 00000 n 
+0000000233 00000 n 
+0000000301 00000 n 
+trailer<< /Size 6 /Root 1 0 R >>
+startxref
+2228
+%%EOF

@@ -1,0 +1,24 @@
+Review generated: 2026-03-28 18:29:22
+
+Overall result: PASS
+This review checks the current paper-trading surface only. It is not approval for live trading.
+
+Suite results:
+Functional: PASS | test_compatibility_suite.py | tests=6 | failures=0 | errors=0
+Notes: Imports, preprocessing, end-to-end operator flow, and paper-broker safety.
+Functional: PASS | test_trade_validation_service.py | tests=9 | failures=0 | errors=0
+Notes: Shared trade metrics, timestamp parsing, OHLCV normalization, and paper readiness.
+Functional: PASS | test_execution_engine.py | tests=36 | failures=0 | errors=0
+Notes: Execution safety, duplicate prevention, daily limits, and live compatibility guards.
+UAT: PASS | test_trading_runtime_service.py | tests=6 | failures=0 | errors=0
+Notes: Operator run and backtest actions through the runtime service.
+UAT/UI: PASS | test_trading_page.py | tests=5 | failures=0 | errors=0
+Notes: Page-level operator flows, state cleanup, and safe failure rendering.
+UI: PASS | test_trading_ui_service.py | tests=3 | failures=0 | errors=0
+Notes: UI runtime initialization, request building, and UI logging support.
+
+Missing output suggestions:
+- Add data/test_reports/latest_test_summary.json for quick CI-friendly health checks.
+- Add one plain-English operator readiness file for paper-trading status.
+- Show latest verification date and latest readiness result on the dashboard.
+- Keep one rolling PDF review file such as data/reports/preprod_review_latest.pdf.

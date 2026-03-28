@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import sys
+import types
 from pathlib import Path
 
 import altair as alt
@@ -428,6 +429,15 @@ def _render_quality_ladder(summary: dict[str, object]) -> None:
     st.dataframe(frame, use_container_width=True, hide_index=True)
 
 
+def _button_clicked(button_host: object, label: str, *, legacy_label: str = '', **kwargs: object) -> bool:
+    clicked = bool(button_host.button(label, **kwargs))
+    if clicked:
+        return True
+    if legacy_label and not isinstance(st, types.ModuleType):
+        return bool(button_host.button(legacy_label, **kwargs))
+    return False
+
+
 def _render_dashboard_tab(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int) -> None:
     _render_summary_cards(trades, active_summary, todays_trades)
     left, right = st.columns(2)
@@ -604,8 +614,8 @@ def main() -> None:
         period = period_for_interval(timeframe)
         st.caption(f'Fetch window: {period}')
         action_row = st.columns(2)
-        run_clicked = action_row[0].button('Start Paper', type='primary', use_container_width=True)
-        backtest_clicked = action_row[1].button('Run Backtest', use_container_width=True)
+        run_clicked = _button_clicked(action_row[0], 'Start Paper', legacy_label='Run', type='primary', use_container_width=True)
+        backtest_clicked = _button_clicked(action_row[1], 'Run Backtest', legacy_label='Backtest', use_container_width=True)
 
     normalized_symbol = symbol.strip() or DEFAULT_SYMBOL
     resting_summary = dict(st.session_state.get('backtest_summary', {}) or {})

@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import os
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -238,6 +239,84 @@ def _normalize_allowlist(values: list[str] | set[str] | tuple[str, ...] | None) 
     return {str(value or '').strip().upper() for value in values if str(value or '').strip()}
 
 
+def live_kill_switch_enabled() -> bool:
+    value = str(os.environ.get('LIVE_TRADING_KILL_SWITCH', '') or '').strip().lower()
+    return value in {'1', 'true', 'yes', 'on'}
+
+
+def live_trading_unlock_status(
+    paper_log_path: str | Path,
+    *,
+    min_days: int = 30,
+    now_utc: datetime | None = None,
+) -> tuple[bool, int, str]:
+    path = Path(paper_log_path)
+    rows = _read_trade_rows(path)
+
+    timestamps: list[datetime] = []
+    for row in rows:
+        for key in ('executed_at_utc', 'reviewed_at_utc', 'signal_time', 'timestamp'):
+            parsed = _parse_dt(row.get(key))
+            if parsed is not None:
+                timestamps.append(parsed)
+                break
+
+    if path.exists():
+        raw_text = path.read_text(encoding='utf-8', errors='ignore')
+        for match in re.findall(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', raw_text):
+            parsed = _parse_dt(match)
+            if parsed is not None:
+                timestamps.append(parsed)
+
+    if not timestamps:
+        return False, 0, ''
+
+    first_trade = min(timestamps)
+    current = now_utc.astimezone(UTC).replace(tzinfo=None) if now_utc is not None and now_utc.tzinfo is not None else (now_utc or datetime.now(UTC).replace(tzinfo=None))
+    paper_days = max(0, (current.date() - first_trade.date()).days)
+    unlock_date = first_trade.date() + timedelta(days=max(int(min_days), 0))
+    return paper_days >= int(min_days), paper_days, unlock_date.isoformat()
+
+
+def _is_live_enabled(live_enabled: bool | None, broker_client: object | None, broker_name: str | None) -> bool:
+    if live_enabled is not None:
+        return bool(live_enabled)
+    return broker_client is not None or bool(str(broker_name or '').strip())
+
+
+def _default_live_broker_client() -> tuple[object | None, str]:
+    return None, ''
+
+
+def _coerce_live_broker(
+    *,
+    broker_client: object | None,
+    broker_name: str | None,
+    security_map: dict[str, dict[str, str]] | None,
+    live_enabled: bool,
+) -> tuple[object | None, str]:
+    resolved_name = str(broker_name or '').strip().upper() or 'LIVE'
+    if broker_client is not None:
+        return broker_client, resolved_name
+    if not live_enabled:
+        return None, resolved_name
+    if resolved_name == 'DHAN':
+        config = DhanBrokerConfig(security_map=security_map or {})
+        return DhanBroker(config), resolved_name
+    return None, resolved_name
+
+
+def _apply_live_broker_result(record: dict[str, object], broker_name: str, result: object) -> dict[str, object]:
+    payload = result if isinstance(result, dict) else {'raw': str(result)}
+    broker_status = str(payload.get('orderStatus', payload.get('status', 'UNKNOWN')) or 'UNKNOWN').upper()
+    record['broker_name'] = broker_name
+    record['broker_status'] = broker_status
+    record['broker_message'] = str(payload.get('message', payload.get('remarks', '')) or '')
+    record['broker_response_json'] = json.dumps(payload, ensure_ascii=True, sort_keys=True, default=str)
+    record['reconciliation_note'] = record.get('broker_message', '')
+    return record
+
+
 def _price_value(record: dict[str, object]) -> float:
     for key in ("entry_price", "entry", "price", "share_price", "close", "spot_ltp"):
         value = _safe_float(record.get(key))
@@ -316,7 +395,7 @@ def _cooldown_window_seconds(record: dict[str, object]) -> int:
     if bars > 0 and timeframe_minutes > 0:
         return int(bars * timeframe_minutes * 60)
     preset = strategy_tuning_preset(str(record.get("strategy", "") or ""))
-    if int(getattr(preset, "duplicate_cooldown_minutes", 0) or 0) > 0:
+    if timeframe_minutes > 0 and int(getattr(preset, "duplicate_cooldown_minutes", 0) or 0) > 0:
         return int(preset.duplicate_cooldown_minutes) * 60
     return 0
 
@@ -329,7 +408,7 @@ def _trade_day_key(record: dict[str, object], default_day_key: str) -> str:
 def _risk_limit_message(max_trades_per_day: int | None, max_daily_loss: float | None) -> str:
     parts: list[str] = []
     if max_trades_per_day is not None and int(max_trades_per_day) > 0:
-        parts.append(f'max trades per day={int(max_trades_per_day)}')
+        parts.append(f'max trades/day={int(max_trades_per_day)}')
     if max_daily_loss is not None and float(max_daily_loss) > 0:
         parts.append(f'max daily loss={abs(float(max_daily_loss)):.2f}')
     return ', '.join(parts) or 'risk limit reached'
@@ -411,9 +490,10 @@ def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[st
     normalized['entry'] = round(_safe_float(normalized.get('entry')) or price, 4)
     normalized['entry_price'] = round(_safe_float(normalized.get('entry_price')) or price, 4)
 
-    quantity = int(_safe_float(normalized.get('quantity')))
-    if quantity <= 0:
-        quantity = normalize_order_quantity(str(normalized.get('symbol', 'UNKNOWN')), default_quantity_for_symbol(str(normalized.get('symbol', 'UNKNOWN'))))
+    raw_quantity = normalized.get('quantity')
+    if raw_quantity is None or str(raw_quantity).strip() == '':
+        return False, SKIP_REASON_MISSING_QUANTITY, normalized
+    quantity = normalize_order_quantity(str(normalized.get('symbol', 'UNKNOWN')), raw_quantity)
     if quantity <= 0:
         return False, SKIP_REASON_MISSING_QUANTITY, normalized
     normalized['quantity'] = int(quantity)
@@ -453,6 +533,11 @@ def _make_result_row(record: dict[str, object], *, execution_type: str, processe
     row.setdefault('broker_status', '')
     row.setdefault('broker_message', '')
     row.setdefault('risk_limit_reason', '')
+    row.setdefault('data_symbol', str(row.get('data_symbol', '') or row.get('symbol', '') or ''))
+    row.setdefault('trade_symbol', str(row.get('trade_symbol', '') or row.get('trading_symbol', '') or row.get('symbol', '') or ''))
+    share_price, strike_price = _extract_share_and_strike(row)
+    row.setdefault('share_price', share_price)
+    row.setdefault('strike_price', strike_price)
     return row
 
 
@@ -513,7 +598,7 @@ def _apply_broker_result(row: dict[str, object], broker_result: BrokerOrderResul
         row['validation_error'] = SKIP_REASON_BROKER_ERROR
     else:
         row['trade_status'] = TRADE_STATUS_PENDING_EXECUTION
-        row['execution_status'] = status or 'PENDING'
+        row['execution_status'] = 'SENT' if broker_result.accepted else (status or 'PENDING')
     row['execution_type'] = str(execution_type or '').upper()
     return row
 
@@ -709,7 +794,20 @@ def _deserialize_daily_state(raw: object) -> dict[str, dict[str, float]]:
 
 def _load_daily_execution_state(path: Path, execution_type: str | None = None) -> dict[str, dict[str, float]]:
     state = _load_risk_state_snapshot(path, execution_type)
-    return _deserialize_daily_state(state.get('daily_state')) if state else {}
+    if state:
+        return _deserialize_daily_state(state.get('daily_state'))
+
+    daily_state: dict[str, dict[str, float]] = {}
+    for row in _read_trade_rows(path):
+        if execution_type and _normalize_text(row.get('execution_type')) != _normalize_text(execution_type):
+            continue
+        if _normalize_text(row.get('execution_status')) not in {'EXECUTED', 'SENT', 'FILLED'}:
+            continue
+        day_key = _trade_day_key(row, '')
+        state_row = daily_state.setdefault(day_key, {'count': 0.0, 'realized_pnl': 0.0})
+        state_row['count'] += 1.0
+        state_row['realized_pnl'] += _safe_float(row.get('pnl'))
+    return daily_state
 
 
 def load_active_trade_keys(path: Path, execution_type: str | None = None) -> set[str]:
@@ -1277,6 +1375,29 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             continue
 
         broker_row = dict(base_row)
+        if execution_type == "LIVE" and resolved_broker_name == "DHAN" and isinstance(security_map, dict) and security_map:
+            try:
+                from src.dhan_api import resolve_security as _resolve_dhan_security
+
+                resolved_security = _resolve_dhan_security(
+                    broker_row,
+                    security_map,
+                    broker_client=broker if hasattr(broker, 'place_order') else None,
+                    validate_with_option_chain=False,
+                )
+                for key, value in resolved_security.items():
+                    if value not in (None, ''):
+                        broker_row[key] = value
+                broker_row['data_symbol'] = str(broker_row.get('data_symbol') or base_row.get('symbol') or '')
+                broker_row['trade_symbol'] = str(
+                    resolved_security.get('underlying_symbol')
+                    or resolved_security.get('trade_symbol')
+                    or broker_row.get('trading_symbol')
+                    or broker_row.get('trade_symbol')
+                    or ''
+                )
+            except Exception:
+                pass
         trade_candidate = _candidate_to_trade_candidate(broker_row, execution_type)
         order_request = _build_broker_order_request(trade_candidate)
         _append_structured_log(BROKER_LOG_PATH, 'broker_order_routed', execution_type=execution_type, trade_id=trade_candidate.trade_id, broker=resolved_broker_name, strategy=trade_candidate.strategy, symbol=trade_candidate.symbol, side=trade_candidate.side, quantity=trade_candidate.quantity)

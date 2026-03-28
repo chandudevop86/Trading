@@ -32,7 +32,7 @@ class ConfluenceConfig:
     zone_fresh_bars: int = 24
     min_zone_reaction: float = 0.55
     min_zone_strength_score: float = 4.0
-    minimum_take_score: float = 7.0
+    minimum_take_score: float = 14.0
     max_nearby_zones: int = 2
     retest_tolerance_pct: float = 0.0015
     max_retest_bars: int = 6
@@ -258,9 +258,9 @@ def _time_score(base_candle_count: int, config: ConfluenceConfig) -> float:
 
 
 def _score_interpretation(total_score: float) -> str:
-    if total_score >= 10.0:
+    if total_score >= 16.0:
         return 'STRONG_TRADE'
-    if total_score >= 7.0:
+    if total_score >= 12.0:
         return 'MEDIUM_OPTIONAL'
     return 'SKIP'
 
@@ -607,12 +607,6 @@ def _recent_imbalance_context(candles: pd.DataFrame, index: int, side: str, conf
 
 
 def score_trade_setup(context: dict[str, Any], config: ConfluenceConfig, mode: str) -> dict[str, Any]:
-    normalized_mode = _normalize_mode(mode)
-    scoring = ScoringConfig(mode=normalized_mode)
-    scoring.thresholds.conservative = float(config.min_score_conservative)
-    scoring.thresholds.balanced = float(config.min_score_balanced)
-    scoring.thresholds.aggressive = float(config.min_score_aggressive)
-
     has_fvg = bool(context.get('has_fvg', False))
     has_bvg = bool(context.get('has_bvg', False))
     imbalance_ok = has_fvg or (bool(config.allow_bvg_entries) and has_bvg)
@@ -620,31 +614,30 @@ def score_trade_setup(context: dict[str, Any], config: ConfluenceConfig, mode: s
     sweep_ok = bool(context.get('liquidity_sweep', False))
     retest_ok = bool(context.get('retest_confirmation', False))
     vwap_ok = bool(context.get('vwap_alignment', False))
-    distribution_ok = (not bool(config.require_distribution_phase)) or str(context.get('amd_phase', '') or '').strip().lower() == 'distribution'
+    distribution_ok = bool(context.get('distribution_detected', False))
+    accumulation_detected = bool(context.get('accumulation_detected', False))
+    manipulation_detected = bool(context.get('manipulation_detected', False))
+    overlap_with_fvg = bool(context.get('overlap_with_fvg', False))
+    touch_count = int(context.get('touch_count', 0) or 0)
+    fresh_zone = touch_count == 0
 
-    score = weighted_score(
-        {
-            'trend': trend_ok,
-            'vwap': vwap_ok,
-            'rsi': False,
-            'adx': False,
-            'zone': bool(context.get('zone_proximity', False)),
-            'fvg': imbalance_ok,
-            'sweep': sweep_ok,
-            'retest': retest_ok,
-        },
-        scoring,
-    )
+    accumulation_score = 3.0 if accumulation_detected and float(context.get('accumulation_quality', 0.0) or 0.0) >= 2.0 else 2.0 if accumulation_detected else 0.0
+    manipulation_score = 4.0 if manipulation_detected and sweep_ok and retest_ok else 2.0 if manipulation_detected else 0.0
+    distribution_score = 3.0 if distribution_ok and trend_ok and vwap_ok else 1.0 if distribution_ok else 0.0
+    amd_score = round(accumulation_score + manipulation_score + distribution_score, 2)
 
-    base_score = float(context.get('base_score', 1.0) or 1.0)
-    impulse_score = float(context.get('impulse_score', 1.0) or 1.0)
-    volume_score = float(context.get('volume_score', 0.0) or 0.0)
-    fresh_score = float(context.get('fresh_score', 1.0) or 1.0)
-    time_score = float(context.get('time_score', 1.0) or 1.0)
-    trend_score = 2.0 if trend_ok else 0.0
-    retest_score = 3.0 if retest_ok else 0.0
-    raw_total_score = round(base_score + impulse_score + volume_score + fresh_score + time_score + trend_score + retest_score, 2)
-    score_interpretation = _score_interpretation(raw_total_score)
+    fvg_size_score = 1.0 if float(context.get('imbalance_size', 0.0) or 0.0) >= float(context.get('min_fvg_size', config.min_fvg_size) or config.min_fvg_size) else 0.0
+    fvg_freshness_score = 2.0 if int(context.get('imbalance_age_bars', 99) or 99) <= 1 else 1.0 if int(context.get('imbalance_age_bars', 99) or 99) <= int(config.max_retest_bars) else 0.0
+    fvg_retest_score = 2.0 if retest_ok and has_fvg else 1.0 if imbalance_ok else 0.0
+    fvg_score = round(fvg_size_score + fvg_freshness_score + fvg_retest_score, 2)
+
+    zone_freshness_score = 2.0 if fresh_zone else 1.0
+    zone_impulse_score = 1.0 if float(context.get('impulse_score', 0.0) or 0.0) >= 3.0 else 0.0
+    zone_overlap_score = 2.0 if overlap_with_fvg else 0.0
+    sd_score = round(zone_freshness_score + zone_impulse_score + zone_overlap_score, 2)
+
+    total_score = round(amd_score + fvg_score + sd_score, 2)
+    score_interpretation = _score_interpretation(total_score)
 
     blockers: list[str] = []
     if bool(config.require_liquidity_sweep) and not sweep_ok:
@@ -655,25 +648,43 @@ def score_trade_setup(context: dict[str, Any], config: ConfluenceConfig, mode: s
         blockers.append('missing_distribution_phase')
     if float(context.get('amd_confidence', 0.0) or 0.0) < float(config.minimum_amd_confidence):
         blockers.append(f'amd_confidence_below_{float(config.minimum_amd_confidence):.2f}')
+    if amd_score < 7.0:
+        blockers.append('amd_score_below_7.00')
+    if fvg_score < 3.0:
+        blockers.append('fvg_score_below_3.00')
+    if sd_score < 3.0:
+        blockers.append('sd_score_below_3.00')
+    if total_score < float(config.minimum_take_score):
+        blockers.append(f'total_score_below_{float(config.minimum_take_score):.2f}')
+    if not retest_ok:
+        blockers.append('missing_retest_confirmation')
+    if not imbalance_ok:
+        blockers.append('missing_imbalance_alignment')
 
-    accepted = raw_total_score >= 10.0 and not blockers
-    rejection_tokens = [f'missing_{reason}' for reason in score.reasons]
-    if raw_total_score < 10.0:
-        rejection_tokens.append('score_below_10.00')
-    rejection_tokens.extend(blockers)
-
+    accepted = not blockers
     return {
         'accepted': accepted,
-        'threshold': 10.0,
-        'amd_score': round(score.components.get('trend', 0.0), 2),
-        'sweep_score': round(score.components.get('sweep', 0.0), 2),
-        'imbalance_score': round(score.components.get('fvg', 0.0), 2),
-        'zone_score': round(score.components.get('zone', 0.0), 2),
-        'trend_score': round(trend_score, 2),
-        'retest_score': round(retest_score, 2),
-        'total_score': raw_total_score,
+        'threshold': float(config.minimum_take_score),
+        'amd_score': amd_score,
+        'fvg_score': fvg_score,
+        'sd_score': sd_score,
+        'zone_score': sd_score,
+        'imbalance_score': fvg_score,
+        'sweep_score': round(manipulation_score, 2),
+        'trend_score': round(2.0 if trend_ok else 0.0, 2),
+        'retest_score': round(2.0 if retest_ok else 0.0, 2),
+        'total_score': total_score,
         'score_interpretation': score_interpretation,
-        'rejection_reason': '' if accepted else ','.join(rejection_tokens),
+        'rejection_reason': '' if accepted else ','.join(blockers),
+        'accumulation_score': round(accumulation_score, 2),
+        'manipulation_score': round(manipulation_score, 2),
+        'distribution_score': round(distribution_score, 2),
+        'fvg_size_score': round(fvg_size_score, 2),
+        'fvg_freshness_score': round(fvg_freshness_score, 2),
+        'fvg_retest_score': round(fvg_retest_score, 2),
+        'zone_freshness_score': round(zone_freshness_score, 2),
+        'zone_impulse_score': round(zone_impulse_score, 2),
+        'zone_overlap_score': round(zone_overlap_score, 2),
     }
 
 
@@ -853,6 +864,14 @@ def generate_trades(
                 'retest_confirmation': retest_confirmation,
                 'trend_alignment': trend_alignment,
                 'vwap_alignment': vwap_alignment,
+                'accumulation_detected': bool(_recent_flag((candles['amd_phase'] == 'accumulation'), index, config.accumulation_lookback)),
+                'manipulation_detected': bool(recent_sweep),
+                'distribution_detected': str(row['amd_phase']).strip().lower() == 'distribution',
+                'accumulation_quality': 3.0 if float(row.get('rolling_std', 0.0) or 0.0) <= float(row.get('avg_range_5', 0.0) or 0.0) * 0.7 else 2.0 if float(row.get('rolling_std', 0.0) or 0.0) <= float(row.get('avg_range_5', 0.0) or 0.0) else 1.0,
+                'imbalance_size': float(row['fvg_size'] if bool(imbalance['has_fvg']) else row.get('bvg_size', 0.0) or 0.0),
+                'imbalance_age_bars': max(0, int(index) - int(_latest_true_index(candles['bullish_fvg'] if side == 'BUY' else candles['bearish_fvg'], index, config.max_retest_bars) or _latest_true_index(candles['bullish_bvg'] if side == 'BUY' else candles['bearish_bvg'], index, config.max_retest_bars) or index)),
+                'min_fvg_size': float(config.min_fvg_size),
+                'overlap_with_fvg': bool(imbalance['imbalance_low'] is not None and not (float(zone['zone_high']) < float(imbalance['imbalance_low']) or float(zone['zone_low']) > float(imbalance['imbalance_high']))),
             }
             score = score_trade_setup(context, config, mode)
             if not score['accepted']:
@@ -902,12 +921,16 @@ def generate_trades(
                 'trade_no': trade_no,
                 'trade_label': f'Trade {trade_no}',
                 'reason': reason,
+                'pattern_family': 'AMD_FVG_SD',
+                'direction': side,
                 'amd_phase': str(row['amd_phase']),
                 'amd_confidence_value': round(float(amd_confidence), 2),
                 'imbalance_type': str(context['imbalance_type'] or ('FVG' if context['has_fvg'] else 'BVG' if context['has_bvg'] else '')),
                 'zone_type': str(context['zone_type'] or ''),
                 'score': float(score['total_score']),
                 'amd_score': float(score['amd_score']),
+                'fvg_score': float(score['fvg_score']),
+                'sd_score': float(score['sd_score']),
                 'imbalance_score': float(score['imbalance_score']),
                 'zone_score': float(score['zone_score']),
                 'sweep_score': float(score['sweep_score']),
@@ -921,6 +944,12 @@ def generate_trades(
                 'rr_ratio': round(effective_rr, 2),
                 'mode': mode,
                 'liquidity_sweep': 'YES' if recent_sweep else 'NO',
+                'accumulation_detected': 'YES' if bool(context.get('accumulation_detected')) else 'NO',
+                'manipulation_detected': 'YES' if bool(context.get('manipulation_detected')) else 'NO',
+                'distribution_detected': 'YES' if bool(context.get('distribution_detected')) else 'NO',
+                'fvg_type': 'bullish' if side == 'BUY' and bool(context.get('has_fvg')) else 'bearish' if side == 'SELL' and bool(context.get('has_fvg')) else '',
+                'overlap_with_fvg': 'YES' if bool(context.get('overlap_with_fvg')) else 'NO',
+                'fresh_zone': 'YES' if int(context.get('touch_count', 0) or 0) == 0 else 'NO',
                 'zone_reaction_strength': round(float(context['zone_reaction_strength']), 4),
                 'zone_strength_score': round(float(context['zone_strength_score']), 2),
                 'zone_pattern': str(context.get('zone_pattern', 'UNKNOWN') or 'UNKNOWN'),

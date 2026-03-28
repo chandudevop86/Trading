@@ -49,6 +49,7 @@ class BreakoutConfig:
     allow_afternoon_session: bool = False
     afternoon_session_start: str = '13:46'
     afternoon_session_end: str = '14:45'
+    min_breakout_take_score: float = 12.0
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
 
     def __post_init__(self) -> None:
@@ -292,43 +293,136 @@ def _midday_restricted(candle: Candle, config: BreakoutConfig) -> bool:
         afternoon_end=config.afternoon_session_end,
     ) == 'MIDDAY_BLOCKED'
 
-def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Candle, *, regime: str, bias: str, trigger: float, volume_ratio: float, strength: float, vwap_slope: float, atr_value: float, structure_ok: bool, structure_label: str, config: BreakoutConfig) -> tuple[float, str, dict[str, float], str, bool] | None:
+def _avg_candle_range(day_candles: list[Candle], idx: int, lookback: int = 5) -> float:
+    start = max(0, idx - max(1, int(lookback)) + 1)
+    sample = [max(float(c.high) - float(c.low), 0.0) for c in day_candles[start:idx + 1]]
+    return (sum(sample) / len(sample)) if sample else 0.0
+
+
+def _body_ratio(candle: Candle) -> float:
+    range_value = max(float(candle.high) - float(candle.low), 0.0)
+    if range_value <= 0:
+        return 0.0
+    return abs(float(candle.close) - float(candle.open)) / range_value
+
+
+def _consolidation_candles(day_candles: list[Candle], idx: int, trigger: float, atr_value: float, lookback: int = 6) -> int:
+    count = 0
+    band = max(float(atr_value) * 1.2, abs(float(trigger)) * 0.0015, 2.0)
+    start = max(0, idx - max(1, int(lookback)))
+    for candle in reversed(day_candles[start:idx]):
+        if abs(float(candle.close) - float(trigger)) <= band:
+            count += 1
+        else:
+            break
+    return count
+
+
+def _opposing_level_distance(day_candles: list[Candle], idx: int, side: str, entry: float) -> float | None:
+    history = day_candles[max(0, idx - 20):idx]
+    if side == 'BUY':
+        candidates = [float(c.high) - float(entry) for c in history if float(c.high) > float(entry)]
+    else:
+        candidates = [float(entry) - float(c.low) for c in history if float(c.low) < float(entry)]
+    if not candidates:
+        return None
+    return min(candidates)
+
+
+def _breakout_score_bucket(score: float) -> str:
+    if score >= 15:
+        return '15+'
+    if score >= 12:
+        return '12-14'
+    if score >= 9:
+        return '9-11'
+    return '0-8'
+
+
+def _mae_mfe(day_candles: list[Candle], start_idx: int, end_idx: int, side: str, entry: float) -> tuple[float, float]:
+    sample = day_candles[start_idx:end_idx + 1]
+    if not sample:
+        return 0.0, 0.0
+    if side == 'BUY':
+        mae = min(float(c.low) - entry for c in sample)
+        mfe = max(float(c.high) - entry for c in sample)
+    else:
+        mae = min(entry - float(c.high) for c in sample)
+        mfe = max(entry - float(c.low) for c in sample)
+    return round(mae, 2), round(mfe, 2)
+
+
+def _minutes_between(start: datetime, end: datetime) -> int | None:
+    try:
+        return max(int((end - start).total_seconds() // 60), 0)
+    except Exception:
+        return None
+
+
+def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Candle, *, day_candles: list[Candle], idx: int, regime: str, bias: str, trigger: float, volume_ratio: float, vwap_slope: float, atr_value: float, structure_ok: bool, structure_label: str, config: BreakoutConfig) -> tuple[float, str, dict[str, float], str, bool] | None:
+    previous_candle = day_candles[idx - 1] if idx > 0 else breakout_candle
     broke_level = breakout_candle.close > trigger if side == 'BUY' else breakout_candle.close < trigger
+    clean_break = breakout_candle.close > previous_candle.high if side == 'BUY' else breakout_candle.close < previous_candle.low
     vwap_ok = breakout_candle.close > breakout_candle.vwap and confirmation_candle.close > confirmation_candle.vwap and vwap_slope > 0 if side == 'BUY' else breakout_candle.close < breakout_candle.vwap and confirmation_candle.close < confirmation_candle.vwap and vwap_slope < 0
-    retest_ok = _confirmation_holds(side, trigger, breakout_candle, confirmation_candle) or _retest_holds(side, trigger, confirmation_candle)
-    reaction_ok = confirmation_candle.close > breakout_candle.close if side == 'BUY' else confirmation_candle.close < breakout_candle.close
+    retest_happened = _retest_holds(side, trigger, confirmation_candle)
+    continuation_ok = _secondary_breakout_holds(side, trigger, breakout_candle, confirmation_candle, atr_value)
+    held_zone = _confirmation_holds(side, trigger, breakout_candle, confirmation_candle) or retest_happened
+    body_ratio = _body_ratio(breakout_candle)
+    avg_range = max(_avg_candle_range(day_candles, idx, lookback=5), 0.0001)
+    breakout_strength = abs(float(breakout_candle.close) - float(trigger))
+    strength_ratio = breakout_strength / avg_range
+    consolidation_bars = _consolidation_candles(day_candles, idx, trigger, atr_value, lookback=6)
+    entry_reference = max(float(trigger), float(breakout_candle.close)) if side == 'BUY' else min(float(trigger), float(breakout_candle.close))
+    next_level_distance = _opposing_level_distance(day_candles, idx, side, entry_reference)
+    min_rr_distance = max(float(atr_value) * 1.5, abs(float(trigger)) * 0.002, 3.0)
     bias_support = bias == side or not config.use_first_hour_bias or regime != 'TREND'
-    score = weighted_score(
-        {
-            'trend': regime == 'TREND' and bias_support,
-            'vwap': bool(vwap_ok),
-            'rsi': strength >= config.min_breakout_strength,
-            'adx': volume_ratio >= config.min_volume_ratio,
-            'macd': confirmation_candle.close >= breakout_candle.close if side == 'BUY' else confirmation_candle.close <= breakout_candle.close,
-            'zone': broke_level,
-            'sweep': broke_level and strength >= config.min_breakout_strength,
-            'retest': retest_ok,
-            'reaction': reaction_ok,
-            'breakout_quality': strength >= config.min_breakout_strength * 0.85,
-        },
-        config.scoring,
-    )
+
+    strength_score = 3 if strength_ratio > 2.0 else 2 if strength_ratio > 1.2 else 0
+    body_score = 2 if body_ratio > 0.7 else 1 if body_ratio > 0.5 else 0
+    volume_score = 3 if volume_ratio > 1.8 else 2 if volume_ratio > 1.3 else 0
+    structure_score = 2 if clean_break else 0
+    retest_score = 3 if retest_happened and held_zone else 1 if (not retest_happened and continuation_ok) else 0
+    time_score = 2 if consolidation_bars >= 5 else 1
+    distance_score = 2 if (next_level_distance is None or next_level_distance > min_rr_distance) else 0
+    trend_score = 2 if (vwap_ok and bias_support) else 0
+
+    breakout_score = strength_score + body_score + volume_score + structure_score + retest_score + time_score + distance_score + trend_score
     if config.require_vwap_alignment and not vwap_ok:
         return None
     if config.require_market_structure and not structure_ok:
         return None
-    if not broke_level or not score.accepted:
+    if not broke_level or not clean_break:
         return None
-    if not retest_ok:
+    if retest_score <= 0:
         return None
-    if strength < float(config.min_breakout_strength) or volume_ratio < float(config.min_volume_ratio):
+    if breakout_score < float(config.min_breakout_take_score):
         return None
     if abs(float(breakout_candle.close) - float(breakout_candle.vwap)) < max(atr_value * 0.12, abs(trigger) * 0.0008, 0.08):
         return None
-    setup_type = 'retest'
-    rejection_reason = '' if score.accepted else ','.join(f'missing_{reason}' for reason in score.reasons)
-    reason = f'breakout {setup_type} score={score.total:.2f} mode={config.scoring.normalized_mode()} regime={regime} structure={structure_label.lower()}'
-    return score.total, reason, score.components, rejection_reason, False
+
+    setup_type = 'retest' if retest_happened else 'continuation'
+    reason = f'breakout {setup_type} score={breakout_score:.2f} strength={strength_ratio:.2f} structure={structure_label.lower()}'
+    components = {
+        'strength_score': float(strength_score),
+        'body_score': float(body_score),
+        'volume_score': float(volume_score),
+        'structure_score': float(structure_score),
+        'retest_score': float(retest_score),
+        'time_score': float(time_score),
+        'distance_score': float(distance_score),
+        'trend_score': float(trend_score),
+        'strength_ratio': round(float(strength_ratio), 4),
+        'body_ratio': round(float(body_ratio), 4),
+        'breakout_strength': round(float(breakout_strength), 4),
+        'avg_candle_range': round(float(avg_range), 4),
+        'volume_ratio': round(float(volume_ratio), 4),
+        'clean_break': 1.0 if clean_break else 0.0,
+        'retest_happened': 1.0 if retest_happened else 0.0,
+        'continuation_ok': 1.0 if continuation_ok else 0.0,
+        'consolidation_candles': float(consolidation_bars),
+        'next_level_distance': round(float(next_level_distance), 4) if next_level_distance is not None else -1.0,
+    }
+    return breakout_score, reason, components, '', setup_type == 'continuation'
 
 def generate_trades(
     df: Any,
@@ -403,11 +497,12 @@ def generate_trades(
                     side,
                     breakout_candle,
                     confirmation_candle,
+                    day_candles=day_candles,
+                    idx=idx,
                     regime=regime,
                     bias=bias,
                     trigger=trigger,
                     volume_ratio=volume_ratio,
-                    strength=strength,
                     vwap_slope=vwap_slope,
                     atr_value=atr_value,
                     structure_ok=structure_ok,
@@ -465,6 +560,10 @@ def generate_trades(
 
                 gross_pnl, trading_cost, pnl = calculate_net_pnl(side, entry, exit_price, int(qty), cost_bps=cfg.cost_bps, fixed_cost_per_trade=cfg.fixed_cost_per_trade)
                 rr_achieved = 0.0 if risk_distance == 0 else abs(exit_price - entry) / risk_distance
+                mae, mfe = _mae_mfe(day_candles, idx, exit_idx if 'exit_idx' in locals() else idx + 1, side, entry)
+                time_to_target_min = _minutes_between(breakout_candle.timestamp, exit_time) if exit_reason == 'TARGET' else None
+                time_to_stop_min = _minutes_between(breakout_candle.timestamp, exit_time) if exit_reason == 'STOP_LOSS' else None
+                fake_breakout = 'YES' if exit_reason == 'STOP_LOSS' and time_to_stop_min is not None and time_to_stop_min <= 15 else 'NO'
                 trade = StandardTrade(
                     timestamp=confirmation_candle.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
                     side=side,
@@ -480,22 +579,41 @@ def generate_trades(
                     quantity=int(qty),
                     extra={
                         'setup_type': 'secondary' if secondary_entry else 'retest',
+                        'breakout_score_bucket': _breakout_score_bucket(score_value),
                         'retest_only_entry': 'YES',
                         'entry_policy': 'RETEST_ONLY',
-                        'trend_score': round(components.get('trend', 0.0), 2),
-                        'indicator_score': round(sum(components.get(key, 0.0) for key in ['vwap', 'rsi', 'adx', 'macd']), 2),
-                        'zone_score': round(sum(components.get(key, 0.0) for key in ['zone', 'reaction', 'retest', 'breakout_quality']), 2),
-                        'zone_gate_score': round(sum(components.get(key, 0.0) for key in ['zone', 'reaction', 'retest', 'breakout_quality']), 2),
-                        'zone_gate_threshold': round(float(cfg.scoring.threshold()), 2),
+                        'trend_score': round(components.get('trend_score', 0.0), 2),
+                        'indicator_score': round(sum(components.get(key, 0.0) for key in ['volume_score', 'trend_score']), 2),
+                        'zone_score': round(sum(components.get(key, 0.0) for key in ['structure_score', 'retest_score', 'distance_score']), 2),
+                        'zone_gate_score': round(sum(components.get(key, 0.0) for key in ['structure_score', 'retest_score', 'distance_score']), 2),
+                        'zone_gate_threshold': round(float(cfg.min_breakout_take_score), 2),
                         'total_score': round(score_value, 2),
+                        'strength_score': round(components.get('strength_score', 0.0), 2),
+                        'body_score': round(components.get('body_score', 0.0), 2),
+                        'volume_score': round(components.get('volume_score', 0.0), 2),
+                        'structure_score': round(components.get('structure_score', 0.0), 2),
+                        'retest_score': round(components.get('retest_score', 0.0), 2),
+                        'time_score': round(components.get('time_score', 0.0), 2),
+                        'distance_score': round(components.get('distance_score', 0.0), 2),
+                        'strength_ratio': round(components.get('strength_ratio', 0.0), 4),
+                        'body_ratio': round(components.get('body_ratio', 0.0), 4),
+                        'consolidation_candles': int(components.get('consolidation_candles', 0.0)),
+                        'next_level_distance': round(components.get('next_level_distance', 0.0), 4) if components.get('next_level_distance', -1.0) >= 0 else '',
                         'rejection_reason': rejection_reason,
                         'day': day.isoformat(),
                         'entry_trigger_price': round(trigger, 4),
                         'fill_model': 'TRIGGER_PLUS_SLIPPAGE',
                         'trailing_stop_loss': round(trail_stop, 4),
                         'market_regime': regime,
-                        'breakout_strength': round(strength, 4),
-                        'volume_ratio': round(volume_ratio, 4),
+                        'breakout_strength': round(components.get('breakout_strength', 0.0), 4),
+                        'volume_ratio': round(components.get('volume_ratio', 0.0), 4),
+                        'avg_candle_range': round(components.get('avg_candle_range', 0.0), 4),
+                        'clean_break': 'YES' if components.get('clean_break', 0.0) >= 1 else 'NO',
+                        'mae': mae,
+                        'mfe': mfe,
+                        'time_to_target_min': time_to_target_min,
+                        'time_to_stop_min': time_to_stop_min,
+                        'fake_breakout': fake_breakout,
                         'first_hour_bias': bias,
                         'bias_mode': 'REQUIRED' if cfg.use_first_hour_bias else 'OBSERVE_ONLY',
                         'bias_aligned': 'YES' if side == bias else 'NO',

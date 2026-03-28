@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import time
 from math import floor
+from typing import Any
 
 from src.breakout_bot import Candle, add_intraday_vwap
 from src.trade_safety import calculate_net_pnl, daily_limit_reached
@@ -29,6 +30,10 @@ class MtfTradeConfig:
     cost_bps: float = 0.0
     fixed_cost_per_trade: float = 0.0
     max_daily_loss: float | None = None
+    min_score_5m: int = 8
+    min_score_15m: int = 4
+    min_score_1h: int = 2
+    min_mtf_score: int = 14
 
 def _group_by_day(candles: list[Candle]) -> dict:
     by_day: dict = {}
@@ -166,6 +171,154 @@ def _setup_strength(latest_15m: AggCandle, zone_low: float, zone_high: float, si
     return score
 
 
+def _bar_range(candle: Candle | AggCandle) -> float:
+    return max(float(candle.high) - float(candle.low), 0.0001)
+
+
+def _avg_volume(day_candles: list[Candle], idx: int, lookback: int = 5) -> float:
+    left = max(0, idx - max(1, int(lookback)))
+    sample = [max(float(getattr(candle, 'volume', 0.0) or 0.0), 0.0) for candle in day_candles[left:idx]]
+    if not sample:
+        return max(float(getattr(day_candles[idx], 'volume', 0.0) or 0.0), 0.0)
+    return sum(sample) / len(sample)
+
+
+def _zone_alignment_15m(side: str) -> str:
+    return 'DEMAND' if side == 'BUY' else 'SUPPLY'
+
+
+def _score_5m(day_candles: list[Candle], trigger_idx: int, *, zone_low: float, zone_high: float, side: str, rr_ratio: float, retest_ok: bool) -> tuple[int, dict[str, object]]:
+    trigger = day_candles[trigger_idx]
+    zone_width = max(zone_high - zone_low, 0.0001)
+    entry_reference = zone_high if side == 'BUY' else zone_low
+    entry_to_zone_distance = abs(float(trigger.close) - entry_reference)
+    zone_quality = 3 if entry_to_zone_distance <= zone_width * 0.25 else 2 if entry_to_zone_distance <= zone_width * 0.75 else 1 if entry_to_zone_distance <= zone_width * 1.25 else 0
+    retest_score = 2 if retest_ok else 0
+    candle_range = _bar_range(trigger)
+    body = abs(float(trigger.close) - float(trigger.open))
+    impulse_ratio = body / candle_range
+    impulse_score = 2 if impulse_ratio >= 0.6 else 1 if impulse_ratio >= 0.35 else 0
+    breakout_volume = max(float(getattr(trigger, 'volume', 0.0) or 0.0), 0.0)
+    avg_volume = _avg_volume(day_candles, trigger_idx, lookback=5)
+    volume_spike = avg_volume > 0 and breakout_volume > avg_volume * 1.5
+    volume_score = 1 if volume_spike else 0
+    vwap_ok = (float(trigger.close) >= float(trigger.vwap)) if side == 'BUY' else (float(trigger.close) <= float(trigger.vwap))
+    vwap_score = 1 if vwap_ok else 0
+    rr_ok = float(rr_ratio) >= 1.8
+    rr_score = 1 if rr_ok else 0
+    score = zone_quality + retest_score + impulse_score + volume_score + vwap_score + rr_score
+    return score, {
+        'zone_score_5m': zone_quality,
+        'retest_ok_5m': bool(retest_ok),
+        'impulse_score_5m': impulse_score,
+        'volume_spike_5m': bool(volume_spike),
+        'volume_score_5m': volume_score,
+        'breakout_volume_5m': round(breakout_volume, 2),
+        'avg_volume_5m': round(avg_volume, 2),
+        'vwap_alignment_5m': bool(vwap_ok),
+        'vwap_ok_5m': bool(vwap_ok),
+        'entry_to_zone_distance': round(entry_to_zone_distance, 4),
+        'rr_planned': round(float(rr_ratio), 2),
+        'sl_points': round(zone_width, 4),
+    }
+
+
+def _score_15m(latest_15m: AggCandle, prev_15m: AggCandle, *, side: str, setup_source: str, zone_low: float, zone_high: float) -> tuple[int, dict[str, object]]:
+    trend_ok = (float(latest_15m.close) > float(latest_15m.open)) if side == 'BUY' else (float(latest_15m.close) < float(latest_15m.open))
+    trend_score = 2 if trend_ok else 0
+    zone_ok = bool(setup_source)
+    zone_score = 2 if zone_ok else 0
+    structure_break = (float(latest_15m.close) > float(prev_15m.high)) if side == 'BUY' else (float(latest_15m.close) < float(prev_15m.low))
+    structure_score = 2 if structure_break else 0
+    candle_range = _bar_range(latest_15m)
+    impulse_strength = abs(float(latest_15m.close) - float(latest_15m.open)) / candle_range
+    impulse_score = 2 if impulse_strength >= 0.55 else 1 if impulse_strength >= 0.35 else 0
+    vwap_bias = 'BULLISH' if side == 'BUY' and float(latest_15m.close) >= max(zone_high, zone_low) else 'BEARISH' if side == 'SELL' and float(latest_15m.close) <= min(zone_high, zone_low) else 'NEUTRAL'
+    score = trend_score + zone_score + structure_score
+    return score, {
+        'trend_15m': 'UP' if side == 'BUY' and trend_ok else 'DOWN' if side == 'SELL' and trend_ok else 'MIXED',
+        'trend_ok_15m': bool(trend_ok),
+        'zone_alignment_15m': _zone_alignment_15m(side),
+        'zone_ok_15m': bool(zone_ok),
+        'vwap_bias_15m': vwap_bias,
+        'impulse_score_15m': int(impulse_score),
+        'structure_break_15m': bool(structure_break),
+    }
+
+
+def _nearest_levels_1h(completed_1h: list[AggCandle]) -> tuple[float | None, float | None]:
+    if not completed_1h:
+        return None, None
+    nearest_supply = max(float(bar.high) for bar in completed_1h[-3:])
+    nearest_demand = min(float(bar.low) for bar in completed_1h[-3:])
+    return nearest_supply, nearest_demand
+
+
+def _score_1h(latest_1h: AggCandle, *, ema_now: float, ema_prev: float, side: str, entry: float, zone_width: float, completed_1h: list[AggCandle]) -> tuple[int, dict[str, object]]:
+    bullish_bias = latest_1h.close > latest_1h.open and latest_1h.close >= ema_now and ema_now >= ema_prev
+    bearish_bias = latest_1h.close < latest_1h.open and latest_1h.close <= ema_now and ema_now <= ema_prev
+    bias_ok = bullish_bias if side == 'BUY' else bearish_bias
+    trend_score = 2 if bias_ok else 0
+    nearest_supply, nearest_demand = _nearest_levels_1h(completed_1h)
+    distance_to_supply = round(max((nearest_supply - entry), 0.0), 4) if nearest_supply is not None else None
+    distance_to_demand = round(max((entry - nearest_demand), 0.0), 4) if nearest_demand is not None else None
+    conflict = False
+    if side == 'BUY' and distance_to_supply is not None:
+        conflict = distance_to_supply <= max(zone_width * 2.0, 5.0)
+    if side == 'SELL' and distance_to_demand is not None:
+        conflict = distance_to_demand <= max(zone_width * 2.0, 5.0)
+    zone_score = 0 if conflict else 2
+    score = trend_score + zone_score
+    return score, {
+        'trend_1h': 'UP' if bullish_bias else 'DOWN' if bearish_bias else 'MIXED',
+        'bias_ok_1h': bool(bias_ok),
+        'nearest_supply_1h': round(float(nearest_supply), 4) if nearest_supply is not None else None,
+        'nearest_demand_1h': round(float(nearest_demand), 4) if nearest_demand is not None else None,
+        'distance_to_supply_1h': distance_to_supply,
+        'distance_to_demand_1h': distance_to_demand,
+        'distance_to_htf_zone': distance_to_supply if side == 'BUY' else distance_to_demand,
+        'htf_conflict': bool(conflict),
+    }
+
+
+def _mtf_bucket(score: int) -> str:
+    if score >= 16:
+        return '16-20'
+    if score >= 12:
+        return '12-15'
+    if score >= 9:
+        return '9-11'
+    return '0-8'
+
+
+def _trade_result(exit_reason: str, pnl: float) -> str:
+    if str(exit_reason).upper() == 'TARGET' or pnl > 0:
+        return 'WIN'
+    if pnl < 0:
+        return 'LOSS'
+    return 'FLAT'
+
+
+def _mae_mfe(day_candles: list[Candle], start_idx: int, end_idx: int, side: str, entry: float) -> tuple[float, float]:
+    sample = day_candles[start_idx:end_idx + 1]
+    if not sample:
+        return 0.0, 0.0
+    if side == 'BUY':
+        mae = min(float(c.low) - entry for c in sample)
+        mfe = max(float(c.high) - entry for c in sample)
+    else:
+        mae = min(entry - float(c.high) for c in sample)
+        mfe = max(entry - float(c.low) for c in sample)
+    return round(mae, 2), round(mfe, 2)
+
+
+def _minutes_between(start: Any, end: Any) -> int | None:
+    try:
+        return max(int((end - start).total_seconds() // 60), 0)
+    except Exception:
+        return None
+
+
 def generate_trades(
     candles: list[Candle],
     capital: float,
@@ -245,6 +398,7 @@ def generate_trades(
                     continue
 
                 latest_15m = completed_15m[-1]
+                prev_15m = completed_15m[-2]
                 if i <= latest_15m.end_idx:
                     continue
 
@@ -281,6 +435,15 @@ def generate_trades(
                     stop = max(trigger_high, zone_high)
                     target = entry - (stop - entry) * rr_ratio
 
+                zone_width = max(zone_high - zone_low, 0.0001)
+                score_5m, metrics_5m = _score_5m(day_candles, i, zone_low=zone_low, zone_high=zone_high, side=side, rr_ratio=rr_ratio, retest_ok=retest)
+                score_15m, metrics_15m = _score_15m(latest_15m, prev_15m, side=side, setup_source=setup_source, zone_low=zone_low, zone_high=zone_high)
+                score_1h, metrics_1h = _score_1h(latest_1h, ema_now=ema_now, ema_prev=ema_prev, side=side, entry=entry, zone_width=zone_width, completed_1h=completed_1h)
+                mtf_score = int(score_5m + score_15m + score_1h)
+                htf_conflict = bool(metrics_1h.get('htf_conflict', False))
+                if score_5m < cfg.min_score_5m or score_15m < cfg.min_score_15m or score_1h < cfg.min_score_1h or mtf_score < cfg.min_mtf_score or htf_conflict:
+                    continue
+
                 qty = _calc_qty(capital, risk_pct, entry, stop)
                 if qty <= 0:
                     continue
@@ -291,11 +454,15 @@ def generate_trades(
                     "trade_no": trades_taken + 1,
                     "trade_label": f"Trade {trades_taken + 1}",
                     "entry_time": trigger.timestamp.isoformat(sep=" "),
+                    "timestamp": trigger.timestamp.isoformat(sep=" "),
                     "side": side,
+                    "pattern": setup_source,
                     "entry_price": round(entry, 4),
+                    "entry": round(entry, 4),
                     "stop_loss": round(stop, 4),
                     "trailing_stop_loss": round(stop, 4),
                     "target_price": round(target, 4),
+                    "target": round(target, 4),
                     "target_1": round(entry + abs(entry - stop), 4) if side == "BUY" else round(entry - abs(entry - stop), 4),
                     "target_2": round(entry + (2.0 * abs(entry - stop)), 4) if side == "BUY" else round(entry - (2.0 * abs(entry - stop)), 4),
                     "target_3": round(entry + (3.0 * abs(entry - stop)), 4) if side == "BUY" else round(entry - (3.0 * abs(entry - stop)), 4),
@@ -308,6 +475,8 @@ def generate_trades(
                     "setup_source": setup_source,
                     "retest_zone_low": round(zone_low, 4),
                     "retest_zone_high": round(zone_high, 4),
+                    "zone_low": round(zone_low, 4),
+                    "zone_high": round(zone_high, 4),
                     "trend_ema": round(ema_now, 4),
                     "ema_period": ema_period,
                     "setup_mode": (cfg.setup_mode or "either").strip().lower(),
@@ -317,7 +486,19 @@ def generate_trades(
                     "session_allowed": 'YES',
                     "session_window": 'MORNING',
                     "setup_strength_score": round(setup_strength, 2),
+                    "score_5m": int(score_5m),
+                    "score_15m": int(score_15m),
+                    "score_1h": int(score_1h),
+                    "mtf_score": int(mtf_score),
+                    "mtf_score_bucket": _mtf_bucket(mtf_score),
+                    "allow_trade": True,
                 }
+                trade.update(metrics_5m)
+                trade.update(metrics_15m)
+                trade.update(metrics_1h)
+                trade['sl_points'] = round(abs(entry - stop), 4)
+                entry_idx = i
+                break
                 entry_idx = i
                 break
 
@@ -385,6 +566,12 @@ def generate_trades(
             trade["gross_pnl"] = round(gross_pnl, 2)
             trade["trading_cost"] = round(trading_cost, 2)
             trade["pnl"] = round(pnl, 2)
+            trade["result"] = _trade_result(exit_reason, float(pnl))
+            mae, mfe = _mae_mfe(day_candles, entry_idx, exit_idx, side, entry)
+            trade["mae"] = mae
+            trade["mfe"] = mfe
+            trade["time_to_target_min"] = _minutes_between(trigger.timestamp, exit_time) if exit_reason == 'TARGET' else None
+            trade["time_to_stop_min"] = _minutes_between(trigger.timestamp, exit_time) if exit_reason in {'STOP_LOSS', 'TRAILING_STOP'} else None
             trades.append(trade)
 
             trades_taken += 1
@@ -392,4 +579,5 @@ def generate_trades(
             search_start = exit_idx + 1
 
     return trades
+
 

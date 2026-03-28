@@ -44,6 +44,9 @@ from src.output_decision_service import (
     build_quality_ladder_summary,
     build_top_fix_actions,
 )
+from src.backtesting.score_backtest_metrics import render_score_backtest_summary
+from src.strategies.supply_demand import detect_scored_zones, zone_records_to_rows
+from src.visualization.zone_heatmap import build_zone_heatmap
 from src.trading_runtime_service import latest_actionable_trades, run_operator_action
 from src.trading_ui_service import apply_minimal_theme, build_request, initialize_ui_runtime, log_ui_event, render_operator_panels, render_summary_cards
 
@@ -499,6 +502,63 @@ def _render_charts_tab(*, candles: pd.DataFrame, symbol: str, timeframe: str) ->
     st.caption(f'{symbol} | {timeframe} | showing latest {min(len(candles), 240)} candles')
 
 
+def _render_score_backtest_report_tab(*, trades: list[dict[str, object]], summary: dict[str, object]) -> None:
+    st.markdown('### Score Backtest Report')
+    if not trades:
+        st.info('No backtest trades available yet. Run Backtest to evaluate score buckets and thresholds.')
+        return
+    analysis = render_score_backtest_summary(trades, starting_equity=max(_safe_float(summary.get('starting_equity', 100000.0)), 1.0))
+    bucket_rows = pd.DataFrame(analysis.get('score_bucket_rows', []))
+    threshold_rows = pd.DataFrame(analysis.get('threshold_filter_rows', []))
+    col_one, col_two, col_three = st.columns(3)
+    col_one.metric('Best Min Score', str(analysis.get('best_min_score_threshold', 'ALL')))
+    col_two.metric('Higher Score Improves Win Rate', str(summary.get('higher_score_improves_win_rate', 'INSUFFICIENT_DATA') or 'INSUFFICIENT_DATA'))
+    col_three.metric('Higher Score Improves Expectancy', str(summary.get('higher_score_improves_expectancy', 'INSUFFICIENT_DATA') or 'INSUFFICIENT_DATA'))
+    st.markdown('#### Win Rate by Score Bucket')
+    if not bucket_rows.empty:
+        display = bucket_rows.rename(columns={
+            'bucket': 'Score bucket',
+            'trades': 'Trades',
+            'wins': 'Wins',
+            'losses': 'Losses',
+            'win_rate': 'Win rate',
+            'avg_pnl': 'Average PnL',
+            'expectancy': 'Expectancy',
+            'profit_factor': 'Profit factor',
+            'max_drawdown_pct': 'Max DD %',
+        })
+        st.dataframe(display, use_container_width=True, hide_index=True)
+    st.markdown('#### Threshold Comparison')
+    if not threshold_rows.empty:
+        display = threshold_rows.rename(columns={
+            'threshold_label': 'Filter',
+            'trades': 'Trades',
+            'win_rate': 'Win rate',
+            'expectancy': 'Expectancy',
+            'total_pnl': 'Total PnL',
+            'max_drawdown_pct': 'Max DD %',
+            'profit_factor': 'Profit factor',
+        })
+        st.dataframe(display, use_container_width=True, hide_index=True)
+
+
+def _render_zone_heatmap_tab(*, candles: pd.DataFrame, symbol: str) -> None:
+    st.markdown('### Zone Heatmap')
+    if candles.empty:
+        st.info('No candle sample available yet. Run Backtest or Start Paper to render the zone heatmap.')
+        return
+    candle_rows = candles.to_dict(orient='records')
+    zone_records = detect_scored_zones(candle_rows, symbol=symbol)
+    if not zone_records:
+        st.info('No supply or demand zones were detected in the current candle sample.')
+        return
+    zone_rows = zone_records_to_rows(zone_records)
+    heatmap = build_zone_heatmap(candles, zone_rows)
+    st.altair_chart(heatmap, use_container_width=True)
+    with st.expander('Zone Table'):
+        st.dataframe(pd.DataFrame(zone_rows), use_container_width=True, hide_index=True)
+
+
 def _render_trades_tab(*, trades: list[dict[str, object]], status: str) -> None:
     st.markdown('### Trade Explorer')
     if not trades:
@@ -604,9 +664,13 @@ def _render_execution_tab(*, status: str, broker_status: str, todays_trades: int
 
 
 def _render_tabs(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], candles: pd.DataFrame, active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int) -> None:
-    dashboard_tab, charts_tab, validation_tab, trades_tab, execution_tab = st.tabs(['Dashboard', 'Charts', 'Validation', 'Trades', 'Execution Logs'])
+    dashboard_tab, score_report_tab, zone_heatmap_tab, charts_tab, validation_tab, trades_tab, execution_tab = st.tabs(['Dashboard', 'Score Backtest Report', 'Zone Heatmap', 'Charts', 'Validation', 'Trades', 'Execution Logs'])
     with dashboard_tab:
         _render_dashboard_tab(strategy=strategy, symbol=symbol, timeframe=timeframe, period=period, broker_choice=broker_choice, status=status, broker_status=broker_status, trades=trades, active_summary=active_summary, scorecard_summary=scorecard_summary, todays_trades=todays_trades)
+    with score_report_tab:
+        _render_score_backtest_report_tab(trades=trades, summary=scorecard_summary)
+    with zone_heatmap_tab:
+        _render_zone_heatmap_tab(candles=candles, symbol=symbol)
     with charts_tab:
         _render_charts_tab(candles=candles, symbol=symbol, timeframe=timeframe)
     with validation_tab:

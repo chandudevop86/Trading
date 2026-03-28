@@ -120,6 +120,222 @@ def _profit_factor(gross_profit: float, gross_loss_abs: float) -> float | str:
     return 0.0
 
 
+def _score_bucket(score: float) -> str:
+    if score >= 13:
+        return '13+'
+    if score >= 10:
+        return '10-12'
+    if score >= 7:
+        return '7-9'
+    return '0-6'
+
+
+def _trade_score(record: dict[str, Any]) -> float:
+    for key in ('mtf_score', 'score', 'total_score', 'zone_score', 'zone_strength_score', 'zone_gate_score'):
+        raw = str(record.get(key, '') or '').strip()
+        if raw:
+            return _safe_float(record.get(key))
+    return 0.0
+
+
+def _has_mtf_scores(trades: list[dict[str, Any]]) -> bool:
+    return any(str(trade.get('mtf_score', '') or '').strip() for trade in trades)
+
+
+def _mtf_score_bucket(score: float) -> str:
+    if score >= 16:
+        return '16-20'
+    if score >= 12:
+        return '12-15'
+    if score >= 9:
+        return '9-11'
+    return '0-8'
+
+
+def _mtf_score_bucket_metrics(trades: list[dict[str, Any]], capital: float) -> tuple[dict[str, dict[str, float]], str]:
+    buckets = ['0-8', '9-11', '12-15', '16-20']
+    bucket_map: dict[str, list[dict[str, Any]]] = {bucket: [] for bucket in buckets}
+    for trade in trades:
+        bucket_map[_mtf_score_bucket(_safe_float(trade.get('mtf_score')))].append(trade)
+
+    analysis: dict[str, dict[str, float]] = {}
+    for bucket in buckets:
+        bucket_trades = bucket_map[bucket]
+        pnl_values = [_safe_float(trade.get('pnl')) for trade in bucket_trades]
+        wins = sum(1 for value in pnl_values if value > 0)
+        losses = sum(1 for value in pnl_values if value < 0)
+        total = len(bucket_trades)
+        gross_profit = sum(value for value in pnl_values if value > 0)
+        gross_loss_abs = abs(sum(value for value in pnl_values if value < 0))
+        profit_factor = gross_profit / gross_loss_abs if gross_loss_abs > 0 else float('inf') if gross_profit > 0 else 0.0
+        expectancy = (sum(pnl_values) / total) if total else 0.0
+        equity_rows = _build_equity_curve_rows('MTF_BUCKET', bucket_trades, starting_equity=float(capital)) if total else []
+        max_drawdown_pct = max((row.get('drawdown_pct', 0.0) for row in equity_rows), default=0.0)
+        analysis[bucket] = {
+            'trades': float(total),
+            'wins': float(wins),
+            'losses': float(losses),
+            'win_rate': round((wins / total) * 100.0, 2) if total else 0.0,
+            'total_pnl': round(sum(pnl_values), 2),
+            'avg_pnl': round(expectancy, 2),
+            'expectancy': round(expectancy, 2),
+            'profit_factor': round(profit_factor, 2) if profit_factor != float('inf') else 'inf',
+            'max_drawdown_pct': round(float(max_drawdown_pct), 2),
+        }
+
+    serialized = '; '.join(
+        f"{bucket}=trades:{int(values['trades'])},wins:{int(values['wins'])},losses:{int(values['losses'])},win_rate:{values['win_rate']:.2f},avg_pnl:{values['avg_pnl']:.2f},expectancy:{values['expectancy']:.2f},max_dd_pct:{values['max_drawdown_pct']:.2f},pf:{values['profit_factor']}"
+        for bucket, values in analysis.items()
+    )
+    return analysis, serialized
+
+
+def _breakout_score_bucket(score: float) -> str:
+    if score >= 15:
+        return '15+'
+    if score >= 12:
+        return '12-14'
+    if score >= 9:
+        return '9-11'
+    return '0-8'
+
+
+def _breakout_score_bucket_metrics(trades: list[dict[str, Any]], capital: float) -> tuple[dict[str, dict[str, float]], str]:
+    buckets = ['0-8', '9-11', '12-14', '15+']
+    breakout_trades = [trade for trade in trades if str(trade.get('strategy', '')).upper() == 'BREAKOUT']
+    bucket_map: dict[str, list[dict[str, Any]]] = {bucket: [] for bucket in buckets}
+    for trade in breakout_trades:
+        bucket_map[_breakout_score_bucket(_trade_score(trade))].append(trade)
+
+    analysis: dict[str, dict[str, float]] = {}
+    for bucket in buckets:
+        bucket_trades = bucket_map[bucket]
+        pnl_values = [_safe_float(trade.get('pnl')) for trade in bucket_trades]
+        wins = sum(1 for value in pnl_values if value > 0)
+        total = len(bucket_trades)
+        equity_rows = _build_equity_curve_rows('BREAKOUT_BUCKET', bucket_trades, starting_equity=float(capital)) if total else []
+        max_drawdown_pct = max((row.get('drawdown_pct', 0.0) for row in equity_rows), default=0.0)
+        analysis[bucket] = {
+            'trades': float(total),
+            'win_rate': round((wins / total) * 100.0, 2) if total else 0.0,
+            'avg_pnl': round((sum(pnl_values) / total), 2) if total else 0.0,
+            'expectancy': round((sum(pnl_values) / total), 2) if total else 0.0,
+            'max_drawdown_pct': round(float(max_drawdown_pct), 2),
+        }
+
+    serialized = '; '.join(
+        f"{bucket}=trades:{int(values['trades'])},win_rate:{values['win_rate']:.2f},avg_pnl:{values['avg_pnl']:.2f},expectancy:{values['expectancy']:.2f},max_dd_pct:{values['max_drawdown_pct']:.2f}"
+        for bucket, values in analysis.items()
+    )
+    return analysis, serialized
+
+
+def _score_bucket_metrics(trades: list[dict[str, Any]], capital: float) -> tuple[dict[str, dict[str, float]], str]:
+    buckets = ['0-6', '7-9', '10-12', '13+']
+    bucket_map: dict[str, list[dict[str, Any]]] = {bucket: [] for bucket in buckets}
+    for trade in trades:
+        bucket_map[_score_bucket(_trade_score(trade))].append(trade)
+
+    analysis: dict[str, dict[str, float]] = {}
+    for bucket in buckets:
+        bucket_trades = bucket_map[bucket]
+        pnl_values = [_safe_float(trade.get('pnl')) for trade in bucket_trades]
+        wins = sum(1 for value in pnl_values if value > 0)
+        losses = sum(1 for value in pnl_values if value < 0)
+        total = len(bucket_trades)
+        gross_profit = sum(value for value in pnl_values if value > 0)
+        gross_loss_abs = abs(sum(value for value in pnl_values if value < 0))
+        profit_factor = gross_profit / gross_loss_abs if gross_loss_abs > 0 else float('inf') if gross_profit > 0 else 0.0
+        expectancy = (sum(pnl_values) / total) if total else 0.0
+        equity_rows = _build_equity_curve_rows('BUCKET', bucket_trades, starting_equity=float(capital)) if total else []
+        max_drawdown_pct = max((row.get('drawdown_pct', 0.0) for row in equity_rows), default=0.0)
+        analysis[bucket] = {
+            'trades': float(total),
+            'wins': float(wins),
+            'losses': float(losses),
+            'win_rate': round((wins / total) * 100.0, 2) if total else 0.0,
+            'total_pnl': round(sum(pnl_values), 2),
+            'avg_pnl': round(expectancy, 2),
+            'expectancy': round(expectancy, 2),
+            'profit_factor': round(profit_factor, 2) if profit_factor != float('inf') else 'inf',
+            'max_drawdown_pct': round(float(max_drawdown_pct), 2),
+        }
+
+    serialized = '; '.join(
+        f"{bucket}=trades:{int(values['trades'])},wins:{int(values['wins'])},losses:{int(values['losses'])},win_rate:{values['win_rate']:.2f},avg_pnl:{values['avg_pnl']:.2f},expectancy:{values['expectancy']:.2f},max_dd_pct:{values['max_drawdown_pct']:.2f},pf:{values['profit_factor']}"
+        for bucket, values in analysis.items()
+    )
+    return analysis, serialized
+
+
+def _threshold_filter_metrics(trades: list[dict[str, Any]], capital: float) -> tuple[dict[str, dict[str, float]], str, str]:
+    thresholds = [('ALL', 0.0), ('8+', 8.0), ('10+', 10.0), ('12+', 12.0)]
+    analysis: dict[str, dict[str, float]] = {}
+    best_label = 'ALL'
+    best_key = (-10**9, -10**9, 10**9, -10**9)
+    for label, threshold in thresholds:
+        filtered = trades if threshold <= 0 else [trade for trade in trades if _trade_score(trade) >= threshold]
+        pnl_values = [_safe_float(trade.get('pnl')) for trade in filtered]
+        wins = sum(1 for value in pnl_values if value > 0)
+        total = len(filtered)
+        gross_profit = sum(value for value in pnl_values if value > 0)
+        gross_loss_abs = abs(sum(value for value in pnl_values if value < 0))
+        profit_factor = gross_profit / gross_loss_abs if gross_loss_abs > 0 else float('inf') if gross_profit > 0 else 0.0
+        expectancy = (sum(pnl_values) / total) if total else 0.0
+        equity_rows = _build_equity_curve_rows('FILTER', filtered, starting_equity=float(capital)) if total else []
+        max_drawdown_pct = max((row.get('drawdown_pct', 0.0) for row in equity_rows), default=0.0)
+        win_rate = round((wins / total) * 100.0, 2) if total else 0.0
+        analysis[label] = {
+            'threshold': threshold,
+            'trades': float(total),
+            'win_rate': win_rate,
+            'total_pnl': round(sum(pnl_values), 2),
+            'expectancy': round(expectancy, 2),
+            'max_drawdown_pct': round(float(max_drawdown_pct), 2),
+            'profit_factor': round(profit_factor, 2) if profit_factor != float('inf') else 'inf',
+        }
+        ranking_pf = 999.0 if profit_factor == float('inf') else float(profit_factor)
+        candidate_key = (round(expectancy, 6), ranking_pf, -float(max_drawdown_pct), -float(total))
+        if total > 0 and candidate_key > best_key:
+            best_key = candidate_key
+            best_label = label
+
+    serialized = '; '.join(
+        f"{label}=trades:{int(values['trades'])},win_rate:{values['win_rate']:.2f},expectancy:{values['expectancy']:.2f},pnl:{values['total_pnl']:.2f},max_dd_pct:{values['max_drawdown_pct']:.2f},pf:{values['profit_factor']}"
+        for label, values in analysis.items()
+    )
+    return analysis, serialized, best_label
+
+
+def _binary_segment_metrics(rows: list[dict[str, Any]], key: str, positive_value: str, capital: float) -> str:
+    groups = {'YES': [], 'NO': []}
+    for row in rows:
+        groups['YES' if str(row.get(key, '')).strip().upper() == positive_value else 'NO'].append(row)
+    parts = []
+    for label in ['YES', 'NO']:
+        sample = groups[label]
+        pnl_values = [_safe_float(item.get('pnl')) for item in sample]
+        total = len(sample)
+        wins = sum(1 for value in pnl_values if value > 0)
+        expectancy = (sum(pnl_values) / total) if total else 0.0
+        equity_rows = _equity_curve_rows(sample, float(capital)) if 'backtest_engine' in __file__ and total else _build_equity_curve_rows('SEGMENT', sample, starting_equity=float(capital)) if total else []
+        max_dd_pct = max((row.get('drawdown_pct', 0.0) for row in equity_rows), default=0.0)
+        parts.append(f"{label}=trades:{total},win_rate:{((wins / total) * 100.0) if total else 0.0:.2f},expectancy:{expectancy:.2f},max_dd_pct:{float(max_dd_pct):.2f}")
+    return '; '.join(parts)
+
+
+def _score_progression_flags(bucket_analysis: dict[str, dict[str, float]]) -> tuple[str, str]:
+    progression = ['0-6', '7-9', '10-12', '13+']
+    active = [bucket for bucket in progression if bucket_analysis.get(bucket, {}).get('trades', 0.0) > 0]
+    if len(active) < 2:
+        return 'INSUFFICIENT_DATA', 'INSUFFICIENT_DATA'
+    win_rates = [float(bucket_analysis[bucket]['win_rate']) for bucket in active]
+    expectancies = [float(bucket_analysis[bucket]['expectancy']) for bucket in active]
+    win_rate_improves = all(curr >= prev for prev, curr in zip(win_rates, win_rates[1:]))
+    expectancy_improves = all(curr >= prev for prev, curr in zip(expectancies, expectancies[1:]))
+    return ('YES' if win_rate_improves else 'NO'), ('YES' if expectancy_improves else 'NO')
+
+
 def _pnl_summary(
     strategy: str,
     rows: list[dict[str, Any]],
@@ -153,6 +369,13 @@ def _pnl_summary(
     session_pass_count = sum(1 for row in rows if str(row.get('session_gate', '')).strip().upper() == 'PASS')
     zone_gate_scores = [_safe_float(row.get('zone_gate_score')) for row in rows if str(row.get('zone_gate_score', '')).strip() != '']
     avg_zone_gate_score = round(sum(zone_gate_scores) / len(zone_gate_scores), 2) if zone_gate_scores else 0.0
+    bucket_analysis, score_bucket_analysis = _score_bucket_metrics(rows, float(starting_equity))
+    threshold_analysis, threshold_filter_analysis, best_threshold_label = _threshold_filter_metrics(rows, float(starting_equity))
+    higher_score_improves_win_rate, higher_score_improves_expectancy = _score_progression_flags(bucket_analysis)
+    mtf_bucket_analysis, mtf_score_bucket_analysis = _mtf_score_bucket_metrics(rows, float(starting_equity)) if _has_mtf_scores(rows) else ({}, '')
+    breakout_bucket_analysis, breakout_score_bucket_analysis = _breakout_score_bucket_metrics(rows, float(starting_equity))
+    overlap_performance = _binary_segment_metrics(rows, 'overlap_with_fvg', 'YES', float(starting_equity))
+    freshness_performance = _binary_segment_metrics(rows, 'fresh_zone', 'YES', float(starting_equity))
     summary = {
         'strategy': strategy,
         'trades': total,
@@ -186,6 +409,15 @@ def _pnl_summary(
         'session_pass_trades': session_pass_count,
         'session_pass_pct': round((session_pass_count / total) * 100.0, 2) if total else 0.0,
         'avg_zone_gate_score': avg_zone_gate_score,
+        'score_bucket_analysis': score_bucket_analysis,
+        'threshold_filter_analysis': threshold_filter_analysis,
+        'mtf_score_bucket_analysis': mtf_score_bucket_analysis,
+        'breakout_score_bucket_analysis': breakout_score_bucket_analysis,
+        'overlap_performance': overlap_performance,
+        'freshness_performance': freshness_performance,
+        'best_min_score_threshold': best_threshold_label,
+        'higher_score_improves_win_rate': higher_score_improves_win_rate,
+        'higher_score_improves_expectancy': higher_score_improves_expectancy,
         'positive_expectancy': 'YES' if expectancy_per_trade > 0 else 'NO',
     }
     return summary, equity_curve_rows

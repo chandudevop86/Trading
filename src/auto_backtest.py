@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import csv
@@ -14,12 +14,28 @@ from src.strategy_service import StrategyContext, generate_strategy_rows
 from src.trading_workflows import build_backtest_workflow, run_live_candidates, run_paper_candidates
 from src.runtime_persistence import persist_rows
 
+DEFAULT_VALIDATION_THRESHOLDS: dict[str, float] = {
+    'min_trades': 20.0,
+    'min_win_rate_pct': 40.0,
+    'min_profit_factor': 1.2,
+    'min_expectancy': 0.0,
+    'max_drawdown_pct': 15.0,
+    'min_net_pnl': 0.0,
+}
+
 
 def _safe_float(value: Any) -> float:
     try:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _event_time_key(row: dict[str, Any]) -> str:
@@ -95,6 +111,7 @@ def _pnl_summary(
     starting_equity: float,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     pnl_values = [_safe_float(r.get('pnl')) for r in rows]
+    total_pnl = round(sum(pnl_values), 2)
     win_values = [p for p in pnl_values if p > 0]
     loss_values = [p for p in pnl_values if p < 0]
     wins = len(win_values)
@@ -107,9 +124,11 @@ def _pnl_summary(
     equity_curve_rows = _build_equity_curve_rows(strategy, rows, starting_equity=starting_equity)
     max_drawdown = max((float(r.get('drawdown', 0.0) or 0.0) for r in equity_curve_rows), default=0.0)
     max_drawdown_pct = max((float(r.get('drawdown_pct', 0.0) or 0.0) for r in equity_curve_rows), default=0.0)
+    expectancy_per_trade = round(total_pnl / total, 2) if total else 0.0
     summary = {
         'strategy': strategy,
         'trades': total,
+        'total_trades': total,
         'wins': wins,
         'losses': losses,
         'win_rate_pct': round((wins / total) * 100.0, 2) if total else 0.0,
@@ -125,9 +144,139 @@ def _pnl_summary(
         'equity_curve_points': max(0, len(equity_curve_rows) - 1),
         'gross_total_pnl': gross_total_pnl,
         'total_trading_cost': total_cost,
-        'total_pnl': round(sum(pnl_values), 2),
+        'total_pnl': total_pnl,
+        'avg_pnl': expectancy_per_trade,
+        'expectancy_per_trade': expectancy_per_trade,
+        'positive_expectancy': 'YES' if expectancy_per_trade > 0 else 'NO',
     }
     return summary, equity_curve_rows
+
+
+def _validation_thresholds(args: argparse.Namespace) -> dict[str, float]:
+    thresholds = dict(DEFAULT_VALIDATION_THRESHOLDS)
+    for key in thresholds:
+        value = getattr(args, key, None)
+        if value is None:
+            continue
+        thresholds[key] = float(value)
+    thresholds['min_trades'] = max(thresholds['min_trades'], 0.0)
+    thresholds['max_drawdown_pct'] = max(thresholds['max_drawdown_pct'], 0.0)
+    return thresholds
+
+
+def _validation_reasons(summary: dict[str, Any], thresholds: dict[str, float]) -> list[str]:
+    trades = _safe_int(summary.get('total_trades', summary.get('trades')))
+    win_rate_pct = _safe_float(summary.get('win_rate_pct', summary.get('win_rate')))
+    profit_factor_raw = summary.get('profit_factor')
+    profit_factor = float('inf') if str(profit_factor_raw).strip().lower() == 'inf' else _safe_float(profit_factor_raw)
+    expectancy = _safe_float(summary.get('expectancy_per_trade'))
+    max_drawdown_pct = _safe_float(summary.get('max_drawdown_pct'))
+    total_pnl = _safe_float(summary.get('total_pnl'))
+    reasons: list[str] = []
+    if trades < int(thresholds['min_trades']):
+        reasons.append('too_few_trades')
+    if win_rate_pct < thresholds['min_win_rate_pct']:
+        reasons.append('win_rate_below_threshold')
+    if profit_factor != float('inf') and profit_factor < thresholds['min_profit_factor']:
+        reasons.append('profit_factor_below_threshold')
+    if expectancy <= thresholds['min_expectancy']:
+        reasons.append('expectancy_not_positive' if thresholds['min_expectancy'] <= 0 else 'expectancy_below_threshold')
+    if max_drawdown_pct > thresholds['max_drawdown_pct']:
+        reasons.append('drawdown_above_limit')
+    if total_pnl < thresholds['min_net_pnl']:
+        reasons.append('net_pnl_below_threshold')
+    return reasons
+
+
+def _apply_validation(summary: dict[str, Any], thresholds: dict[str, float]) -> dict[str, Any]:
+    item = dict(summary)
+    reasons = _validation_reasons(item, thresholds)
+    validation_status = 'PASS' if not reasons else 'FAIL'
+    validation_reasons = '|'.join(reasons)
+    promotable = validation_status == 'PASS'
+    item['validation_status'] = validation_status
+    item['validation_reasons'] = validation_reasons
+    item['validation_reasons_list'] = list(reasons)
+    item['promotable'] = 'YES' if promotable else 'NO'
+    item['deployment_ready'] = 'YES' if promotable else 'NO'
+    existing_blockers = str(item.get('deployment_blockers', '') or '').strip()
+    validation_blockers = validation_reasons.replace('|', '; ')
+    item['deployment_blockers'] = '; '.join(part for part in [existing_blockers, validation_blockers] if part)
+    return item
+
+
+def _validation_report_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    report_rows: list[dict[str, Any]] = []
+    for row in summary_rows:
+        report_rows.append(
+            {
+                'strategy': row.get('strategy', ''),
+                'trades': row.get('total_trades', row.get('trades', 0)),
+                'win_rate_pct': row.get('win_rate_pct', row.get('win_rate', 0.0)),
+                'profit_factor': row.get('profit_factor', 0.0),
+                'expectancy_per_trade': row.get('expectancy_per_trade', 0.0),
+                'max_drawdown_pct': row.get('max_drawdown_pct', 0.0),
+                'total_pnl': row.get('total_pnl', 0.0),
+                'validation_status': row.get('validation_status', 'FAIL'),
+                'validation_reasons': row.get('validation_reasons', ''),
+                'promotable': row.get('promotable', 'NO'),
+            }
+        )
+    return report_rows
+
+
+def _build_candidate_map(candidates: list[dict[str, object]]) -> dict[str, list[dict[str, object]]]:
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for candidate in candidates:
+        strategy = str(candidate.get('strategy', '') or '').strip().upper()
+        grouped.setdefault(strategy, []).append(candidate)
+    return grouped
+
+
+def _execution_candidates_for_mode(
+    summary_rows: list[dict[str, Any]],
+    candidate_map: dict[str, list[dict[str, object]]],
+    *,
+    execution_type: str,
+    allow_live_on_pass: bool,
+    allow_paper_on_fail: bool,
+) -> list[dict[str, object]]:
+    selected: list[dict[str, object]] = []
+    for row in summary_rows:
+        strategy = str(row.get('strategy', '') or '').strip().upper()
+        validation_status = str(row.get('validation_status', 'FAIL') or 'FAIL').upper()
+        validation_reasons = str(row.get('validation_reasons', '') or '').strip() or 'validation_failed'
+        strategy_candidates = candidate_map.get(strategy, [])
+        if not strategy_candidates:
+            continue
+        if execution_type == 'LIVE':
+            if validation_status != 'PASS':
+                print(f"[PROMOTION] Strategy {strategy} blocked from live execution: {validation_reasons}")
+                continue
+            if not allow_live_on_pass:
+                print(f"[PROMOTION] Strategy {strategy} blocked from live execution: allow_live_on_pass_flag_required")
+                continue
+            print(f"[PROMOTION] Strategy {strategy} approved for live execution")
+            selected.extend(strategy_candidates)
+            continue
+        if execution_type == 'PAPER':
+            if validation_status == 'PASS':
+                print(f"[PROMOTION] Strategy {strategy} approved for paper execution")
+                selected.extend(strategy_candidates)
+                continue
+            if allow_paper_on_fail:
+                print(f"[PROMOTION] Strategy {strategy} approved for paper execution via override: {validation_reasons}")
+                selected.extend(strategy_candidates)
+                continue
+            print(f"[PROMOTION] Strategy {strategy} blocked from paper execution: {validation_reasons}")
+    return selected
+
+
+def _best_promotable_strategy(ranked_summary_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for row in ranked_summary_rows:
+        if str(row.get('validation_status', 'FAIL')).upper() == 'PASS':
+            return row
+    return None
 
 
 def _build_breakout_bias_evaluation(
@@ -217,9 +366,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--ranking-output', type=Path, default=Path('data/strategy_expectancy_report.csv'))
     parser.add_argument('--optimizer-output', type=Path, default=Path('data/strategy_optimizer_report.csv'))
     parser.add_argument('--validation-output', type=Path, default=Path('data/backtest_validation.csv'))
+    parser.add_argument('--validation-report-output', type=Path, default=Path('data/backtest_validation_report.csv'))
     parser.add_argument('--equity-curve-output', type=Path, default=Path('data/backtest_equity_curves.csv'))
     parser.add_argument('--paper-log-output', type=Path, default=Path('data/paper_trading_logs_all.csv'))
     parser.add_argument('--execution-type', default='PAPER', choices=['PAPER', 'LIVE', 'NONE'])
+    parser.add_argument('--allow-live-on-pass', action='store_true')
+    parser.add_argument('--allow-paper-on-fail', action='store_true')
+    parser.add_argument('--min-trades', type=float, default=None)
+    parser.add_argument('--min-win-rate-pct', type=float, default=None)
+    parser.add_argument('--min-profit-factor', type=float, default=None)
+    parser.add_argument('--min-expectancy', type=float, default=None)
+    parser.add_argument('--max-drawdown-pct', type=float, default=None)
+    parser.add_argument('--min-net-pnl', type=float, default=None)
     parser.add_argument('--live-log-output', type=Path, default=Path('data/live_trading_logs_all.csv'))
     parser.add_argument('--live-broker', default='DHAN', choices=['DHAN', 'NONE'])
     parser.add_argument('--security-map', type=Path, default=Path('data/dhan_security_map.csv'))
@@ -247,6 +405,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     max_daily_loss_value = float(getattr(args, 'max_daily_loss', 0.0) or 0.0)
     max_daily_loss = max_daily_loss_value if max_daily_loss_value > 0 else None
     equity_curve_output = Path(getattr(args, 'equity_curve_output', Path('data/backtest_equity_curves.csv')))
+    validation_thresholds = _validation_thresholds(args)
 
     rows = fetch_live_ohlcv(args.symbol, args.interval, args.period)
     if not rows:
@@ -351,10 +510,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     ]
     summary_rows = [summary for summary, _ in summary_and_curves]
     summary_rows = [apply_strategy_benchmark(summary) for summary in summary_rows]
-    ranked_summary_rows = rank_strategy_summaries(summary_rows)
-    optimizer_rows = optimizer_report_rows(ranked_summary_rows)
-    equity_curve_rows = [curve_row for _, curve_rows in summary_and_curves for curve_row in curve_rows]
     breakout_bias_evaluation = _build_breakout_bias_evaluation(summary_rows[0], summary_rows[1])
+
     for summary in summary_rows:
         summary['timeframe'] = timeframe
         summary['data_start'] = data_start
@@ -362,6 +519,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         summary['run_at_utc'] = run_at
         summary['equity_curve_output'] = str(equity_curve_output)
 
+    summary_rows = [_apply_validation(summary, validation_thresholds) for summary in summary_rows]
+    ranked_summary_rows = rank_strategy_summaries(summary_rows)
+    optimizer_rows = optimizer_report_rows(ranked_summary_rows)
+    validation_report_rows = _validation_report_rows(summary_rows)
+    promotable_rows = [row for row in ranked_summary_rows if str(row.get('validation_status', 'FAIL')).upper() == 'PASS']
+    best_promotable = _best_promotable_strategy(ranked_summary_rows)
+
+    equity_curve_rows = [curve_row for _, curve_rows in summary_and_curves for curve_row in curve_rows]
     for curve_row in equity_curve_rows:
         curve_row['timeframe'] = timeframe
         curve_row['data_start'] = data_start
@@ -372,7 +537,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     _append_rows(args.summary_history_output, summary_rows)
     _write_rows(args.ranking_output, ranked_summary_rows)
     _write_rows(args.optimizer_output, optimizer_rows)
+    _write_rows(Path(getattr(args, 'validation_report_output', Path('data/backtest_validation_report.csv'))), validation_report_rows)
     _write_rows(equity_curve_output, equity_curve_rows)
+
+    for summary in summary_rows:
+        if str(summary.get('validation_status', 'FAIL')).upper() == 'PASS':
+            print(f"[VALIDATION] Strategy {summary['strategy']} PASSED")
+        else:
+            print(f"[VALIDATION] Strategy {summary['strategy']} FAILED: {summary.get('validation_reasons', '')}")
+    if not promotable_rows:
+        print('[RESULT] No promotable strategies found')
 
     validation_summary: dict[str, Any] = {}
 
@@ -382,7 +556,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     amd_workflow = build_backtest_workflow(amd_rows, 'AMD + FVG + Supply/Demand', args.execution_symbol)
     one_workflow = build_backtest_workflow(one_trade_rows, 'One Trade/Day (All Indicators)', args.execution_symbol)
     btst_workflow = build_backtest_workflow(btst_rows, 'BTST', args.execution_symbol)
-    candidates = (
+    all_candidates = (
         breakout_workflow.execution_candidates
         + ds_workflow.execution_candidates
         + ind_workflow.execution_candidates
@@ -391,13 +565,24 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         + btst_workflow.execution_candidates
     )
 
-    for candidate in candidates:
+    for candidate in all_candidates:
         candidate['timeframe'] = timeframe
         candidate['data_start'] = data_start
         candidate['data_end'] = data_end
         candidate['backtest_run_at_utc'] = run_at
 
     execution_type = str(getattr(args, 'execution_type', 'PAPER') or 'PAPER').strip().upper()
+    allow_live_on_pass = bool(getattr(args, 'allow_live_on_pass', False))
+    allow_paper_on_fail = bool(getattr(args, 'allow_paper_on_fail', False))
+    candidate_map = _build_candidate_map(all_candidates)
+    candidates = _execution_candidates_for_mode(
+        ranked_summary_rows,
+        candidate_map,
+        execution_type=execution_type,
+        allow_live_on_pass=allow_live_on_pass,
+        allow_paper_on_fail=allow_paper_on_fail,
+    ) if execution_type in {'PAPER', 'LIVE'} else []
+
     executed_log_path = args.paper_log_output
     paper_rows: list[dict[str, object]] = []
 
@@ -405,35 +590,41 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         paper_rows = []
     elif execution_type == 'LIVE':
         executed_log_path = getattr(args, 'live_log_output', Path('data/live_trading_logs_all.csv'))
-        live_broker = str(getattr(args, 'live_broker', 'DHAN') or 'DHAN').strip().upper()
-        security_map_path = getattr(args, 'security_map', Path('data/dhan_security_map.csv'))
-        security_map = None
-        if live_broker != 'NONE':
-            try:
-                from src.dhan_api import load_security_map  # type: ignore
-                security_map = load_security_map(security_map_path)
-            except Exception:
-                security_map = None
-        live_result = run_live_candidates(
-            candidates,
-            output_path=executed_log_path,
-            deduplicate=False,
-            broker_name=live_broker,
-            security_map=security_map,
-            max_trades_per_day=max_trades_per_day,
-            max_daily_loss=max_daily_loss,
-        )
-        paper_rows = list(getattr(live_result.execution_result, 'rows', []))
+        if candidates:
+            live_broker = str(getattr(args, 'live_broker', 'DHAN') or 'DHAN').strip().upper()
+            security_map_path = getattr(args, 'security_map', Path('data/dhan_security_map.csv'))
+            security_map = None
+            if live_broker != 'NONE':
+                try:
+                    from src.dhan_api import load_security_map  # type: ignore
+                    security_map = load_security_map(security_map_path)
+                except Exception:
+                    security_map = None
+            live_result = run_live_candidates(
+                candidates,
+                output_path=executed_log_path,
+                deduplicate=False,
+                broker_name=live_broker,
+                security_map=security_map,
+                max_trades_per_day=max_trades_per_day,
+                max_daily_loss=max_daily_loss,
+            )
+            paper_rows = list(getattr(live_result.execution_result, 'rows', []))
+        else:
+            print('[RESULT] No eligible live candidates after validation gates')
     else:
         execution_type = 'PAPER'
-        paper_result = run_paper_candidates(
-            candidates,
-            output_path=args.paper_log_output,
-            deduplicate=False,
-            max_trades_per_day=max_trades_per_day,
-            max_daily_loss=max_daily_loss,
-        )
-        paper_rows = list(getattr(paper_result.execution_result, 'rows', []))
+        if candidates:
+            paper_result = run_paper_candidates(
+                candidates,
+                output_path=args.paper_log_output,
+                deduplicate=False,
+                max_trades_per_day=max_trades_per_day,
+                max_daily_loss=max_daily_loss,
+            )
+            paper_rows = list(getattr(paper_result.execution_result, 'rows', []))
+        else:
+            print('[RESULT] No eligible paper candidates after validation gates')
     validation_output = Path(getattr(args, 'validation_output', Path('data/backtest_validation.csv')))
     validation_summary_output = validation_output.with_name(f'{validation_output.stem}_summary{validation_output.suffix}')
     if execution_type in {'PAPER', 'LIVE'} and paper_rows:
@@ -458,10 +649,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     return {
         'summary_rows': summary_rows,
         'ranked_summary_rows': ranked_summary_rows,
+        'promotable_rows': promotable_rows,
+        'recommended_strategy': best_promotable,
         'ranking_output': str(args.ranking_output),
         'optimizer_output': str(args.optimizer_output),
         'optimizer_rows': optimizer_rows,
         'validation_output': str(validation_output),
+        'validation_report_output': str(getattr(args, 'validation_report_output', Path('data/backtest_validation_report.csv'))),
         'validation_summary_output': str(validation_summary_output),
         'validation_summary': validation_summary,
         'equity_curve_rows': equity_curve_rows,
@@ -493,30 +687,28 @@ def main() -> None:
             f"trades_delta={bias_evaluation.get('trades_delta')}"
         )
     for row in out['summary_rows']:
+        reasons = str(row.get('validation_reasons', '') or '')
         print(
             f"{row['strategy']}: trades={row['trades']} wins={row['wins']} "
             f"losses={row['losses']} gross_pnl={row['gross_total_pnl']} "
             f"costs={row['total_trading_cost']} pnl={row['total_pnl']} win_rate={row['win_rate_pct']}% "
-            f"avg_win={row['avg_win']} avg_loss={row['avg_loss']} "
-            f"pf={row['profit_factor']} max_dd={row['max_drawdown']} ({row['max_drawdown_pct']}%)"
+            f"avg_win={row['avg_win']} avg_loss={row['avg_loss']} expectancy={row['expectancy_per_trade']} "
+            f"pf={row['profit_factor']} max_dd={row['max_drawdown']} ({row['max_drawdown_pct']}%) "
+            f"validation={row.get('validation_status')} reasons={reasons or 'NONE'} promotable={row.get('promotable')}"
         )
-    if out.get('ranked_summary_rows'):
-        best = out['ranked_summary_rows'][0]
+    best = out.get('recommended_strategy')
+    if best:
         print(
-            f"Best expectancy profile: rank={best.get('rank')} strategy={best.get('strategy')} "
+            f"Best promotable strategy: rank={best.get('rank')} strategy={best.get('strategy')} "
             f"expectancy={best.get('expectancy_per_trade')} pf={best.get('profit_factor')} max_dd={best.get('max_drawdown')}"
         )
+    else:
+        print('Best promotable strategy: none')
     print(f"Strategy ranking: {out.get('ranking_output', '')}")
-    print(f"Optimizer report: {out.get('optimizer_output', '')}" )
+    print(f"Optimizer report: {out.get('optimizer_output', '')}")
+    print(f"Validation report: {out.get('validation_report_output', '')}")
     print(f"Equity curves: {out['equity_curve_output']}")
 
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-

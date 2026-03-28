@@ -36,6 +36,7 @@ from src.runtime_strategy_presets import OPERATOR_DEFAULTS
 from src.strike_selector import attach_option_strikes
 from src.trading_core import append_log, configure_file_logging
 from src.runtime_models import period_for_interval
+from src.output_decision_service import build_quality_ladder_frame, build_quality_ladder_summary
 from src.trading_runtime_service import latest_actionable_trades, run_operator_action
 from src.trading_ui_service import apply_minimal_theme, build_request, initialize_ui_runtime, log_ui_event, render_operator_panels, render_summary_cards
 
@@ -414,6 +415,14 @@ def _render_header(strategy: str, symbol: str, timeframe: str, mode: str, broker
     )
 
 
+def _render_quality_ladder(summary: dict[str, object]) -> None:
+    st.markdown('### Strategy Quality Ladder')
+    st.caption('These four checks explain why the system is improving or failing in plain English.')
+    st.info(build_quality_ladder_summary(summary))
+    frame = build_quality_ladder_frame(summary)
+    st.dataframe(frame, use_container_width=True, hide_index=True)
+
+
 def _render_dashboard_tab(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int) -> None:
     _render_summary_cards(trades, active_summary, todays_trades)
     left, right = st.columns(2)
@@ -423,6 +432,7 @@ def _render_dashboard_tab(*, strategy: str, symbol: str, timeframe: str, period:
         st.dataframe(_build_signal_table(trades), use_container_width=True, hide_index=True)
     with right:
         _render_operator_panels(status, trades, symbol, timeframe, period, broker_choice, broker_status)
+    _render_quality_ladder(scorecard_summary)
     _render_scorecard(scorecard_summary, status, todays_trades, strategy)
 
 
@@ -507,6 +517,7 @@ def _render_validation_tab(summary: dict[str, object]) -> None:
     st.dataframe(metrics_frame, use_container_width=True, hide_index=True)
     st.markdown('### Validation Snapshot')
     st.dataframe(_build_validation_snapshot(summary), use_container_width=True, hide_index=True)
+    _render_quality_ladder(summary)
     if str(summary.get('deployment_ready', 'NO') or 'NO').upper() == 'YES':
         st.success('PASS: eligible for paper or live consideration, subject to operator approval.')
     else:

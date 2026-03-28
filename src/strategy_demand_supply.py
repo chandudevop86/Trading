@@ -6,7 +6,11 @@ from typing import Any, Mapping
 import pandas as pd
 
 from src.breakout_bot import Candle, _coerce_candles
-from src.demand_supply_bot import DemandSupplyConfig, generate_trades as _generate_trades
+from src.demand_supply_bot import (
+    DemandSupplyConfig,
+    generate_trades as _generate_trades,
+    mark_zone_retest_state as _mark_zone_retest_state,
+)
 from src.strategy_common import session_window
 from src.trading_core import ScoreThresholds
 
@@ -52,13 +56,15 @@ def is_session_valid(ts: object, config: DemandSupplyConfig | Mapping[str, Any] 
     return window in _SESSION_ALLOWED
 
 
-def is_vwap_valid(price: float, vwap: float, side: str) -> bool:
+def is_vwap_valid(price: float, vwap: float, side: str, config: DemandSupplyConfig | Mapping[str, Any] | None = None) -> bool:
     """Apply the directional VWAP filter used by the strict demand/supply strategy."""
+    cfg = _coerce_config(config)
+    buffer_pct = max(float(cfg.vwap_reclaim_buffer_pct), 0.0)
     normalized_side = str(side or '').strip().upper()
     if normalized_side == 'BUY':
-        return float(price) > float(vwap)
+        return float(price) >= float(vwap) * (1.0 + buffer_pct)
     if normalized_side == 'SELL':
-        return float(price) < float(vwap)
+        return float(price) <= float(vwap) * (1.0 - buffer_pct)
     return False
 
 
@@ -97,6 +103,10 @@ def rejection_candle(row: Mapping[str, Any], side: str, config: DemandSupplyConf
     return False
 
 
+def mark_zone_retest_state(state: Mapping[str, Any], *, event: str, candle_idx: int) -> dict[str, object]:
+    """Track the current retest-cycle state for one zone."""
+    return _mark_zone_retest_state(dict(state), event=event, candle_idx=int(candle_idx))
+
 def generate_trades(df: Any, capital: float, risk_pct: float, rr_ratio: float, config: DemandSupplyConfig | Mapping[str, Any] | None = None):
     """Compatibility wrapper around the production demand/supply generator."""
     return _generate_trades(df, capital=capital, risk_pct=risk_pct, rr_ratio=rr_ratio, config=_coerce_config(config))
@@ -110,3 +120,7 @@ __all__ = [
     'is_vwap_valid',
     'rejection_candle',
 ]
+
+
+
+

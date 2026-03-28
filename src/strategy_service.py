@@ -239,6 +239,8 @@ def _run_demand_supply_strategy(context: StrategyContext, dependencies: Strategy
             min_zone_selection_score=5.0,
             min_confirmation_body_ratio=0.60,
             min_rejection_wick_ratio=0.50,
+            zone_departure_buffer_pct=0.0006,
+            vwap_reclaim_buffer_pct=0.0005,
             allow_afternoon_session=False,
             avoid_midday=True,
         ),
@@ -428,6 +430,7 @@ def run_strategy_workflow(
         attach_option_strikes_fn=attach_option_strikes_fn,
         attach_option_metrics_fn=attach_option_metrics_fn,
     )
+
 
 
 

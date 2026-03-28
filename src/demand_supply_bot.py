@@ -39,6 +39,8 @@ class DemandSupplyConfig:
     min_rejection_wick_ratio: float = 0.50
     zone_buffer_atr_fraction: float = 0.12
     zone_buffer_price_fraction: float = 0.0008
+    zone_departure_buffer_pct: float = 0.0006
+    vwap_reclaim_buffer_pct: float = 0.0005
     require_vwap_alignment: bool = True
     require_trend_bias: bool = True
     avoid_midday: bool = True
@@ -223,9 +225,12 @@ def _zone_freshness_ratio(idx: int, zone: Zone, config: DemandSupplyConfig) -> f
     return round(min(max((float(config.zone_freshness_bars) - float(age)) / float(config.zone_freshness_bars), 0.0), 1.0), 4)
 
 
-def _vwap_aligned(candle: Candle, side: str) -> bool:
+def _vwap_aligned(candle: Candle, side: str, buffer_pct: float = 0.0) -> bool:
     close = float(candle.close)
-    return close >= float(candle.vwap) if side == 'BUY' else close <= float(candle.vwap)
+    vwap = float(candle.vwap)
+    if side == 'BUY':
+        return close >= vwap * (1.0 + max(float(buffer_pct), 0.0))
+    return close <= vwap * (1.0 - max(float(buffer_pct), 0.0))
 
 
 def _zone_broken(day_candles: list[Candle], zone: Zone, side: str, start_idx: int, end_idx: int, tolerance_pct: float) -> bool:
@@ -244,6 +249,40 @@ def _touches_zone(candle: Candle, zone: Zone, side: str, tolerance_pct: float) -
     return float(candle.high) >= float(zone.low) * (1.0 - tolerance_pct) and float(candle.close) <= float(zone.high) * (1.0 + tolerance_pct)
 
 
+def _zone_departed(candle: Candle, zone: Zone, side: str, config: DemandSupplyConfig) -> bool:
+    buffer_pct = max(float(config.zone_departure_buffer_pct), float(config.touch_tolerance_pct) * 0.25)
+    if side == 'BUY':
+        return float(candle.close) >= float(zone.high) * (1.0 + buffer_pct)
+    return float(candle.close) <= float(zone.low) * (1.0 - buffer_pct)
+
+
+def rejection_candle(candle: Candle, zone: Zone, side: str, config: DemandSupplyConfig) -> bool:
+    return _rejection_candle(candle, zone, side, config)
+
+
+def mark_zone_retest_state(state: dict[str, object], *, event: str, candle_idx: int) -> dict[str, object]:
+    updated = dict(state)
+    updated['last_event'] = event
+    updated[f'{event}_idx'] = candle_idx
+    if event == 'trade':
+        updated['trade_created'] = True
+    return updated
+
+
+def is_retest(day_candles: list[Candle], zone: Zone, side: str, state: dict[str, object], retest_idx: int, config: DemandSupplyConfig) -> bool:
+    departure_idx = int(state.get('departure_idx', -1) or -1)
+    if departure_idx < 0 or retest_idx <= departure_idx:
+        return False
+    if retest_idx - departure_idx > int(config.max_retest_bars):
+        return False
+    candle = day_candles[retest_idx]
+    if not _touches_zone(candle, zone, side, float(config.touch_tolerance_pct)):
+        return False
+    if not rejection_candle(candle, zone, side, config):
+        return False
+    return _vwap_aligned(candle, side)
+
+
 def _rejection_candle(candle: Candle, zone: Zone, side: str, config: DemandSupplyConfig) -> bool:
     zone_mid = _zone_mid(zone)
     body_ok = _body_ratio(candle) >= float(config.min_confirmation_body_ratio) * 0.70
@@ -259,29 +298,55 @@ def _confirmation_candle(candle: Candle, touch_candle: Candle, zone: Zone, side:
     return body_ok and float(candle.close) < float(candle.open) and float(candle.close) < min(float(touch_candle.open), float(touch_candle.close), float(zone.low))
 
 
-def detect_retest(day_candles: list[Candle], zone: Zone, side: str, start_idx: int, config: DemandSupplyConfig) -> tuple[int, int] | None:
-    first_touch_idx = zone.idx + 1
-    search_start = max(first_touch_idx + 1, start_idx, zone.idx + 2)
-    search_end = min(len(day_candles), zone.idx + 1 + max(2, int(config.max_retest_bars)))
-    if _zone_broken(day_candles, zone, side, zone.idx + 1, search_end, float(config.touch_tolerance_pct) * 0.75):
-        return None
+def detect_retest(day_candles: list[Candle], zone: Zone, side: str, start_idx: int, config: DemandSupplyConfig) -> tuple[int, int, dict[str, object]] | None:
+    search_start = max(zone.idx + 1, start_idx, zone.idx + 1)
+    search_end = min(len(day_candles), zone.idx + 1 + max(int(config.zone_freshness_bars), int(config.max_retest_bars) * 3, 6))
+    state: dict[str, object] = {
+        'zone_idx': zone.idx,
+        'side': side,
+        'first_touch_idx': -1,
+        'departure_idx': -1,
+        'retest_idx': -1,
+        'trade_created': False,
+        'last_event': 'idle',
+    }
 
-    for touch_idx in range(search_start, search_end):
-        touch_candle = day_candles[touch_idx]
-        if not session_filter(touch_candle, config):
-            continue
-        if not _touches_zone(touch_candle, zone, side, float(config.touch_tolerance_pct)):
-            continue
-        if not _rejection_candle(touch_candle, zone, side, config):
+    for idx in range(search_start, search_end):
+        candle = day_candles[idx]
+        if _zone_broken(day_candles, zone, side, zone.idx + 1, idx + 1, float(config.touch_tolerance_pct) * 0.75):
+            return None
+        if not session_filter(candle, config):
             continue
 
-        confirmation_limit = min(len(day_candles), touch_idx + 1 + max(1, int(config.retest_confirmation_bars)))
-        for confirmation_idx in range(touch_idx + 1, confirmation_limit):
+        if int(state.get('first_touch_idx', -1)) < 0:
+            if _touches_zone(candle, zone, side, float(config.touch_tolerance_pct)):
+                state = mark_zone_retest_state(state, event='first_touch', candle_idx=idx)
+            continue
+
+        if int(state.get('departure_idx', -1)) < 0:
+            if _zone_departed(candle, zone, side, config):
+                state = mark_zone_retest_state(state, event='departure', candle_idx=idx)
+            continue
+
+        if idx - int(state.get('departure_idx', -1)) > int(config.max_retest_bars):
+            return None
+
+        if not is_retest(day_candles, zone, side, state, idx, config):
+            continue
+
+        state = mark_zone_retest_state(state, event='retest', candle_idx=idx)
+        touch_candle = day_candles[idx]
+        confirmation_limit = min(len(day_candles), idx + 1 + max(1, int(config.retest_confirmation_bars)))
+        for confirmation_idx in range(idx + 1, confirmation_limit):
             confirmation_candle = day_candles[confirmation_idx]
             if not session_filter(confirmation_candle, config):
                 continue
+            if config.require_vwap_alignment and not _vwap_aligned(confirmation_candle, side, float(config.vwap_reclaim_buffer_pct)):
+                continue
             if _confirmation_candle(confirmation_candle, touch_candle, zone, side, config):
-                return touch_idx, confirmation_idx
+                state = mark_zone_retest_state(state, event='trade', candle_idx=confirmation_idx)
+                return idx, confirmation_idx, state
+        return None
     return None
 
 
@@ -377,7 +442,7 @@ def _quality_score(
     session_component, session_name = _session_component(candle, config)
     zone_selection_score = _zone_selection_score(day_candles, idx, zone, side, config)
 
-    if config.require_vwap_alignment and not vwap_ok:
+    if config.require_vwap_alignment and not _vwap_aligned(candle, side, float(config.vwap_reclaim_buffer_pct)):
         return None
     if config.require_trend_bias and (not bias_aligned or not trend_ok):
         return None
@@ -549,7 +614,9 @@ def generate_trades(
             retest = detect_retest(day_candles, zone, side, zone.idx + 2, cfg)
             if retest is None:
                 continue
-            touch_idx, confirmation_idx = retest
+            touch_idx, confirmation_idx, retest_state = retest
+            if bool(retest_state.get('trade_created')) and zone_key in used_zone_keys:
+                continue
             if confirmation_idx - last_direction_bar[side] < int(cfg.duplicate_signal_cooldown_bars):
                 continue
 
@@ -640,6 +707,9 @@ def generate_trades(
                     'session_filter_mode': 'MORNING_ONLY',
                     'retest_touch_time': touch_candle.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
                     'retest_confirmation_time': entry_candle.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                    'first_touch_time': day_candles[int(retest_state.get('first_touch_idx', touch_idx))].timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                    'zone_departure_time': day_candles[int(retest_state.get('departure_idx', touch_idx))].timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                    'retest_cycle_state': str(retest_state.get('last_event', 'trade')).upper(),
                     'first_touch_entry_allowed': 'NO',
                     'duplicate_signal_cooldown_bars': int(cfg.duplicate_signal_cooldown_bars),
                     'max_retest_bars': int(cfg.max_retest_bars),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 from src.reporting_service import recent_trade_summary, safe_float, safe_int, short_broker_status

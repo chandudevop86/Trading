@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any
 
@@ -37,6 +37,10 @@ def _pillar_row(area: str, status: str, headline: str, reason: str, next_step: s
     }
 
 
+def _has_quality_sample(total_trades: int, minimum: int = 150) -> bool:
+    return int(total_trades) >= int(minimum)
+
+
 def build_strategy_quality_ladder(summary: dict[str, object]) -> list[dict[str, str]]:
     total_trades = _safe_int(summary.get('total_trades', summary.get('closed_trades', 0)))
     retest_only_trade_pct = _safe_float(summary.get('retest_only_trade_pct'))
@@ -52,8 +56,9 @@ def build_strategy_quality_ladder(summary: dict[str, object]) -> list[dict[str, 
     drawdown_proven = _normalize_flag(summary.get('drawdown_proven', 'NO'))
 
     rows: list[dict[str, str]] = []
+    has_quality_sample = _has_quality_sample(total_trades)
 
-    if total_trades <= 0:
+    if not has_quality_sample:
         rows.append(_pillar_row('Retest-Only Entry', 'WATCH', 'No trade sample yet', 'Retest discipline cannot be judged until the system produces a clean sample.', 'Run a backtest and confirm retest-only trades stay high.'))
     elif retest_only_trade_pct >= 90:
         rows.append(_pillar_row('Retest-Only Entry', 'PASS', 'Retest discipline is strong', f'{retest_only_trade_pct:.1f}% of trades came from retest-only entries.', 'Keep retest-only entry as the default execution policy.'))
@@ -62,7 +67,7 @@ def build_strategy_quality_ladder(summary: dict[str, object]) -> list[dict[str, 
     else:
         rows.append(_pillar_row('Retest-Only Entry', 'FAIL', 'Retest discipline is weak', f'Only {retest_only_trade_pct:.1f}% of trades came from retest-only entries.', 'Block non-retest setups and reduce impulsive early entries.'))
 
-    if total_trades <= 0:
+    if not has_quality_sample:
         rows.append(_pillar_row('VWAP + Session Filter', 'WATCH', 'No context sample yet', 'VWAP and session filters need a live sample before they can be judged.', 'Run a backtest and confirm weak session trades are removed.'))
     else:
         context_score = min(vwap_pass_pct, session_pass_pct)
@@ -73,7 +78,7 @@ def build_strategy_quality_ladder(summary: dict[str, object]) -> list[dict[str, 
         else:
             rows.append(_pillar_row('VWAP + Session Filter', 'FAIL', 'Trade context is weak', f'VWAP pass is {vwap_pass_pct:.1f}% and session pass is {session_pass_pct:.1f}%.', 'Remove more low-quality session trades and require stronger VWAP alignment.'))
 
-    if total_trades <= 0:
+    if not has_quality_sample:
         rows.append(_pillar_row('Zone Scoring', 'WATCH', 'No setup-quality sample yet', 'Zone quality needs a trade sample before the scoring filter can be judged.', 'Run a backtest and review average zone score.'))
     elif avg_zone_gate_score >= 5.0:
         rows.append(_pillar_row('Zone Scoring', 'PASS', 'Setup quality is strong', f'Average zone score is {avg_zone_gate_score:.2f}, which is above the current floor.', 'Keep weak zones filtered out before entry evaluation.'))
@@ -82,7 +87,7 @@ def build_strategy_quality_ladder(summary: dict[str, object]) -> list[dict[str, 
     else:
         rows.append(_pillar_row('Zone Scoring', 'FAIL', 'Setup quality is weak', f'Average zone score is only {avg_zone_gate_score:.2f}.', 'Filter weak zones earlier and require stronger reaction quality.'))
 
-    if total_trades <= 0:
+    if not has_quality_sample or not sample_window_passed:
         rows.append(_pillar_row('Validation System', 'WATCH', 'No validated sample yet', 'The system has not produced a sample large enough to prove readiness.', 'Run a 150-200 trade backtest before making any deployment decision.'))
     elif deployment_ready and validation_passed and sample_window_passed and expectancy > 0 and profit_factor > 1.3 and 0 <= max_drawdown_pct <= 12 and drawdown_proven:
         rows.append(_pillar_row('Validation System', 'PASS', 'The system is proving itself', 'Expectancy, profit factor, drawdown, and the validation window are all passing.', 'Keep validating on rolling samples before any live expansion.'))
@@ -109,3 +114,4 @@ def build_quality_ladder_summary(summary: dict[str, object]) -> str:
         reasons = ', '.join(row['area'].lower() for row in watched[:2])
         return f'This strategy is improving, but {reasons} still need to become more consistent.'
     return 'This strategy is behaving well across entry discipline, trade context, setup quality, and validation.'
+

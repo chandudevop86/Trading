@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -364,15 +364,20 @@ def _header_go_live(summary: dict[str, object]) -> str:
 
 
 def _header_next_action(summary: dict[str, object], broker_choice: str) -> str:
-    blockers = str(summary.get('deployment_blockers', '') or '').strip()
     deployment_ready = str(summary.get('deployment_ready', 'NO') or 'NO').upper() == 'YES'
+    total_trades = _safe_int(summary.get('total_trades', summary.get('closed_trades', 0)))
+    expectancy = _safe_float(summary.get('expectancy_per_trade'))
+    profit_factor = _safe_float(summary.get('profit_factor'))
+    drawdown_proven = str(summary.get('drawdown_proven', 'NO') or 'NO').upper() == 'YES'
     if deployment_ready and broker_choice != 'Paper':
         return 'Live can remain locked until operator approval is explicit.'
     if deployment_ready:
         return 'Run paper execution and verify clean logs before any live promotion.'
-    if blockers:
-        return blockers
-    return 'Run a strict backtest and clear every validation blocker before deployment.'
+    if total_trades < 150:
+        return 'Run a backtest first. The system needs 150 to 200 clean trades before readiness can be judged.'
+    if expectancy <= 0 or profit_factor <= 1.3 or not drawdown_proven:
+        return 'Improve trade quality first. The system still needs positive expectancy, profit factor above 1.3, and proven drawdown behavior.'
+    return build_quality_ladder_summary(summary)
 
 
 def _render_header(strategy: str, symbol: str, timeframe: str, mode: str, broker_choice: str, summary: dict[str, object]) -> None:
@@ -485,11 +490,18 @@ def _render_trades_tab(*, trades: list[dict[str, object]], status: str) -> None:
 
 def _render_validation_tab(summary: dict[str, object]) -> None:
     st.markdown('### Validation Summary')
+    blockers = str(summary.get('deployment_blockers', '') or '').strip()
+    blocker_count = 0 if not blockers else len([part for part in blockers.split(';') if str(part).strip()])
+    plain_summary = build_quality_ladder_summary(summary)
     col_one, col_two, col_three, col_four = st.columns(4)
     col_one.metric('Deployment Ready', str(summary.get('deployment_ready', 'NO') or 'NO'))
     col_two.metric('Sample Window', str(summary.get('sample_window_passed', 'NO') or 'NO'))
     col_three.metric('Validation Passed', str(summary.get('validation_passed', summary.get('deployment_ready', 'NO')) or 'NO'))
-    col_four.metric('Blockers', str(summary.get('deployment_blockers', 'None') or 'None'))
+    col_four.metric('Blocking Issues', 'None' if blocker_count == 0 else str(blocker_count))
+    st.info(plain_summary)
+    if blockers:
+        with st.expander('Technical blockers'):
+            st.code(blockers)
 
     st.markdown('### Validation Gates')
     gates = pd.DataFrame([
@@ -636,3 +648,5 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+

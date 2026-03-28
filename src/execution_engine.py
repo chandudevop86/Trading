@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import hashlib
@@ -78,6 +78,17 @@ ACTIVE_TRADE_STATUSES = {
 }
 EXECUTION_SUCCESS_STATUSES = {"EXECUTED", "SENT", "FILLED"}
 RUNTIME_CONFIG = RuntimeConfig.load()
+
+
+def _append_structured_log(path: Path, event: str, **payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        'logged_at_utc': datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S'),
+        'event': event,
+        **payload,
+    }
+    with path.open('a', encoding='utf-8') as handle:
+        handle.write(json.dumps(record, ensure_ascii=True, sort_keys=True, default=str) + '\n')
 ORDER_HISTORY_OUTPUT = RUNTIME_CONFIG.paths.order_history_csv
 OPTIMIZER_REPORT_OUTPUT = RUNTIME_CONFIG.paths.optimizer_report_csv
 BROKER_LOG_PATH = RUNTIME_CONFIG.paths.broker_log
@@ -221,6 +232,12 @@ def _normalize_text(value: object) -> str:
     return str(value or "").strip().upper()
 
 
+def _normalize_allowlist(values: list[str] | set[str] | tuple[str, ...] | None) -> set[str]:
+    if not values:
+        return set()
+    return {str(value or '').strip().upper() for value in values if str(value or '').strip()}
+
+
 def _price_value(record: dict[str, object]) -> float:
     for key in ("entry_price", "entry", "price", "share_price", "close", "spot_ltp"):
         value = _safe_float(record.get(key))
@@ -304,6 +321,20 @@ def _cooldown_window_seconds(record: dict[str, object]) -> int:
     return 0
 
 
+def _trade_day_key(record: dict[str, object], default_day_key: str) -> str:
+    signal_time = _parse_dt(record.get('signal_time')) or _parse_dt(record.get('entry_time')) or _parse_dt(record.get('timestamp'))
+    return signal_time.strftime('%Y-%m-%d') if signal_time is not None else str(default_day_key)
+
+
+def _risk_limit_message(max_trades_per_day: int | None, max_daily_loss: float | None) -> str:
+    parts: list[str] = []
+    if max_trades_per_day is not None and int(max_trades_per_day) > 0:
+        parts.append(f'max trades per day={int(max_trades_per_day)}')
+    if max_daily_loss is not None and float(max_daily_loss) > 0:
+        parts.append(f'max daily loss={abs(float(max_daily_loss)):.2f}')
+    return ', '.join(parts) or 'risk limit reached'
+
+
 def _effective_max_trades_per_day(record: dict[str, object], explicit_limit: int | None) -> int | None:
     if explicit_limit is not None and int(explicit_limit) > 0:
         return int(explicit_limit)
@@ -361,6 +392,131 @@ def _ensure_trade_identity(record: dict[str, object], *, default_status: str | N
     if default_status and not str(normalized.get("trade_status", "") or "").strip():
         normalized["trade_status"] = default_status
     return normalized
+
+
+def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[str, object]]:
+    normalized = _ensure_trade_identity(candidate, default_status=TRADE_STATUS_REVIEWED)
+    side = _normalize_text(normalized.get('side'))
+    if side not in {'BUY', 'SELL'}:
+        return False, SKIP_REASON_INVALID_SIDE, normalized
+
+    signal_time = str(normalized.get('signal_time', '') or '').strip()
+    if not signal_time:
+        return False, SKIP_REASON_MISSING_TIMESTAMP, normalized
+
+    price = _price_value(normalized)
+    if price <= 0:
+        return False, SKIP_REASON_MISSING_PRICE, normalized
+    normalized['price'] = round(price, 4)
+    normalized['entry'] = round(_safe_float(normalized.get('entry')) or price, 4)
+    normalized['entry_price'] = round(_safe_float(normalized.get('entry_price')) or price, 4)
+
+    quantity = int(_safe_float(normalized.get('quantity')))
+    if quantity <= 0:
+        quantity = normalize_order_quantity(str(normalized.get('symbol', 'UNKNOWN')), default_quantity_for_symbol(str(normalized.get('symbol', 'UNKNOWN'))))
+    if quantity <= 0:
+        return False, SKIP_REASON_MISSING_QUANTITY, normalized
+    normalized['quantity'] = int(quantity)
+
+    stop_loss = _safe_float(normalized.get('stop_loss'))
+    risk_buffer = max(price * 0.005, 0.5)
+    if stop_loss <= 0:
+        stop_loss = price - risk_buffer if side == 'BUY' else price + risk_buffer
+    normalized['stop_loss'] = round(stop_loss, 4)
+
+    target_price = _safe_float(normalized.get('target_price')) or _safe_float(normalized.get('target'))
+    if target_price <= 0:
+        risk_per_unit = abs(price - stop_loss) or risk_buffer
+        target_price = price + (risk_per_unit * 2.0) if side == 'BUY' else price - (risk_per_unit * 2.0)
+    normalized['target_price'] = round(target_price, 4)
+    normalized['target'] = round(_safe_float(normalized.get('target')) or target_price, 4)
+
+    if side == 'BUY' and not (float(normalized['stop_loss']) < price < float(normalized['target_price'])):
+        return False, SKIP_REASON_INVALID_TRADE_LEVELS, normalized
+    if side == 'SELL' and not (float(normalized['target_price']) < price < float(normalized['stop_loss'])):
+        return False, SKIP_REASON_INVALID_TRADE_LEVELS, normalized
+
+    return True, '', normalized
+
+
+def _make_result_row(record: dict[str, object], *, execution_type: str, processed_at_utc: str) -> dict[str, object]:
+    row = _ensure_trade_identity(record, default_status=TRADE_STATUS_REVIEWED)
+    row['execution_type'] = str(execution_type or '').upper()
+    row['execution_status'] = str(row.get('execution_status', '') or 'PENDING')
+    row['reviewed_at_utc'] = str(row.get('reviewed_at_utc', '') or processed_at_utc)
+    row['processed_at_utc'] = str(processed_at_utc)
+    row.setdefault('duplicate_reason', '')
+    row.setdefault('blocked_reason', '')
+    row.setdefault('validation_error', '')
+    row.setdefault('broker_name', '')
+    row.setdefault('broker_order_id', '')
+    row.setdefault('broker_status', '')
+    row.setdefault('broker_message', '')
+    row.setdefault('risk_limit_reason', '')
+    return row
+
+
+def _candidate_to_trade_candidate(record: dict[str, object], execution_type: str) -> TradeCandidate:
+    return TradeCandidate(
+        trade_id=str(record.get('trade_id', '') or make_trade_id(record)),
+        trade_key=str(record.get('trade_key', '') or make_trade_key(record)),
+        strategy=str(record.get('strategy', 'TRADE_BOT') or 'TRADE_BOT'),
+        symbol=str(record.get('symbol', 'UNKNOWN') or 'UNKNOWN'),
+        side=str(record.get('side', '') or '').upper(),
+        quantity=int(_safe_float(record.get('quantity'))),
+        price=float(_price_value(record)),
+        signal_time=str(record.get('signal_time', '') or ''),
+        reason=str(record.get('reason', '') or ''),
+        execution_type=str(execution_type or '').upper(),
+        stop_loss=_safe_float(record.get('stop_loss')) or None,
+        target=_safe_float(record.get('target_price', record.get('target'))) or None,
+        order_type=str(record.get('order_type', 'MARKET') or 'MARKET'),
+        product_type=str(record.get('product_type', 'INTRADAY') or 'INTRADAY'),
+        validity=str(record.get('validity', 'DAY') or 'DAY'),
+        trigger_price=_safe_float(record.get('trigger_price')) or None,
+        metadata={},
+    )
+
+
+def _build_broker_order_request(candidate: TradeCandidate) -> BrokerOrderRequest:
+    return BrokerOrderRequest(
+        trade_id=candidate.trade_id,
+        strategy=candidate.strategy,
+        symbol=candidate.symbol,
+        side=candidate.side,
+        quantity=int(candidate.quantity),
+        order_type=str(candidate.order_type),
+        product_type=str(candidate.product_type),
+        validity=str(candidate.validity),
+        price=float(candidate.price) if float(candidate.price) > 0 else None,
+        trigger_price=candidate.trigger_price,
+        execution_type=str(candidate.execution_type or 'PAPER'),
+        metadata=dict(candidate.metadata),
+    )
+
+
+def _apply_broker_result(row: dict[str, object], broker_result: BrokerOrderResult, *, execution_type: str) -> dict[str, object]:
+    status = _normalize_text(broker_result.status or '') or 'UNKNOWN'
+    row['broker_name'] = str(broker_result.broker_name or '')
+    row['broker_order_id'] = str(broker_result.order_id or '')
+    row['broker_status'] = status
+    row['broker_message'] = str(broker_result.message or '')
+    row['broker_response_json'] = json.dumps(broker_result.raw_response or {}, ensure_ascii=True, sort_keys=True, default=str)
+    row['executed_at_utc'] = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    if status in EXECUTION_SUCCESS_STATUSES and broker_result.accepted:
+        row['trade_status'] = TRADE_STATUS_EXECUTED
+        row['execution_status'] = 'EXECUTED'
+        row['position_status'] = 'OPEN'
+    elif status in {'REJECTED', 'FAILED', 'ERROR', 'CANCELLED', 'CANCELED'} or not broker_result.accepted:
+        row['trade_status'] = TRADE_STATUS_ERROR
+        row['execution_status'] = 'ERROR'
+        row['validation_error'] = SKIP_REASON_BROKER_ERROR
+    else:
+        row['trade_status'] = TRADE_STATUS_PENDING_EXECUTION
+        row['execution_status'] = status or 'PENDING'
+    row['execution_type'] = str(execution_type or '').upper()
+    return row
+
 
 def build_execution_candidates(strategy: str, output_rows: list[dict[str, object]], symbol: str) -> list[dict[str, object]]:
     symbol = symbol.strip() or "UNKNOWN"
@@ -549,6 +705,11 @@ def _deserialize_daily_state(raw: object) -> dict[str, dict[str, float]]:
             "realized_pnl": float(payload.get("realized_pnl", 0.0) or 0.0),
         }
     return state
+
+
+def _load_daily_execution_state(path: Path, execution_type: str | None = None) -> dict[str, dict[str, float]]:
+    state = _load_risk_state_snapshot(path, execution_type)
+    return _deserialize_daily_state(state.get('daily_state')) if state else {}
 
 
 def load_active_trade_keys(path: Path, execution_type: str | None = None) -> set[str]:
@@ -1690,5 +1851,13 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
+
+
+
+
+
+
+
+
 
 

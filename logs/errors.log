@@ -139,3 +139,13 @@
 2026-03-28 02:37:01,088 INFO Trading UI failure: list index out of range
 2026-03-28 02:37:01,826 INFO Trading UI failure: list index out of range
 2026-03-28 02:37:01,874 INFO Trading UI failure: list index out of range
+{"broker": "PAPER", "error_message": "name '_apply_broker_result' is not defined", "error_type": "NameError", "event": "broker_execution_error", "execution_type": "PAPER", "logged_at_utc": "2026-03-28 11:35:05", "strategy": "BREAKOUT", "symbol": "NIFTY", "trade_id": "1ee87439-14b5-5c30-928f-3846de5abc4d"}
+{"broker": "PAPER", "error_message": "name '_apply_broker_result' is not defined", "error_type": "NameError", "event": "broker_execution_error", "execution_type": "PAPER", "logged_at_utc": "2026-03-28 11:35:06", "strategy": "COMPATIBILITY_TEST", "symbol": "NIFTY", "trade_id": "165abe98-c11d-5da0-90e6-c29f04fa3965"}
+{"broker": "PAPER", "error_message": "name '_apply_broker_result' is not defined", "error_type": "NameError", "event": "broker_execution_error", "execution_type": "PAPER", "logged_at_utc": "2026-03-28 11:35:06", "strategy": "COMPATIBILITY_TEST", "symbol": "NIFTY", "trade_id": "5e95f637-f0de-5f14-b85b-fa6b80d4222e"}
+{"broker": "PAPER", "error_message": "name '_apply_broker_result' is not defined", "error_type": "NameError", "event": "broker_execution_error", "execution_type": "PAPER", "logged_at_utc": "2026-03-28 11:35:06", "strategy": "COMPATIBILITY_TEST", "symbol": "NIFTY", "trade_id": "26b776fb-c055-5f6a-988b-046a9e391bd7"}
+2026-03-28 17:24:09,161 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE
+2026-03-28 17:25:12,839 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE
+2026-03-28 17:29:37,182 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE
+2026-03-28 17:30:41,558 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE
+2026-03-28 17:37:01,296 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE
+2026-03-28 17:39:56,249 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE

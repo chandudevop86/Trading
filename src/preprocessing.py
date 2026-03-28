@@ -34,19 +34,24 @@ def _coerce_dataframe(df: Any) -> pd.DataFrame:
 
 
 def _build_timestamp_series(prepared: pd.DataFrame) -> pd.Series | None:
+    timestamp_series: pd.Series | None = None
     if "timestamp" in prepared.columns:
-        return prepared["timestamp"]
+        timestamp_series = prepared["timestamp"]
     if "datetime" in prepared.columns:
-        return prepared["datetime"]
+        candidate = prepared["datetime"]
+        timestamp_series = candidate if timestamp_series is None else timestamp_series.where(timestamp_series.notna(), candidate)
     if "date" in prepared.columns and "time" in prepared.columns:
         date_text = prepared["date"].astype(str).str.strip()
         time_text = prepared["time"].astype(str).str.strip()
-        return date_text + " " + time_text
+        candidate = date_text + " " + time_text
+        timestamp_series = candidate if timestamp_series is None else timestamp_series.where(timestamp_series.notna(), candidate)
     if "date" in prepared.columns:
-        return prepared["date"]
+        candidate = prepared["date"]
+        timestamp_series = candidate if timestamp_series is None else timestamp_series.where(timestamp_series.notna(), candidate)
     if "time" in prepared.columns:
-        return prepared["time"]
-    return None
+        candidate = prepared["time"]
+        timestamp_series = candidate if timestamp_series is None else timestamp_series.where(timestamp_series.notna(), candidate)
+    return timestamp_series
 
 
 def prepare_trading_data(df: Any) -> pd.DataFrame:
@@ -57,6 +62,12 @@ def prepare_trading_data(df: Any) -> pd.DataFrame:
 
     prepared.columns = [_normalize_column_name(column) for column in prepared.columns]
     prepared = prepared.rename(columns={column: _COLUMN_ALIASES.get(column, column) for column in prepared.columns})
+    if prepared.columns.duplicated().any():
+        collapsed: dict[str, pd.Series] = {}
+        for column in dict.fromkeys(prepared.columns):
+            duplicates = prepared.loc[:, prepared.columns == column]
+            collapsed[column] = duplicates.apply(lambda row: next((value for value in row if pd.notna(value)), None), axis=1)
+        prepared = pd.DataFrame(collapsed)
 
     timestamp_series = _build_timestamp_series(prepared)
     if timestamp_series is not None:

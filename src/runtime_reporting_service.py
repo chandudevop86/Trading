@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.backtest_engine import summarize_trade_log
+from src.trade_validation_service import build_trade_evaluation_summary
 from src.trading_core import append_log
 from src.strategy_tuning import normalize_strategy_key
 
@@ -110,55 +111,20 @@ def current_execution_rows(path: Path, strategy: str, symbol: str, execution_typ
     ]
 
 
-def _open_execution_summary(rows: list[dict[str, object]], strategy: str) -> dict[str, object]:
-    tracked_rows = [
-        dict(row)
-        for row in rows
-        if str(row.get('execution_status', '') or '').strip().upper() in {'EXECUTED', 'FILLED', 'SENT', 'CLOSED', 'EXITED'}
-    ]
-    if not tracked_rows:
-        return {}
-
-    closed_rows = [
-        row
-        for row in tracked_rows
-        if str(row.get('execution_status', '') or '').strip().upper() in {'CLOSED', 'EXITED'}
-        or str(row.get('exit_time', '') or '').strip()
-    ]
-    total_trades = len(tracked_rows)
-    wins = sum(1 for row in closed_rows if safe_float(row.get('pnl')) > 0)
-    losses = sum(1 for row in closed_rows if safe_float(row.get('pnl')) < 0)
-    total_pnl = sum(safe_float(row.get('pnl')) for row in tracked_rows)
-    winning_pnl = [safe_float(row.get('pnl')) for row in closed_rows if safe_float(row.get('pnl')) > 0]
-    losing_pnl = [safe_float(row.get('pnl')) for row in closed_rows if safe_float(row.get('pnl')) < 0]
-    gross_profit = sum(winning_pnl)
-    gross_loss = abs(sum(losing_pnl))
-    profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf') if gross_profit > 0 else 0.0
-    return {
-        'strategy': normalize_strategy_key(strategy) or 'PAPER_EXECUTION',
-        'total_trades': total_trades,
-        'closed_trades': len(closed_rows),
-        'open_trades': total_trades - len(closed_rows),
-        'wins': wins,
-        'losses': losses,
-        'win_rate': round((wins / len(closed_rows)) * 100.0, 2) if closed_rows else 0.0,
-        'total_pnl': round(total_pnl, 2),
-        'avg_win': round(sum(winning_pnl) / len(winning_pnl), 2) if winning_pnl else 0.0,
-        'avg_loss': round(sum(losing_pnl) / len(losing_pnl), 2) if losing_pnl else 0.0,
-        'max_drawdown': 0.0,
-        'profit_factor': round(profit_factor, 2) if profit_factor != float('inf') else 'inf',
-    }
-
-
 def paper_execution_summary(path: Path, strategy: str, symbol: str, capital: float) -> dict[str, object]:
     rows = current_execution_rows(path, strategy, symbol, execution_type='PAPER')
     if not rows:
         return {}
-    summary = summarize_trade_log(rows, capital=float(capital), strategy_name=normalize_strategy_key(strategy) or 'PAPER_EXECUTION')
-    if safe_int(summary.get('total_trades')) > 0:
+
+    strategy_name = normalize_strategy_key(strategy) or 'PAPER_EXECUTION'
+    shared_summary = build_trade_evaluation_summary(rows, strategy_name=strategy_name)
+
+    if safe_int(shared_summary.get('closed_trades')) > 0:
+        summary = summarize_trade_log(rows, capital=float(capital), strategy_name=strategy_name)
+        summary.update(shared_summary)
         return summary
-    fallback = _open_execution_summary(rows, strategy)
-    return fallback or summary
+
+    return dict(shared_summary)
 
 
 def todays_trade_count(path: Path, strategy: str, symbol: str, execution_type: str = 'PAPER') -> int:
@@ -187,5 +153,3 @@ def short_broker_status(broker_choice: str, broker_status: str) -> str:
     if broker_choice == 'Dhan Live':
         return 'Dhan live active' if 'armed' in broker_status.lower() else broker_status
     return 'Paper broker active'
-
-

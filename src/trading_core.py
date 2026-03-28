@@ -129,10 +129,10 @@ def configure_file_logging(log_path: Path | str = RUNTIME_CONFIG.paths.errors_lo
     return LOGGER
 
 
-def prepare_trading_data(df: Any) -> pd.DataFrame:
+def prepare_trading_data(df: Any, *, include_derived: bool = True) -> pd.DataFrame:
     from src.preprocessing import prepare_trading_data as _prepare_trading_data
 
-    return _prepare_trading_data(df)
+    return _prepare_trading_data(df, include_derived=include_derived)
 
 def weighted_score(signals: dict[str, bool], config: ScoringConfig | None = None) -> WeightedScore:
     scoring = config or ScoringConfig()

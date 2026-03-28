@@ -23,23 +23,23 @@ def apply_minimal_theme() -> None:
         '''
         <style>
         :root {
-            --desk-bg: #fff9f7;
-            --desk-bg-soft: #fff3f0;
-            --desk-card: rgba(255, 255, 255, 0.92);
-            --desk-border: rgba(243, 114, 116, 0.14);
-            --desk-text: #2d2f35;
-            --desk-muted: #6b7280;
-            --desk-accent: #ff7d87;
-            --desk-accent-soft: #ffd6d9;
-            --desk-blue: #6266f1;
-            --desk-shadow: 0 20px 45px rgba(244, 141, 141, 0.12);
+            --desk-bg: #f3f4ea;
+            --desk-bg-soft: #ecefdf;
+            --desk-card: rgba(255, 255, 255, 0.90);
+            --desk-border: rgba(107, 128, 86, 0.16);
+            --desk-text: #283128;
+            --desk-muted: #5f6b57;
+            --desk-accent: #7b8f55;
+            --desk-accent-soft: #dbe3c6;
+            --desk-blue: #4f6f52;
+            --desk-shadow: 0 20px 45px rgba(92, 112, 74, 0.12);
         }
         [data-testid="stAppViewContainer"] {
             background:
-                radial-gradient(circle at top left, rgba(255, 125, 135, 0.40), transparent 26%),
-                radial-gradient(circle at 95% 40%, rgba(255, 125, 135, 0.34), transparent 22%),
-                radial-gradient(circle at 80% 92%, rgba(255, 167, 173, 0.55), transparent 28%),
-                linear-gradient(180deg, #fffdfc 0%, var(--desk-bg) 100%);
+                radial-gradient(circle at top left, rgba(142, 161, 105, 0.22), transparent 26%),
+                radial-gradient(circle at 95% 40%, rgba(166, 181, 118, 0.18), transparent 22%),
+                radial-gradient(circle at 80% 92%, rgba(198, 208, 154, 0.26), transparent 28%),
+                linear-gradient(180deg, #fbfcf6 0%, var(--desk-bg) 100%);
         }
         .main .block-container {
             max-width: 1220px;
@@ -47,7 +47,7 @@ def apply_minimal_theme() -> None:
             padding-bottom: 2rem;
         }
         [data-testid="stHeader"] {
-            background: rgba(255,255,255,0.72);
+            background: rgba(248,250,242,0.74);
         }
         [data-testid="stMetric"] {
             background: var(--desk-card);
@@ -96,7 +96,7 @@ def apply_minimal_theme() -> None:
             margin: 10px 10px 0 0;
             border-radius: 999px;
             background: rgba(255,255,255,0.85);
-            border: 1px solid rgba(243, 114, 116, 0.18);
+            border: 1px solid rgba(123, 143, 85, 0.18);
             color: #444a57;
             font-size: 0.82rem;
             font-weight: 600;
@@ -118,9 +118,9 @@ def apply_minimal_theme() -> None:
             overflow: hidden;
             padding: 0;
             border-radius: 34px;
-            background: linear-gradient(135deg, rgba(255,255,255,0.96), rgba(255,246,244,0.92));
-            border: 1px solid rgba(243, 114, 116, 0.16);
-            box-shadow: 0 30px 65px rgba(244, 141, 141, 0.14);
+            background: linear-gradient(135deg, rgba(255,255,252,0.96), rgba(241,244,231,0.94));
+            border: 1px solid rgba(123, 143, 85, 0.16);
+            box-shadow: 0 30px 65px rgba(92, 112, 74, 0.12);
             margin-bottom: 18px;
         }
         .desk-hero-inner {
@@ -136,7 +136,7 @@ def apply_minimal_theme() -> None:
             z-index: 2;
         }
         .desk-kicker {
-            color: #ef5b68;
+            color: #6f8451;
             text-transform: uppercase;
             letter-spacing: 0.14em;
             font-size: 0.72rem;
@@ -168,7 +168,7 @@ def apply_minimal_theme() -> None:
         .desk-blob-c {
             position: absolute;
             border-radius: 999px;
-            background: linear-gradient(135deg, #ff8c95, #ffb0b6);
+            background: linear-gradient(135deg, #8a9b62, #b7c48c);
             opacity: 0.95;
         }
         .desk-blob-a {
@@ -193,7 +193,7 @@ def apply_minimal_theme() -> None:
             right: 40px;
             top: 28px;
             opacity: 0.22;
-            background: linear-gradient(135deg, #ff7d87, #ffd6d9);
+            background: linear-gradient(135deg, #a6b57a, #dde6c4);
         }
         .desk-monitor {
             position: absolute;
@@ -231,7 +231,7 @@ def apply_minimal_theme() -> None:
             bottom: 36px;
             width: 310px;
             height: 16px;
-            background: #ff93a0;
+            background: #9caf6d;
             border-radius: 10px;
         }
         .desk-desk::before,

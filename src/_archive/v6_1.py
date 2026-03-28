@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -138,7 +137,7 @@ def _build_scorecard_rows(summary: dict[str, object], *, status: str, todays_tra
     if deployment_ready:
         trade_quality_score += 1.0
     trade_quality_issue = 'Fresh validation missing for trade selectivity.'
-    trade_quality_fix = 'Run a 150-200 trade backtest and keep avg trades/day near 1.'
+    trade_quality_fix = 'Run a 100-200 trade backtest and keep avg trades/day near 1.'
     if validation_available and avg_trades_per_day > 1.5:
         trade_quality_issue = f'Overtrading persists at {avg_trades_per_day:.2f} trades/day.'
         trade_quality_fix = 'Raise the score floor or retest quality filters until trade density falls.'
@@ -156,7 +155,7 @@ def _build_scorecard_rows(summary: dict[str, object], *, status: str, todays_tra
     validation_fix = 'Run Backtest to populate expectancy, profit factor, drawdown, and pass/fail gates.'
     if validation_available and not sample_window_passed:
         validation_issue = f'Sample window failed with {total_trades} trades.'
-        validation_fix = 'Keep validation only in the 150-200 trade window before considering deployment.'
+        validation_fix = 'Keep validation only in the 100-200 trade window before considering deployment.'
     elif validation_available and not deployment_ready:
         blockers = str(summary.get('deployment_blockers', '') or '').strip() or 'validation gates not passed'
         validation_issue = blockers
@@ -266,7 +265,7 @@ def _build_validation_snapshot(summary: dict[str, object]) -> pd.DataFrame:
     deployment_ready = str(summary.get('deployment_ready', 'NO') or 'NO').upper()
     sample_window = str(summary.get('sample_window_passed', 'NO') or 'NO').upper()
     return pd.DataFrame([
-        {'metric': 'Sample size', 'value': total_trades, 'target': '150-200 trades', 'status': 'PASS' if sample_window == 'YES' else 'WATCH'},
+        {'metric': 'Sample size', 'value': total_trades, 'target': '100-200 trades', 'status': 'PASS' if sample_window == 'YES' else 'WATCH'},
         {'metric': 'Expectancy', 'value': round(expectancy, 2), 'target': '> 0', 'status': 'PASS' if expectancy > 0 else 'FAIL'},
         {'metric': 'Profit factor', 'value': round(profit_factor, 2), 'target': '> 1.30', 'status': 'PASS' if profit_factor > 1.3 else 'FAIL'},
         {'metric': 'Max drawdown %', 'value': round(drawdown, 2), 'target': '<= 10', 'status': 'PASS' if 0 <= drawdown <= 10 else 'FAIL'},
@@ -391,53 +390,6 @@ def _render_dashboard_tab(*, strategy: str, symbol: str, timeframe: str, period:
     _render_scorecard(scorecard_summary, status, todays_trades, strategy)
 
 
-def _render_charts_tab(*, candles: pd.DataFrame, symbol: str, timeframe: str) -> None:
-    st.markdown('### Market Overview')
-    if candles.empty:
-        st.info('No candle data available yet. Run Backtest or Start Paper to load market context.')
-        return
-    latest_close = float(candles['close'].iloc[-1])
-    latest_high = float(candles['high'].iloc[-1])
-    latest_low = float(candles['low'].iloc[-1])
-    latest_volume = float(candles['volume'].iloc[-1]) if 'volume' in candles.columns else 0.0
-    overview = st.columns(4)
-    overview[0].metric('Close', round(latest_close, 2))
-    overview[1].metric('High', round(latest_high, 2))
-    overview[2].metric('Low', round(latest_low, 2))
-    overview[3].metric('Volume', int(latest_volume))
-    st.markdown('### Price Chart')
-    chart = (
-        alt.Chart(candles.tail(240))
-        .mark_line(color='#7a8b5a', strokeWidth=2)
-        .encode(
-            x=alt.X('timestamp:T', title='Time'),
-            y=alt.Y('close:Q', title='Close Price'),
-            tooltip=['timestamp:T', 'open:Q', 'high:Q', 'low:Q', 'close:Q', 'volume:Q'],
-        )
-        .properties(height=360)
-        .interactive()
-    )
-    st.altair_chart(chart, use_container_width=True)
-    with st.expander('Recent Candle Data'):
-        st.dataframe(candles.tail(20), use_container_width=True, hide_index=True)
-    st.caption(f'{symbol} | {timeframe} | showing latest {min(len(candles), 240)} candles')
-
-
-def _render_trades_tab(*, trades: list[dict[str, object]], status: str) -> None:
-    st.markdown('### Trade Explorer')
-    if not trades:
-        st.info('No strategy trades available yet. Run Backtest for research output or Start Paper for live-paper actions.')
-        return
-    trades_frame = pd.DataFrame(trades)
-    preferred_columns = [
-        'timestamp', 'signal_time', 'strategy', 'symbol', 'side', 'entry', 'entry_price', 'stop_loss', 'target',
-        'score', 'reason', 'trade_status', 'validation_status', 'duplicate_reason'
-    ]
-    available_columns = [column for column in preferred_columns if column in trades_frame.columns]
-    st.dataframe(trades_frame[available_columns] if available_columns else trades_frame, use_container_width=True, hide_index=True)
-    st.caption(f'Trade rows: {len(trades_frame)} | Status: {status}')
-
-
 def _render_validation_tab(summary: dict[str, object]) -> None:
     st.markdown('### Validation Summary')
     col_one, col_two, col_three, col_four = st.columns(4)
@@ -513,16 +465,12 @@ def _render_execution_tab(*, status: str, broker_status: str, todays_trades: int
             st.dataframe(rejections, use_container_width=True, hide_index=True)
 
 
-def _render_tabs(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], candles: pd.DataFrame, active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int) -> None:
-    dashboard_tab, charts_tab, validation_tab, trades_tab, execution_tab = st.tabs(['Dashboard', 'Charts', 'Validation', 'Trades', 'Execution Logs'])
+def _render_tabs(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int) -> None:
+    dashboard_tab, validation_tab, execution_tab = st.tabs(['Dashboard', 'Validation', 'Execution Logs'])
     with dashboard_tab:
         _render_dashboard_tab(strategy=strategy, symbol=symbol, timeframe=timeframe, period=period, broker_choice=broker_choice, status=status, broker_status=broker_status, trades=trades, active_summary=active_summary, scorecard_summary=scorecard_summary, todays_trades=todays_trades)
-    with charts_tab:
-        _render_charts_tab(candles=candles, symbol=symbol, timeframe=timeframe)
     with validation_tab:
         _render_validation_tab(scorecard_summary)
-    with trades_tab:
-        _render_trades_tab(trades=trades, status=status)
     with execution_tab:
         _render_execution_tab(status=status, broker_status=broker_status, todays_trades=todays_trades, summary=scorecard_summary)
 
@@ -553,7 +501,7 @@ def main() -> None:
     resting_summary = dict(st.session_state.get('backtest_summary', {}) or {})
     if not run_clicked and not backtest_clicked:
         _render_header(strategy, normalized_symbol, timeframe, mode, broker_choice, resting_summary)
-        _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=period_for_interval(timeframe), broker_choice=broker_choice, status='Ready', broker_status='Paper broker active', trades=[], candles=pd.DataFrame(), active_summary={}, scorecard_summary=resting_summary, todays_trades=0)
+        _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=period_for_interval(timeframe), broker_choice=broker_choice, status='Ready', broker_status='Paper broker active', trades=[], active_summary={}, scorecard_summary=resting_summary, todays_trades=0)
         return
 
     try:
@@ -565,7 +513,7 @@ def main() -> None:
             st.session_state.pop('backtest_summary', None)
             _append_text_log(APP_LOG, result.status)
             _append_text_log(ERRORS_LOG, result.status)
-            _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=result.period, broker_choice=broker_choice, status=result.status, broker_status=result.broker_status, trades=result.trades, candles=result.candles, active_summary=result.active_summary, scorecard_summary=summary, todays_trades=result.todays_trades)
+            _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=result.period, broker_choice=broker_choice, status=result.status, broker_status=result.broker_status, trades=result.trades, active_summary=result.active_summary, scorecard_summary=summary, todays_trades=result.todays_trades)
             _render_execution_feedback(result.execution_messages)
             st.error(result.status)
             return
@@ -578,7 +526,7 @@ def main() -> None:
             _append_text_log(APP_LOG, f'BACKTEST completed for {strategy} {normalized_symbol} {timeframe}')
 
         _append_text_log(APP_LOG, result.status)
-        _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=result.period, broker_choice=broker_choice, status=result.status, broker_status=result.broker_status, trades=result.trades, candles=result.candles, active_summary=result.active_summary, scorecard_summary=summary, todays_trades=result.todays_trades)
+        _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=result.period, broker_choice=broker_choice, status=result.status, broker_status=result.broker_status, trades=result.trades, active_summary=result.active_summary, scorecard_summary=summary, todays_trades=result.todays_trades)
         _render_execution_feedback(result.execution_messages)
     except Exception as exc:
         message = f'Trading UI failure: {exc}'

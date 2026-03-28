@@ -12,3 +12,5 @@ Use these active surfaces instead:
 Version notes:
 - `v6.py`: restored pre-V4 scorecard operator page snapshot.
 - `trading_ui_service_v6.py`: matching UI helper snapshot for `v6.py`.
+- `v6_1.py`: Trading desk snapshot with hard-status operator header, simplified deployment-first UI, and safer action labels.
+- `trading_ui_service_v6_1.py`: matching sage-olive UI theme snapshot for `v6_1.py`.

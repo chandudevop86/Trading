@@ -23,23 +23,23 @@ def apply_minimal_theme() -> None:
         '''
         <style>
         :root {
-            --desk-bg: #f3f4ea;
+            --desk-bg: #f4f5ee;
             --desk-bg-soft: #ecefdf;
             --desk-card: rgba(255, 255, 255, 0.90);
-            --desk-border: rgba(107, 128, 86, 0.16);
+            --desk-border: rgba(112, 128, 96, 0.14);
             --desk-text: #283128;
-            --desk-muted: #5f6b57;
-            --desk-accent: #7b8f55;
-            --desk-accent-soft: #dbe3c6;
-            --desk-blue: #4f6f52;
-            --desk-shadow: 0 20px 45px rgba(92, 112, 74, 0.12);
+            --desk-muted: #586255;
+            --desk-accent: #7a8b5a;
+            --desk-accent-soft: #d4dcc3;
+            --desk-blue: #5a6f57;
+            --desk-shadow: 0 20px 45px rgba(96, 112, 82, 0.10);
         }
         [data-testid="stAppViewContainer"] {
             background:
-                radial-gradient(circle at top left, rgba(142, 161, 105, 0.22), transparent 26%),
-                radial-gradient(circle at 95% 40%, rgba(166, 181, 118, 0.18), transparent 22%),
-                radial-gradient(circle at 80% 92%, rgba(198, 208, 154, 0.26), transparent 28%),
-                linear-gradient(180deg, #fbfcf6 0%, var(--desk-bg) 100%);
+                radial-gradient(circle at top left, rgba(122, 139, 90, 0.12), transparent 24%),
+                radial-gradient(circle at 92% 38%, rgba(167, 180, 135, 0.10), transparent 20%),
+                radial-gradient(circle at 78% 90%, rgba(212, 220, 195, 0.14), transparent 24%),
+                linear-gradient(180deg, #fafbf7 0%, var(--desk-bg) 100%);
         }
         .main .block-container {
             max-width: 1220px;
@@ -47,7 +47,7 @@ def apply_minimal_theme() -> None:
             padding-bottom: 2rem;
         }
         [data-testid="stHeader"] {
-            background: rgba(248,250,242,0.74);
+            background: rgba(249,250,246,0.76);
         }
         [data-testid="stMetric"] {
             background: var(--desk-card);
@@ -57,7 +57,7 @@ def apply_minimal_theme() -> None:
             box-shadow: var(--desk-shadow);
         }
         [data-testid="stMetricLabel"] {
-            color: var(--desk-muted);
+            color: #55604f;
             font-weight: 600;
         }
         [data-testid="stMetricValue"] {

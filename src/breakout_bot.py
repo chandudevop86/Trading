@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -39,6 +39,8 @@ class BreakoutConfig:
     min_volume_ratio: float = 1.30
     duplicate_signal_cooldown_bars: int = 12
     require_vwap_alignment: bool = True
+    require_market_structure: bool = True
+    structure_swing_window: int = 2
     allow_secondary_entries: bool = False
     morning_session_start: str = '09:35'
     morning_session_end: str = '10:45'
@@ -235,6 +237,37 @@ def _candidate_sides(bias: str, *, use_first_hour_bias: bool) -> list[str]:
     return ['BUY', 'SELL']
 
 
+def _recent_swings(day_candles: list[Candle], idx: int, swing_window: int) -> tuple[list[float], list[float]]:
+    highs: list[float] = []
+    lows: list[float] = []
+    window = max(1, int(swing_window or 1))
+    upper_bound = min(len(day_candles) - window - 1, idx)
+    for center in range(window, upper_bound + 1):
+        candle = day_candles[center]
+        left = day_candles[center - window:center]
+        right = day_candles[center + 1:center + window + 1]
+        if len(right) < window:
+            continue
+        if all(float(candle.high) >= float(item.high) for item in left + right):
+            highs.append(float(candle.high))
+        if all(float(candle.low) <= float(item.low) for item in left + right):
+            lows.append(float(candle.low))
+    return highs[-2:], lows[-2:]
+
+
+def _market_structure_ok(day_candles: list[Candle], idx: int, side: str, config: BreakoutConfig) -> tuple[bool, str]:
+    highs, lows = _recent_swings(day_candles, idx, config.structure_swing_window)
+    if len(highs) < 2 or len(lows) < 2:
+        return False, 'INSUFFICIENT'
+    if side == 'BUY':
+        if highs[-1] > highs[-2] and lows[-1] > lows[-2]:
+            return True, 'HH_HL'
+        return False, 'STRUCTURE_WEAK'
+    if highs[-1] < highs[-2] and lows[-1] < lows[-2]:
+        return True, 'LH_LL'
+    return False, 'STRUCTURE_WEAK'
+
+
 def _session_allowed(candle: Candle, config: BreakoutConfig) -> bool:
     return session_allowed(
         candle.timestamp,
@@ -259,7 +292,7 @@ def _midday_restricted(candle: Candle, config: BreakoutConfig) -> bool:
         afternoon_end=config.afternoon_session_end,
     ) == 'MIDDAY_BLOCKED'
 
-def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Candle, *, regime: str, bias: str, trigger: float, volume_ratio: float, strength: float, vwap_slope: float, atr_value: float, config: BreakoutConfig) -> tuple[float, str, dict[str, float], str, bool] | None:
+def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Candle, *, regime: str, bias: str, trigger: float, volume_ratio: float, strength: float, vwap_slope: float, atr_value: float, structure_ok: bool, structure_label: str, config: BreakoutConfig) -> tuple[float, str, dict[str, float], str, bool] | None:
     broke_level = breakout_candle.close > trigger if side == 'BUY' else breakout_candle.close < trigger
     vwap_ok = breakout_candle.close > breakout_candle.vwap and confirmation_candle.close > confirmation_candle.vwap and vwap_slope > 0 if side == 'BUY' else breakout_candle.close < breakout_candle.vwap and confirmation_candle.close < confirmation_candle.vwap and vwap_slope < 0
     retest_ok = _confirmation_holds(side, trigger, breakout_candle, confirmation_candle) or _retest_holds(side, trigger, confirmation_candle)
@@ -282,6 +315,8 @@ def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Ca
     )
     if config.require_vwap_alignment and not vwap_ok:
         return None
+    if config.require_market_structure and not structure_ok:
+        return None
     if not broke_level or not score.accepted:
         return None
     if not retest_ok:
@@ -292,9 +327,8 @@ def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Ca
         return None
     setup_type = 'retest'
     rejection_reason = '' if score.accepted else ','.join(f'missing_{reason}' for reason in score.reasons)
-    reason = f'breakout {setup_type} score={score.total:.2f} mode={config.scoring.normalized_mode()} regime={regime}'
+    reason = f'breakout {setup_type} score={score.total:.2f} mode={config.scoring.normalized_mode()} regime={regime} structure={structure_label.lower()}'
     return score.total, reason, score.components, rejection_reason, False
-
 
 def generate_trades(
     df: Any,
@@ -363,6 +397,7 @@ def generate_trades(
             for side in _candidate_sides(bias, use_first_hour_bias=cfg.use_first_hour_bias):
                 if idx - last_signal_index[side] < int(cfg.duplicate_signal_cooldown_bars):
                     continue
+                structure_ok, structure_label = _market_structure_ok(day_candles, idx, side, cfg)
                 trigger = opening_range.high if side == 'BUY' else opening_range.low
                 score_result = _score_candidate(
                     side,
@@ -375,6 +410,8 @@ def generate_trades(
                     strength=strength,
                     vwap_slope=vwap_slope,
                     atr_value=atr_value,
+                    structure_ok=structure_ok,
+                    structure_label=structure_label,
                     config=cfg,
                 )
                 if score_result is None:
@@ -462,6 +499,8 @@ def generate_trades(
                         'first_hour_bias': bias,
                         'bias_mode': 'REQUIRED' if cfg.use_first_hour_bias else 'OBSERVE_ONLY',
                         'bias_aligned': 'YES' if side == bias else 'NO',
+                        'market_structure_ok': 'YES' if structure_ok else 'NO',
+                        'market_structure_label': structure_label,
                         'regime_filter': 'ON' if cfg.filter_choppy_days else 'OFF',
                         'session_allowed': 'YES',
                         'session_gate': 'PASS',
@@ -539,6 +578,13 @@ def run(
     if telegram_token and telegram_chat_id:
         send_telegram_message(telegram_token, telegram_chat_id, build_trade_summary(trades))
     return trades
+
+
+
+
+
+
+
 
 
 

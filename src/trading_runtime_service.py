@@ -1,5 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any, Callable
 
 import pandas as pd
@@ -10,6 +11,7 @@ from src.strategy_demand_supply import generate_trades as generate_demand_supply
 from src.indicator_bot import generate_indicator_rows
 from src.live_ohlcv import fetch_live_ohlcv
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
+from src.nse_option_chain import build_metrics_map, extract_option_records, fetch_option_chain
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
 from src.runtime_defaults import DEFAULT_INTERVAL, DEFAULT_PERIOD, EXECUTED_TRADES_OUTPUT
 from src.runtime_models import TradingActionRequest, TradingActionResult, period_for_interval
@@ -48,9 +50,109 @@ def fetch_ohlcv_data(symbol: str, interval: str = DEFAULT_INTERVAL, period: str 
     return prepare_trading_data(pd.DataFrame(rows or []))
 
 
+def _safe_option_float(value: object, default: float = 0.0) -> float:
+    try:
+        if value is None or str(value).strip() == '':
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _days_to_expiry(value: object) -> int | None:
+    raw = str(value or '').strip()
+    if not raw:
+        return None
+    parsed: datetime | None = None
+    for fmt in ('%Y-%m-%d', '%d-%b-%Y', '%Y/%m/%d'):
+        try:
+            parsed = datetime.strptime(raw, fmt)
+            break
+        except ValueError:
+            continue
+    if parsed is None:
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+    today = datetime.now(UTC).date()
+    return max((parsed.date() - today).days, 0)
+
+
+def _option_risk_flags(row: dict[str, object]) -> dict[str, object]:
+    expiry_days = _days_to_expiry(row.get('option_expiry'))
+    strike = _safe_option_float(row.get('strike_price'))
+    spot = _safe_option_float(row.get('spot_price', row.get('entry_price', row.get('entry'))))
+    iv = _safe_option_float(row.get('option_iv'))
+    near_atm = bool(strike > 0 and spot > 0 and abs(spot - strike) <= max(50.0, strike * 0.0025))
+
+    theta_risk = 'UNKNOWN'
+    gamma_risk = 'UNKNOWN'
+    if expiry_days is not None:
+        if expiry_days <= 1:
+            theta_risk = 'HIGH'
+        elif expiry_days <= 3:
+            theta_risk = 'MEDIUM'
+        else:
+            theta_risk = 'LOW'
+
+        if near_atm and expiry_days <= 2:
+            gamma_risk = 'HIGH'
+        elif near_atm or expiry_days <= 5:
+            gamma_risk = 'MEDIUM'
+        else:
+            gamma_risk = 'LOW'
+
+    risk_summary = (
+        f'Theta decay {theta_risk.lower()}'
+        if theta_risk != 'UNKNOWN'
+        else 'Theta decay unavailable'
+    )
+    if gamma_risk != 'UNKNOWN':
+        risk_summary += f' | Gamma risk {gamma_risk.lower()}'
+
+    payload: dict[str, object] = {
+        'days_to_expiry': expiry_days if expiry_days is not None else '',
+        'theta_decay_risk': theta_risk,
+        'gamma_risk': gamma_risk,
+        'option_decay_summary': risk_summary,
+    }
+    if iv > 0:
+        payload['option_iv'] = round(iv, 4)
+    return payload
+
+
 def _attach_option_metrics(rows: list[dict[str, object]], symbol: str, fetch_option_metrics: bool) -> list[dict[str, object]]:
-    del symbol, fetch_option_metrics
-    return [dict(row) for row in rows]
+    base_rows = [dict(row) for row in rows]
+    if not fetch_option_metrics or not base_rows:
+        return base_rows
+    try:
+        payload = fetch_option_chain(symbol, timeout=10.0)
+        metrics_map = build_metrics_map(extract_option_records(payload))
+    except Exception:
+        return [
+            dict(row, option_metrics_status='UNAVAILABLE', **_option_risk_flags(row))
+            for row in base_rows
+        ]
+
+    enriched: list[dict[str, object]] = []
+    for row in base_rows:
+        item = dict(row)
+        strike_value = item.get('strike_price', item.get('strike'))
+        option_type = str(item.get('option_type', '') or '').upper()
+        try:
+            strike = int(float(strike_value))
+        except (TypeError, ValueError):
+            strike = 0
+        metrics = metrics_map.get((strike, option_type), {}) if strike > 0 and option_type in {'CE', 'PE'} else {}
+        if metrics:
+            item.update(metrics)
+            item['option_metrics_status'] = 'ATTACHED'
+        else:
+            item['option_metrics_status'] = 'MISSING'
+        item.update(_option_risk_flags(item))
+        enriched.append(item)
+    return enriched
 
 
 def _attach_indicator_trade_levels(rows: list[dict[str, object]], *, rr_ratio: float, trailing_sl_pct: float) -> list[dict[str, object]]:
@@ -240,53 +342,45 @@ def run_operator_action(request: TradingActionRequest) -> TradingActionResult:
                 candles=candles,
                 trades=[],
                 period=period,
-                status=_status_message(False, True),
-                broker_status="Backtest mode",
-                active_summary=dict(backtest_summary),
+                status='Backtest completed',
+                broker_status='Backtest mode',
+                active_summary=backtest_summary,
                 backtest_summary=backtest_summary,
                 paper_summary={},
-                todays_trades=0,
                 execution_messages=[],
+                todays_trades=0,
             )
 
-        broker_status = "Paper broker active" if request.broker_choice == "Paper" else "Idle"
+        broker_status = str(request.broker_choice or 'Paper')
         if request.run_requested:
-            _, execution_messages, broker_status = _run_execution(request, trades, candles)
-            paper_summary = paper_execution_summary(EXECUTED_TRADES_OUTPUT, request.strategy, request.symbol, float(request.capital))
-            active_summary = dict(paper_summary)
-        else:
-            active_summary = {}
-
-        todays_trades = todays_trade_count(EXECUTED_TRADES_OUTPUT, request.strategy, request.symbol)
+            _execution_result, execution_messages, broker_status = _run_execution(request, trades, candles)
+            paper_summary = paper_execution_summary(EXECUTED_TRADES_OUTPUT, request.strategy, request.symbol, request.capital)
+        active_summary = dict(backtest_summary or paper_summary or {})
+        today_count = todays_trade_count(EXECUTED_TRADES_OUTPUT, request.strategy, request.symbol)
         return TradingActionResult(
             candles=candles,
             trades=trades,
             period=period,
-            status=_status_message(request.run_requested, False),
+            status=_status_message(request.run_requested, request.backtest_requested),
             broker_status=broker_status,
             active_summary=active_summary,
             backtest_summary=backtest_summary,
             paper_summary=paper_summary,
-            todays_trades=todays_trades,
             execution_messages=execution_messages,
+            todays_trades=today_count,
         )
     except Exception as exc:
-        _log_runtime_error("run_operator_action", exc)
-        failed_action = "Backtest failed" if request.backtest_requested and not request.run_requested else "Run failed"
+        _log_runtime_error('run_operator_action', exc)
+        failure_prefix = 'Backtest failed' if request.backtest_requested and not request.run_requested else 'Run failed'
         return TradingActionResult(
             candles=pd.DataFrame(),
             trades=[],
             period=period_for_interval(request.timeframe),
-            status=f"{failed_action}: {exc}",
-            broker_status="Runtime error",
+            status=f'{failure_prefix}: {exc}',
+            broker_status='Runtime error',
             active_summary={},
             backtest_summary={},
             paper_summary={},
+            execution_messages=[('error', str(exc))],
             todays_trades=0,
-            execution_messages=[("error", str(exc))],
         )
-
-
-
-
-

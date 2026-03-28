@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import floor
@@ -17,6 +17,12 @@ STRATEGY_NAME = 'AMD_FVG_SUPPLY_DEMAND'
 class ConfluenceConfig:
     mode: str = 'Balanced'
     swing_window: int = 3
+    base_candle_min: int = 2
+    base_candle_max: int = 6
+    base_range_threshold_factor: float = 1.0
+    impulse_multiplier_threshold: float = 2.0
+    volume_spike_multiplier: float = 1.5
+    fast_base_candle_limit: int = 3
     accumulation_lookback: int = 10
     manipulation_lookback: int = 6
     distribution_lookback: int = 8
@@ -26,6 +32,7 @@ class ConfluenceConfig:
     zone_fresh_bars: int = 24
     min_zone_reaction: float = 0.55
     min_zone_strength_score: float = 4.0
+    minimum_take_score: float = 7.0
     max_nearby_zones: int = 2
     retest_tolerance_pct: float = 0.0015
     max_retest_bars: int = 6
@@ -167,6 +174,7 @@ def _prepare_df(data: Any) -> pd.DataFrame:
     df['vwap'] = vwap.where(vwap.notna(), df['close']).astype(float)
     df['avg_range_5'] = df['bar_range'].rolling(5, min_periods=1).mean()
     df['avg_body_5'] = df['body_size'].rolling(5, min_periods=1).mean()
+    df['avg_volume_5'] = df['volume'].fillna(0.0).rolling(5, min_periods=1).mean()
     return df
 
 
@@ -202,7 +210,62 @@ def _vwap_alignment(row: pd.Series, side: str) -> bool:
     return float(row['close']) <= vwap
 
 
-def _zone_strength_score(zone: dict[str, Any], row: pd.Series, side: str, nearby_zones: int) -> float:
+def _base_score(candles: pd.DataFrame, zone: dict[str, Any], config: ConfluenceConfig) -> tuple[float, int, float]:
+    created_index = int(zone.get('created_index', 0) or 0)
+    min_candles = max(2, int(config.base_candle_min or 2))
+    max_candles = max(min_candles, int(config.base_candle_max or 6))
+    threshold = max(float(candles.iloc[created_index].get('avg_range_5', 0.0) or 0.0) * max(float(config.base_range_threshold_factor or 1.0), 0.1), 0.05)
+    best_range = 0.0
+    best_count = 0
+    for candle_count in range(min_candles, max_candles + 1):
+        start = created_index - candle_count + 1
+        if start < 0:
+            continue
+        sample = candles.iloc[start:created_index + 1]
+        if len(sample) != candle_count:
+            continue
+        base_range = float(sample['high'].max()) - float(sample['low'].min())
+        if best_count == 0 or base_range < best_range:
+            best_range = round(base_range, 4)
+            best_count = candle_count
+    if best_count == 0:
+        return 1.0, 0, round(threshold, 4)
+    base_score = 2.0 if best_range < threshold else 1.0
+    return base_score, best_count, round(threshold, 4)
+
+
+def _impulse_score(row: pd.Series, config: ConfluenceConfig) -> tuple[float, float, float]:
+    avg_range = max(float(row.get('avg_range_5', 0.0) or 0.0), 0.0001)
+    impulse = max(float(row.get('bar_range', 0.0) or 0.0), 0.0)
+    threshold = avg_range * max(float(config.impulse_multiplier_threshold or 2.0), 0.1)
+    score = 3.0 if impulse > threshold else 1.0
+    return score, round(impulse, 4), round(avg_range, 4)
+
+
+def _volume_score(row: pd.Series, config: ConfluenceConfig) -> tuple[float, bool, float, float]:
+    breakout_volume = max(float(row.get('volume', 0.0) or 0.0), 0.0)
+    avg_volume = max(float(row.get('avg_volume_5', 0.0) or 0.0), 0.0)
+    volume_spike = avg_volume > 0 and breakout_volume > avg_volume * max(float(config.volume_spike_multiplier or 1.5), 0.1)
+    return (2.0 if volume_spike else 0.0), volume_spike, round(breakout_volume, 4), round(avg_volume, 4)
+
+
+def _touch_count(zone: dict[str, Any]) -> int:
+    return int(zone.get('touch_count', 0) or 0)
+
+
+def _time_score(base_candle_count: int, config: ConfluenceConfig) -> float:
+    return 2.0 if 0 < int(base_candle_count) <= int(config.fast_base_candle_limit) else 1.0
+
+
+def _score_interpretation(total_score: float) -> str:
+    if total_score >= 10.0:
+        return 'STRONG_TRADE'
+    if total_score >= 7.0:
+        return 'MEDIUM_OPTIONAL'
+    return 'SKIP'
+
+
+def _zone_strength_score(zone: dict[str, Any], row: pd.Series, side: str, nearby_zones: int, candles: pd.DataFrame, config: ConfluenceConfig) -> float:
     reaction_strength = float(zone.get('reaction_strength', 0.0) or 0.0)
     score = 0.0
     if reaction_strength >= 0.55:
@@ -222,6 +285,33 @@ def _zone_strength_score(zone: dict[str, Any], row: pd.Series, side: str, nearby
         score += 1.0
     elif nearby_zones >= 3:
         score -= 1.0
+    base_score, base_candle_count, base_range_threshold = _base_score(candles, zone, config)
+    impulse_score, impulse_range, avg_candle_range = _impulse_score(row, config)
+    volume_score, volume_spike, breakout_volume, avg_volume = _volume_score(row, config)
+    touch_count = _touch_count(zone)
+    fresh_score = 3.0 if touch_count == 0 else 1.0
+    time_score = _time_score(base_candle_count, config)
+    trend_score = 2.0 if _trend_alignment(row, side) else 0.0
+    zone['base_score'] = round(base_score, 2)
+    zone['base_candle_count'] = int(base_candle_count)
+    zone['base_range_threshold'] = round(base_range_threshold, 4)
+    zone['impulse_score'] = round(impulse_score, 2)
+    zone['impulse_range'] = round(impulse_range, 4)
+    zone['avg_candle_range'] = round(avg_candle_range, 4)
+    zone['volume_score'] = round(volume_score, 2)
+    zone['volume_spike'] = bool(volume_spike)
+    zone['breakout_volume'] = round(breakout_volume, 4)
+    zone['avg_volume'] = round(avg_volume, 4)
+    zone['touch_count'] = int(touch_count)
+    zone['fresh_score'] = round(fresh_score, 2)
+    zone['time_score'] = round(time_score, 2)
+    zone['trend_score'] = round(trend_score, 2)
+    score += float(base_score) * 0.5
+    score += float(impulse_score) * 0.35
+    score += float(volume_score) * 0.40
+    score += float(fresh_score) * 0.30
+    score += float(time_score) * 0.35
+    score += float(trend_score) * 0.40
     return round(score, 2)
 
 
@@ -383,6 +473,7 @@ def detect_supply_demand_zones(df: pd.DataFrame, config: ConfluenceConfig) -> li
                 'zone_low': round(float(row['low']), 4),
                 'zone_high': round(max(float(row['open']), float(row['close'])), 4),
                 'reaction_strength': round(max(0.0, float(future['high'].max()) - max(float(row['open']), float(row['close']))) / max(float(row['bar_range']), 0.1), 4),
+                'pattern': 'DBR' if float(row['close']) >= float(row['open']) else 'UNKNOWN',
             }
             if float(zone['reaction_strength']) >= float(config.min_zone_reaction) and not _merge_zone_if_needed(zones, zone, tolerance_abs):
                 zones.append(zone)
@@ -395,6 +486,7 @@ def detect_supply_demand_zones(df: pd.DataFrame, config: ConfluenceConfig) -> li
                 'zone_low': round(min(float(row['open']), float(row['close'])), 4),
                 'zone_high': round(float(row['high']), 4),
                 'reaction_strength': round(max(0.0, min(float(row['open']), float(row['close'])) - float(future['low'].min())) / max(float(row['bar_range']), 0.1), 4),
+                'pattern': 'RBD' if float(row['close']) <= float(row['open']) else 'UNKNOWN',
             }
             if float(zone['reaction_strength']) >= float(config.min_zone_reaction) and not _merge_zone_if_needed(zones, zone, tolerance_abs):
                 zones.append(zone)
@@ -544,6 +636,16 @@ def score_trade_setup(context: dict[str, Any], config: ConfluenceConfig, mode: s
         scoring,
     )
 
+    base_score = float(context.get('base_score', 1.0) or 1.0)
+    impulse_score = float(context.get('impulse_score', 1.0) or 1.0)
+    volume_score = float(context.get('volume_score', 0.0) or 0.0)
+    fresh_score = float(context.get('fresh_score', 1.0) or 1.0)
+    time_score = float(context.get('time_score', 1.0) or 1.0)
+    trend_score = 2.0 if trend_ok else 0.0
+    retest_score = 3.0 if retest_ok else 0.0
+    raw_total_score = round(base_score + impulse_score + volume_score + fresh_score + time_score + trend_score + retest_score, 2)
+    score_interpretation = _score_interpretation(raw_total_score)
+
     blockers: list[str] = []
     if bool(config.require_liquidity_sweep) and not sweep_ok:
         blockers.append('missing_required_sweep')
@@ -554,22 +656,23 @@ def score_trade_setup(context: dict[str, Any], config: ConfluenceConfig, mode: s
     if float(context.get('amd_confidence', 0.0) or 0.0) < float(config.minimum_amd_confidence):
         blockers.append(f'amd_confidence_below_{float(config.minimum_amd_confidence):.2f}')
 
-    accepted = score.accepted and not blockers
+    accepted = raw_total_score >= 10.0 and not blockers
     rejection_tokens = [f'missing_{reason}' for reason in score.reasons]
-    if score.total < score.threshold:
-        rejection_tokens.append(f'score_below_{score.threshold:.2f}')
+    if raw_total_score < 10.0:
+        rejection_tokens.append('score_below_10.00')
     rejection_tokens.extend(blockers)
 
     return {
         'accepted': accepted,
-        'threshold': score.threshold,
+        'threshold': 10.0,
         'amd_score': round(score.components.get('trend', 0.0), 2),
         'sweep_score': round(score.components.get('sweep', 0.0), 2),
         'imbalance_score': round(score.components.get('fvg', 0.0), 2),
         'zone_score': round(score.components.get('zone', 0.0), 2),
-        'trend_score': round(score.components.get('trend', 0.0), 2),
-        'retest_score': round(score.components.get('retest', 0.0), 2),
-        'total_score': score.total,
+        'trend_score': round(trend_score, 2),
+        'retest_score': round(retest_score, 2),
+        'total_score': raw_total_score,
+        'score_interpretation': score_interpretation,
         'rejection_reason': '' if accepted else ','.join(rejection_tokens),
     }
 
@@ -689,12 +792,15 @@ def generate_trades(
             if zone is None:
                 continue
             nearby_zones = _nearby_zone_count(zones, zone, row, side, config)
-            zone_strength_score = _zone_strength_score(zone, row, side, nearby_zones)
+            zone_strength_score = _zone_strength_score(zone, row, side, nearby_zones, candles, config)
             if nearby_zones > int(config.max_nearby_zones):
                 continue
             if float(zone.get('reaction_strength', 0.0) or 0.0) < float(config.min_zone_reaction):
                 continue
             if zone_strength_score < float(config.min_zone_strength_score):
+                continue
+            expected_pattern = 'DBR' if side == 'BUY' else 'RBD'
+            if str(zone.get('pattern', 'UNKNOWN') or 'UNKNOWN').upper() != expected_pattern:
                 continue
 
             imbalance = _recent_imbalance_context(candles, index, side, config)
@@ -726,8 +832,24 @@ def generate_trades(
                 'imbalance_type': str(imbalance['imbalance_type'] or ''),
                 'zone_proximity': True,
                 'zone_type': zone['type'],
+                'zone_pattern': str(zone.get('pattern', 'UNKNOWN') or 'UNKNOWN'),
                 'zone_reaction_strength': float(zone.get('reaction_strength', 0.0) or 0.0),
                 'zone_strength_score': float(zone_strength_score),
+                'base_score': float(zone.get('base_score', 1.0) or 1.0),
+                'base_candle_count': int(zone.get('base_candle_count', 0) or 0),
+                'base_range_threshold': float(zone.get('base_range_threshold', 0.0) or 0.0),
+                'impulse_score': float(zone.get('impulse_score', 1.0) or 1.0),
+                'impulse_range': float(zone.get('impulse_range', 0.0) or 0.0),
+                'avg_candle_range': float(zone.get('avg_candle_range', 0.0) or 0.0),
+                'volume_score': float(zone.get('volume_score', 0.0) or 0.0),
+                'volume_spike': bool(zone.get('volume_spike', False)),
+                'breakout_volume': float(zone.get('breakout_volume', 0.0) or 0.0),
+                'avg_volume': float(zone.get('avg_volume', 0.0) or 0.0),
+                'touch_count': int(zone.get('touch_count', 0) or 0),
+                'fresh_score': float(zone.get('fresh_score', 1.0) or 1.0),
+                'time_in_base': int(zone.get('base_candle_count', 0) or 0),
+                'time_score': float(zone.get('time_score', 1.0) or 1.0),
+                'trend_score': float(zone.get('trend_score', 0.0) or 0.0),
                 'retest_confirmation': retest_confirmation,
                 'trend_alignment': trend_alignment,
                 'vwap_alignment': vwap_alignment,
@@ -790,6 +912,7 @@ def generate_trades(
                 'zone_score': float(score['zone_score']),
                 'sweep_score': float(score['sweep_score']),
                 'total_score': float(score['total_score']),
+                'score_interpretation': str(score.get('score_interpretation', 'SKIP')),
                 'trend_score': float(score['trend_score']),
                 'retest_score': float(score['retest_score']),
                 'rejection_reason': '',
@@ -800,6 +923,21 @@ def generate_trades(
                 'liquidity_sweep': 'YES' if recent_sweep else 'NO',
                 'zone_reaction_strength': round(float(context['zone_reaction_strength']), 4),
                 'zone_strength_score': round(float(context['zone_strength_score']), 2),
+                'zone_pattern': str(context.get('zone_pattern', 'UNKNOWN') or 'UNKNOWN'),
+                'base_score': round(float(context.get('base_score', 1.0) or 1.0), 2),
+                'base_candle_count': int(context.get('base_candle_count', 0) or 0),
+                'base_range_threshold': round(float(context.get('base_range_threshold', 0.0) or 0.0), 4),
+                'impulse_score': round(float(context.get('impulse_score', 1.0) or 1.0), 2),
+                'impulse_range': round(float(context.get('impulse_range', 0.0) or 0.0), 4),
+                'avg_candle_range': round(float(context.get('avg_candle_range', 0.0) or 0.0), 4),
+                'volume_score': round(float(context.get('volume_score', 0.0) or 0.0), 2),
+                'volume_spike': 'YES' if bool(context.get('volume_spike', False)) else 'NO',
+                'breakout_volume': round(float(context.get('breakout_volume', 0.0) or 0.0), 4),
+                'avg_volume': round(float(context.get('avg_volume', 0.0) or 0.0), 4),
+                'touch_count': int(context.get('touch_count', 0) or 0),
+                'fresh_score': round(float(context.get('fresh_score', 1.0) or 1.0), 2),
+                'time_in_base': int(context.get('time_in_base', 0) or 0),
+                'time_score': round(float(context.get('time_score', 1.0) or 1.0), 2),
                 'vwap_aligned': 'YES' if vwap_alignment else 'NO',
                 'session_allowed': 'YES',
                 'session_window': session_window,
@@ -829,6 +967,9 @@ __all__ = [
     'score_trade_setup',
     'generate_trades',
 ]
+
+
+
 
 
 

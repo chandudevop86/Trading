@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
@@ -211,6 +211,7 @@ def _run_breakout_strategy(context: StrategyContext, dependencies: StrategyDepen
             min_breakout_strength=0.22,
             min_volume_ratio=1.30,
             require_vwap_alignment=True,
+            require_market_structure=True,
             allow_secondary_entries=False,
             allow_afternoon_session=False,
         ),
@@ -234,6 +235,7 @@ def _run_demand_supply_strategy(context: StrategyContext, dependencies: Strategy
             duplicate_signal_cooldown_bars=max(24, int(preset.duplicate_signal_cooldown_bars)),
             require_vwap_alignment=True,
             require_trend_bias=True,
+            require_market_structure=True,
             max_retest_bars=4,
             min_reaction_strength=0.75,
             min_zone_selection_score=5.0,
@@ -430,6 +432,7 @@ def run_strategy_workflow(
         attach_option_strikes_fn=attach_option_strikes_fn,
         attach_option_metrics_fn=attach_option_metrics_fn,
     )
+
 
 
 

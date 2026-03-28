@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -15,6 +15,7 @@ class Zone:
     high: float
     idx: int
     reaction_strength: float
+    pattern: str = 'UNKNOWN'
 
 
 @dataclass(slots=True)
@@ -35,6 +36,7 @@ class DemandSupplyConfig:
     zone_freshness_bars: int = 20
     min_reaction_strength: float = 0.75
     min_zone_selection_score: float = 5.00
+    minimum_take_score: float = 7.0
     min_confirmation_body_ratio: float = 0.60
     min_rejection_wick_ratio: float = 0.50
     zone_buffer_atr_fraction: float = 0.12
@@ -43,6 +45,14 @@ class DemandSupplyConfig:
     vwap_reclaim_buffer_pct: float = 0.0005
     require_vwap_alignment: bool = True
     require_trend_bias: bool = True
+    require_market_structure: bool = True
+    structure_swing_window: int = 2
+    base_candle_min: int = 2
+    base_candle_max: int = 6
+    base_range_threshold_factor: float = 1.0
+    impulse_multiplier_threshold: float = 2.0
+    volume_spike_multiplier: float = 1.5
+    fast_base_candle_limit: int = 3
     avoid_midday: bool = True
     morning_session_start: str = '09:35'
     morning_session_end: str = '10:45'
@@ -62,6 +72,10 @@ _SCORE_WEIGHTS: dict[str, float] = {
     'freshness': 2.0,
     'reaction_strength': 2.0,
     'structure_clarity': 1.6,
+    'base_quality': 1.0,
+    'impulse_quality': 1.0,
+    'volume_quality': 0.8,
+    'trend_alignment': 0.8,
     'vwap_alignment': 1.2,
     'retest_confirmation': 1.8,
     'volatility_quality': 0.8,
@@ -157,6 +171,7 @@ def _find_zones(day_candles: list[Candle], pivot_window: int) -> list[Zone]:
                     high=float(max(candle.open, candle.close)),
                     idx=index,
                     reaction_strength=_reaction_strength(day_candles, index, 'BUY'),
+                    pattern='DBR' if float(candle.close) >= float(candle.open) else 'UNKNOWN',
                 )
             )
         if highs and float(candle.high) > max(float(value) for value in highs):
@@ -167,6 +182,7 @@ def _find_zones(day_candles: list[Candle], pivot_window: int) -> list[Zone]:
                     high=float(candle.high),
                     idx=index,
                     reaction_strength=_reaction_strength(day_candles, index, 'SELL'),
+                    pattern='RBD' if float(candle.close) <= float(candle.open) else 'UNKNOWN',
                 )
             )
     return zones
@@ -181,6 +197,37 @@ def _trend_ok(day_candles: list[Candle], idx: int, side: str) -> bool:
     if side == 'BUY':
         return close >= fast >= slow
     return close <= fast <= slow
+
+
+def _recent_swings(day_candles: list[Candle], idx: int, swing_window: int) -> tuple[list[float], list[float]]:
+    highs: list[float] = []
+    lows: list[float] = []
+    window = max(1, int(swing_window or 1))
+    upper_bound = min(len(day_candles) - window - 1, idx)
+    for center in range(window, upper_bound + 1):
+        candle = day_candles[center]
+        left = day_candles[center - window:center]
+        right = day_candles[center + 1:center + window + 1]
+        if len(right) < window:
+            continue
+        if all(float(candle.high) >= float(item.high) for item in left + right):
+            highs.append(float(candle.high))
+        if all(float(candle.low) <= float(item.low) for item in left + right):
+            lows.append(float(candle.low))
+    return highs[-2:], lows[-2:]
+
+
+def _market_structure(day_candles: list[Candle], idx: int, side: str, config: DemandSupplyConfig) -> tuple[bool, str]:
+    highs, lows = _recent_swings(day_candles, idx, config.structure_swing_window)
+    if len(highs) < 2 or len(lows) < 2:
+        return False, 'INSUFFICIENT'
+    if side == 'BUY':
+        if highs[-1] > highs[-2] and lows[-1] > lows[-2]:
+            return True, 'HH_HL'
+        return False, 'STRUCTURE_WEAK'
+    if highs[-1] < highs[-2] and lows[-1] < lows[-2]:
+        return True, 'LH_LL'
+    return False, 'STRUCTURE_WEAK'
 
 
 def _higher_tf_bias(day_candles: list[Candle], idx: int) -> str:
@@ -208,6 +255,93 @@ def _avg_range(day_candles: list[Candle], idx: int, window: int) -> float:
     if not sample:
         return 0.0
     return sum(_intraday_range(candle) for candle in sample) / len(sample)
+
+
+def _base_candle_profile(day_candles: list[Candle], idx: int, config: DemandSupplyConfig) -> tuple[float, int, float]:
+    min_candles = max(2, int(config.base_candle_min or 2))
+    max_candles = max(min_candles, int(config.base_candle_max or 6))
+    avg_range = max(_avg_range(day_candles, idx, config.atr_window), 0.0001)
+    threshold = avg_range * max(float(config.base_range_threshold_factor or 1.0), 0.1)
+    best_range = 0.0
+    best_count = 0
+    for candle_count in range(min_candles, max_candles + 1):
+        start = idx - candle_count + 1
+        if start < 0:
+            continue
+        sample = day_candles[start:idx + 1]
+        if len(sample) != candle_count:
+            continue
+        base_range = max(float(c.high) for c in sample) - min(float(c.low) for c in sample)
+        if best_count == 0 or base_range < best_range:
+            best_range = round(base_range, 4)
+            best_count = candle_count
+    if best_count == 0:
+        return 1.0, 0, round(threshold, 4)
+    base_score = 2.0 if best_range < threshold else 1.0
+    return base_score, best_count, round(threshold, 4)
+
+
+def _impulse_score(day_candles: list[Candle], idx: int, config: DemandSupplyConfig) -> tuple[float, float, float]:
+    avg_range = max(_avg_range(day_candles, idx, config.atr_window), 0.0001)
+    impulse = _intraday_range(day_candles[idx])
+    threshold = avg_range * max(float(config.impulse_multiplier_threshold or 2.0), 0.1)
+    score = 3.0 if impulse > threshold else 1.0
+    return score, round(impulse, 4), round(avg_range, 4)
+
+
+def _volume_component(day_candles: list[Candle], idx: int, config: DemandSupplyConfig) -> tuple[float, bool, float, float]:
+    current_volume = max(float(getattr(day_candles[idx], 'volume', 0.0) or 0.0), 0.0)
+    left = max(0, idx - 5)
+    history = [max(float(getattr(candle, 'volume', 0.0) or 0.0), 0.0) for candle in day_candles[left:idx]]
+    avg_volume = sum(history) / len(history) if history else current_volume
+    volume_spike = avg_volume > 0 and current_volume > avg_volume * max(float(config.volume_spike_multiplier or 1.5), 0.1)
+    normalized = 1.0 if volume_spike else 0.0
+    return round(normalized * _SCORE_WEIGHTS['volume_quality'], 4), volume_spike, round(current_volume, 4), round(avg_volume, 4)
+
+
+def _touch_count(day_candles: list[Candle], zone: Zone, side: str, idx: int, config: DemandSupplyConfig) -> int:
+    count = 0
+    for candle in day_candles[max(zone.idx + 1, 0):max(idx, zone.idx + 1)]:
+        if _touches_zone(candle, zone, side, float(config.touch_tolerance_pct)):
+            count += 1
+    return count
+
+
+def _fresh_touch_score(day_candles: list[Candle], zone: Zone, side: str, idx: int, config: DemandSupplyConfig) -> tuple[float, int]:
+    touch_count = _touch_count(day_candles, zone, side, idx, config)
+    raw_score = 3.0 if touch_count == 0 else 1.0
+    normalized = 1.0 if raw_score >= 3.0 else 0.33
+    return round(normalized * _SCORE_WEIGHTS['freshness'], 4), touch_count
+
+
+def _time_component(base_candle_count: int, config: DemandSupplyConfig) -> tuple[float, float]:
+    raw_score = 2.0 if 0 < int(base_candle_count) <= int(config.fast_base_candle_limit) else 1.0
+    normalized = 1.0 if raw_score >= 2.0 else 0.5
+    return round(normalized * _SCORE_WEIGHTS['base_quality'], 4), raw_score
+
+
+def _trend_component(bias_aligned: bool, trend_ok: bool) -> tuple[float, float]:
+    raw_score = 2.0 if bias_aligned and trend_ok else 0.0
+    normalized = 1.0 if raw_score >= 2.0 else 0.0
+    return round(normalized * _SCORE_WEIGHTS['trend_alignment'], 4), raw_score
+
+
+def _retest_hold_score(confirmation_candle: Candle, zone: Zone, side: str, retest_confirmed: bool) -> float:
+    if not retest_confirmed:
+        return 0.0
+    if side == 'BUY' and float(confirmation_candle.close) >= float(zone.high):
+        return 3.0
+    if side == 'SELL' and float(confirmation_candle.close) <= float(zone.low):
+        return 3.0
+    return 0.0
+
+
+def _score_interpretation(total_score: float) -> str:
+    if total_score >= 10.0:
+        return 'STRONG_TRADE'
+    if total_score >= 7.0:
+        return 'MEDIUM_OPTIONAL'
+    return 'SKIP'
 
 
 def _volatility_ratio(day_candles: list[Candle], idx: int, config: DemandSupplyConfig) -> float:
@@ -360,16 +494,16 @@ def _reaction_component(zone: Zone, day_candles: list[Candle], idx: int, side: s
     return round(normalized * _SCORE_WEIGHTS['reaction_strength'], 4), round(reaction_metric, 4)
 
 
-def _structure_component(day_candles: list[Candle], idx: int, zone: Zone, side: str, bias_aligned: bool) -> tuple[float, float]:
+def _structure_component(day_candles: list[Candle], idx: int, zone: Zone, side: str, bias_aligned: bool, structure_ok: bool) -> tuple[float, float]:
     avg_range = max(_avg_range(day_candles, idx, 8), 0.0001)
     zone_width = max(float(zone.high) - float(zone.low), 0.0001)
     width_ratio = zone_width / avg_range
     width_score = 1.0 if 0.18 <= width_ratio <= 1.05 else 0.7 if width_ratio <= 1.35 else 0.35 if width_ratio <= 1.80 else 0.0
     location_score = 1.0 if (side == 'BUY' and float(day_candles[idx].close) >= _zone_mid(zone)) or (side == 'SELL' and float(day_candles[idx].close) <= _zone_mid(zone)) else 0.0
     bias_score = 1.0 if bias_aligned else 0.0
-    structure_ratio = (width_score * 0.45) + (location_score * 0.20) + (bias_score * 0.35)
+    structure_pattern_score = 1.0 if structure_ok else 0.0
+    structure_ratio = (width_score * 0.30) + (location_score * 0.15) + (bias_score * 0.20) + (structure_pattern_score * 0.35)
     return round(structure_ratio * _SCORE_WEIGHTS['structure_clarity'], 4), round(structure_ratio, 4)
-
 
 def _vwap_component(candle: Candle, side: str) -> tuple[float, bool]:
     aligned = _vwap_aligned(candle, side)
@@ -410,9 +544,29 @@ def _zone_selection_score(day_candles: list[Candle], idx: int, zone: Zone, side:
     freshness = _freshness_component(idx, zone, config)
     reaction_component, _ = _reaction_component(zone, day_candles, idx, side)
     bias = _higher_tf_bias(day_candles, idx)
-    structure_component, _ = _structure_component(day_candles, idx, zone, side, bias == ('BULLISH' if side == 'BUY' else 'BEARISH'))
-    return round(freshness + reaction_component + structure_component, 4)
-
+    structure_ok, _ = _market_structure(day_candles, idx, side, config)
+    bias_aligned = bias == ('BULLISH' if side == 'BUY' else 'BEARISH')
+    structure_component, _ = _structure_component(day_candles, idx, zone, side, bias_aligned, structure_ok)
+    base_score, base_candle_count, _ = _base_candle_profile(day_candles, idx, config)
+    impulse_score, _, _ = _impulse_score(day_candles, idx, config)
+    volume_component, _, _, _ = _volume_component(day_candles, idx, config)
+    fresh_touch_component, _ = _fresh_touch_score(day_candles, zone, side, idx, config)
+    time_component, _ = _time_component(base_candle_count, config)
+    trend_component, _ = _trend_component(bias_aligned, structure_ok)
+    base_component = round((1.0 if base_score >= 2.0 else 0.5) * _SCORE_WEIGHTS['base_quality'], 4)
+    impulse_component = round((1.0 if impulse_score >= 3.0 else 0.33) * _SCORE_WEIGHTS['impulse_quality'], 4)
+    return round(
+        freshness
+        + reaction_component
+        + structure_component
+        + base_component
+        + impulse_component
+        + volume_component
+        + fresh_touch_component
+        + time_component
+        + trend_component,
+        4,
+    )
 
 def _quality_score(
     day_candles: list[Candle],
@@ -433,11 +587,19 @@ def _quality_score(
     trend_bias = _higher_tf_bias(day_candles, idx)
     bias_aligned = trend_bias == ('BULLISH' if side == 'BUY' else 'BEARISH')
     trend_ok = _trend_ok(day_candles, idx, side)
+    structure_ok, structure_label = _market_structure(day_candles, idx, side, config)
     freshness_component = _freshness_component(idx, zone, config)
     reaction_component, reaction_metric = _reaction_component(zone, day_candles, idx, side)
-    structure_component, structure_ratio = _structure_component(day_candles, idx, zone, side, bias_aligned)
+    structure_component, structure_ratio = _structure_component(day_candles, idx, zone, side, bias_aligned, structure_ok)
+    base_score, base_candle_count, base_range_threshold = _base_candle_profile(day_candles, idx, config)
+    impulse_score, impulse_range, avg_candle_range = _impulse_score(day_candles, idx, config)
+    volume_component, volume_spike, breakout_volume, avg_volume = _volume_component(day_candles, idx, config)
+    fresh_touch_component, touch_count = _fresh_touch_score(day_candles, zone, side, idx, config)
+    time_component, time_score = _time_component(base_candle_count, config)
+    trend_component, trend_score = _trend_component(bias_aligned, trend_ok)
     vwap_component, vwap_ok = _vwap_component(candle, side)
     retest_component, retest_ratio = _retest_component(touch_candle, candle, zone, side, config)
+    retest_score = _retest_hold_score(candle, zone, side, retest_confirmed)
     volatility_component, volatility_ratio = _volatility_component(day_candles, idx, config)
     session_component, session_name = _session_component(candle, config)
     zone_selection_score = _zone_selection_score(day_candles, idx, zone, side, config)
@@ -446,11 +608,16 @@ def _quality_score(
         return None
     if config.require_trend_bias and (not bias_aligned or not trend_ok):
         return None
+    if config.require_market_structure and not structure_ok:
+        return None
     if reaction_metric < float(config.min_reaction_strength):
         return None
     if session_component <= 0 or session_name != 'MORNING':
         return None
     if zone_selection_score < max(float(config.min_zone_selection_score), 5.0):
+        return None
+    expected_pattern = 'DBR' if side == 'BUY' else 'RBD'
+    if str(zone.pattern or 'UNKNOWN').upper() != expected_pattern:
         return None
     if retest_ratio < 0.72:
         return None
@@ -461,15 +628,23 @@ def _quality_score(
 
     components = {
         'freshness': freshness_component,
+        'touch_freshness': fresh_touch_component,
         'reaction_strength': reaction_component,
         'structure_clarity': structure_component,
+        'base_quality': round((1.0 if base_score >= 2.0 else 0.5) * _SCORE_WEIGHTS['base_quality'], 4),
+        'impulse_quality': round((1.0 if impulse_score >= 3.0 else 0.33) * _SCORE_WEIGHTS['impulse_quality'], 4),
+        'volume_quality': volume_component,
+        'trend_alignment': trend_component,
+        'time_quality': time_component,
         'vwap_alignment': round(vwap_component, 4),
         'retest_confirmation': retest_component,
         'volatility_quality': volatility_component,
         'session_quality': round(session_component, 4),
     }
-    total_score = round(sum(components.values()), 2)
-    threshold = round(float(config.scoring.threshold()), 2)
+    raw_total_score = round(base_score + impulse_score + (2.0 if volume_spike else 0.0) + (3.0 if touch_count == 0 else 1.0) + time_score + trend_score + retest_score, 2)
+    score_interpretation = _score_interpretation(raw_total_score)
+    total_score = raw_total_score
+    threshold = 10.0
     if total_score < threshold:
         return None
 
@@ -478,23 +653,43 @@ def _quality_score(
         'bias_aligned': bias_aligned,
         'vwap_aligned': vwap_ok,
         'trend_ok': trend_ok,
+        'market_structure_ok': structure_ok,
+        'zone_pattern': str(zone.pattern or 'UNKNOWN'),
+        'market_structure_label': structure_label,
         'session_window': session_name,
         'freshness_ratio': round(_zone_freshness_ratio(idx, zone, config), 4),
         'reaction_score': reaction_metric,
         'structure_score': round(structure_ratio, 4),
         'retest_ratio': retest_ratio,
+        'retest_score': round(retest_score, 2),
         'volatility_ratio': volatility_ratio,
+        'volume_spike': volume_spike,
+        'volume_score': 2 if volume_spike else 0,
+        'breakout_volume': breakout_volume,
+        'avg_volume': avg_volume,
+        'touch_count': int(touch_count),
+        'fresh_score': 3 if touch_count == 0 else 1,
+        'base_score': round(base_score, 2),
+        'base_candle_count': int(base_candle_count),
+        'base_range_threshold': round(base_range_threshold, 4),
+        'time_in_base': int(base_candle_count),
+        'time_score': round(time_score, 2),
+        'impulse_score': round(impulse_score, 2),
+        'impulse_range': round(impulse_range, 4),
+        'avg_candle_range': round(avg_candle_range, 4),
+        'trend_score': round(trend_score, 2),
         'zone_strength_score': total_score,
+        'raw_total_score': total_score,
+        'score_interpretation': score_interpretation,
         'zone_selection_score': round(zone_selection_score, 2),
         'score_threshold': threshold,
     }
     reason = (
-        f'{side.lower()} demand_supply retest score={total_score:.2f} '
+        f'{side.lower()} demand_supply retest score={total_score:.2f} {score_interpretation.lower()} '
         f'freshness={components["freshness"]:.2f} reaction={components["reaction_strength"]:.2f} '
-        f'structure={components["structure_clarity"]:.2f} retest={components["retest_confirmation"]:.2f}'
+        f'structure={components["structure_clarity"]:.2f} {structure_label.lower()} retest={components["retest_confirmation"]:.2f}'
     )
     return total_score, components, reason, '', diagnostics
-
 
 def score_zone(
     day_candles: list[Candle],
@@ -673,6 +868,7 @@ def generate_trades(
                     'timeframe': '5m',
                     'day': day.isoformat(),
                     'zone_kind': zone.kind,
+                    'zone_pattern': str(zone.pattern or 'UNKNOWN'),
                     'zone_low': round(float(zone.low), 4),
                     'zone_high': round(float(zone.high), 4),
                     'zone_buffer': round(buffer, 4),
@@ -681,17 +877,37 @@ def generate_trades(
                     'freshness_score': round(float(components['freshness']), 2),
                     'reaction_component': round(float(components['reaction_strength']), 2),
                     'structure_component': round(float(components['structure_clarity']), 2),
+                    'base_component': round(float(components['base_quality']), 2),
+                    'impulse_component': round(float(components['impulse_quality']), 2),
                     'vwap_component': round(float(components['vwap_alignment']), 2),
                     'retest_component': round(float(components['retest_confirmation']), 2),
                     'volatility_component': round(float(components['volatility_quality']), 2),
                     'session_component': round(float(components['session_quality']), 2),
                     'zone_strength_score': round(float(diagnostics['zone_strength_score']), 2),
+                    'total_score': round(float(diagnostics['raw_total_score']), 2),
+                    'score_interpretation': str(diagnostics['score_interpretation']),
                     'zone_selection_score': round(float(zone_selection_score), 2),
                     'zone_gate_score': round(float(zone_selection_score), 2),
                     'zone_prequalification_floor': round(float(cfg.min_zone_selection_score), 2),
                     'zone_gate_threshold': round(float(cfg.min_zone_selection_score), 2),
                     'zone_prequalified': 'YES',
                     'structure_score': round(float(diagnostics['structure_score']), 4),
+                    'base_score': round(float(diagnostics['base_score']), 2),
+                    'base_candle_count': int(diagnostics['base_candle_count']),
+                    'base_range_threshold': round(float(diagnostics['base_range_threshold']), 4),
+                    'impulse_score': round(float(diagnostics['impulse_score']), 2),
+                    'impulse_range': round(float(diagnostics['impulse_range']), 4),
+                    'avg_candle_range': round(float(diagnostics['avg_candle_range']), 4),
+                    'volume_score': round(float(diagnostics['volume_score']), 2),
+                    'volume_spike': 'YES' if bool(diagnostics['volume_spike']) else 'NO',
+                    'breakout_volume': round(float(diagnostics['breakout_volume']), 4),
+                    'avg_volume': round(float(diagnostics['avg_volume']), 4),
+                    'touch_count': int(diagnostics['touch_count']),
+                    'fresh_score': round(float(diagnostics['fresh_score']), 2),
+                    'time_in_base': int(diagnostics['time_in_base']),
+                    'time_score': round(float(diagnostics['time_score']), 2),
+                    'trend_score': round(float(diagnostics['trend_score']), 2),
+                    'retest_score': round(float(diagnostics['retest_score']), 2),
                     'freshness_ratio': round(float(diagnostics['freshness_ratio']), 4),
                     'reaction_score': round(float(diagnostics['reaction_score']), 4),
                     'retest_ratio': round(float(diagnostics['retest_ratio']), 4),
@@ -701,6 +917,8 @@ def generate_trades(
                     'vwap_aligned': 'YES' if bool(diagnostics['vwap_aligned']) else 'NO',
                     'vwap_gate': 'PASS' if bool(diagnostics['vwap_aligned']) else 'FAIL',
                     'trend_alignment': 'YES' if bool(diagnostics['trend_ok']) else 'NO',
+                    'market_structure_ok': 'YES' if bool(diagnostics['market_structure_ok']) else 'NO',
+                    'market_structure_label': str(diagnostics['market_structure_label']),
                     'session_window': str(diagnostics['session_window']),
                     'session_allowed': 'YES',
                     'session_gate': 'PASS',
@@ -728,6 +946,22 @@ def generate_trades(
             used_signal_keys.add(signal_key)
 
     return trades
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

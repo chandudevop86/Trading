@@ -96,6 +96,11 @@ SUITES: list[SuiteConfig] = [
     ),
     SuiteConfig(
         area='Functional',
+        pattern='test_dhan_api.py',
+        description='DHAN symbol resolution, option instrument lookup, and broker request shaping.',
+    ),
+    SuiteConfig(
+        area='Functional',
         pattern='test_execution_engine.py',
         description='Execution safety, duplicate prevention, daily limits, and live compatibility guards.',
     ),

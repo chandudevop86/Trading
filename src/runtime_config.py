@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
@@ -152,6 +152,19 @@ class TradingDaemonConfig:
 
 
 @dataclass(slots=True)
+class TelegramRuntimeConfig:
+    enabled: bool = _bool_env('TELEGRAM_NOTIFICATIONS_ENABLED')
+    token: str = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+    chat_id: str = os.getenv('TELEGRAM_CHAT_ID', '').strip()
+    notify_on_success: bool = _bool_env('TELEGRAM_NOTIFY_SUCCESS', True)
+    notify_on_error: bool = _bool_env('TELEGRAM_NOTIFY_ERRORS', True)
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.enabled and self.token and self.chat_id)
+
+
+@dataclass(slots=True)
 class RuntimeConfig:
     app_name: str = os.getenv('APP_NAME', 'trading-system')
     environment: str = os.getenv('APP_ENV', 'local')
@@ -159,6 +172,7 @@ class RuntimeConfig:
     aws: AwsConfig = field(default_factory=AwsConfig)
     broker: BrokerRuntimeConfig = field(default_factory=BrokerRuntimeConfig)
     daemon: TradingDaemonConfig = field(default_factory=TradingDaemonConfig)
+    telegram: TelegramRuntimeConfig = field(default_factory=TelegramRuntimeConfig)
 
     @property
     def local_mode(self) -> bool:

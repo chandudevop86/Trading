@@ -70,6 +70,8 @@ SKIP_REASON_BROKER_ERROR = "BROKER_ERROR"
 SKIP_REASON_KILL_SWITCH = "KILL_SWITCH_ENABLED"
 SKIP_REASON_OPTIMIZER_GATE = "OPTIMIZER_GATE_BLOCKED"
 SKIP_REASON_MAX_OPEN_TRADES = "MAX_OPEN_TRADES"
+SKIP_REASON_DHAN_PREFLIGHT_FAILED = "DHAN_PREFLIGHT_FAILED"
+SKIP_REASON_DHAN_SECURITY_MAP_MISSING = "DHAN_SECURITY_MAP_MISSING"
 
 ACTIVE_TRADE_STATUSES = {
     TRADE_STATUS_REVIEWED,
@@ -518,6 +520,50 @@ def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[st
 
     return True, '', normalized
 
+
+
+
+def validate_dhan_preflight(candidate: dict[str, object], security_map: dict[str, dict[str, str]] | None, *, broker_client: object | None = None) -> tuple[bool, str, dict[str, object]]:
+    normalized = _ensure_trade_identity(candidate, default_status=TRADE_STATUS_REVIEWED)
+    if not isinstance(security_map, dict) or not security_map:
+        return False, SKIP_REASON_DHAN_SECURITY_MAP_MISSING, normalized
+    try:
+        from src.dhan_api import resolve_security as _resolve_dhan_security
+
+        resolved = _resolve_dhan_security(
+            normalized,
+            security_map,
+            broker_client=broker_client,
+            validate_with_option_chain=False,
+        )
+    except Exception as exc:
+        normalized['broker_message'] = str(exc)
+        return False, SKIP_REASON_DHAN_PREFLIGHT_FAILED, normalized
+
+    enriched = dict(normalized)
+    for key, value in dict(resolved).items():
+        if value not in (None, ''):
+            enriched[key] = value
+    enriched['data_symbol'] = str(enriched.get('data_symbol') or normalized.get('symbol') or '')
+    enriched['trade_symbol'] = str(
+        resolved.get('underlying_symbol')
+        or resolved.get('trade_symbol')
+        or enriched.get('trading_symbol')
+        or enriched.get('trade_symbol')
+        or ''
+    )
+    required = {
+        'data_symbol': str(enriched.get('data_symbol', '') or '').strip(),
+        'trade_symbol': str(enriched.get('trade_symbol', '') or '').strip(),
+        'security_id': str(enriched.get('security_id', '') or '').strip(),
+        'exchange_segment': str(enriched.get('exchange_segment', '') or '').strip(),
+        'instrument_type': str(enriched.get('instrument_type', '') or '').strip(),
+    }
+    missing = [key for key, value in required.items() if not value]
+    if missing:
+        enriched['broker_message'] = 'Missing DHAN fields: ' + ', '.join(missing)
+        return False, SKIP_REASON_DHAN_PREFLIGHT_FAILED, enriched
+    return True, '', enriched
 
 def _make_result_row(record: dict[str, object], *, execution_type: str, processed_at_utc: str) -> dict[str, object]:
     row = _ensure_trade_identity(record, default_status=TRADE_STATUS_REVIEWED)
@@ -1375,29 +1421,26 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             continue
 
         broker_row = dict(base_row)
-        if execution_type == "LIVE" and resolved_broker_name == "DHAN" and isinstance(security_map, dict) and security_map:
-            try:
-                from src.dhan_api import resolve_security as _resolve_dhan_security
-
-                resolved_security = _resolve_dhan_security(
-                    broker_row,
-                    security_map,
-                    broker_client=broker if hasattr(broker, 'place_order') else None,
-                    validate_with_option_chain=False,
-                )
-                for key, value in resolved_security.items():
-                    if value not in (None, ''):
-                        broker_row[key] = value
-                broker_row['data_symbol'] = str(broker_row.get('data_symbol') or base_row.get('symbol') or '')
-                broker_row['trade_symbol'] = str(
-                    resolved_security.get('underlying_symbol')
-                    or resolved_security.get('trade_symbol')
-                    or broker_row.get('trading_symbol')
-                    or broker_row.get('trade_symbol')
-                    or ''
-                )
-            except Exception:
-                pass
+        if execution_type == "LIVE" and resolved_broker_name == "DHAN":
+            preflight_ok, preflight_reason, enriched_broker_row = validate_dhan_preflight(
+                broker_row,
+                security_map,
+                broker_client=broker if hasattr(broker, 'place_order') else None,
+            )
+            if not preflight_ok:
+                blocked = dict(_make_result_row(enriched_broker_row, execution_type=execution_type, processed_at_utc=now))
+                blocked['trade_status'] = TRADE_STATUS_BLOCKED
+                blocked['execution_status'] = 'BLOCKED'
+                blocked['blocked_reason'] = preflight_reason
+                blocked = _annotate_rejection_row(blocked, reason=preflight_reason, category='broker_preflight')
+                blocked['broker_name'] = resolved_broker_name
+                blocked['broker_status'] = 'DHAN_PREFLIGHT'
+                blocked['broker_message'] = str(enriched_broker_row.get('broker_message', '') or 'DHAN pre-flight validation failed.')
+                rows_to_write.append(blocked)
+                _append_written_row(result, blocked)
+                _append_structured_log(REJECTIONS_LOG_PATH, 'trade_blocked', execution_type=execution_type, trade_id=trade_id, strategy=blocked.get('strategy'), symbol=blocked.get('symbol'), reason=blocked.get('blocked_reason'), broker_status=blocked.get('broker_status'), category='broker_preflight')
+                continue
+            broker_row = dict(enriched_broker_row)
         trade_candidate = _candidate_to_trade_candidate(broker_row, execution_type)
         order_request = _build_broker_order_request(trade_candidate)
         _append_structured_log(BROKER_LOG_PATH, 'broker_order_routed', execution_type=execution_type, trade_id=trade_candidate.trade_id, broker=resolved_broker_name, strategy=trade_candidate.strategy, symbol=trade_candidate.symbol, side=trade_candidate.side, quantity=trade_candidate.quantity)

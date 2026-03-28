@@ -25,6 +25,7 @@ from src.execution_engine import (
     reconcile_live_positions,
     reconcile_live_trades,
     validate_candidate,
+    validate_dhan_preflight,
 )
 
 
@@ -556,6 +557,53 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertGreaterEqual(days, 30)
             self.assertIn('2026-01-31', unlock_date)
 
+
+
+    def test_validate_dhan_preflight_blocks_missing_security_map(self):
+        ok, reason, enriched = validate_dhan_preflight(
+            {
+                'strategy': 'BREAKOUT',
+                'symbol': '^NSEI',
+                'signal_time': '2026-03-06 10:00:00',
+                'side': 'BUY',
+                'price': 100.0,
+                'quantity': 75,
+            },
+            None,
+        )
+        self.assertFalse(ok)
+        self.assertEqual(reason, 'DHAN_SECURITY_MAP_MISSING')
+        self.assertEqual(enriched['symbol'], '^NSEI')
+
+    def test_execute_live_trades_blocks_when_dhan_preflight_fails(self):
+        broker = _StubBrokerClient()
+        candidates = [
+            {
+                'strategy': 'BREAKOUT',
+                'symbol': '^NSEI',
+                'signal_time': '2026-03-06 10:00:00',
+                'side': 'BUY',
+                'price': 100.0,
+                'quantity': 75,
+                'option_type': 'CE',
+                'strike_price': 22500,
+            }
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'live.csv'
+            rows = execute_live_trades(
+                candidates,
+                out,
+                broker_client=broker,
+                broker_name='DHAN',
+                security_map={},
+                optimizer_report_path=self._write_optimizer_report(td),
+            )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['execution_status'], 'BLOCKED')
+        self.assertEqual(rows[0]['blocked_reason'], 'DHAN_SECURITY_MAP_MISSING')
+        self.assertEqual(rows[0]['broker_status'], 'DHAN_PREFLIGHT')
+        self.assertEqual(broker.calls, 0)
 
     def test_execute_live_trades_resolves_dhan_security_metadata(self):
         broker = _StubBrokerClient()

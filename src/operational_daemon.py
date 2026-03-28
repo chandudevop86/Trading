@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import time
@@ -12,6 +12,8 @@ from src.backtest_engine import BacktestConfig, run_backtest, summarize_trade_lo
 from src.execution_engine import build_execution_candidates, close_paper_trades, execute_live_trades, execute_paper_trades, execution_result_summary
 from src.legacy_scope import fail_noncanonical_entrypoint
 from src.runtime_config import RuntimeConfig
+from src.telegram_notifier import send_telegram_message
+from src.trade_validation_service import build_trade_evaluation_summary
 from src.trading_core import append_log, write_rows
 
 
@@ -20,6 +22,48 @@ def _append_text_log(path: Path, message: str) -> None:
     stamp = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')
     with path.open('a', encoding='utf-8') as handle:
         handle.write(f'[{stamp}] {message}\n')
+
+
+def _paper_readiness_line(executed_rows: list[dict[str, object]], strategy: str) -> str:
+    if not executed_rows:
+        return 'Paper readiness: no executed trades yet.'
+    summary = build_trade_evaluation_summary(executed_rows, strategy_name=strategy)
+    readiness_status = str(summary.get('paper_readiness_status', 'NOT_READY_FOR_PAPER_PHASE') or 'NOT_READY_FOR_PAPER_PHASE')
+    readiness_summary = str(summary.get('paper_readiness_summary', '') or '').strip()
+    return f"Paper readiness: {readiness_status.replace('_', ' ').title()} | {readiness_summary}"
+
+
+def _build_cycle_telegram_message(config: RuntimeConfig, cycle_summary: dict[str, Any]) -> str:
+    daemon = config.daemon
+    broker_mode = str(config.broker.mode or 'PAPER').upper()
+    execution_messages = cycle_summary.get('execution_messages') or []
+    status_line = ' | '.join(message for _, message in execution_messages) if execution_messages else 'No execution events'
+    readiness_line = _paper_readiness_line(list(cycle_summary.get('executed_rows') or []), daemon.strategy)
+    return '\n'.join(
+        [
+            'Trading cycle update',
+            f'Strategy: {daemon.strategy}',
+            f'Symbol: {daemon.symbol}',
+            f'Timeframe: {daemon.timeframe}',
+            f'Broker: {broker_mode}',
+            f'Candle rows: {int(cycle_summary.get("candles", 0) or 0)}',
+            f'Strategy rows: {int(cycle_summary.get("trades", 0) or 0)}',
+            f'Execution candidates: {int(cycle_summary.get("candidates", 0) or 0)}',
+            f'Execution status: {status_line}',
+            readiness_line,
+        ]
+    )
+
+
+def _send_telegram_notification(config: RuntimeConfig, message: str, *, on_error: bool = False) -> None:
+    telegram = config.telegram
+    if not telegram.configured:
+        return
+    if on_error and not telegram.notify_on_error:
+        return
+    if (not on_error) and not telegram.notify_on_success:
+        return
+    send_telegram_message(telegram.token, telegram.chat_id, message)
 
 
 def execute_trading_cycle(config: RuntimeConfig) -> dict[str, Any]:
@@ -148,14 +192,25 @@ def execute_trading_cycle(config: RuntimeConfig) -> dict[str, Any]:
             except Exception as exc:
                 _append_text_log(paths.errors_log, f'S3 sync failed for {artifact}: {exc}')
 
-    return {
+    executed_rows = []
+    for rows in (execution_result.executed_rows, execution_result.blocked_rows, execution_result.skipped_rows):
+        if rows:
+            executed_rows.extend(dict(row) for row in rows)
+
+    cycle_summary = {
         'candles': len(candles),
         'trades': len(trades),
         'candidates': len(candidates),
         'execution_result': execution_result,
         'execution_messages': messages,
         'backtest_summary': backtest_summary,
+        'executed_rows': executed_rows,
     }
+    try:
+        _send_telegram_notification(config, _build_cycle_telegram_message(config, cycle_summary))
+    except Exception as exc:
+        _append_text_log(paths.errors_log, f'Telegram success notification failed: {exc}')
+    return cycle_summary
 
 
 def parse_args() -> argparse.Namespace:
@@ -179,6 +234,23 @@ def main() -> None:
         except Exception as exc:
             _append_text_log(paths.errors_log, f'Daemon cycle failed: {exc}')
             append_log(f'Daemon cycle failed: {exc}')
+            try:
+                _send_telegram_notification(
+                    config,
+                    '\n'.join(
+                        [
+                            'Trading cycle failed',
+                            f'Strategy: {config.daemon.strategy}',
+                            f'Symbol: {config.daemon.symbol}',
+                            f'Timeframe: {config.daemon.timeframe}',
+                            f'Broker: {config.broker.mode}',
+                            f'Error: {exc}',
+                        ]
+                    ),
+                    on_error=True,
+                )
+            except Exception as notify_exc:
+                _append_text_log(paths.errors_log, f'Telegram error notification failed: {notify_exc}')
         if args.once:
             break
         time.sleep(max(30, int(config.daemon.poll_interval_seconds)))

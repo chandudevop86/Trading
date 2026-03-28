@@ -178,3 +178,16 @@
 2026-03-28 18:29:53,530 INFO execution_engine skipped invalid trade a15fae86-ff29-5510-8931-7674d8706d5e reason=MISSING_QUANTITY
 2026-03-28 18:29:57,719 INFO runtime_error[run_operator_action] ValueError: bad candle payload
 2026-03-28 18:29:57,729 INFO runtime_error[run_operator_action] ValueError: bad candle payload
+2026-03-28 19:02:00,080 INFO execution_engine skipped invalid trade 679a8cdc-1450-5389-ac5a-d135259cdf54 reason=INVALID_SIDE
+2026-03-28 19:02:08,040 INFO execution_engine skipped invalid trade 9b9cc866-2ed4-593b-948f-3595a1cf2af1 reason=INVALID_SIDE
+2026-03-28 19:02:13,842 INFO execution_engine skipped invalid trade a15fae86-ff29-5510-8931-7674d8706d5e reason=MISSING_QUANTITY
+2026-03-28 19:08:15,309 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE
+2026-03-28 19:08:16,529 INFO execution_engine skipped invalid trade 679a8cdc-1450-5389-ac5a-d135259cdf54 reason=INVALID_SIDE
+2026-03-28 19:08:22,136 INFO execution_engine skipped invalid trade 679a8cdc-1450-5389-ac5a-d135259cdf54 reason=INVALID_SIDE
+2026-03-28 19:08:23,850 INFO execution_engine skipped invalid trade 9b9cc866-2ed4-593b-948f-3595a1cf2af1 reason=INVALID_SIDE
+2026-03-28 19:08:29,084 INFO execution_engine skipped invalid trade a15fae86-ff29-5510-8931-7674d8706d5e reason=MISSING_QUANTITY
+2026-03-28 19:08:29,224 INFO execution_engine skipped invalid trade 9b9cc866-2ed4-593b-948f-3595a1cf2af1 reason=INVALID_SIDE
+2026-03-28 19:08:36,225 INFO execution_engine skipped invalid trade a15fae86-ff29-5510-8931-7674d8706d5e reason=MISSING_QUANTITY
+2026-03-28 19:08:42,745 INFO runtime_error[run_operator_action] ValueError: bad candle payload
+2026-03-28 19:08:42,768 INFO runtime_error[run_operator_action] ValueError: bad candle payload
+2026-03-28 19:16:25,246 INFO Trading cycle completed strategy=Breakout broker=PAPER 1 trade executed

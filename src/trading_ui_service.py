@@ -63,6 +63,37 @@ def apply_minimal_theme() -> None:
         [data-testid="stMetricValue"] {
             color: var(--desk-text);
         }
+        [data-testid="stTextInputRootElement"] input,
+        [data-testid="stNumberInput"] input,
+        [data-testid="stSelectbox"] [data-baseweb="select"] > div {
+            border: 1px solid rgba(122, 139, 90, 0.18) !important;
+            box-shadow: none !important;
+        }
+        [data-testid="stNumberInput"] button {
+            color: #5a6f57 !important;
+        }
+        div[data-testid="stButton"] > button[kind="primary"] {
+            background: linear-gradient(135deg, #7a8b5a, #8fa06c) !important;
+            color: #f8fafc !important;
+            border: 1px solid rgba(90, 111, 87, 0.30) !important;
+            box-shadow: 0 12px 24px rgba(90, 111, 87, 0.16) !important;
+        }
+        div[data-testid="stButton"] > button[kind="primary"]:hover {
+            background: linear-gradient(135deg, #6f8150, #879967) !important;
+        }
+        div[data-testid="stButton"] > button:not([kind="primary"]) {
+            background: rgba(255, 255, 255, 0.88) !important;
+            color: #40503d !important;
+            border: 1px solid rgba(122, 139, 90, 0.20) !important;
+        }
+        div[data-testid="stButton"] > button:not([kind="primary"]):hover {
+            background: rgba(244, 246, 238, 0.96) !important;
+            border-color: rgba(122, 139, 90, 0.30) !important;
+        }
+        label, .stTextInput label, .stSelectbox label, .stNumberInput label {
+            color: #4f5d49 !important;
+            font-weight: 700 !important;
+        }
         .desk-card {
             background: var(--desk-card);
             border: 1px solid var(--desk-border);

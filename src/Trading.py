@@ -102,6 +102,41 @@ def _safe_int(value: object) -> int:
         return 0
 
 
+def _format_status_label(value: str) -> str:
+    normalized = str(value or '').strip().upper()
+    mapping = {
+        'FAIL_NOT_READY': 'Fail: Not Ready',
+        'PASS_FOR_SMALL_CAPITAL': 'Pass: Small Capital',
+        'PAPER_ONLY': 'Paper Only',
+        'LIVE_LOCKED': 'Live Locked',
+        'LIVE_ELIGIBLE': 'Live Eligible',
+        'PAPER_ACTIVE | LIVE_LOCKED': 'Paper Active | Live Locked',
+        'PAPER_ACTIVE | LIVE LOCKED': 'Paper Active | Live Locked',
+    }
+    if normalized in mapping:
+        return mapping[normalized]
+    if not normalized:
+        return 'Pending'
+    return str(value).replace('_', ' ').title()
+
+
+def _metric_display(value: object, *, kind: str = 'number') -> str:
+    raw = str(value or '').strip()
+    if kind == 'trades':
+        numeric = _safe_int(value)
+        return 'No sample yet' if numeric <= 0 else f'{numeric} Trades'
+    if kind == 'proof':
+        return 'Yes' if raw.upper() == 'YES' else 'No'
+    if kind == 'factor':
+        if raw == '' or _safe_float(value) <= 0:
+            return 'Pending backtest'
+        return raw
+    numeric = _safe_float(value)
+    if numeric <= 0:
+        return 'Pending backtest'
+    return f'{numeric:.2f}' if kind == 'pct' else f'{numeric:.2f}'
+
+
 def _score_color(score: float) -> str:
     value = float(score)
     if value >= 8.0:
@@ -313,18 +348,18 @@ def _safe_log_preview(path: Path, lines: int = 10) -> str:
 def _header_badge(summary: dict[str, object], broker_choice: str) -> str:
     deployment_ready = str(summary.get('deployment_ready', 'NO') or 'NO').upper() == 'YES'
     if broker_choice == 'Paper' or not deployment_ready:
-        return 'PAPER ACTIVE | LIVE LOCKED'
-    return 'LIVE ELIGIBLE'
+        return 'Paper Active | Live Locked'
+    return 'Live Eligible'
 
 
 def _header_go_live(summary: dict[str, object]) -> str:
     deployment_ready = str(summary.get('deployment_ready', 'NO') or 'NO').upper() == 'YES'
     validation_passed = str(summary.get('validation_passed', summary.get('deployment_ready', 'NO')) or 'NO').upper() == 'YES'
     if deployment_ready and validation_passed:
-        return 'PASS_FOR_SMALL_CAPITAL'
+        return 'Pass: Small Capital'
     if validation_passed:
-        return 'PAPER_ONLY'
-    return 'FAIL_NOT_READY'
+        return 'Paper Only'
+    return 'Fail: Not Ready'
 
 
 def _header_next_action(summary: dict[str, object], broker_choice: str) -> str:
@@ -341,13 +376,13 @@ def _header_next_action(summary: dict[str, object], broker_choice: str) -> str:
 
 def _render_header(strategy: str, symbol: str, timeframe: str, mode: str, broker_choice: str, summary: dict[str, object]) -> None:
     go_live_status = _header_go_live(summary)
-    live_permission = 'LIVE LOCKED' if broker_choice == 'Paper' or go_live_status != 'PASS_FOR_SMALL_CAPITAL' else 'LIVE ELIGIBLE'
+    live_permission = 'Live Locked' if broker_choice == 'Paper' or go_live_status != 'Pass: Small Capital' else 'Live Eligible'
     total_trades = _safe_int(summary.get('total_trades', summary.get('closed_trades', 0)))
-    expectancy = round(_safe_float(summary.get('expectancy_per_trade')), 2)
-    second_half_expectancy = round(_safe_float(summary.get('second_half_expectancy_per_trade')), 2)
-    profit_factor = summary.get('profit_factor', 0.0)
-    max_drawdown_pct = round(_safe_float(summary.get('max_drawdown_pct')), 2)
-    drawdown_proven = str(summary.get('drawdown_proven', 'NO') or 'NO')
+    expectancy = _metric_display(summary.get('expectancy_per_trade'))
+    second_half_expectancy = _metric_display(summary.get('second_half_expectancy_per_trade'))
+    profit_factor = _metric_display(summary.get('profit_factor'), kind='factor')
+    max_drawdown_pct = _metric_display(summary.get('max_drawdown_pct'), kind='pct')
+    drawdown_proven = _metric_display(summary.get('drawdown_proven', 'NO'), kind='proof')
     next_action = _header_next_action(summary, broker_choice)
     st.markdown(
         (
@@ -358,19 +393,19 @@ def _render_header(strategy: str, symbol: str, timeframe: str, mode: str, broker
             '<h2 style="margin:8px 0 0 0;color:#f8fafc;font-size:40px;line-height:1.05;">Production Trading Desk</h2>'
             '<p style="margin:10px 0 0 0;color:#cbd5e1;font-size:15px;max-width:760px;">Retest-only Nifty intraday deployment console with VWAP discipline, strict session filtering, real drawdown proof, and hard go-live gates.</p>'
             '</div>'
-            f'<div style="padding:10px 14px;border-radius:999px;background:#1e293b;border:1px solid rgba(248,250,252,0.12);color:#f8fafc;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">{_header_badge(summary, broker_choice)}</div>'
+            f'<div style="padding:12px 16px;border-radius:999px;background:#1e293b;border:1px solid rgba(248,250,252,0.12);color:#f8fafc;font-size:13px;font-weight:800;letter-spacing:0.08em;">{_header_badge(summary, broker_choice)}</div>'
             '</div>'
             '<div style="display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;margin-top:18px;">'
             f'<div style="background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:14px;"><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Go-Live Status</div><div style="margin-top:6px;font-size:20px;font-weight:800;color:#f8fafc;">{go_live_status}</div></div>'
             f'<div style="background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:14px;"><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Live Permission</div><div style="margin-top:6px;font-size:20px;font-weight:800;color:#f8fafc;">{live_permission}</div></div>'
             f'<div style="background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:14px;"><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Active Strategy</div><div style="margin-top:6px;font-size:20px;font-weight:800;color:#f8fafc;">{strategy}</div><div style="margin-top:6px;font-size:13px;color:#cbd5e1;">{symbol} | {timeframe} | {mode}</div></div>'
-            f'<div style="background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:14px;"><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Validation Window</div><div style="margin-top:6px;font-size:20px;font-weight:800;color:#f8fafc;">{total_trades} Trades</div><div style="margin-top:6px;font-size:13px;color:#cbd5e1;">Target: 150-200 clean trades</div></div>'
+            f'<div style="background:rgba(15,23,42,0.55);border:1px solid rgba(148,163,184,0.18);border-radius:18px;padding:14px;"><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Validation Window</div><div style="margin-top:6px;font-size:20px;font-weight:800;color:#f8fafc;">{_metric_display(total_trades, kind='trades')}</div><div style="margin-top:6px;font-size:13px;color:#cbd5e1;">Target: 150-200 clean trades</div></div>'
             '</div>'
             '<div style="display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:12px;margin-top:12px;">'
-            f'<div style="background:rgba(30,41,59,0.82);border-radius:16px;padding:12px;"><div style="font-size:12px;color:#94a3b8;">Expectancy/Trade</div><div style="margin-top:4px;font-size:18px;font-weight:800;color:#f8fafc;">{expectancy:.2f}</div></div>'
-            f'<div style="background:rgba(30,41,59,0.82);border-radius:16px;padding:12px;"><div style="font-size:12px;color:#94a3b8;">2H Expectancy</div><div style="margin-top:4px;font-size:18px;font-weight:800;color:#f8fafc;">{second_half_expectancy:.2f}</div></div>'
+            f'<div style="background:rgba(30,41,59,0.82);border-radius:16px;padding:12px;"><div style="font-size:12px;color:#94a3b8;">Expectancy/Trade</div><div style="margin-top:4px;font-size:18px;font-weight:800;color:#f8fafc;">{expectancy}</div></div>'
+            f'<div style="background:rgba(30,41,59,0.82);border-radius:16px;padding:12px;"><div style="font-size:12px;color:#94a3b8;">2H Expectancy</div><div style="margin-top:4px;font-size:18px;font-weight:800;color:#f8fafc;">{second_half_expectancy}</div></div>'
             f'<div style="background:rgba(30,41,59,0.82);border-radius:16px;padding:12px;"><div style="font-size:12px;color:#94a3b8;">Profit Factor</div><div style="margin-top:4px;font-size:18px;font-weight:800;color:#f8fafc;">{profit_factor}</div></div>'
-            f'<div style="background:rgba(30,41,59,0.82);border-radius:16px;padding:12px;"><div style="font-size:12px;color:#94a3b8;">Drawdown</div><div style="margin-top:4px;font-size:18px;font-weight:800;color:#f8fafc;">{max_drawdown_pct:.2f}%</div><div style="margin-top:4px;font-size:12px;color:#cbd5e1;">Proof: {drawdown_proven}</div></div>'
+            f'<div style="background:rgba(30,41,59,0.82);border-radius:16px;padding:12px;"><div style="font-size:12px;color:#94a3b8;">Drawdown</div><div style="margin-top:4px;font-size:18px;font-weight:800;color:#f8fafc;">{max_drawdown_pct if max_drawdown_pct == 'Pending backtest' else max_drawdown_pct + '%'}</div><div style="margin-top:4px;font-size:12px;color:#cbd5e1;">Proof: {drawdown_proven}</div></div>'
             '</div>'
             f'<div style="margin-top:14px;padding:14px 16px;border-radius:16px;background:rgba(248,250,252,0.06);border:1px solid rgba(248,250,252,0.08);"><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;">Next Action</div><div style="margin-top:6px;color:#f8fafc;font-size:15px;font-weight:600;">{next_action}</div></div>'
             '</div>'
@@ -394,7 +429,7 @@ def _render_dashboard_tab(*, strategy: str, symbol: str, timeframe: str, period:
 def _render_charts_tab(*, candles: pd.DataFrame, symbol: str, timeframe: str) -> None:
     st.markdown('### Market Overview')
     if candles.empty:
-        st.info('No candle data available yet. Run Backtest or Start Paper to load market context.')
+        st.info('No market sample loaded yet. Run Backtest or Start Paper to load price context.')
         return
     latest_close = float(candles['close'].iloc[-1])
     latest_high = float(candles['high'].iloc[-1])
@@ -426,7 +461,7 @@ def _render_charts_tab(*, candles: pd.DataFrame, symbol: str, timeframe: str) ->
 def _render_trades_tab(*, trades: list[dict[str, object]], status: str) -> None:
     st.markdown('### Trade Explorer')
     if not trades:
-        st.info('No strategy trades available yet. Run Backtest for research output or Start Paper for live-paper actions.')
+        st.info('No trade rows available yet. Run Backtest for research output or Start Paper for paper execution.')
         return
     trades_frame = pd.DataFrame(trades)
     preferred_columns = [

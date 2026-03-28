@@ -200,3 +200,6 @@
 2026-03-29 00:21:40,000 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE
 2026-03-29 00:24:45,781 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE
 2026-03-29 00:57:17,760 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE
+2026-03-29 01:06:08,727 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE
+2026-03-29 01:16:45,061 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE
+2026-03-29 01:17:38,354 INFO execution_engine skipped invalid trade 776ac56f-74c1-53b0-8f6a-6470755df94c reason=INVALID_SIDE

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
@@ -8,6 +8,7 @@ from typing import Any, Callable
 import pandas as pd
 
 from src.runtime_config import RuntimeConfig
+from src.trade_validation_service import build_trade_evaluation_summary
 from src.trading_core import append_log, prepare_trading_data, write_rows
 from src.validation_engine import required_win_rate_pct
 
@@ -185,6 +186,17 @@ def _safe_int(value: object, default: int = 0) -> int:
 def _normalize_text(value: object) -> str:
     return str(value or '').strip().upper()
 
+def _merge_shared_validation(summary: dict[str, object], rows: list[dict[str, object]], strategy_name: str) -> dict[str, object]:
+    shared = build_trade_evaluation_summary(rows, strategy_name=strategy_name)
+    keep_existing = {
+        'strategy', 'total_trades', 'closed_trades', 'wins', 'losses', 'win_rate', 'total_pnl',
+        'avg_pnl', 'avg_win', 'avg_loss', 'profit_factor', 'expectancy_per_trade',
+        'max_drawdown', 'max_drawdown_pct', 'duplicate_trade_count', 'invalid_trade_count', 'execution_error_count'
+    }
+    for key, value in shared.items():
+        if key not in keep_existing:
+            summary[key] = value
+    return summary
 
 def _trade_key(record: dict[str, object]) -> str:
     strategy = _normalize_text(record.get('strategy', 'STRATEGY'))
@@ -953,6 +965,7 @@ def run_backtest(df: Any, strategy_func: Callable[..., list[dict[str, object]]],
     summary['cooldown_controls_enforced'] = 'YES' if int(cfg.duplicate_cooldown_minutes) > 0 else 'NO'
     validation = _validation_report(summary, cfg)
     summary.update(validation)
+    summary = _merge_shared_validation(summary, closed_trades, cfg.strategy_name)
     write_rows(cfg.summary_output, [summary])
     write_rows(cfg.validation_output, [validation])
     return summary
@@ -1003,9 +1016,13 @@ def summarize_trade_log(
     summary['market_session'] = '09:15-15:30'
     validation_row = _validation_report(summary, cfg)
     summary.update(validation_row)
+    summary = _merge_shared_validation(summary, closed_rows, strategy_name)
     write_rows(summary_output, [summary])
     write_rows(validation_output, [validation_row])
     return summary
+
+
+
 
 
 

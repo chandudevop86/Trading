@@ -103,6 +103,7 @@ EXECUTION_SCHEMA = [
     "instrument_type",
     "signal_time",
     "duplicate_signal_key",
+    "signal_instance_key",
     "side",
     "price",
     "share_price",
@@ -233,32 +234,42 @@ def _timeframe_key(record: dict[str, object]) -> str:
 
 
 def _signal_time_text(record: dict[str, object]) -> str:
-    return str(record.get("signal_time", record.get("entry_time", record.get("timestamp", ""))) or "").strip()
+    raw = str(record.get("signal_time", record.get("entry_time", record.get("timestamp", ""))) or "").strip()
+    parsed = _parse_dt(raw)
+    if parsed is None:
+        return raw
+    timeframe_minutes = _infer_timeframe_minutes(record.get("timeframe", record.get("interval")))
+    if timeframe_minutes > 0:
+        minute_bucket = int(parsed.minute / timeframe_minutes) * timeframe_minutes
+        parsed = parsed.replace(minute=minute_bucket, second=0, microsecond=0)
+    else:
+        parsed = parsed.replace(second=0, microsecond=0)
+    return parsed.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def make_duplicate_signal_key(record: dict[str, object]) -> str:
+def make_signal_instance_key(record: dict[str, object]) -> str:
     strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
     symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
     timeframe = _timeframe_key(record)
     signal_time = _signal_time_text(record)
+    return "|".join([strategy, symbol, timeframe, signal_time])
+
+
+def make_duplicate_signal_key(record: dict[str, object]) -> str:
+    signal_instance_key = str(record.get("signal_instance_key", "") or make_signal_instance_key(record))
     side = _normalize_text(record.get("side"))
-    return "|".join([strategy, symbol, timeframe, signal_time, side])
+    return "|".join([signal_instance_key, side])
 
 
 def _cooldown_group_key(record: dict[str, object]) -> str:
     strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
     symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
     timeframe = _timeframe_key(record)
-    side = _normalize_text(record.get("side"))
-    return "|".join([strategy, symbol, timeframe, side])
+    return "|".join([strategy, symbol, timeframe])
 
 
 def _trade_cooldown_group_key(record: dict[str, object]) -> str:
-    strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
-    symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
-    timeframe = _timeframe_key(record)
-    return "|".join([strategy, symbol, timeframe])
-
+    return _cooldown_group_key(record)
 
 
 def _infer_timeframe_minutes(value: object) -> int:
@@ -292,6 +303,7 @@ def _cooldown_window_seconds(record: dict[str, object]) -> int:
         return int(preset.duplicate_cooldown_minutes) * 60
     return 0
 
+
 def _effective_max_trades_per_day(record: dict[str, object], explicit_limit: int | None) -> int | None:
     if explicit_limit is not None and int(explicit_limit) > 0:
         return int(explicit_limit)
@@ -305,9 +317,7 @@ def _effective_max_trades_per_day(record: dict[str, object], explicit_limit: int
 
 
 def make_trade_key(record: dict[str, object]) -> str:
-    strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
-    symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
-    signal_time = _signal_time_text(record)
+    signal_instance_key = str(record.get("signal_instance_key", "") or make_signal_instance_key(record))
     side = _normalize_text(record.get("side"))
     entry_price = f"{_price_value(record):.6f}"
     instrument = _normalize_text(
@@ -315,9 +325,9 @@ def make_trade_key(record: dict[str, object]) -> str:
         or record.get("contract_symbol")
         or record.get("option_strike")
         or record.get("strike_price")
-        or symbol
+        or record.get("symbol", "UNKNOWN")
     )
-    payload = "|".join([strategy, symbol, _timeframe_key(record), signal_time, side, entry_price, instrument])
+    payload = "|".join([signal_instance_key, side, entry_price, instrument])
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:20]
 
 
@@ -325,13 +335,11 @@ def make_trade_id(record: dict[str, object]) -> str:
     existing = str(record.get("trade_id", "") or "").strip()
     if existing:
         return existing
-    strategy = _normalize_text(record.get("strategy", "TRADE_BOT"))
-    symbol = _normalize_text(record.get("symbol", "UNKNOWN"))
-    signal_time = _signal_time_text(record)
+    signal_instance_key = str(record.get("signal_instance_key", "") or make_signal_instance_key(record))
     side = _normalize_text(record.get("side"))
     entry_price = f"{_price_value(record):.6f}"
     option_key = _normalize_text(record.get("option_strike") or record.get("trading_symbol") or record.get("strike_price"))
-    payload = "|".join([strategy, symbol, _timeframe_key(record), signal_time, side, entry_price, option_key])
+    payload = "|".join([signal_instance_key, side, entry_price, option_key])
     return str(uuid.uuid5(uuid.NAMESPACE_URL, payload))
 
 
@@ -345,13 +353,14 @@ def _ensure_trade_identity(record: dict[str, object], *, default_status: str | N
     normalized.setdefault("symbol", str(normalized.get("symbol", "UNKNOWN") or "UNKNOWN"))
     normalized.setdefault("timeframe", str(normalized.get("timeframe", normalized.get("interval", "")) or ""))
     normalized.setdefault("signal_time", _signal_time_text(normalized))
+    normalized["signal_time"] = _signal_time_text(normalized)
+    normalized["signal_instance_key"] = str(normalized.get("signal_instance_key", "") or make_signal_instance_key(normalized))
     normalized["duplicate_signal_key"] = str(normalized.get("duplicate_signal_key", "") or make_duplicate_signal_key(normalized))
     normalized["trade_key"] = str(normalized.get("trade_key", "") or make_trade_key(normalized))
     normalized["trade_id"] = make_trade_id(normalized)
     if default_status and not str(normalized.get("trade_status", "") or "").strip():
         normalized["trade_status"] = default_status
     return normalized
-
 
 def build_execution_candidates(strategy: str, output_rows: list[dict[str, object]], symbol: str) -> list[dict[str, object]]:
     symbol = symbol.strip() or "UNKNOWN"
@@ -572,6 +581,14 @@ def load_active_duplicate_signal_keys(path: Path, execution_type: str | None = N
     return keys
 
 
+def load_logged_signal_instance_keys(path: Path, execution_type: str | None = None) -> set[str]:
+    keys: set[str] = set()
+    for row in _read_trade_rows(path):
+        if execution_type and _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
+            continue
+        keys.add(str(row.get("signal_instance_key", "") or make_signal_instance_key(row)))
+    return {key for key in keys if key.strip()}
+
 def _load_recent_signal_times(path: Path, execution_type: str | None = None) -> dict[str, datetime]:
     state = _load_risk_state_snapshot(path, execution_type)
     if state:
@@ -640,15 +657,18 @@ def _duplicate_reason_for_candidate(
     historical_trade_ids: set[str],
     active_trade_keys: set[str],
     active_duplicate_signal_keys: set[str],
+    logged_signal_instance_keys: set[str],
     recent_signal_times: dict[str, datetime],
     batch_seen_trade_ids: set[str] | None = None,
     batch_seen_trade_keys: set[str] | None = None,
     batch_seen_signal_keys: set[str] | None = None,
+    batch_seen_signal_instances: set[str] | None = None,
     batch_recent_signal_times: dict[str, datetime] | None = None,
 ) -> str:
     trade_id = str(record.get("trade_id", "") or "")
     trade_key = str(record.get("trade_key", "") or make_trade_key(record))
     duplicate_signal_key = str(record.get("duplicate_signal_key", "") or make_duplicate_signal_key(record))
+    signal_instance_key = str(record.get("signal_instance_key", "") or make_signal_instance_key(record))
     signal_time = _parse_dt(record.get("signal_time"))
     cooldown_group = _cooldown_group_key(record)
     cooldown_seconds = _cooldown_window_seconds(record)
@@ -657,7 +677,11 @@ def _duplicate_reason_for_candidate(
         return SKIP_REASON_DUPLICATE_BATCH_TRADE
     if batch_seen_trade_keys is not None and trade_key and trade_key in batch_seen_trade_keys:
         return SKIP_REASON_DUPLICATE_BATCH_TRADE
+    if batch_seen_signal_instances is not None and signal_instance_key and signal_instance_key in batch_seen_signal_instances:
+        return SKIP_REASON_DUPLICATE_SIGNAL_KEY
     if batch_seen_signal_keys is not None and duplicate_signal_key and duplicate_signal_key in batch_seen_signal_keys:
+        return SKIP_REASON_DUPLICATE_SIGNAL_KEY
+    if signal_instance_key and signal_instance_key in logged_signal_instance_keys:
         return SKIP_REASON_DUPLICATE_SIGNAL_KEY
     if trade_id and trade_id in historical_trade_ids:
         return SKIP_REASON_DUPLICATE_EXECUTED_TRADE
@@ -675,17 +699,19 @@ def _duplicate_reason_for_candidate(
         if (signal_time - previous_signal_time).total_seconds() < cooldown_seconds:
             return SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN
     return ""
+
+
 def filter_unlogged_candidates(candidates: list[dict[str, object]], output_path: Path) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     historical_trade_ids = _load_historical_trade_ids(output_path)
     active_trade_keys = load_active_trade_keys(output_path)
     active_duplicate_signal_keys = load_active_duplicate_signal_keys(output_path)
+    logged_signal_instance_keys = load_logged_signal_instance_keys(output_path)
     recent_signal_times = _load_recent_signal_times(output_path)
     batch_seen_trade_ids: set[str] = set()
     batch_seen_trade_keys: set[str] = set()
     batch_seen_signal_keys: set[str] = set()
+    batch_seen_signal_instances: set[str] = set()
     batch_recent_signal_times: dict[str, datetime] = {}
-    batch_recent_trade_times: dict[str, datetime] = {}
-    batch_recent_trade_times: dict[str, datetime] = {}
     fresh: list[dict[str, object]] = []
     skipped: list[dict[str, object]] = []
     for candidate in candidates:
@@ -695,10 +721,12 @@ def filter_unlogged_candidates(candidates: list[dict[str, object]], output_path:
             historical_trade_ids=historical_trade_ids,
             active_trade_keys=active_trade_keys,
             active_duplicate_signal_keys=active_duplicate_signal_keys,
+            logged_signal_instance_keys=logged_signal_instance_keys,
             recent_signal_times=recent_signal_times,
             batch_seen_trade_ids=batch_seen_trade_ids,
             batch_seen_trade_keys=batch_seen_trade_keys,
             batch_seen_signal_keys=batch_seen_signal_keys,
+            batch_seen_signal_instances=batch_seen_signal_instances,
             batch_recent_signal_times=batch_recent_signal_times,
         )
         if reason:
@@ -709,313 +737,12 @@ def filter_unlogged_candidates(candidates: list[dict[str, object]], output_path:
         batch_seen_trade_ids.add(str(row.get('trade_id', '') or ''))
         batch_seen_trade_keys.add(str(row.get('trade_key', '') or ''))
         batch_seen_signal_keys.add(str(row.get('duplicate_signal_key', '') or ''))
+        batch_seen_signal_instances.add(str(row.get('signal_instance_key', '') or ''))
         signal_time = _parse_dt(row.get('signal_time'))
         if signal_time is not None:
             batch_recent_signal_times[_cooldown_group_key(row)] = signal_time
         fresh.append(row)
     return fresh, skipped
-def _trade_day_key(record: dict[str, object], fallback_day: str) -> str:
-    ts = _parse_dt(record.get("signal_time")) or _parse_dt(record.get("entry_time")) or _parse_dt(record.get("timestamp"))
-    if ts is None:
-        return fallback_day
-    return ts.strftime("%Y-%m-%d")
-
-
-def _load_daily_execution_state(path: Path, execution_type: str) -> dict[str, dict[str, float]]:
-    state = _load_risk_state_snapshot(path, execution_type)
-    if state:
-        return _deserialize_daily_state(state.get("daily_state", {}))
-
-    daily_state: dict[str, dict[str, float]] = {}
-    for row in _read_trade_rows(path):
-        if _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
-            continue
-        if _row_is_closed(row):
-            continue
-        if _normalize_text(row.get("execution_status")) not in EXECUTION_SUCCESS_STATUSES and _normalize_text(row.get("trade_status")) not in {TRADE_STATUS_EXECUTED, TRADE_STATUS_OPEN, TRADE_STATUS_PENDING_EXECUTION}:
-            continue
-        day_key = _trade_day_key(row, str(row.get("executed_at_utc", ""))[:10])
-        bucket = daily_state.setdefault(day_key, {"count": 0.0, "realized_pnl": 0.0})
-        bucket["count"] += 1.0
-        bucket["realized_pnl"] += _safe_float(row.get("pnl"))
-    return daily_state
-
-
-def _risk_limit_message(max_trades_per_day: int | None, max_daily_loss: float | None) -> str:
-    parts: list[str] = []
-    if max_trades_per_day is not None and int(max_trades_per_day) > 0:
-        parts.append(f"max trades/day={int(max_trades_per_day)}")
-    if max_daily_loss is not None and float(max_daily_loss) > 0:
-        parts.append(f"max daily loss={float(max_daily_loss):.2f}")
-    return ", ".join(parts) if parts else "risk limit"
-
-
-def live_kill_switch_enabled() -> bool:
-    raw = str(os.getenv("LIVE_TRADING_KILL_SWITCH", "") or "").strip().lower()
-    return raw in {"1", "true", "yes", "on", "enabled"}
-
-
-def _default_live_broker_client() -> tuple[object | None, str]:
-    broker_name = str(os.getenv("LIVE_BROKER", "DHAN") or "DHAN").strip().upper() or "DHAN"
-    if broker_name != "DHAN":
-        return None, broker_name
-    try:
-        return DhanBroker.from_env(allow_live=True), broker_name
-    except Exception:
-        return None, broker_name
-
-
-def _default_security_map() -> dict[str, dict[str, str]]:
-    return {}
-
-
-def _apply_live_broker_result(record: dict[str, object], broker_name: str, result: object) -> None:
-    record["broker_name"] = broker_name
-    if isinstance(result, dict):
-        record["broker_order_id"] = result.get("orderId", result.get("order_id", ""))
-        record["broker_status"] = result.get("orderStatus", result.get("status", "SENT"))
-        record["broker_message"] = result.get("message", result.get("remarks", result.get("omsErrorDescription", "")))
-        try:
-            record["broker_response_json"] = json.dumps(result, ensure_ascii=True)
-        except Exception:
-            record["broker_response_json"] = str(result)
-    else:
-        record["broker_status"] = "SENT"
-        record["broker_message"] = ""
-
-
-def _first_execution_time(path: Path, execution_type: str) -> Optional[datetime]:
-    earliest: Optional[datetime] = None
-    sources: list[list[dict[str, object]]] = [_read_trade_rows(path)]
-    if path.exists():
-        try:
-            csv_rows = [dict(row) for row in read_csv_rows(path)]
-        except Exception:
-            csv_rows = []
-        if csv_rows:
-            sources.append(csv_rows)
-    for rows in sources:
-        for row in rows:
-            if _normalize_text(row.get("execution_type")) != _normalize_text(execution_type):
-                continue
-            raw = str(row.get("executed_at_utc", "")).strip()
-            if not raw:
-                continue
-            try:
-                ts = datetime.strptime(raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
-            except ValueError:
-                continue
-            earliest = ts if earliest is None else min(earliest, ts)
-    return earliest
-
-
-def live_trading_unlock_status(paper_log_path: Path, min_days: int = 30, now_utc: Optional[datetime] = None) -> Tuple[bool, int, str]:
-    start = _first_execution_time(paper_log_path, "PAPER")
-    if start is None:
-        return False, 0, ""
-    now = now_utc or datetime.now(UTC)
-    days = max(0, (now - start).days)
-    unlock_date = start.replace(microsecond=0) + timedelta(days=min_days)
-    return days >= min_days, days, unlock_date.strftime("%Y-%m-%d %H:%M:%S UTC")
-
-
-def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[str, object]]:
-    record = _ensure_trade_identity(candidate)
-    side = _normalize_text(record.get("side"))
-    if side not in {"BUY", "SELL"}:
-        record["validation_error"] = SKIP_REASON_INVALID_SIDE
-        return False, SKIP_REASON_INVALID_SIDE, record
-    signal_time = str(record.get("signal_time", record.get("entry_time", record.get("timestamp", ""))) or "").strip()
-    if not signal_time or _parse_dt(signal_time) is None:
-        record["validation_error"] = SKIP_REASON_MISSING_TIMESTAMP
-        return False, SKIP_REASON_MISSING_TIMESTAMP, record
-    price = _price_value(record)
-    if price <= 0:
-        record["validation_error"] = SKIP_REASON_MISSING_PRICE
-        return False, SKIP_REASON_MISSING_PRICE, record
-    stop_loss = _safe_float(record.get("stop_loss"))
-    target_price = _safe_float(record.get("target_price", record.get("target")))
-    if side == "BUY":
-        stop_loss = stop_loss if stop_loss > 0 else round(price * 0.995, 4)
-        target_price = target_price if target_price > 0 else round(price + ((price - stop_loss) * 2.0), 4)
-        if not (stop_loss < price < target_price):
-            record["validation_error"] = SKIP_REASON_INVALID_TRADE_LEVELS
-            return False, SKIP_REASON_INVALID_TRADE_LEVELS, record
-    else:
-        stop_loss = stop_loss if stop_loss > 0 else round(price * 1.005, 4)
-        target_price = target_price if target_price > 0 else round(price - ((stop_loss - price) * 2.0), 4)
-        if not (target_price < price < stop_loss):
-            record["validation_error"] = SKIP_REASON_INVALID_TRADE_LEVELS
-            return False, SKIP_REASON_INVALID_TRADE_LEVELS, record
-    record["price"] = price
-    record["entry"] = _safe_float(record.get("entry", price)) or price
-    record["entry_price"] = _safe_float(record.get("entry_price", price)) or price
-    record["stop_loss"] = stop_loss
-    record["target_price"] = target_price
-    record.setdefault("target", target_price)
-    record.setdefault("share_price", price)
-    record.setdefault("timeframe", str(record.get("timeframe", record.get("interval", "")) or ""))
-    record["signal_time"] = signal_time
-    record.setdefault("timestamp", signal_time)
-    record.setdefault("reason", str(record.get("reason", record.get("strategy", "TRADE")) or "TRADE"))
-    record.setdefault("strike_price", record.get("option_strike", record.get("strike", "")))
-    record["score"] = _safe_float(record.get("score"))
-    record["duplicate_signal_key"] = str(record.get("duplicate_signal_key", "") or make_duplicate_signal_key(record))
-    raw_quantity = record.get("quantity")
-    if raw_quantity is None or str(raw_quantity).strip() == "":
-        record["validation_error"] = SKIP_REASON_MISSING_QUANTITY
-        return False, SKIP_REASON_MISSING_QUANTITY, record
-    quantity = normalize_order_quantity(str(record.get("symbol", "")), raw_quantity)
-    if quantity <= 0:
-        record["validation_error"] = SKIP_REASON_MISSING_QUANTITY
-        return False, SKIP_REASON_MISSING_QUANTITY, record
-    record["quantity"] = quantity
-    return True, "", record
-
-def _make_result_row(candidate: dict[str, object], *, execution_type: str, processed_at_utc: str) -> dict[str, object]:
-    row = _ensure_trade_identity(candidate)
-    row.setdefault("execution_type", execution_type)
-    row.setdefault("executed_at_utc", processed_at_utc)
-    row.setdefault("position_status", "")
-    row.setdefault("timeframe", str(row.get("timeframe", row.get("interval", "")) or ""))
-    row.setdefault("duplicate_signal_key", str(row.get("duplicate_signal_key", "") or make_duplicate_signal_key(row)))
-    row.setdefault("entry", row.get("entry_price", row.get("price", "")))
-    row.setdefault("entry_price", row.get("price", row.get("entry", "")))
-    row.setdefault("target_price", row.get("target", row.get("target_price", "")))
-    row.setdefault("target", row.get("target_price", row.get("target", "")))
-    row.setdefault("stop_loss", row.get("stop_loss", ""))
-    row.setdefault("score", row.get("score", ""))
-    return row
-def _json_safe_value(value: object) -> object:
-    if value is None:
-        return None
-    if isinstance(value, (str, int, float, bool)):
-        return value
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d %H:%M:%S")
-    if isinstance(value, dict):
-        return {str(key): _json_safe_value(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_json_safe_value(item) for item in value]
-    return str(value)
-
-def _append_structured_log(path: Path, event: str, **fields: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload: dict[str, object] = {
-        "timestamp_utc": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
-        "event": event,
-    }
-    for key, value in fields.items():
-        if value is None or value == "":
-            continue
-        payload[str(key)] = _json_safe_value(value)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, ensure_ascii=True, sort_keys=True) + "\n")
-
-
-def _is_live_enabled(explicit_flag: bool | None, broker_client: object | None, broker_name: str | None) -> bool:
-    if explicit_flag is not None:
-        return bool(explicit_flag)
-    if broker_client is not None or str(broker_name or "").strip():
-        return True
-    raw = str(os.getenv("LIVE_TRADING_ENABLED", "") or "").strip().lower()
-    return raw in {"1", "true", "yes", "on", "enabled"}
-
-
-def _normalize_allowlist(symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None) -> set[str]:
-    if symbol_allowlist is None:
-        raw = str(os.getenv("LIVE_SYMBOL_ALLOWLIST", "") or "").strip()
-        if not raw:
-            return set()
-        symbol_allowlist = [part.strip() for part in raw.split(",") if part.strip()]
-    return {str(item).strip().upper() for item in symbol_allowlist if str(item).strip()}
-
-
-def _candidate_to_trade_candidate(record: dict[str, object], execution_type: str) -> TradeCandidate:
-    return TradeCandidate(
-        trade_id=str(record.get("trade_id", "") or ""),
-        trade_key=str(record.get("trade_key", "") or ""),
-        strategy=str(record.get("strategy", "TRADE_BOT") or "TRADE_BOT"),
-        symbol=str(record.get("symbol", "UNKNOWN") or "UNKNOWN"),
-        side=str(record.get("side", "") or ""),
-        quantity=int(_safe_float(record.get("quantity", 0))),
-        price=_price_value(record),
-        signal_time=str(record.get("signal_time", record.get("entry_time", record.get("timestamp", ""))) or ""),
-        reason=str(record.get("reason", record.get("strategy", "TRADE")) or "TRADE"),
-        execution_type=execution_type,
-        stop_loss=_safe_float(record.get("stop_loss")) or None,
-        target=_safe_float(record.get("target_price", record.get("target"))) or None,
-        order_type=str(record.get("order_type", "MARKET") or "MARKET"),
-        product_type=str(record.get("product_type", "INTRADAY") or "INTRADAY"),
-        validity=str(record.get("validity", "DAY") or "DAY"),
-        trigger_price=_safe_float(record.get("trigger_price")) or None,
-        metadata=dict(record),
-    )
-
-
-def _build_broker_order_request(candidate: TradeCandidate) -> BrokerOrderRequest:
-    return BrokerOrderRequest(
-        trade_id=candidate.trade_id,
-        strategy=candidate.strategy,
-        symbol=candidate.symbol,
-        side=candidate.side,
-        quantity=candidate.quantity,
-        order_type=candidate.order_type,
-        product_type=candidate.product_type,
-        validity=candidate.validity,
-        price=candidate.price if candidate.price > 0 else None,
-        trigger_price=candidate.trigger_price,
-        execution_type=candidate.execution_type,
-        metadata=dict(candidate.metadata),
-    )
-
-
-def _coerce_live_broker(*, broker_client: object | None, broker_name: str | None, security_map: dict[str, Any] | None, live_enabled: bool) -> tuple[object | None, str]:
-    resolved_name = str(broker_name or "DHAN").strip().upper() or "DHAN"
-    if isinstance(broker_client, Broker):
-        return broker_client, resolved_name
-    if broker_client is not None and resolved_name == "DHAN":
-        try:
-            return DhanBroker(broker_client, security_map=security_map, config=DhanBrokerConfig(allow_live=live_enabled)), resolved_name
-        except Exception:
-            return broker_client, resolved_name
-    if broker_client is not None:
-        return broker_client, resolved_name
-    if resolved_name == "DHAN":
-        try:
-            return DhanBroker.from_env(allow_live=live_enabled, security_map=security_map), resolved_name
-        except Exception:
-            return None, resolved_name
-    return None, resolved_name
-
-
-def _apply_broker_result(record: dict[str, object], broker_result: BrokerOrderResult, *, execution_type: str) -> None:
-    record["broker_name"] = broker_result.broker_name
-    record["broker_order_id"] = broker_result.order_id
-    record["broker_status"] = broker_result.status
-    record["broker_message"] = broker_result.message
-    if broker_result.raw_response:
-        try:
-            record["broker_response_json"] = json.dumps(broker_result.raw_response, ensure_ascii=True)
-        except Exception:
-            record["broker_response_json"] = str(broker_result.raw_response)
-    for key, value in broker_result.metadata.items():
-        if value not in {None, ""}:
-            record[key] = value
-    if execution_type == "PAPER":
-        record["trade_status"] = TRADE_STATUS_EXECUTED
-        record["position_status"] = TRADE_STATUS_OPEN
-        record["execution_status"] = "EXECUTED"
-    elif broker_result.accepted:
-        record["trade_status"] = TRADE_STATUS_PENDING_EXECUTION
-        record["execution_status"] = "SENT"
-    else:
-        record["trade_status"] = TRADE_STATUS_ERROR
-        record["execution_status"] = "ERROR"
-        record["validation_error"] = SKIP_REASON_BROKER_ERROR
-
 
 def _existing_csv_fieldnames(path: Path) -> list[str]:
     if not path.exists() or path.stat().st_size == 0:
@@ -1200,6 +927,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
     historical_trade_ids = _load_historical_trade_ids(output_path, execution_type)
     active_trade_keys = load_active_trade_keys(output_path, execution_type)
     active_duplicate_signal_keys = load_active_duplicate_signal_keys(output_path, execution_type)
+    logged_signal_instance_keys = load_logged_signal_instance_keys(output_path, execution_type)
     recent_signal_times = _load_recent_signal_times(output_path, execution_type)
     recent_trade_times = _load_recent_trade_times(output_path, execution_type)
     open_trade_count = _count_open_trades(output_path, execution_type)
@@ -1227,6 +955,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
     batch_seen_trade_ids: set[str] = set()
     batch_seen_trade_keys: set[str] = set()
     batch_seen_signal_keys: set[str] = set()
+    batch_seen_signal_instances: set[str] = set()
     batch_recent_signal_times: dict[str, datetime] = {}
     batch_recent_trade_times: dict[str, datetime] = {}
 
@@ -1243,25 +972,24 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             append_log(f'execution_engine skipped invalid trade {trade_id} reason={validation_reason}')
             _mark_skipped(result, base_row, validation_reason)
             continue
-        if deduplicate:
-            duplicate_reason = _duplicate_reason_for_candidate(
-                base_row,
-                historical_trade_ids=historical_trade_ids,
-                active_trade_keys=active_trade_keys,
-                active_duplicate_signal_keys=active_duplicate_signal_keys,
-                recent_signal_times=recent_signal_times,
-                batch_seen_trade_ids=batch_seen_trade_ids,
-                batch_seen_trade_keys=batch_seen_trade_keys,
-                batch_seen_signal_keys=batch_seen_signal_keys,
-                batch_recent_signal_times=batch_recent_signal_times,
-            )
-            if duplicate_reason:
-                _append_structured_log(REJECTIONS_LOG_PATH, 'trade_skipped', execution_type=execution_type, trade_id=trade_id, strategy=base_row.get('strategy'), symbol=base_row.get('symbol'), reason=duplicate_reason, category='deduplication')
-                _mark_skipped(result, base_row, duplicate_reason)
-                continue
-        batch_seen_trade_ids.add(trade_id)
-        batch_seen_trade_keys.add(trade_key)
-        batch_seen_signal_keys.add(duplicate_signal_key)
+        duplicate_reason = _duplicate_reason_for_candidate(
+            base_row,
+            historical_trade_ids=historical_trade_ids,
+            active_trade_keys=active_trade_keys,
+            active_duplicate_signal_keys=active_duplicate_signal_keys,
+            logged_signal_instance_keys=logged_signal_instance_keys,
+            recent_signal_times=recent_signal_times,
+            batch_seen_trade_ids=batch_seen_trade_ids,
+            batch_seen_trade_keys=batch_seen_trade_keys,
+            batch_seen_signal_keys=batch_seen_signal_keys,
+            batch_seen_signal_instances=batch_seen_signal_instances,
+            batch_recent_signal_times=batch_recent_signal_times,
+        )
+        if duplicate_reason:
+            category = 'cooldown' if duplicate_reason == SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN else 'deduplication'
+            _append_structured_log(REJECTIONS_LOG_PATH, 'trade_skipped', execution_type=execution_type, trade_id=trade_id, strategy=base_row.get('strategy'), symbol=base_row.get('symbol'), reason=duplicate_reason, category=category)
+            _mark_skipped(result, base_row, duplicate_reason)
+            continue
         trade_cooldown_group = _trade_cooldown_group_key(base_row)
         trade_cooldown_seconds = _cooldown_window_seconds(base_row)
         previous_trade_time = batch_recent_trade_times.get(trade_cooldown_group)
@@ -1272,6 +1000,10 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
                 _append_structured_log(REJECTIONS_LOG_PATH, 'trade_skipped', execution_type=execution_type, trade_id=trade_id, strategy=base_row.get('strategy'), symbol=base_row.get('symbol'), reason=SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN, category='cooldown')
                 _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN)
                 continue
+        batch_seen_trade_ids.add(trade_id)
+        batch_seen_trade_keys.add(trade_key)
+        batch_seen_signal_keys.add(duplicate_signal_key)
+        batch_seen_signal_instances.add(str(base_row.get('signal_instance_key', '') or make_signal_instance_key(base_row)))
         if signal_time is not None:
             batch_recent_signal_times[cooldown_group] = signal_time
             batch_recent_trade_times[trade_cooldown_group] = signal_time
@@ -1461,7 +1193,7 @@ def summarize_execution_result(
     deduplicate_enabled: bool,
     execution_type: str,
 ) -> dict[str, object]:
-    """Summarize execution outcomes for go-live validation."""
+    """Summarize execution outcomes for go-live and crisis-risk validation."""
     malformed_reasons = {
         'INVALID_SIDE',
         'INVALID_TIMESTAMP',
@@ -1478,8 +1210,11 @@ def summarize_execution_result(
         'INVALID_TRADE_LEVELS',
     }
     invalid_trade_count = 0
-    for row in list(result.skipped_rows) + list(result.error_rows):
+    blocked_reason_counts: dict[str, int] = {}
+    for row in list(result.blocked_rows) + list(result.skipped_rows) + list(result.error_rows):
         reason = _normalize_text(row.get("validation_error") or row.get("blocked_reason") or row.get("risk_limit_reason"))
+        if reason:
+            blocked_reason_counts[reason] = int(blocked_reason_counts.get(reason, 0)) + 1
         if reason in malformed_reasons:
             invalid_trade_count += 1
     return {
@@ -1492,6 +1227,7 @@ def summarize_execution_result(
         'invalid_trade_count': int(invalid_trade_count),
         'execution_error_count': int(result.error_count),
         'execution_crash_count': int(result.error_count),
+        'blocked_reason_counts': blocked_reason_counts,
         'cooldown_controls_enforced': 'YES' if deduplicate_enabled else 'NO',
         'duplicate_controls_enforced': 'YES' if deduplicate_enabled else 'NO',
         'paper_execution_crashes': 'NO' if int(result.error_count) == 0 else 'YES',
@@ -1954,26 +1690,5 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

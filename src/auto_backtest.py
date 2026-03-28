@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import csv
@@ -20,14 +20,23 @@ from src.validation_engine import (
     write_pass_fail_checklist_csv,
     write_validation_summary_json,
 )
+from src.crisis_risk_engine import (
+    apply_crisis_overrides,
+    default_nifty_crisis_config,
+    detect_market_stress,
+    evaluate_live_permission,
+    write_crisis_summary_json,
+)
 
 DEFAULT_VALIDATION_THRESHOLDS: dict[str, float] = {
-    'min_trades': 100.0,
+    'min_trades': 150.0,
+    'max_trades': 200.0,
     'min_win_rate_pct': 38.0,
     'min_profit_factor': 1.3,
     'min_expectancy': 0.0,
     'max_drawdown_pct': 12.0,
     'min_net_pnl': 0.0,
+    'max_expectancy_stability_gap_ratio': 0.5,
 }
 
 
@@ -132,6 +141,13 @@ def _pnl_summary(
     max_drawdown = max((float(r.get('drawdown', 0.0) or 0.0) for r in equity_curve_rows), default=0.0)
     max_drawdown_pct = max((float(r.get('drawdown_pct', 0.0) or 0.0) for r in equity_curve_rows), default=0.0)
     expectancy_per_trade = round(total_pnl / total, 2) if total else 0.0
+    first_half_count = total // 2
+    first_half_values = pnl_values[:first_half_count]
+    second_half_values = pnl_values[first_half_count:]
+    first_half_expectancy = round(sum(first_half_values) / len(first_half_values), 2) if first_half_values else 0.0
+    second_half_expectancy = round(sum(second_half_values) / len(second_half_values), 2) if second_half_values else 0.0
+    expectancy_stability_gap_ratio = round(abs(first_half_expectancy - second_half_expectancy) / abs(expectancy_per_trade), 4) if abs(expectancy_per_trade) > 0 else 0.0
+    drawdown_proven = max_drawdown_pct > 0 and losses > 0
     summary = {
         'strategy': strategy,
         'trades': total,
@@ -154,11 +170,13 @@ def _pnl_summary(
         'total_pnl': total_pnl,
         'avg_pnl': expectancy_per_trade,
         'expectancy_per_trade': expectancy_per_trade,
+        'first_half_expectancy_per_trade': first_half_expectancy,
+        'second_half_expectancy_per_trade': second_half_expectancy,
+        'expectancy_stability_gap_ratio': expectancy_stability_gap_ratio,
+        'drawdown_proven': 'YES' if drawdown_proven else 'NO',
         'positive_expectancy': 'YES' if expectancy_per_trade > 0 else 'NO',
     }
     return summary, equity_curve_rows
-
-
 def _validation_thresholds(args: argparse.Namespace) -> dict[str, float]:
     thresholds = dict(DEFAULT_VALIDATION_THRESHOLDS)
     for key in thresholds:
@@ -167,7 +185,9 @@ def _validation_thresholds(args: argparse.Namespace) -> dict[str, float]:
             continue
         thresholds[key] = float(value)
     thresholds['min_trades'] = max(thresholds['min_trades'], 0.0)
+    thresholds['max_trades'] = max(thresholds['max_trades'], thresholds['min_trades'])
     thresholds['max_drawdown_pct'] = max(thresholds['max_drawdown_pct'], 0.0)
+    thresholds['max_expectancy_stability_gap_ratio'] = max(thresholds['max_expectancy_stability_gap_ratio'], 0.0)
     return thresholds
 
 
@@ -177,24 +197,33 @@ def _validation_reasons(summary: dict[str, Any], thresholds: dict[str, float]) -
     profit_factor_raw = summary.get('profit_factor')
     profit_factor = float('inf') if str(profit_factor_raw).strip().lower() == 'inf' else _safe_float(profit_factor_raw)
     expectancy = _safe_float(summary.get('expectancy_per_trade'))
+    second_half_expectancy = _safe_float(summary.get('second_half_expectancy_per_trade'))
+    expectancy_stability_gap_ratio = _safe_float(summary.get('expectancy_stability_gap_ratio'))
     max_drawdown_pct = _safe_float(summary.get('max_drawdown_pct'))
     total_pnl = _safe_float(summary.get('total_pnl'))
+    drawdown_proven = str(summary.get('drawdown_proven', 'NO')).strip().upper() == 'YES'
     reasons: list[str] = []
     if trades < int(thresholds['min_trades']):
         reasons.append('too_few_trades')
+    if trades > int(thresholds['max_trades']):
+        reasons.append('trade_count_above_validation_window')
     if win_rate_pct < thresholds['min_win_rate_pct']:
         reasons.append('win_rate_below_threshold')
-    if profit_factor != float('inf') and profit_factor < thresholds['min_profit_factor']:
+    if profit_factor != float('inf') and profit_factor <= thresholds['min_profit_factor']:
         reasons.append('profit_factor_below_threshold')
     if expectancy <= thresholds['min_expectancy']:
         reasons.append('expectancy_not_positive' if thresholds['min_expectancy'] <= 0 else 'expectancy_below_threshold')
+    if second_half_expectancy <= thresholds['min_expectancy']:
+        reasons.append('second_half_expectancy_not_positive')
+    if expectancy_stability_gap_ratio > thresholds['max_expectancy_stability_gap_ratio']:
+        reasons.append('expectancy_unstable')
     if max_drawdown_pct > thresholds['max_drawdown_pct']:
         reasons.append('drawdown_above_limit')
+    if not drawdown_proven:
+        reasons.append('drawdown_not_proven')
     if total_pnl < thresholds['min_net_pnl']:
         reasons.append('net_pnl_below_threshold')
     return reasons
-
-
 def _apply_validation(summary: dict[str, Any], thresholds: dict[str, float]) -> dict[str, Any]:
     item = dict(summary)
     reasons = _validation_reasons(item, thresholds)
@@ -222,7 +251,11 @@ def _validation_report_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str
                 'win_rate_pct': row.get('win_rate_pct', row.get('win_rate', 0.0)),
                 'profit_factor': row.get('profit_factor', 0.0),
                 'expectancy_per_trade': row.get('expectancy_per_trade', 0.0),
+                'first_half_expectancy_per_trade': row.get('first_half_expectancy_per_trade', 0.0),
+                'second_half_expectancy_per_trade': row.get('second_half_expectancy_per_trade', 0.0),
+                'expectancy_stability_gap_ratio': row.get('expectancy_stability_gap_ratio', 0.0),
                 'max_drawdown_pct': row.get('max_drawdown_pct', 0.0),
+                'drawdown_proven': row.get('drawdown_proven', 'NO'),
                 'total_pnl': row.get('total_pnl', 0.0),
                 'validation_status': row.get('validation_status', 'FAIL'),
                 'validation_reasons': row.get('validation_reasons', ''),
@@ -376,16 +409,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--validation-report-output', type=Path, default=Path('data/backtest_validation_report.csv'))
     parser.add_argument('--go-live-output-json', type=Path, default=Path('data/go_live_validation_summary.json'))
     parser.add_argument('--go-live-checklist-output', type=Path, default=Path('data/go_live_validation_checklist.csv'))
+    parser.add_argument('--crisis-output-json', type=Path, default=Path('data/crisis_risk_summary.json'))
     parser.add_argument('--equity-curve-output', type=Path, default=Path('data/backtest_equity_curves.csv'))
     parser.add_argument('--paper-log-output', type=Path, default=Path('data/paper_trading_logs_all.csv'))
     parser.add_argument('--execution-type', default='PAPER', choices=['PAPER', 'LIVE', 'NONE'])
     parser.add_argument('--allow-live-on-pass', action='store_true')
     parser.add_argument('--allow-paper-on-fail', action='store_true')
     parser.add_argument('--min-trades', type=float, default=None)
+    parser.add_argument('--max-trades', type=float, default=None)
     parser.add_argument('--min-win-rate-pct', type=float, default=None)
     parser.add_argument('--min-profit-factor', type=float, default=None)
     parser.add_argument('--min-expectancy', type=float, default=None)
     parser.add_argument('--max-drawdown-pct', type=float, default=None)
+    parser.add_argument('--max-expectancy-stability-gap-ratio', type=float, default=None)
     parser.add_argument('--min-net-pnl', type=float, default=None)
     parser.add_argument('--live-log-output', type=Path, default=Path('data/live_trading_logs_all.csv'))
     parser.add_argument('--live-broker', default='DHAN', choices=['DHAN', 'NONE'])
@@ -423,6 +459,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     timeframe = str(getattr(args, 'interval', '') or '')
     data_start = str(rows[0].get('timestamp', '')) if rows else ''
     data_end = str(rows[-1].get('timestamp', '')) if rows else ''
+    crisis_config = default_nifty_crisis_config()
+    initial_crisis_evaluation = detect_market_stress(rows, {}, crisis_config, timeframe=timeframe)
+    print(
+        f"[CRISIS] Initial state={initial_crisis_evaluation.get('stress_state')} "
+        f"reasons={'|'.join(initial_crisis_evaluation.get('blocking_reasons', []) or initial_crisis_evaluation.get('warnings', []) or ['NONE'])}"
+    )
 
     candles = load_candles(rows)
     if not candles:
@@ -580,7 +622,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         candidate['data_end'] = data_end
         candidate['backtest_run_at_utc'] = run_at
 
-    execution_type = str(getattr(args, 'execution_type', 'PAPER') or 'PAPER').strip().upper()
+    requested_execution_type = str(getattr(args, 'execution_type', 'PAPER') or 'PAPER').strip().upper()
+    execution_type = requested_execution_type
     allow_live_on_pass = bool(getattr(args, 'allow_live_on_pass', False))
     allow_paper_on_fail = bool(getattr(args, 'allow_paper_on_fail', False))
     candidate_map = _build_candidate_map(all_candidates)
@@ -591,10 +634,30 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         allow_live_on_pass=allow_live_on_pass,
         allow_paper_on_fail=allow_paper_on_fail,
     ) if execution_type in {'PAPER', 'LIVE'} else []
+    crisis_overrides = apply_crisis_overrides(
+        candidates,
+        initial_crisis_evaluation,
+        crisis_config,
+        requested_execution_type=requested_execution_type,
+        max_trades_per_day=max_trades_per_day,
+        max_daily_loss=max_daily_loss,
+    )
+    execution_type = str(crisis_overrides.get('execution_type', execution_type) or execution_type).upper()
+    candidates = list(crisis_overrides.get('candidates', candidates))
+    max_trades_per_day_override = crisis_overrides.get('max_trades_per_day')
+    if max_trades_per_day_override is not None:
+        max_trades_per_day = int(max_trades_per_day_override)
+    max_daily_loss = crisis_overrides.get('max_daily_loss', max_daily_loss)
+    max_open_trades = crisis_overrides.get('max_open_trades')
+    print(
+        f"[CRISIS] Routed execution={execution_type} "
+        f"notes={'|'.join(crisis_overrides.get('override_notes', []) or ['NONE'])}"
+    )
 
     executed_log_path = args.paper_log_output
     paper_rows: list[dict[str, object]] = []
     execution_summary: dict[str, Any] = {
+        'requested_execution_type': requested_execution_type,
         'execution_type': execution_type,
         'execution_rows': 0,
         'executed_count': 0,
@@ -604,11 +667,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         'invalid_trade_count': 0,
         'execution_error_count': 0,
         'execution_crash_count': 0,
+        'blocked_reason_counts': {},
         'cooldown_controls_enforced': 'NO',
         'duplicate_controls_enforced': 'NO',
         'paper_execution_crashes': 'NO',
     }
-
     if execution_type == 'NONE':
         paper_rows = []
     elif execution_type == 'LIVE':
@@ -631,6 +694,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 security_map=security_map,
                 max_trades_per_day=max_trades_per_day,
                 max_daily_loss=max_daily_loss,
+                max_open_trades=max_open_trades,
             )
             paper_rows = list(getattr(live_result.execution_result, 'rows', []))
             execution_summary = summarize_execution_result(live_result.execution_result, deduplicate_enabled=True, execution_type='LIVE')
@@ -645,6 +709,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 deduplicate=True,
                 max_trades_per_day=max_trades_per_day,
                 max_daily_loss=max_daily_loss,
+                max_open_trades=max_open_trades,
             )
             paper_rows = list(getattr(paper_result.execution_result, 'rows', []))
             execution_summary = summarize_execution_result(paper_result.execution_result, deduplicate_enabled=True, execution_type='PAPER')
@@ -688,6 +753,25 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         getattr(args, 'go_live_checklist_output', Path('data/go_live_validation_checklist.csv')),
         go_live_evaluation,
     )
+    final_crisis_evaluation = detect_market_stress(rows, execution_summary, crisis_config, timeframe=timeframe)
+    live_permission_evaluation = evaluate_live_permission(
+        go_live_evaluation,
+        final_crisis_evaluation,
+        crisis_config,
+        requested_execution_type=requested_execution_type,
+        allow_live_on_pass=allow_live_on_pass,
+    )
+    crisis_summary = {
+        'initial_crisis_evaluation': initial_crisis_evaluation,
+        'final_crisis_evaluation': final_crisis_evaluation,
+        'execution_overrides': crisis_overrides,
+        'live_permission': live_permission_evaluation,
+    }
+    crisis_output_json = write_crisis_summary_json(
+        getattr(args, 'crisis_output_json', Path('data/crisis_risk_summary.json')),
+        crisis_summary,
+    )
+
 
     return {
         'summary_rows': summary_rows,
@@ -703,10 +787,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         'validation_summary': validation_summary,
         'execution_summary': execution_summary,
         'go_live_evaluation': go_live_evaluation,
+        'crisis_summary': crisis_summary,
+        'live_permission_evaluation': live_permission_evaluation,
         'go_live_output_json': str(go_live_output_json),
         'go_live_checklist_output': str(go_live_checklist_output),
+        'crisis_output_json': str(crisis_output_json),
         'equity_curve_rows': equity_curve_rows,
         'equity_curve_output': str(equity_curve_output),
+        'requested_execution_type': requested_execution_type,
         'execution_type': execution_type,
         'executed_log_path': str(executed_log_path),
         'executed_rows_count': len(paper_rows),
@@ -758,15 +846,20 @@ def main() -> None:
     print(f"Passed checks: {', '.join(go_live_ui.get('passed_checks', [])) or 'NONE'}")
     print(f"Failed checks: {', '.join(go_live_ui.get('failed_checks', [])) or 'NONE'}")
     print(f"Next action: {go_live_ui.get('next_action', '')}")
+    crisis_summary = out.get('crisis_summary', {})
+    final_crisis = crisis_summary.get('final_crisis_evaluation', {})
+    live_permission = out.get('live_permission_evaluation', {})
+    print(f"Crisis state: {final_crisis.get('stress_state', 'UNKNOWN')}")
+    print(f"Crisis reasons: {', '.join(final_crisis.get('blocking_reasons', []) or final_crisis.get('warnings', [])) or 'NONE'}")
+    print(f"Live permission: {live_permission.get('decision_status', 'UNKNOWN')} -> {live_permission.get('recommended_execution_type', 'UNKNOWN')}")
     print(f"Validation report: {out.get('validation_report_output', '')}")
     print(f"Go-live JSON: {out.get('go_live_output_json', '')}")
     print(f"Go-live checklist: {out.get('go_live_checklist_output', '')}")
+    print(f"Crisis JSON: {out.get('crisis_output_json', '')}")
     print(f"Equity curves: {out['equity_curve_output']}")
 
 
 if __name__ == '__main__':
     main()
-
-
 
 

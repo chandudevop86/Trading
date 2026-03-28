@@ -1,8 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from src.execution_engine import build_execution_candidates, execute_live_trades, execute_paper_trades
 
@@ -34,6 +34,7 @@ def run_paper_workflow(
     deduplicate: bool = True,
     max_trades_per_day: int | None = None,
     max_daily_loss: float | None = None,
+    max_open_trades: int | None = None,
 ) -> WorkflowResult:
     candidates = build_execution_candidates(strategy_label, output_rows, symbol)
     result = execute_paper_trades(
@@ -42,6 +43,7 @@ def run_paper_workflow(
         deduplicate=deduplicate,
         max_trades_per_day=max_trades_per_day,
         max_daily_loss=max_daily_loss,
+        max_open_trades=max_open_trades,
     )
     return WorkflowResult(
         output_rows=output_rows,
@@ -64,6 +66,7 @@ def run_live_workflow(
     security_map: dict[str, dict[str, str]] | None = None,
     max_trades_per_day: int | None = None,
     max_daily_loss: float | None = None,
+    max_open_trades: int | None = None,
 ) -> WorkflowResult:
     candidates = build_execution_candidates(strategy_label, output_rows, symbol)
     result = execute_live_trades(
@@ -75,6 +78,7 @@ def run_live_workflow(
         security_map=security_map,
         max_trades_per_day=max_trades_per_day,
         max_daily_loss=max_daily_loss,
+        max_open_trades=max_open_trades,
     )
     return WorkflowResult(
         output_rows=output_rows,
@@ -92,6 +96,7 @@ def run_paper_candidates(
     deduplicate: bool = True,
     max_trades_per_day: int | None = None,
     max_daily_loss: float | None = None,
+    max_open_trades: int | None = None,
 ) -> WorkflowResult:
     result = execute_paper_trades(
         candidates,
@@ -99,6 +104,7 @@ def run_paper_candidates(
         deduplicate=deduplicate,
         max_trades_per_day=max_trades_per_day,
         max_daily_loss=max_daily_loss,
+        max_open_trades=max_open_trades,
     )
     return WorkflowResult(
         output_rows=[],
@@ -119,6 +125,7 @@ def run_live_candidates(
     security_map: dict[str, dict[str, str]] | None = None,
     max_trades_per_day: int | None = None,
     max_daily_loss: float | None = None,
+    max_open_trades: int | None = None,
 ) -> WorkflowResult:
     result = execute_live_trades(
         candidates,
@@ -129,6 +136,7 @@ def run_live_candidates(
         security_map=security_map,
         max_trades_per_day=max_trades_per_day,
         max_daily_loss=max_daily_loss,
+        max_open_trades=max_open_trades,
     )
     return WorkflowResult(
         output_rows=[],

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
@@ -19,8 +19,8 @@ BACKTEST_VALIDATION_OUTPUT = RUNTIME_CONFIG.paths.backtest_validation_csv
 
 @dataclass(slots=True)
 class BacktestValidationConfig:
-    min_trades: int = 100
-    target_trades: int = 150
+    min_trades: int = 150
+    target_trades: int = 200
     max_trades: int = 200
     min_profit_factor: float = 1.3
     min_expectancy_per_trade: float = 0.0
@@ -29,14 +29,18 @@ class BacktestValidationConfig:
     max_drawdown_pct: float = 12.0
     max_duplicate_rejections: int = 0
     require_positive_expectancy: bool = True
+    max_expectancy_stability_gap_ratio: float = 0.5
+    require_second_half_positive_expectancy: bool = True
+    require_drawdown_proof: bool = True
+    min_loss_trades_for_drawdown_proof: int = 1
 
 
 
 def nifty_intraday_validation_config() -> BacktestValidationConfig:
     """Validation preset for Nifty intraday paper/backtest promotion."""
     return BacktestValidationConfig(
-        min_trades=100,
-        target_trades=150,
+        min_trades=150,
+        target_trades=200,
         max_trades=200,
         min_profit_factor=1.3,
         min_expectancy_per_trade=0.0,
@@ -44,6 +48,10 @@ def nifty_intraday_validation_config() -> BacktestValidationConfig:
         min_avg_rr=1.0,
         max_drawdown_pct=12.0,
         require_positive_expectancy=True,
+        max_expectancy_stability_gap_ratio=0.5,
+        require_second_half_positive_expectancy=True,
+        require_drawdown_proof=True,
+        min_loss_trades_for_drawdown_proof=1,
     )
 
 
@@ -428,13 +436,14 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
     total_trades = len(trades)
     wins = sum(1 for trade in trades if _safe_float(trade.get('pnl')) > 0)
     losses = sum(1 for trade in trades if _safe_float(trade.get('pnl')) < 0)
-    total_pnl = sum(_safe_float(trade.get('pnl')) for trade in trades)
+    pnl_values = [_safe_float(trade.get('pnl')) for trade in trades]
+    total_pnl = sum(pnl_values)
     gross_total_pnl = sum(_safe_float(trade.get('gross_pnl', trade.get('pnl'))) for trade in trades)
     total_trading_cost = sum(_safe_float(trade.get('trading_cost')) for trade in trades)
     avg_pnl = total_pnl / total_trades if total_trades else 0.0
     avg_rr = sum(_safe_float(trade.get('rr_achieved')) for trade in trades) / total_trades if total_trades else 0.0
-    winning_trades = [_safe_float(trade.get('pnl')) for trade in trades if _safe_float(trade.get('pnl')) > 0]
-    losing_trades = [_safe_float(trade.get('pnl')) for trade in trades if _safe_float(trade.get('pnl')) < 0]
+    winning_trades = [value for value in pnl_values if value > 0]
+    losing_trades = [value for value in pnl_values if value < 0]
     avg_win = sum(winning_trades) / len(winning_trades) if winning_trades else 0.0
     avg_loss = sum(losing_trades) / len(losing_trades) if losing_trades else 0.0
     gross_profit = sum(winning_trades)
@@ -442,9 +451,16 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
     profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf') if gross_profit > 0 else 0.0
     expectancy_per_trade = avg_pnl
     expectancy_r = sum(_safe_float(trade.get('rr_achieved')) for trade in trades) / total_trades if total_trades else 0.0
+    first_half_count = total_trades // 2
+    first_half_values = pnl_values[:first_half_count]
+    second_half_values = pnl_values[first_half_count:]
+    first_half_expectancy = sum(first_half_values) / len(first_half_values) if first_half_values else 0.0
+    second_half_expectancy = sum(second_half_values) / len(second_half_values) if second_half_values else 0.0
+    expectancy_stability_gap_ratio = abs(first_half_expectancy - second_half_expectancy) / abs(expectancy_per_trade) if abs(expectancy_per_trade) > 0 else 0.0
     equity_rows = _equity_curve_rows(trades, float(cfg.capital))
     max_drawdown = abs(min((row['drawdown'] for row in equity_rows), default=0.0))
     max_drawdown_pct = max((row['drawdown_pct'] for row in equity_rows), default=0.0)
+    drawdown_proven = max_drawdown_pct > 0 and losses >= int(cfg.validation.min_loss_trades_for_drawdown_proof)
 
     pnl_by_strategy: dict[str, float] = {}
     score_bucket_analysis: dict[str, dict[str, float]] = {}
@@ -477,8 +493,12 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
         'avg_loss': round(avg_loss, 2),
         'profit_factor': round(profit_factor, 2) if profit_factor != float('inf') else 'inf',
         'expectancy_per_trade': round(expectancy_per_trade, 2),
+        'first_half_expectancy_per_trade': round(first_half_expectancy, 2),
+        'second_half_expectancy_per_trade': round(second_half_expectancy, 2),
+        'expectancy_stability_gap_ratio': round(expectancy_stability_gap_ratio, 4),
         'expectancy_r': round(expectancy_r, 2),
         'positive_expectancy': 'YES' if expectancy_per_trade > 0 else 'NO',
+        'drawdown_proven': 'YES' if drawdown_proven else 'NO',
         'max_drawdown': round(max_drawdown, 2),
         'max_drawdown_pct': round(max_drawdown_pct, 2),
         'avg_rr': round(avg_rr, 2),
@@ -500,17 +520,20 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
         'invalid_trade_count': 0,
         'execution_error_count': 0,
     }
-
-
 def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[str, object]:
     rules = cfg.validation
     total_trades = _safe_int(summary.get('total_trades'))
     win_rate = _safe_float(summary.get('win_rate'))
     profit_factor = float('inf') if str(summary.get('profit_factor', '')).strip().lower() == 'inf' else _safe_float(summary.get('profit_factor'))
     expectancy = _safe_float(summary.get('expectancy_per_trade'))
+    first_half_expectancy = _safe_float(summary.get('first_half_expectancy_per_trade'))
+    second_half_expectancy = _safe_float(summary.get('second_half_expectancy_per_trade'))
+    expectancy_stability_gap_ratio = _safe_float(summary.get('expectancy_stability_gap_ratio'))
     avg_rr = _safe_float(summary.get('avg_rr'), default=2.0)
     max_drawdown_pct = _safe_float(summary.get('max_drawdown_pct'))
     positive_expectancy = str(summary.get('positive_expectancy', 'NO')).upper() == 'YES' or expectancy > 0
+    drawdown_proven = str(summary.get('drawdown_proven', 'NO')).upper() == 'YES'
+    losses = _safe_int(summary.get('losses'))
     duplicate_rejections = _safe_int(summary.get('duplicate_rejections', summary.get('duplicate_trade_count')))
     invalid_trade_count = _safe_int(summary.get('invalid_trade_count', summary.get('malformed_trade_count')))
     required_win_rate = max(float(rules.min_win_rate), required_win_rate_pct(avg_rr))
@@ -529,10 +552,14 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
 
     if rules.require_positive_expectancy and not positive_expectancy:
         blockers.append('NEGATIVE_EXPECTANCY')
-    if expectancy < float(rules.min_expectancy_per_trade):
-        blockers.append(f'EXPECTANCY<{float(rules.min_expectancy_per_trade):.2f}')
-    if profit_factor != float('inf') and profit_factor < float(rules.min_profit_factor):
-        blockers.append(f'PROFIT_FACTOR<{float(rules.min_profit_factor):.2f}')
+    if expectancy <= float(rules.min_expectancy_per_trade):
+        blockers.append(f'EXPECTANCY<={float(rules.min_expectancy_per_trade):.2f}')
+    if rules.require_second_half_positive_expectancy and second_half_expectancy <= float(rules.min_expectancy_per_trade):
+        blockers.append('SECOND_HALF_EXPECTANCY_NOT_POSITIVE')
+    if expectancy_stability_gap_ratio > float(rules.max_expectancy_stability_gap_ratio):
+        blockers.append(f'EXPECTANCY_STABILITY_GAP>{float(rules.max_expectancy_stability_gap_ratio):.2f}')
+    if profit_factor != float('inf') and profit_factor <= float(rules.min_profit_factor):
+        blockers.append(f'PROFIT_FACTOR<={float(rules.min_profit_factor):.2f}')
     if win_rate < float(required_win_rate):
         blockers.append(f'WIN_RATE<{float(required_win_rate):.2f}')
     if avg_rr < float(rules.min_avg_rr):
@@ -543,6 +570,8 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
         blockers.append(f'DUPLICATES>{int(rules.max_duplicate_rejections)}')
     if invalid_trade_count > 0:
         blockers.append('INVALID_TRADES>0')
+    if rules.require_drawdown_proof and not drawdown_proven:
+        blockers.append('DRAWDOWN_NOT_PROVEN')
 
     deployment_ready = 'YES' if not blockers else 'NO'
     target_gap = max(int(rules.target_trades) - total_trades, 0)
@@ -560,8 +589,13 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
         'positive_expectancy': 'YES' if positive_expectancy else 'NO',
         'profit_factor': summary.get('profit_factor', 0.0),
         'expectancy_per_trade': round(expectancy, 2),
+        'first_half_expectancy_per_trade': round(first_half_expectancy, 2),
+        'second_half_expectancy_per_trade': round(second_half_expectancy, 2),
+        'expectancy_stability_gap_ratio': round(expectancy_stability_gap_ratio, 4),
         'win_rate': round(win_rate, 2),
         'avg_rr': round(avg_rr, 2),
+        'losses': losses,
+        'drawdown_proven': 'YES' if drawdown_proven else 'NO',
         'max_drawdown_pct': round(max_drawdown_pct, 2),
         'required_win_rate': round(float(required_win_rate), 2),
         'required_profit_factor': round(float(rules.min_profit_factor), 2),
@@ -574,8 +608,6 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
         'deployment_blockers': '; '.join(blockers),
         'validation_notes': '; '.join(notes),
     }
-
-
 def _build_rejected_row(record: dict[str, object], reason: str) -> dict[str, object]:
     rejected = dict(record)
     rejected['trade_status'] = 'rejected'
@@ -753,14 +785,5 @@ def summarize_trade_log(
     write_rows(summary_output, [summary])
     write_rows(validation_output, [validation_row])
     return summary
-
-
-
-
-
-
-
-
-
 
 

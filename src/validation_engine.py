@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import json
@@ -9,8 +9,9 @@ from typing import Any
 
 @dataclass(frozen=True, slots=True)
 class GoLiveValidationConfig:
-    min_completed_trades: int = 100
+    min_completed_trades: int = 150
     preferred_completed_trades: int = 200
+    max_completed_trades: int = 200
     min_profit_factor: float = 1.3
     min_expectancy_per_trade: float = 0.0
     max_drawdown_pct: float = 12.0
@@ -20,10 +21,14 @@ class GoLiveValidationConfig:
     max_material_win_rate_gap_pct: float = 8.0
     max_material_profit_factor_gap: float = 0.2
     max_material_expectancy_gap_ratio: float = 0.5
+    max_expectancy_stability_gap_ratio: float = 0.5
     min_paper_trades: int = 20
     rr_win_rate_buffer_pct: float = 4.0
     absolute_min_win_rate_pct: float = 35.0
     require_cooldown_controls: bool = True
+    require_second_half_positive_expectancy: bool = True
+    require_drawdown_proof: bool = True
+    min_loss_trades_for_drawdown_proof: int = 1
     market_open: str = '09:15'
     market_close: str = '15:30'
     market_label: str = 'NSE_NIFTY_INTRADAY'
@@ -101,18 +106,36 @@ def _summary_metrics(summary: dict[str, Any], config: GoLiveValidationConfig) ->
     cooldown_controls_enforced = _normalize_flag(
         summary.get('cooldown_controls_enforced', summary.get('duplicate_controls_enforced', 'NO'))
     )
+    losses = _safe_int(summary.get('losses', summary.get('losing_trades', 0)))
+    expectancy_per_trade = _safe_float(summary.get('expectancy_per_trade', summary.get('avg_pnl', 0.0)))
+    first_half_expectancy = _safe_float(summary.get('first_half_expectancy_per_trade', summary.get('first_half_expectancy', 0.0)))
+    second_half_expectancy = _safe_float(summary.get('second_half_expectancy_per_trade', summary.get('second_half_expectancy', 0.0)))
+    expectancy_stability_gap_ratio = _safe_float(summary.get('expectancy_stability_gap_ratio', 0.0))
+    if expectancy_stability_gap_ratio <= 0 and abs(expectancy_per_trade) > 0:
+        expectancy_stability_gap_ratio = abs(first_half_expectancy - second_half_expectancy) / abs(expectancy_per_trade)
+    drawdown_proven = _normalize_flag(
+        summary.get(
+            'drawdown_proven',
+            'YES' if _safe_float(summary.get('max_drawdown_pct', 0.0)) > 0 and losses >= config.min_loss_trades_for_drawdown_proof else 'NO',
+        )
+    )
     return {
         'strategy': str(summary.get('strategy', summary.get('strategy_name', 'SYSTEM')) or 'SYSTEM'),
         'completed_trades': total_trades,
         'win_rate_pct': _safe_float(summary.get('win_rate_pct', summary.get('win_rate', 0.0))),
         'profit_factor': float('inf') if str(summary.get('profit_factor', '')).strip().lower() == 'inf' else _safe_float(summary.get('profit_factor', 0.0)),
-        'expectancy_per_trade': _safe_float(summary.get('expectancy_per_trade', summary.get('avg_pnl', 0.0))),
+        'expectancy_per_trade': expectancy_per_trade,
+        'first_half_expectancy_per_trade': first_half_expectancy,
+        'second_half_expectancy_per_trade': second_half_expectancy,
+        'expectancy_stability_gap_ratio': round(expectancy_stability_gap_ratio, 4),
         'max_drawdown_pct': _safe_float(summary.get('max_drawdown_pct', 0.0)),
         'avg_rr': avg_rr,
+        'losses': losses,
         'duplicate_trade_count': duplicate_trade_count,
         'invalid_trade_count': invalid_trade_count,
         'execution_error_count': execution_error_count,
         'cooldown_controls_enforced': cooldown_controls_enforced,
+        'drawdown_proven': drawdown_proven,
         'market_session': str(summary.get('market_session', f'{config.market_open}-{config.market_close}') or f'{config.market_open}-{config.market_close}'),
     }
 
@@ -160,8 +183,11 @@ def evaluate_go_live(
         checks.append(_rule_result('session_context', PASS, {'backtest': backtest['market_session'], 'paper': paper['market_session']}, expected_session, 'Validation context matches normal NSE market hours 09:15-15:30.', 'system'))
 
     if backtest['completed_trades'] < cfg.min_completed_trades:
-        checks.append(_rule_result('minimum_trade_confidence', FAIL, backtest['completed_trades'], cfg.min_completed_trades, 'Need at least 100 completed backtest trades before live use.', 'backtest'))
+        checks.append(_rule_result('minimum_trade_confidence', FAIL, backtest['completed_trades'], cfg.min_completed_trades, 'Need at least 150 completed backtest trades before live use.', 'backtest'))
         blocking_reasons.append('backtest_trade_count_below_minimum')
+    elif backtest['completed_trades'] > cfg.max_completed_trades:
+        checks.append(_rule_result('trade_window_cap', FAIL, backtest['completed_trades'], cfg.max_completed_trades, 'Trade sample exceeds the strict 100-200 trade validation window.', 'backtest'))
+        blocking_reasons.append('backtest_trade_count_above_validation_window')
     elif backtest['completed_trades'] < cfg.preferred_completed_trades:
         checks.append(_rule_result('preferred_trade_depth', CONDITIONAL_PASS, backtest['completed_trades'], cfg.preferred_completed_trades, 'Trade count is usable but below the preferred 200-trade sample.', 'backtest'))
         warnings.append('backtest_trade_count_below_preferred')
@@ -173,6 +199,18 @@ def evaluate_go_live(
         blocking_reasons.append('backtest_expectancy_not_positive')
     else:
         checks.append(_rule_result('backtest_expectancy', PASS, backtest['expectancy_per_trade'], f'>{cfg.min_expectancy_per_trade}', 'Backtest expectancy is positive.', 'backtest'))
+
+    if cfg.require_second_half_positive_expectancy and backtest['second_half_expectancy_per_trade'] <= cfg.min_expectancy_per_trade:
+        checks.append(_rule_result('expectancy_stability_second_half', FAIL, backtest['second_half_expectancy_per_trade'], f'>{cfg.min_expectancy_per_trade}', 'Second-half expectancy must remain positive to prove stability.', 'backtest'))
+        blocking_reasons.append('backtest_second_half_expectancy_not_positive')
+    else:
+        checks.append(_rule_result('expectancy_stability_second_half', PASS, backtest['second_half_expectancy_per_trade'], f'>{cfg.min_expectancy_per_trade}', 'Second-half expectancy remains positive.', 'backtest'))
+
+    if backtest['expectancy_stability_gap_ratio'] > cfg.max_expectancy_stability_gap_ratio:
+        checks.append(_rule_result('expectancy_stability_gap', FAIL, backtest['expectancy_stability_gap_ratio'], f'<={cfg.max_expectancy_stability_gap_ratio}', 'Expectancy drift across the sample is too large.', 'backtest'))
+        blocking_reasons.append('backtest_expectancy_unstable')
+    else:
+        checks.append(_rule_result('expectancy_stability_gap', PASS, backtest['expectancy_stability_gap_ratio'], f'<={cfg.max_expectancy_stability_gap_ratio}', 'Expectancy drift remains within the configured limit.', 'backtest'))
 
     if paper['completed_trades'] < cfg.min_paper_trades:
         checks.append(_rule_result('paper_trade_count', CONDITIONAL_PASS, paper['completed_trades'], cfg.min_paper_trades, 'Paper trading sample is too small for live approval.', 'paper'))
@@ -211,6 +249,13 @@ def evaluate_go_live(
             blocking_reasons.append(f'{source_name}_invalid_trades_present')
         else:
             checks.append(_rule_result(f'{source_name}_invalid_trades', PASS, metrics['invalid_trade_count'], cfg.max_invalid_trades, f'{source_name.title()} invalid trade count is clean.', source_name))
+
+        if cfg.require_drawdown_proof and source_name == 'backtest':
+            if not metrics['drawdown_proven']:
+                checks.append(_rule_result(f'{source_name}_drawdown_proof', FAIL, {'max_drawdown_pct': metrics['max_drawdown_pct'], 'losses': metrics['losses']}, {'min_loss_trades': cfg.min_loss_trades_for_drawdown_proof, 'drawdown_required': True}, 'Backtest does not contain enough adverse-path evidence to trust drawdown.', source_name))
+                blocking_reasons.append('backtest_drawdown_not_proven')
+            else:
+                checks.append(_rule_result(f'{source_name}_drawdown_proof', PASS, {'max_drawdown_pct': metrics['max_drawdown_pct'], 'losses': metrics['losses']}, {'min_loss_trades': cfg.min_loss_trades_for_drawdown_proof, 'drawdown_required': True}, 'Backtest contains enough adverse-path evidence to trust drawdown.', source_name))
 
     if paper['execution_error_count'] > cfg.max_execution_errors:
         checks.append(_rule_result('paper_execution_errors', FAIL, paper['execution_error_count'], cfg.max_execution_errors, 'Paper execution reported crashes or broker/runtime errors.', 'paper'))
@@ -257,14 +302,13 @@ def evaluate_go_live(
         recommended_next_action = 'Keep the system off live capital, fix blocking rules, and continue Nifty intraday backtest/paper validation within 09:15-15:30 session controls.'
     elif warnings:
         decision_status = 'PAPER_ONLY'
-        recommended_next_action = 'Continue paper trading until warnings clear and the sample moves closer to 200 clean trades with stable paper/backtest alignment.'
+        recommended_next_action = 'Continue paper trading until warnings clear and the sample reaches 100-200 clean trades with stable expectancy and proven drawdown behavior.'
     else:
         decision_status = 'PASS_FOR_SMALL_CAPITAL'
         recommended_next_action = 'Eligible for small-capital live deployment during NSE market hours 09:15-15:30 with existing hard risk limits unchanged.'
 
     passed_checks = [item['rule'] for item in checks if item['status'] == PASS]
     failed_checks = [item['rule'] for item in checks if item['status'] == FAIL]
-    conditional_checks = [item['rule'] for item in checks if item['status'] == CONDITIONAL_PASS]
     human_summary = (
         f"Go-live status: {decision_status}. Passed checks: {len(passed_checks)}. "
         f"Failed checks: {len(failed_checks)}. Next action: {recommended_next_action}"
@@ -317,3 +361,6 @@ def write_pass_fail_checklist_csv(path: str | Path, evaluation: dict[str, Any]) 
         writer.writeheader()
         writer.writerows(rows)
     return output_path
+
+
+

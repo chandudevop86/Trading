@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -98,9 +98,13 @@ def post_live_analysis(request: LiveAnalysisRequest) -> LiveAnalysisResponse:
         telegram_payload=result['telegram_payload'],
         execution_summary=LiveAnalysisExecutionSummary(**result['execution_summary']),
         execution_rows=[LiveAnalysisExecutionRow(**row) for row in result['execution_rows']],
+        validation_summary=result.get('validation_summary', {}),
         report_artifacts=LiveAnalysisReportArtifacts(
             json_report=ReportArtifactLocation(**result['report_artifacts']['json_report']),
             summary_report=ReportArtifactLocation(**result['report_artifacts']['summary_report']),
         ),
     )
+
+
+
 

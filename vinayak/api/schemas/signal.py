@@ -92,6 +92,7 @@ class DashboardSummaryResponse(BaseModel):
     execution_status_counts: dict[str, int]
     audit_status_counts: dict[str, int]
     recent_audit_failures: int
+    validation_summary: dict[str, Any] = Field(default_factory=dict)
 
 
 class LiveOhlcvRowResponse(BaseModel):
@@ -187,5 +188,9 @@ class LiveAnalysisResponse(BaseModel):
     telegram_payload: dict[str, Any]
     execution_summary: LiveAnalysisExecutionSummary
     execution_rows: list[LiveAnalysisExecutionRow]
+    validation_summary: dict[str, Any] = Field(default_factory=dict)
     report_artifacts: LiveAnalysisReportArtifacts
+
+
+
 

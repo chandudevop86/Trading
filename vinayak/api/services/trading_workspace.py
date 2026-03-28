@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -15,6 +15,7 @@ from src.execution_engine import build_execution_candidates, execute_live_trades
 from src.strategy_service import StrategyContext, run_strategy_workflow
 from src.strike_selector import attach_option_strikes
 from src.telegram_notifier import build_trade_summary, send_telegram_message
+from src.trade_validation_service import build_trade_evaluation_summary
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
 from vinayak.api.services.report_storage import cache_json_artifact, store_json_report, store_text_report
 from vinayak.messaging.bus import build_message_bus
@@ -264,6 +265,27 @@ def _build_report_artifacts(result: dict[str, Any]) -> dict[str, dict[str, str]]
     }
 
 
+def _validation_summary_from_rows(rows: list[dict[str, Any]], strategy: str) -> dict[str, Any]:
+    if not rows:
+        return {}
+    summary = build_trade_evaluation_summary(rows, strategy_name=str(strategy or 'VINAYAK'))
+    return {
+        'clean_trades': summary.get('clean_trades', summary.get('closed_trades', 0)),
+        'expectancy_per_trade': summary.get('expectancy_per_trade', 0.0),
+        'expectancy_stability_score': summary.get('expectancy_stability_score', 0.0),
+        'profit_factor': summary.get('profit_factor', 0.0),
+        'profit_factor_stability_score': summary.get('profit_factor_stability_score', 0.0),
+        'max_drawdown_pct': summary.get('max_drawdown_pct', 0.0),
+        'recovery_factor': summary.get('recovery_factor', 0.0),
+        'pass_fail_status': summary.get('pass_fail_status', 'NEED_MORE_DATA'),
+        'confidence_label': summary.get('confidence_label', 'NEED_MORE_DATA'),
+        'paper_readiness_summary': summary.get('paper_readiness_summary', ''),
+        'go_live_status': summary.get('go_live_status', 'PAPER_ONLY'),
+        'promotion_status': summary.get('promotion_status', 'RESEARCH_ONLY'),
+        'warnings': summary.get('warnings', []),
+        'pass_fail_reasons': summary.get('pass_fail_reasons', []),
+    }
+
 def run_live_trading_analysis(
     *,
     symbol: str,
@@ -399,6 +421,9 @@ def run_live_trading_analysis(
         }
         execution_rows = _normalize_rows(result.rows)
 
+    validation_rows = execution_rows if execution_rows else signal_rows
+    validation_summary = _validation_summary_from_rows(validation_rows, strategy)
+
     response: dict[str, Any] = {
         'symbol': symbol,
         'interval': interval,
@@ -415,6 +440,7 @@ def run_live_trading_analysis(
         'telegram_payload': telegram_payload or {},
         'execution_summary': execution_summary,
         'execution_rows': execution_rows,
+        'validation_summary': validation_summary,
     }
     response['report_artifacts'] = _build_report_artifacts(response)
     message_bus.publish(
@@ -431,5 +457,8 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
+
+
 
 

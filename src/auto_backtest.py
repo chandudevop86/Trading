@@ -426,6 +426,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--optimizer-output', type=Path, default=Path('data/strategy_optimizer_report.csv'))
     parser.add_argument('--validation-output', type=Path, default=Path('data/backtest_validation.csv'))
     parser.add_argument('--validation-report-output', type=Path, default=Path('data/backtest_validation_report.csv'))
+    parser.add_argument('--deployable-summary-output', type=Path, default=Path('data/deployable_summary.csv'))
     parser.add_argument('--go-live-output-json', type=Path, default=Path('data/go_live_validation_summary.json'))
     parser.add_argument('--go-live-checklist-output', type=Path, default=Path('data/go_live_validation_checklist.csv'))
     parser.add_argument('--crisis-output-json', type=Path, default=Path('data/crisis_risk_summary.json'))
@@ -608,6 +609,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     _write_rows(args.ranking_output, ranked_summary_rows)
     _write_rows(args.optimizer_output, optimizer_rows)
     _write_rows(Path(getattr(args, 'validation_report_output', Path('data/backtest_validation_report.csv'))), validation_report_rows)
+    _write_rows(Path(getattr(args, 'deployable_summary_output', Path('data/deployable_summary.csv'))), promotable_rows)
     _write_rows(equity_curve_output, equity_curve_rows)
 
     for summary in summary_rows:
@@ -802,6 +804,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         'optimizer_rows': optimizer_rows,
         'validation_output': str(validation_output),
         'validation_report_output': str(getattr(args, 'validation_report_output', Path('data/backtest_validation_report.csv'))),
+        'deployable_summary_output': str(getattr(args, 'deployable_summary_output', Path('data/deployable_summary.csv'))),
         'validation_summary_output': str(validation_summary_output),
         'validation_summary': validation_summary,
         'execution_summary': execution_summary,
@@ -842,23 +845,13 @@ def main() -> None:
         )
     visible_rows = out.get('promotable_rows', [])
     hidden_fail_count = max(0, len(out.get('summary_rows', [])) - len(visible_rows))
-    if visible_rows:
-        for row in visible_rows:
-            print(
-                f"{row['strategy']}: trades={row['trades']} wins={row['wins']} "
-                f"losses={row['losses']} gross_pnl={row['gross_total_pnl']} "
-                f"costs={row['total_trading_cost']} pnl={row['total_pnl']} win_rate={row['win_rate_pct']}% "
-                f"avg_win={row['avg_win']} avg_loss={row['avg_loss']} expectancy={row['expectancy_per_trade']} "
-                f"second_half_exp={row.get('second_half_expectancy_per_trade')} pf={row['profit_factor']} "
-                f"max_dd={row['max_drawdown']} ({row['max_drawdown_pct']}%) dd_proven={row.get('drawdown_proven')} "
-                f"exp_gap={row.get('expectancy_stability_gap_ratio')} retest={row.get('retest_only_trade_pct')}% "
-                f"vwap={row.get('vwap_pass_pct')}% session={row.get('session_pass_pct')}% zone_avg={row.get('avg_zone_gate_score')} "
-                f"validation={row.get('validation_status')} promotable={row.get('promotable')} score={row.get('real_backtest_score')}"
-            )
-    else:
+    if not visible_rows:
         print('Promotable strategies: none')
-    if hidden_fail_count:
-        print(f"Diagnostics only: {hidden_fail_count} failed strategies hidden from top-level UI summary; see validation and ranking reports for details")
+    if hidden_fail_count or visible_rows:
+        print(
+            f"Top-level UI simplified: promotable_count={len(visible_rows)} hidden_failed_count={hidden_fail_count}; "
+            f"see ranking/validation reports for full per-strategy diagnostics"
+        )
     best = out.get('recommended_strategy')
     if best:
         print(
@@ -871,6 +864,7 @@ def main() -> None:
     else:
         print('Best promotable strategy: none')
     print(f"Strategy ranking: {out.get('ranking_output', '')}")
+    print(f"Deployable summary: {out.get('deployable_summary_output', '')}")
     print(f"Optimizer report: {out.get('optimizer_output', '')}")
     go_live_ui = out.get('go_live_evaluation', {}).get('ui_summary', {})
     print(f"Go-live status: {go_live_ui.get('go_live_status', 'UNKNOWN')}")

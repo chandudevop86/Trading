@@ -37,7 +37,13 @@ from src.runtime_strategy_presets import OPERATOR_DEFAULTS
 from src.strike_selector import attach_option_strikes
 from src.trading_core import append_log, configure_file_logging
 from src.runtime_models import period_for_interval
-from src.output_decision_service import build_quality_ladder_frame, build_quality_ladder_summary
+from src.output_decision_service import (
+    build_blocker_frame,
+    build_plain_english_next_action,
+    build_quality_ladder_frame,
+    build_quality_ladder_summary,
+    build_top_fix_actions,
+)
 from src.trading_runtime_service import latest_actionable_trades, run_operator_action
 from src.trading_ui_service import apply_minimal_theme, build_request, initialize_ui_runtime, log_ui_event, render_operator_panels, render_summary_cards
 
@@ -195,9 +201,8 @@ def _build_scorecard_rows(summary: dict[str, object], *, status: str, todays_tra
         validation_issue = f'Sample window failed with {total_trades} trades.'
         validation_fix = 'Keep validation only in the 150-200 trade window before considering deployment.'
     elif validation_available and not deployment_ready:
-        blockers = str(summary.get('deployment_blockers', '') or '').strip() or 'validation gates not passed'
-        validation_issue = blockers
-        validation_fix = 'Do not promote live deployment until every blocker is cleared.'
+        validation_issue = build_plain_english_next_action(summary)
+        validation_fix = 'Top fix: ' + build_top_fix_actions(summary, limit=1)[0]
     elif validation_available and deployment_ready:
         validation_issue = 'Expectancy, profit factor, drawdown, and sample size passed current gates.'
         validation_fix = 'Continue validating on rolling samples before any live change.'
@@ -230,6 +235,9 @@ def _build_scorecard_rows(summary: dict[str, object], *, status: str, todays_tra
 
 def _scorecard_detail_map(summary: dict[str, object], *, status: str, todays_trades: int, strategy_label: str) -> dict[str, list[str]]:
     blockers = str(summary.get('deployment_blockers', '') or '').strip() or 'None'
+    top_fixes = build_top_fix_actions(summary)
+    blocker_frame = build_blocker_frame(summary)
+    grouped = ', '.join(f"{row['severity']}: {row['headline']}" for row in blocker_frame.to_dict(orient='records')[:3])
     return {
         'Trade Quality': [
             f"Operator strategy: {strategy_label}",
@@ -244,13 +252,19 @@ def _scorecard_detail_map(summary: dict[str, object], *, status: str, todays_tra
             f"Expectancy/trade: {_safe_float(summary.get('expectancy_per_trade')):.2f}",
             f"Max drawdown %: {_safe_float(summary.get('max_drawdown_pct')):.2f}",
             f"Win rate: {_safe_float(summary.get('win_rate')):.2f}",
-            f"Blockers: {blockers}",
+            f"Blocker groups: {grouped}",
+            f"Top fix 1: {top_fixes[0]}",
+            f"Raw blockers: {blockers}",
         ],
         'Execution Discipline': [
             f"Duplicate rejections: {_safe_int(summary.get('duplicate_rejections'))}",
             f"Risk-rule rejections: {_safe_int(summary.get('risk_rule_rejections'))}",
             f"Status: {status}",
-            f"Validation passed: {str(summary.get('validation_passed', summary.get('deployment_ready', 'NO')) or 'NO')}",
+            (
+                'Execution rules are working, but strategy validation is still failing.'
+                if str(summary.get('validation_passed', summary.get('deployment_ready', 'NO')) or 'NO').upper() != 'YES'
+                else 'Execution rules are working and strategy validation is currently passing.'
+            ),
         ],
     }
 
@@ -376,6 +390,8 @@ def _header_next_action(summary: dict[str, object], broker_choice: str) -> str:
         return 'Run paper execution and verify clean logs before any live promotion.'
     if total_trades < 150:
         return 'Run a backtest first. The system needs 150 to 200 clean trades before readiness can be judged.'
+    if str(summary.get('deployment_blockers', '') or '').strip():
+        return build_plain_english_next_action(summary)
     if expectancy <= 0 or profit_factor <= 1.3 or not drawdown_proven:
         return 'Improve trade quality first. The system still needs positive expectancy, profit factor above 1.3, and proven drawdown behavior.'
     return build_quality_ladder_summary(summary)
@@ -509,6 +525,12 @@ def _render_validation_tab(summary: dict[str, object]) -> None:
     col_three.metric('Validation Passed', str(summary.get('validation_passed', summary.get('deployment_ready', 'NO')) or 'NO'))
     col_four.metric('Blocking Issues', 'None' if blocker_count == 0 else str(blocker_count))
     st.info(plain_summary)
+    blocker_frame = build_blocker_frame(summary)
+    st.markdown('### Top 3 Fixes')
+    for idx, action in enumerate(build_top_fix_actions(summary), start=1):
+        st.markdown(f'{idx}. {action}')
+    st.markdown('### Blocker Groups')
+    st.dataframe(blocker_frame[['severity', 'headline', 'plain_english', 'fix']], use_container_width=True, hide_index=True)
     if blockers:
         with st.expander('Technical blockers'):
             st.code(blockers)

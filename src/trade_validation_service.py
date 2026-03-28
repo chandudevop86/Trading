@@ -9,14 +9,14 @@ import pandas as pd
 
 
 SMALL_VALUE = 1e-9
-MIN_TRADES = 30
+MIN_TRADES = 40
 MIN_EXPECTANCY = 0.0
 MIN_PROFIT_FACTOR = 1.2
-MAX_DRAWDOWN_PCT = 12.0
+MAX_DRAWDOWN_PCT = 10.0
 MIN_RECOVERY_FACTOR = 1.5
 MAX_LONGEST_DRAWDOWN_STREAK_WARNING = 10
-OUTSIZED_WINNER_WARNING_PCT = 0.40
-RECENT_TRADE_WINDOW = 5
+OUTSIZED_WINNER_WARNING_PCT = 0.35
+RECENT_TRADE_WINDOW = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,9 +209,11 @@ def _max_consecutive_counts(pnl_values: list[float]) -> tuple[int, int]:
 
 def _validation_warnings(summary: dict[str, Any], cfg: PaperReadinessConfig) -> list[str]:
     warnings: list[str] = []
-    if safe_int(summary.get('closed_trades')) < max(int(cfg.min_trades), 1) * 2:
+    closed_trades = safe_int(summary.get('closed_trades'))
+    if closed_trades < max(int(cfg.min_trades), 1) * 2:
         warnings.append('Sample size is still small for strong confidence.')
-    if safe_float(summary.get('largest_win_pct_of_total_profit')) > OUTSIZED_WINNER_WARNING_PCT * 100.0:
+    largest_win_pct = safe_float(summary.get('largest_win_pct_of_total_profit'))
+    if largest_win_pct > OUTSIZED_WINNER_WARNING_PCT * 100.0:
         warnings.append('Results concentrated in one outsized winner.')
     recent_pnl = summary.get('recent_closed_pnl', []) or []
     if recent_pnl and sum(float(value) for value in recent_pnl) <= 0:
@@ -220,6 +222,8 @@ def _validation_warnings(summary: dict[str, Any], cfg: PaperReadinessConfig) -> 
         warnings.append('Equity curve shows a long drawdown streak.')
     if safe_float(summary.get('pnl_std_dev')) > max(abs(safe_float(summary.get('expectancy_per_trade'))) * 4.0, 1.0):
         warnings.append('Equity curve looks unstable relative to expectancy.')
+    if closed_trades < int(cfg.min_trades):
+        warnings.append('Trade sample is too small for intraday validation.')
     if str(summary.get('profit_factor_note', '')).strip():
         warnings.append(str(summary['profit_factor_note']).strip())
     return warnings
@@ -245,7 +249,7 @@ def _confidence_label(summary: dict[str, Any], status: str, cfg: PaperReadinessC
         or max_drawdown_pct > (cfg.max_drawdown_pct * 0.85)
         or recovery_factor < (cfg.min_recovery_factor + 0.3)
     )
-    if total_trades >= cfg.min_trades * 2 and expectancy_pct >= 0.5 and profit_factor_value >= 2.0 and max_drawdown_pct <= cfg.max_drawdown_pct * 0.7 and recovery_factor >= 2.0:
+    if total_trades >= cfg.min_trades * 2 and expectancy_pct >= 0.5 and profit_factor_value >= 2.0 and max_drawdown_pct <= cfg.max_drawdown_pct * 0.6 and recovery_factor >= 2.0:
         return 'STRONG PASS'
     if near_threshold:
         return 'BORDERLINE'
@@ -394,6 +398,7 @@ def evaluate_paper_readiness(summary: dict[str, Any], config: PaperReadinessConf
         status = 'NEED_MORE_DATA'
         reasons.append(f'NEED_MORE_DATA: only {total_trades} trades')
         blocker_messages.append('not enough paper trades yet')
+    largest_win_pct = safe_float(summary.get('largest_win_pct_of_total_profit'))
     if cfg.require_positive_expectancy and expectancy <= cfg.min_expectancy_per_trade:
         reasons.append('FAIL: negative expectancy')
         blocker_messages.append('expectancy is not positive yet')
@@ -415,6 +420,9 @@ def evaluate_paper_readiness(summary: dict[str, Any], config: PaperReadinessConf
     if invalid_trade_count > cfg.max_invalid_trades:
         reasons.append('FAIL: invalid trade rows still present')
         blocker_messages.append('invalid trade rows are still present')
+    if status != 'NEED_MORE_DATA' and largest_win_pct > OUTSIZED_WINNER_WARNING_PCT * 100.0:
+        reasons.append('FAIL: results depend too much on one oversized winner')
+        blocker_messages.append('results are too concentrated in one oversized winner')
     if status == 'PASS' and reasons:
         status = 'FAIL'
 

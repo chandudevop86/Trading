@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
@@ -208,11 +208,11 @@ def _run_breakout_strategy(context: StrategyContext, dependencies: StrategyDepen
             max_daily_loss=context.max_daily_loss,
             max_trades_per_day=max(1, int(configured_max_trades or 1)),
             duplicate_signal_cooldown_bars=max(6, int(preset.duplicate_signal_cooldown_bars)),
-            min_breakout_strength=0.14,
-            min_volume_ratio=1.0,
+            min_breakout_strength=0.18,
+            min_volume_ratio=1.15,
             require_vwap_alignment=True,
-            allow_secondary_entries=True,
-            allow_afternoon_session=True,
+            allow_secondary_entries=False,
+            allow_afternoon_session=False,
         ),
     )
 
@@ -234,6 +234,11 @@ def _run_demand_supply_strategy(context: StrategyContext, dependencies: Strategy
             duplicate_signal_cooldown_bars=max(18, int(preset.duplicate_signal_cooldown_bars)),
             require_vwap_alignment=True,
             require_trend_bias=True,
+            max_retest_bars=5,
+            min_reaction_strength=0.65,
+            min_zone_selection_score=4.2,
+            min_confirmation_body_ratio=0.55,
+            min_rejection_wick_ratio=0.45,
             allow_afternoon_session=False,
             avoid_midday=True,
         ),
@@ -423,6 +428,7 @@ def run_strategy_workflow(
         attach_option_strikes_fn=attach_option_strikes_fn,
         attach_option_metrics_fn=attach_option_metrics_fn,
     )
+
 
 
 

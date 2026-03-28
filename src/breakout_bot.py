@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -35,23 +35,23 @@ class BreakoutConfig:
     max_trades_per_day: int | None = 1
     use_first_hour_bias: bool = True
     filter_choppy_days: bool = True
-    min_breakout_strength: float = 0.14
-    min_volume_ratio: float = 1.0
+    min_breakout_strength: float = 0.18
+    min_volume_ratio: float = 1.15
     duplicate_signal_cooldown_bars: int = 8
     require_vwap_alignment: bool = True
-    allow_secondary_entries: bool = True
-    morning_session_start: str = '09:20'
-    morning_session_end: str = '11:30'
-    midday_start: str = '12:00'
-    midday_end: str = '13:30'
-    allow_afternoon_session: bool = True
-    afternoon_session_start: str = '13:45'
-    afternoon_session_end: str = '15:00'
+    allow_secondary_entries: bool = False
+    morning_session_start: str = '09:25'
+    morning_session_end: str = '11:15'
+    midday_start: str = '11:16'
+    midday_end: str = '13:45'
+    allow_afternoon_session: bool = False
+    afternoon_session_start: str = '13:46'
+    afternoon_session_end: str = '14:45'
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
 
     def __post_init__(self) -> None:
         self.scoring.mode = self.mode
-        self.scoring.thresholds = ScoreThresholds(conservative=6.5, balanced=4.5, aggressive=3.0)
+        self.scoring.thresholds = ScoreThresholds(conservative=7.0, balanced=5.5, aggressive=4.2)
 
 
 parse_timestamp = None
@@ -263,7 +263,6 @@ def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Ca
     broke_level = breakout_candle.close > trigger if side == 'BUY' else breakout_candle.close < trigger
     vwap_ok = breakout_candle.close > breakout_candle.vwap and vwap_slope > 0 if side == 'BUY' else breakout_candle.close < breakout_candle.vwap and vwap_slope < 0
     retest_ok = _confirmation_holds(side, trigger, breakout_candle, confirmation_candle) or _retest_holds(side, trigger, confirmation_candle)
-    secondary_ok = _secondary_breakout_holds(side, trigger, breakout_candle, confirmation_candle, atr_value)
     reaction_ok = confirmation_candle.close > breakout_candle.open if side == 'BUY' else confirmation_candle.close < breakout_candle.open
     bias_support = bias == side or not config.use_first_hour_bias or regime != 'TREND'
     score = weighted_score(
@@ -285,14 +284,14 @@ def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Ca
         return None
     if not broke_level or not score.accepted:
         return None
-    if not config.allow_secondary_entries and not retest_ok:
+    if not retest_ok:
         return None
-    if not retest_ok and not secondary_ok and score.total < score.threshold + 1.0:
+    if strength < float(config.min_breakout_strength) or volume_ratio < float(config.min_volume_ratio):
         return None
-    setup_type = 'retest' if retest_ok else 'secondary'
+    setup_type = 'retest'
     rejection_reason = '' if score.accepted else ','.join(f'missing_{reason}' for reason in score.reasons)
     reason = f'breakout {setup_type} score={score.total:.2f} mode={config.scoring.normalized_mode()} regime={regime}'
-    return score.total, reason, score.components, rejection_reason, secondary_ok and not retest_ok
+    return score.total, reason, score.components, rejection_reason, False
 
 
 def generate_trades(
@@ -531,4 +530,7 @@ def run(
     if telegram_token and telegram_chat_id:
         send_telegram_message(telegram_token, telegram_chat_id, build_trade_summary(trades))
     return trades
+
+
+
 

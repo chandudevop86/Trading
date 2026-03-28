@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -24,36 +24,36 @@ class DemandSupplyConfig:
     mode: str = 'Balanced'
     trailing_sl_pct: float = 0.0
     pivot_window: int = 2
-    touch_tolerance_pct: float = 0.0035
+    touch_tolerance_pct: float = 0.0025
     max_trades_per_day: int = 1
     duplicate_signal_cooldown_bars: int = 18
-    max_retest_bars: int = 8
+    max_retest_bars: int = 5
     retest_confirmation_bars: int = 2
     opening_range_minutes: int = 15
     atr_window: int = 8
-    min_volatility_ratio: float = 0.90
+    min_volatility_ratio: float = 1.00
     zone_freshness_bars: int = 20
-    min_reaction_strength: float = 0.50
-    min_zone_selection_score: float = 3.00
-    min_confirmation_body_ratio: float = 0.45
-    min_rejection_wick_ratio: float = 0.35
+    min_reaction_strength: float = 0.65
+    min_zone_selection_score: float = 4.20
+    min_confirmation_body_ratio: float = 0.55
+    min_rejection_wick_ratio: float = 0.45
     zone_buffer_atr_fraction: float = 0.12
     zone_buffer_price_fraction: float = 0.0008
     require_vwap_alignment: bool = True
     require_trend_bias: bool = True
     avoid_midday: bool = True
-    morning_session_start: str = '09:20'
-    morning_session_end: str = '11:30'
-    afternoon_session_start: str = '13:45'
-    afternoon_session_end: str = '15:00'
+    morning_session_start: str = '09:25'
+    morning_session_end: str = '11:15'
+    afternoon_session_start: str = '13:46'
+    afternoon_session_end: str = '14:45'
     allow_afternoon_session: bool = False
-    midday_start: str = '12:00'
-    midday_end: str = '13:30'
+    midday_start: str = '11:16'
+    midday_end: str = '13:45'
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
 
     def __post_init__(self) -> None:
         self.scoring.mode = self.mode
-        self.scoring.thresholds = ScoreThresholds(conservative=8.2, balanced=6.8, aggressive=5.8)
+        self.scoring.thresholds = ScoreThresholds(conservative=8.6, balanced=7.2, aggressive=6.2)
 
 
 _SCORE_WEIGHTS: dict[str, float] = {
@@ -338,11 +338,7 @@ def _session_component(candle: Candle, config: DemandSupplyConfig) -> tuple[floa
         afternoon_start=config.afternoon_session_start,
         afternoon_end=config.afternoon_session_end,
     )
-    if window == 'MORNING':
-        return _SCORE_WEIGHTS['session_quality'], window
-    if window == 'AFTERNOON':
-        return round(_SCORE_WEIGHTS['session_quality'] * 0.70, 4), window
-    return 0.0, window or 'BLOCKED'
+    return (_SCORE_WEIGHTS['session_quality'], window) if window == 'MORNING' else (0.0, window or 'BLOCKED')
 
 
 def _zone_selection_score(day_candles: list[Candle], idx: int, zone: Zone, side: str, config: DemandSupplyConfig) -> float:
@@ -379,14 +375,17 @@ def _quality_score(
     retest_component, retest_ratio = _retest_component(touch_candle, candle, zone, side, config)
     volatility_component, volatility_ratio = _volatility_component(day_candles, idx, config)
     session_component, session_name = _session_component(candle, config)
+    zone_selection_score = _zone_selection_score(day_candles, idx, zone, side, config)
 
     if config.require_vwap_alignment and not vwap_ok:
         return None
-    if config.require_trend_bias and not bias_aligned:
+    if config.require_trend_bias and (not bias_aligned or not trend_ok):
         return None
     if reaction_metric < float(config.min_reaction_strength):
         return None
-    if session_component <= 0:
+    if session_component <= 0 or session_name != 'MORNING':
+        return None
+    if zone_selection_score < max(float(config.min_zone_selection_score), 4.2):
         return None
 
     components = {
@@ -415,7 +414,7 @@ def _quality_score(
         'retest_ratio': retest_ratio,
         'volatility_ratio': volatility_ratio,
         'zone_strength_score': total_score,
-        'zone_selection_score': round(_zone_selection_score(day_candles, idx, zone, side, config), 2),
+        'zone_selection_score': round(zone_selection_score, 2),
         'score_threshold': threshold,
     }
     reason = (
@@ -646,6 +645,9 @@ def generate_trades(
             used_signal_keys.add(signal_key)
 
     return trades
+
+
+
 
 
 

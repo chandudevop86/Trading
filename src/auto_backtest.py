@@ -148,6 +148,11 @@ def _pnl_summary(
     second_half_expectancy = round(sum(second_half_values) / len(second_half_values), 2) if second_half_values else 0.0
     expectancy_stability_gap_ratio = round(abs(first_half_expectancy - second_half_expectancy) / abs(expectancy_per_trade), 4) if abs(expectancy_per_trade) > 0 else 0.0
     drawdown_proven = max_drawdown_pct > 0 and losses > 0
+    retest_only_count = sum(1 for row in rows if str(row.get('retest_only_entry', '')).strip().upper() == 'YES')
+    vwap_pass_count = sum(1 for row in rows if str(row.get('vwap_gate', '')).strip().upper() == 'PASS')
+    session_pass_count = sum(1 for row in rows if str(row.get('session_gate', '')).strip().upper() == 'PASS')
+    zone_gate_scores = [_safe_float(row.get('zone_gate_score')) for row in rows if str(row.get('zone_gate_score', '')).strip() != '']
+    avg_zone_gate_score = round(sum(zone_gate_scores) / len(zone_gate_scores), 2) if zone_gate_scores else 0.0
     summary = {
         'strategy': strategy,
         'trades': total,
@@ -174,6 +179,13 @@ def _pnl_summary(
         'second_half_expectancy_per_trade': second_half_expectancy,
         'expectancy_stability_gap_ratio': expectancy_stability_gap_ratio,
         'drawdown_proven': 'YES' if drawdown_proven else 'NO',
+        'retest_only_trades': retest_only_count,
+        'retest_only_trade_pct': round((retest_only_count / total) * 100.0, 2) if total else 0.0,
+        'vwap_pass_trades': vwap_pass_count,
+        'vwap_pass_pct': round((vwap_pass_count / total) * 100.0, 2) if total else 0.0,
+        'session_pass_trades': session_pass_count,
+        'session_pass_pct': round((session_pass_count / total) * 100.0, 2) if total else 0.0,
+        'avg_zone_gate_score': avg_zone_gate_score,
         'positive_expectancy': 'YES' if expectancy_per_trade > 0 else 'NO',
     }
     return summary, equity_curve_rows
@@ -256,6 +268,13 @@ def _validation_report_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str
                 'expectancy_stability_gap_ratio': row.get('expectancy_stability_gap_ratio', 0.0),
                 'max_drawdown_pct': row.get('max_drawdown_pct', 0.0),
                 'drawdown_proven': row.get('drawdown_proven', 'NO'),
+                'retest_only_trades': row.get('retest_only_trades', 0),
+                'retest_only_trade_pct': row.get('retest_only_trade_pct', 0.0),
+                'vwap_pass_trades': row.get('vwap_pass_trades', 0),
+                'vwap_pass_pct': row.get('vwap_pass_pct', 0.0),
+                'session_pass_trades': row.get('session_pass_trades', 0),
+                'session_pass_pct': row.get('session_pass_pct', 0.0),
+                'avg_zone_gate_score': row.get('avg_zone_gate_score', 0.0),
                 'total_pnl': row.get('total_pnl', 0.0),
                 'validation_status': row.get('validation_status', 'FAIL'),
                 'validation_reasons': row.get('validation_reasons', ''),
@@ -821,21 +840,33 @@ def main() -> None:
             f"win_rate_delta={bias_evaluation.get('win_rate_delta_pct')}% "
             f"trades_delta={bias_evaluation.get('trades_delta')}"
         )
-    for row in out['summary_rows']:
-        reasons = str(row.get('validation_reasons', '') or '')
-        print(
-            f"{row['strategy']}: trades={row['trades']} wins={row['wins']} "
-            f"losses={row['losses']} gross_pnl={row['gross_total_pnl']} "
-            f"costs={row['total_trading_cost']} pnl={row['total_pnl']} win_rate={row['win_rate_pct']}% "
-            f"avg_win={row['avg_win']} avg_loss={row['avg_loss']} expectancy={row['expectancy_per_trade']} "
-            f"pf={row['profit_factor']} max_dd={row['max_drawdown']} ({row['max_drawdown_pct']}%) "
-            f"validation={row.get('validation_status')} reasons={reasons or 'NONE'} promotable={row.get('promotable')}"
-        )
+    visible_rows = out.get('promotable_rows', [])
+    hidden_fail_count = max(0, len(out.get('summary_rows', [])) - len(visible_rows))
+    if visible_rows:
+        for row in visible_rows:
+            print(
+                f"{row['strategy']}: trades={row['trades']} wins={row['wins']} "
+                f"losses={row['losses']} gross_pnl={row['gross_total_pnl']} "
+                f"costs={row['total_trading_cost']} pnl={row['total_pnl']} win_rate={row['win_rate_pct']}% "
+                f"avg_win={row['avg_win']} avg_loss={row['avg_loss']} expectancy={row['expectancy_per_trade']} "
+                f"second_half_exp={row.get('second_half_expectancy_per_trade')} pf={row['profit_factor']} "
+                f"max_dd={row['max_drawdown']} ({row['max_drawdown_pct']}%) dd_proven={row.get('drawdown_proven')} "
+                f"exp_gap={row.get('expectancy_stability_gap_ratio')} retest={row.get('retest_only_trade_pct')}% "
+                f"vwap={row.get('vwap_pass_pct')}% session={row.get('session_pass_pct')}% zone_avg={row.get('avg_zone_gate_score')} "
+                f"validation={row.get('validation_status')} promotable={row.get('promotable')} score={row.get('real_backtest_score')}"
+            )
+    else:
+        print('Promotable strategies: none')
+    if hidden_fail_count:
+        print(f"Diagnostics only: {hidden_fail_count} failed strategies hidden from top-level UI summary; see validation and ranking reports for details")
     best = out.get('recommended_strategy')
     if best:
         print(
             f"Best promotable strategy: rank={best.get('rank')} strategy={best.get('strategy')} "
-            f"expectancy={best.get('expectancy_per_trade')} pf={best.get('profit_factor')} max_dd={best.get('max_drawdown')}"
+            f"score={best.get('real_backtest_score')} expectancy={best.get('expectancy_per_trade')} "
+            f"second_half_exp={best.get('second_half_expectancy_per_trade')} pf={best.get('profit_factor')} "
+            f"max_dd={best.get('max_drawdown')} dd_proven={best.get('drawdown_proven')} "
+            f"exp_gap={best.get('expectancy_stability_gap_ratio')} validation={best.get('validation_status')}"
         )
     else:
         print('Best promotable strategy: none')
@@ -861,5 +892,6 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 

@@ -224,16 +224,30 @@ def optimizer_report_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str, 
         avg_rr = float(item.get('avg_rr', 0.0) or 0.0)
         win_rate = float(item.get('win_rate', item.get('win_rate_pct', 0.0)) or 0.0)
         max_drawdown_pct = float(item.get('max_drawdown_pct', 0.0) or 0.0)
+        second_half_expectancy = float(item.get('second_half_expectancy_per_trade', 0.0) or 0.0)
+        expectancy_stability_gap_ratio = float(item.get('expectancy_stability_gap_ratio', 0.0) or 0.0)
+        drawdown_proven = str(item.get('drawdown_proven', 'NO') or 'NO').upper()
+        validation_status = str(item.get('validation_status', 'FAIL') or 'FAIL').upper()
+        retest_only_trade_pct = float(item.get('retest_only_trade_pct', 0.0) or 0.0)
+        vwap_pass_pct = float(item.get('vwap_pass_pct', 0.0) or 0.0)
+        session_pass_pct = float(item.get('session_pass_pct', 0.0) or 0.0)
         duplicate_rejections = int(float(item.get('duplicate_rejections', 0) or 0))
         risk_rule_rejections = int(float(item.get('risk_rule_rejections', 0) or 0))
         rank_score = (
-            (1000 if deployment_ready == 'YES' else 0)
+            (1600 if deployment_ready == 'YES' else 0)
+            + (500 if validation_status == 'PASS' else 0)
+            + (250 if drawdown_proven == 'YES' else 0)
             + (300 if positive_expectancy == 'YES' else 0)
             + (expectancy * 25.0)
+            + (second_half_expectancy * 20.0)
             + (min(profit_factor, 3.0) * 40.0)
             + (avg_rr * 20.0)
             + (win_rate * 1.5)
-            - (max_drawdown_pct * 8.0)
+            + (retest_only_trade_pct * 0.8)
+            + (vwap_pass_pct * 0.6)
+            + (session_pass_pct * 0.6)
+            - (max_drawdown_pct * 10.0)
+            - (expectancy_stability_gap_ratio * 120.0)
             - (duplicate_rejections * 6.0)
             - (risk_rule_rejections * 2.0)
         )
@@ -254,10 +268,13 @@ def optimizer_report_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str, 
                 'avg_loss': item.get('avg_loss', 0.0),
                 'profit_factor': item.get('profit_factor', 0.0),
                 'expectancy_per_trade': round(expectancy, 2),
+                'second_half_expectancy_per_trade': round(second_half_expectancy, 2),
+                'expectancy_stability_gap_ratio': round(expectancy_stability_gap_ratio, 4),
                 'expectancy_r': item.get('expectancy_r', 0.0),
                 'avg_rr': round(avg_rr, 2),
                 'max_drawdown': item.get('max_drawdown', 0.0),
                 'max_drawdown_pct': round(max_drawdown_pct, 2),
+                'drawdown_proven': drawdown_proven,
                 'positive_expectancy': positive_expectancy,
                 'duplicate_rejections': duplicate_rejections,
                 'risk_rule_rejections': risk_rule_rejections,
@@ -267,6 +284,10 @@ def optimizer_report_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str, 
                 'cooldown_bars': preset.duplicate_signal_cooldown_bars,
                 'max_trades_per_day': preset.max_trades_per_day,
                 'allow_secondary_entries': 'YES' if preset.allow_secondary_entries else 'NO',
+                'validation_status': validation_status,
+                'retest_only_trade_pct': round(retest_only_trade_pct, 2),
+                'vwap_pass_pct': round(vwap_pass_pct, 2),
+                'session_pass_pct': round(session_pass_pct, 2),
                 'deployment_ready': deployment_ready,
                 'deployment_blockers': item.get('deployment_blockers', ''),
                 'rank_score': round(rank_score, 2),

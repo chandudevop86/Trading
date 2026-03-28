@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -24,26 +24,26 @@ class DemandSupplyConfig:
     mode: str = 'Balanced'
     trailing_sl_pct: float = 0.0
     pivot_window: int = 2
-    touch_tolerance_pct: float = 0.0025
+    touch_tolerance_pct: float = 0.0018
     max_trades_per_day: int = 1
-    duplicate_signal_cooldown_bars: int = 18
-    max_retest_bars: int = 5
+    duplicate_signal_cooldown_bars: int = 24
+    max_retest_bars: int = 4
     retest_confirmation_bars: int = 2
     opening_range_minutes: int = 15
     atr_window: int = 8
-    min_volatility_ratio: float = 1.00
+    min_volatility_ratio: float = 1.05
     zone_freshness_bars: int = 20
-    min_reaction_strength: float = 0.65
-    min_zone_selection_score: float = 4.20
-    min_confirmation_body_ratio: float = 0.55
-    min_rejection_wick_ratio: float = 0.45
+    min_reaction_strength: float = 0.75
+    min_zone_selection_score: float = 5.00
+    min_confirmation_body_ratio: float = 0.60
+    min_rejection_wick_ratio: float = 0.50
     zone_buffer_atr_fraction: float = 0.12
     zone_buffer_price_fraction: float = 0.0008
     require_vwap_alignment: bool = True
     require_trend_bias: bool = True
     avoid_midday: bool = True
-    morning_session_start: str = '09:25'
-    morning_session_end: str = '11:15'
+    morning_session_start: str = '09:35'
+    morning_session_end: str = '10:45'
     afternoon_session_start: str = '13:46'
     afternoon_session_end: str = '14:45'
     allow_afternoon_session: bool = False
@@ -53,7 +53,7 @@ class DemandSupplyConfig:
 
     def __post_init__(self) -> None:
         self.scoring.mode = self.mode
-        self.scoring.thresholds = ScoreThresholds(conservative=8.6, balanced=7.2, aggressive=6.2)
+        self.scoring.thresholds = ScoreThresholds(conservative=9.0, balanced=7.8, aggressive=6.8)
 
 
 _SCORE_WEIGHTS: dict[str, float] = {
@@ -385,7 +385,13 @@ def _quality_score(
         return None
     if session_component <= 0 or session_name != 'MORNING':
         return None
-    if zone_selection_score < max(float(config.min_zone_selection_score), 4.2):
+    if zone_selection_score < max(float(config.min_zone_selection_score), 5.0):
+        return None
+    if retest_ratio < 0.72:
+        return None
+    if volatility_ratio < float(config.min_volatility_ratio):
+        return None
+    if not _vwap_aligned(touch_candle, side):
         return None
 
     components = {
@@ -594,6 +600,8 @@ def generate_trades(
                 zone_type=zone.kind,
                 extra={
                     'setup_type': 'retest',
+                    'retest_only_entry': 'YES',
+                    'entry_policy': 'RETEST_ONLY',
                     'symbol': '^NSEI',
                     'timeframe': '5m',
                     'day': day.isoformat(),
@@ -612,7 +620,9 @@ def generate_trades(
                     'session_component': round(float(components['session_quality']), 2),
                     'zone_strength_score': round(float(diagnostics['zone_strength_score']), 2),
                     'zone_selection_score': round(float(zone_selection_score), 2),
+                    'zone_gate_score': round(float(zone_selection_score), 2),
                     'zone_prequalification_floor': round(float(cfg.min_zone_selection_score), 2),
+                    'zone_gate_threshold': round(float(cfg.min_zone_selection_score), 2),
                     'zone_prequalified': 'YES',
                     'structure_score': round(float(diagnostics['structure_score']), 4),
                     'freshness_ratio': round(float(diagnostics['freshness_ratio']), 4),
@@ -622,9 +632,12 @@ def generate_trades(
                     'trend_bias': str(diagnostics['trend_bias']),
                     'bias_aligned': 'YES' if bool(diagnostics['bias_aligned']) else 'NO',
                     'vwap_aligned': 'YES' if bool(diagnostics['vwap_aligned']) else 'NO',
+                    'vwap_gate': 'PASS' if bool(diagnostics['vwap_aligned']) else 'FAIL',
                     'trend_alignment': 'YES' if bool(diagnostics['trend_ok']) else 'NO',
                     'session_window': str(diagnostics['session_window']),
                     'session_allowed': 'YES',
+                    'session_gate': 'PASS',
+                    'session_filter_mode': 'MORNING_ONLY',
                     'retest_touch_time': touch_candle.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
                     'retest_confirmation_time': entry_candle.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
                     'first_touch_entry_allowed': 'NO',
@@ -645,6 +658,9 @@ def generate_trades(
             used_signal_keys.add(signal_key)
 
     return trades
+
+
+
 
 
 

@@ -461,6 +461,11 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
     max_drawdown = abs(min((row['drawdown'] for row in equity_rows), default=0.0))
     max_drawdown_pct = max((row['drawdown_pct'] for row in equity_rows), default=0.0)
     drawdown_proven = max_drawdown_pct > 0 and losses >= int(cfg.validation.min_loss_trades_for_drawdown_proof)
+    retest_only_count = sum(1 for trade in trades if str(trade.get('retest_only_entry', '')).strip().upper() == 'YES')
+    vwap_pass_count = sum(1 for trade in trades if str(trade.get('vwap_gate', '')).strip().upper() == 'PASS')
+    session_pass_count = sum(1 for trade in trades if str(trade.get('session_gate', '')).strip().upper() == 'PASS')
+    zone_gate_scores = [_safe_float(trade.get('zone_gate_score')) for trade in trades if str(trade.get('zone_gate_score', '')).strip() != '']
+    avg_zone_gate_score = sum(zone_gate_scores) / len(zone_gate_scores) if zone_gate_scores else 0.0
 
     pnl_by_strategy: dict[str, float] = {}
     score_bucket_analysis: dict[str, dict[str, float]] = {}
@@ -499,6 +504,13 @@ def _summary_from_trades(trades: list[dict[str, object]], cfg: BacktestConfig) -
         'expectancy_r': round(expectancy_r, 2),
         'positive_expectancy': 'YES' if expectancy_per_trade > 0 else 'NO',
         'drawdown_proven': 'YES' if drawdown_proven else 'NO',
+        'retest_only_trades': retest_only_count,
+        'retest_only_trade_pct': round((retest_only_count / total_trades) * 100.0, 2) if total_trades else 0.0,
+        'vwap_pass_trades': vwap_pass_count,
+        'vwap_pass_pct': round((vwap_pass_count / total_trades) * 100.0, 2) if total_trades else 0.0,
+        'session_pass_trades': session_pass_count,
+        'session_pass_pct': round((session_pass_count / total_trades) * 100.0, 2) if total_trades else 0.0,
+        'avg_zone_gate_score': round(avg_zone_gate_score, 2),
         'max_drawdown': round(max_drawdown, 2),
         'max_drawdown_pct': round(max_drawdown_pct, 2),
         'avg_rr': round(avg_rr, 2),
@@ -785,5 +797,6 @@ def summarize_trade_log(
     write_rows(summary_output, [summary])
     write_rows(validation_output, [validation_row])
     return summary
+
 
 

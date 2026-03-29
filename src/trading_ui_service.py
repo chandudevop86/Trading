@@ -20,7 +20,10 @@ def log_ui_event(path: Path, message: str) -> None:
 
 
 def apply_minimal_theme() -> None:
-    st.set_page_config(page_title='Trading Desk V7', page_icon='chart', layout='wide')
+    try:
+        st.set_page_config(page_title='Trading Desk V7', page_icon='chart', layout='wide')
+    except Exception:
+        pass
     st.markdown(
         '''
         <style>
@@ -487,6 +490,7 @@ def build_request(strategy: str, symbol: str, timeframe: str, capital: float, ri
         run_requested=bool(run_clicked),
         backtest_requested=bool(backtest_clicked),
     )
+
 
 
 

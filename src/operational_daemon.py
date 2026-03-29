@@ -9,7 +9,8 @@ from typing import Any
 from src.Trading import fetch_ohlcv_data, run_strategy
 from src.aws_storage import sync_path_to_s3_if_enabled
 from src.backtest_engine import BacktestConfig, run_backtest, summarize_trade_log
-from src.execution_engine import build_execution_candidates, close_paper_trades, execute_live_trades, execute_paper_trades, execution_result_summary
+from src.execution_engine import close_paper_trades, execute_live_trades, execute_paper_trades, execution_result_summary
+from src.execution.pipeline import prepare_candidates_for_execution
 from src.legacy_scope import fail_noncanonical_entrypoint
 from src.runtime_config import RuntimeConfig
 from src.telegram_notifier import send_telegram_message
@@ -106,7 +107,7 @@ def execute_trading_cycle(config: RuntimeConfig) -> dict[str, Any]:
     write_rows(paths.ohlcv_csv, candles.to_dict(orient='records'))
     write_rows(paths.trades_csv, trades)
 
-    candidates = build_execution_candidates(daemon.strategy, trades, symbol)
+    candidates = prepare_candidates_for_execution(daemon.strategy, symbol, candles, trades)
     if broker_config.mode == 'LIVE':
         execution_result = execute_live_trades(
             candidates,
@@ -258,3 +259,5 @@ def main() -> None:
 
 if __name__ == '__main__':
     fail_noncanonical_entrypoint('src/operational_daemon.py', canonical='src.auto_run')
+
+

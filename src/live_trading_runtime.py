@@ -5,7 +5,8 @@ from typing import Any
 
 from src.breakout_bot import load_candles
 from src.dhan_streams import CandleAggregator, OrderUpdateEvent, normalize_dhan_market_feed_payload, normalize_dhan_order_update_payload
-from src.execution_engine import apply_live_order_updates_to_log, build_execution_candidates
+from src.execution_engine import apply_live_order_updates_to_log
+from src.execution.pipeline import prepare_candidates_for_execution
 from src.strategy_service import StrategyContext, generate_strategy_rows
 
 
@@ -127,7 +128,7 @@ class DhanLiveTradingRuntime:
         if not rows:
             return []
         strategy_label = self.config.strategy_label or self.config.strategy
-        candidates = build_execution_candidates(strategy_label, rows, self.config.execution_symbol)
+        candidates = prepare_candidates_for_execution(strategy_label, self.config.execution_symbol, __import__('pandas').DataFrame(self.closed_candles), rows)
         fresh: list[dict[str, Any]] = []
         for candidate in candidates:
             trade_id = str(candidate.get('trade_id', '') or '')
@@ -153,3 +154,5 @@ class DhanLiveTradingRuntime:
             'trade_id': event.trade_id,
             'symbol': event.symbol,
         }
+
+

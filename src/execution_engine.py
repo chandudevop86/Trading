@@ -27,6 +27,7 @@ from src.csv_io import read_csv_rows
 from src.runtime_config import RuntimeConfig
 from src.trading_core import append_log
 from src.strategy_tuning import normalize_strategy_key, strategy_tuning_preset
+from src.execution.contracts import normalize_candidate_contract
 from src.runtime_persistence import (
     load_current_rows,
     load_execution_risk_state,
@@ -73,6 +74,10 @@ SKIP_REASON_OPTIMIZER_GATE = "OPTIMIZER_GATE_BLOCKED"
 SKIP_REASON_MAX_OPEN_TRADES = "MAX_OPEN_TRADES"
 SKIP_REASON_DHAN_PREFLIGHT_FAILED = "DHAN_PREFLIGHT_FAILED"
 SKIP_REASON_DHAN_SECURITY_MAP_MISSING = "DHAN_SECURITY_MAP_MISSING"
+SKIP_REASON_MISSING_ZONE_ID = "MISSING_ZONE_ID"
+SKIP_REASON_EXECUTION_GATE_BLOCKED = "EXECUTION_GATE_BLOCKED"
+SKIP_REASON_VALIDATION_STATUS_FAIL = "VALIDATION_STATUS_FAIL"
+SKIP_REASON_DUPLICATE_ZONE_SETUP = "DUPLICATE_ZONE_SETUP"
 
 ACTIVE_TRADE_STATUSES = {
     TRADE_STATUS_REVIEWED,
@@ -430,6 +435,18 @@ def _effective_max_trades_per_day(record: dict[str, object], explicit_limit: int
 
 
 def make_trade_key(record: dict[str, object]) -> str:
+    zone_id = str(record.get("zone_id", "") or "").strip()
+    if zone_id:
+        side = _normalize_text(record.get("side"))
+        instrument = _normalize_text(
+            record.get("trading_symbol")
+            or record.get("contract_symbol")
+            or record.get("option_strike")
+            or record.get("strike_price")
+            or record.get("symbol", "UNKNOWN")
+        )
+        payload = "|".join([zone_id.upper(), side, instrument])
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:20]
     signal_instance_key = str(record.get("signal_instance_key", "") or make_signal_instance_key(record))
     side = _normalize_text(record.get("side"))
     entry_price = f"{_price_value(record):.6f}"
@@ -446,8 +463,11 @@ def make_trade_key(record: dict[str, object]) -> str:
 
 def make_trade_id(record: dict[str, object]) -> str:
     existing = str(record.get("trade_id", "") or "").strip()
+    zone_id = str(record.get("zone_id", "") or "").strip()
     if existing:
         return existing
+    if zone_id:
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, zone_id.upper()))
     signal_instance_key = str(record.get("signal_instance_key", "") or make_signal_instance_key(record))
     side = _normalize_text(record.get("side"))
     entry_price = f"{_price_value(record):.6f}"
@@ -485,6 +505,19 @@ def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[st
     signal_time = str(normalized.get('signal_time', '') or '').strip()
     if not signal_time:
         return False, SKIP_REASON_MISSING_TIMESTAMP, normalized
+
+    validation_status = str(normalized.get('validation_status', normalized.get('zone_validation_status', '')) or '').strip().upper()
+    strategy_name = _normalize_text(normalized.get('strategy'))
+    zone_id = str(normalized.get('zone_id', '') or '').strip()
+    requires_zone_gate = bool(zone_id or validation_status or strategy_name == 'DEMAND_SUPPLY' or ('DEMAND' in strategy_name and 'SUPPLY' in strategy_name))
+    if validation_status and validation_status != 'PASS':
+        return False, SKIP_REASON_VALIDATION_STATUS_FAIL, normalized
+    if bool(normalized.get('setup_already_used', False)):
+        return False, SKIP_REASON_DUPLICATE_ZONE_SETUP, normalized
+    if requires_zone_gate and not zone_id:
+        return False, SKIP_REASON_MISSING_ZONE_ID, normalized
+    if requires_zone_gate and 'execution_allowed' in normalized and not bool(normalized.get('execution_allowed')):
+        return False, SKIP_REASON_EXECUTION_GATE_BLOCKED, normalized
 
     price = _price_value(normalized)
     if price <= 0:
@@ -680,7 +713,8 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
         elif side == "SELL":
             stop_loss = stop_loss if stop_loss > 0 else round(close_price * 1.005, 4)
             target_price = target_price if target_price > 0 else round(close_price - ((stop_loss - close_price) * 2.0), 4)
-        candidates.append(_ensure_trade_identity({
+        payload = dict(last)
+        payload.update({
             "strategy": "INDICATOR",
             "symbol": symbol,
             "timestamp": str(last.get("timestamp", "")),
@@ -696,18 +730,27 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
             "share_price": close_price,
             "strike_price": last.get("strike_price"),
             "score": _safe_float(last.get("score")) or 0.0,
-            "quantity": default_quantity_for_symbol(symbol),
+            "quantity": last.get("quantity", default_quantity_for_symbol(symbol)),
             "reason": signal,
+            "strategy_name": str(last.get("strategy_name", "INDICATOR")),
+            "setup_type": str(last.get("setup_type", "INDICATOR")),
+            "zone_id": last.get("zone_id", ""),
+            "validation_status": last.get("validation_status", "PENDING"),
+            "validation_score": last.get("validation_score", last.get("score", 0.0)),
+            "validation_reasons": last.get("validation_reasons", []),
+            "execution_allowed": last.get("execution_allowed", False),
+            "contract_version": last.get("contract_version", "strict_trade_candidate_v1"),
             "duplicate_signal_cooldown_bars": last.get("duplicate_signal_cooldown_bars", 0),
             "duplicate_signal_cooldown_minutes": last.get("duplicate_signal_cooldown_minutes", ""),
-        }, default_status=TRADE_STATUS_NEW))
+        })
+        candidates.append(_ensure_trade_identity(normalize_candidate_contract(payload), default_status=TRADE_STATUS_NEW))
         return candidates
 
     for row in output_rows:
         share_price, strike_price = _extract_share_and_strike(row)
         option_type = str(row.get("option_type", "")).strip().upper()
         if not option_type:
-            side_val = str(row.get("side", row.get("type", ""))).strip().upper()
+            side_val = str(row.get("side", row.get("type", "")).strip().upper())
             if side_val == "BUY":
                 option_type = "CE"
             elif side_val == "SELL":
@@ -721,7 +764,8 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
         entry_value = row.get("entry", row.get("entry_price", row.get("price", row.get("close", ""))))
         stop_value = row.get("stop_loss", row.get("sl", ""))
         target_value = row.get("target", row.get("target_price", row.get("tp", "")))
-        candidates.append(_ensure_trade_identity({
+        payload = dict(row)
+        payload.update({
             "strategy": str(row.get("strategy", "TRADE_BOT")),
             "symbol": symbol,
             "timestamp": str(row.get("timestamp", row.get("entry_time", row.get("time", "")))),
@@ -758,9 +802,17 @@ def build_execution_candidates(strategy: str, output_rows: list[dict[str, object
                 f"{str(row.get('reason', '') or '').strip()} | "
                 f"SL:{stop_value} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', target_value)}"
             ).strip(' |') or f"SL:{stop_value} TSL:{row.get('trailing_stop_loss', '')} TP:{row.get('target_price', target_value)}",
-        }, default_status=TRADE_STATUS_NEW))
+            "strategy_name": row.get("strategy_name", row.get("strategy", "TRADE_BOT")),
+            "setup_type": row.get("setup_type", row.get("zone_type", row.get("strategy", "TRADE_BOT"))),
+            "zone_id": row.get("zone_id", ""),
+            "validation_status": row.get("validation_status", "PENDING"),
+            "validation_score": row.get("validation_score", row.get("score", 0.0)),
+            "validation_reasons": row.get("validation_reasons", []),
+            "execution_allowed": row.get("execution_allowed", False),
+            "contract_version": row.get("contract_version", "strict_trade_candidate_v1"),
+        })
+        candidates.append(_ensure_trade_identity(normalize_candidate_contract(payload), default_status=TRADE_STATUS_NEW))
     return candidates
-
 
 def build_analysis_queue(candidates: list[dict[str, object]], analyzed_at_utc: Optional[str] = None) -> list[dict[str, object]]:
     actionable = [c for c in candidates if _normalize_text(c.get("side")) in {"BUY", "SELL"}]
@@ -1512,7 +1564,49 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
 
 
 def execute_paper_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, max_trades_per_day: int | None = None, max_daily_loss: float | None = None, max_open_trades: int | None = None, order_history_path: Path | None = None) -> ExecutionResult:
-    return _execute_candidates(candidates, output_path, execution_type="PAPER", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, max_open_trades=max_open_trades, order_history_path=order_history_path)
+    strict_contract_markers = {"validation_status", "execution_allowed", "contract_version", "strategy_name", "setup_type", "validation_reasons"}
+    should_use_canonical_gate = any(any(marker in candidate for marker in strict_contract_markers) for candidate in candidates)
+    if not should_use_canonical_gate:
+        legacy_candidates: list[dict[str, object]] = []
+        for candidate in candidates:
+            item = dict(candidate)
+            if not str(item.get("zone_id", "") or "").strip():
+                normalized = normalize_candidate_contract(item)
+                zone_suffix = str(item.get("price", item.get("entry", item.get("entry_price", ""))) or "").replace(".", "_")
+                item["zone_id"] = f"{normalized.get('zone_id', '')}_{zone_suffix}".strip("_")
+            item.pop("validation_status", None)
+            item.pop("validation_score", None)
+            item.pop("validation_reasons", None)
+            item.pop("execution_allowed", None)
+            legacy_candidates.append(item)
+        return _execute_candidates(legacy_candidates, output_path, execution_type="PAPER", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, max_open_trades=max_open_trades, order_history_path=order_history_path)
+
+    from src.execution.paper_execution_service import CanonicalExecutionConfig, run_canonical_paper_execution
+
+    existing_rows = _read_trade_rows(output_path)
+    result, _blocked_rows, _state = run_canonical_paper_execution(
+        candidates,
+        config=CanonicalExecutionConfig(
+            output_path=output_path,
+            order_history_path=order_history_path,
+            deduplicate=deduplicate,
+            max_trades_per_day=int(max_trades_per_day or 0),
+            max_daily_loss=float(max_daily_loss or 0.0),
+            max_open_trades=max_open_trades,
+        ),
+        adapter=lambda allowed, resolved_output_path, **kwargs: _execute_candidates(
+            allowed,
+            resolved_output_path,
+            execution_type="PAPER",
+            deduplicate=bool(kwargs.get("deduplicate", deduplicate)),
+            max_trades_per_day=(None if not kwargs.get("max_trades_per_day") else kwargs.get("max_trades_per_day")),
+            max_daily_loss=(None if not kwargs.get("max_daily_loss") else kwargs.get("max_daily_loss")),
+            max_open_trades=kwargs.get("max_open_trades"),
+            order_history_path=kwargs.get("order_history_path"),
+        ),
+        existing_rows=existing_rows,
+    )
+    return result
 
 
 def execute_live_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, max_trades_per_day: int | None = None, max_daily_loss: float | None = None, max_open_trades: int | None = None, live_enabled: bool | None = None, symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None, max_order_quantity: int | None = None, max_order_value: float | None = None, order_history_path: Path | None = None, optimizer_report_path: Path | None = None, enforce_optimizer_gate: bool | None = None) -> ExecutionResult:
@@ -2023,3 +2117,22 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

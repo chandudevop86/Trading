@@ -11,8 +11,9 @@ from src.indicator_bot import IndicatorConfig, generate_indicator_rows, generate
 from src.mtf_trade_bot import MtfTradeConfig, generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
 from src.strategy_tuning import strategy_tuning_preset
+from src.execution.contracts import normalize_candidate_contract
 
-STRATEGY_SIGNAL_CONTRACT_VERSION = 'legacy_strategy_signal_v1'
+STRATEGY_SIGNAL_CONTRACT_VERSION = 'strict_trade_candidate_v1'
 _ACTIONABLE_SIDES = {'BUY', 'SELL'}
 
 
@@ -432,6 +433,7 @@ def run_strategy_workflow(
         attach_option_strikes_fn=attach_option_strikes_fn,
         attach_option_metrics_fn=attach_option_metrics_fn,
     )
+
 
 
 

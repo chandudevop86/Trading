@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 from typing import Any, Callable
@@ -36,10 +36,34 @@ from src.runtime_persistence import load_current_rows, load_latest_batch_rows
 from src.runtime_strategy_presets import runtime_strategy_kwargs
 from src.strategy_tuning import normalize_strategy_key, strategy_backtest_config
 from src.trading_core import prepare_trading_data
+from src.validation.engine import validate_trade
 
 
 def paper_candle_rows(candles: pd.DataFrame) -> list[dict[str, object]]:
     return prepare_trading_data(candles).to_dict(orient="records")
+
+
+def _validate_execution_candidates(
+    strategy: str,
+    symbol: str,
+    candles: pd.DataFrame,
+    trades: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    validated: list[dict[str, object]] = []
+    for trade in trades:
+        item = dict(trade)
+        item.setdefault("symbol", symbol)
+        item.setdefault("strategy", strategy)
+        validation = validate_trade(item, candles)
+        item["validation_status"] = str(validation.get("decision", "FAIL") or "FAIL").upper()
+        item["validation_score"] = round(float(validation.get("score", 0.0) or 0.0), 2)
+        item["validation_reasons"] = list(validation.get("reasons", []) or [])
+        item["reason_codes"] = list(item.get("reason_codes", []) or []) + item["validation_reasons"]
+        item["execution_allowed"] = item["validation_status"] == "PASS"
+        item["validation_metrics"] = dict(validation.get("metrics", {}) or {})
+        validated.append(item)
+    return validated
+
 
 
 def refresh_paper_trade_summary(candles: pd.DataFrame, capital: float) -> dict[str, object]:
@@ -179,7 +203,8 @@ def run_execution(
     actionable_trades = latest_actionable_trades(trades)
     if not actionable_trades:
         return None, [("info", "No actionable trade candidates")], "Paper standby"
-    candidates = build_execution_candidates(request.strategy, actionable_trades, request.symbol)
+    validated_trades = _validate_execution_candidates(request.strategy, request.symbol, candles, actionable_trades)
+    candidates = build_execution_candidates(request.strategy, validated_trades, request.symbol)
     if request.broker_choice == "Dhan Live":
         optimizer_ready, optimizer_reason = latest_optimizer_gate(request.strategy)
         if not optimizer_ready:
@@ -208,4 +233,8 @@ def run_execution(
         refresh_paper_trade_summary(candles, request.capital)
         status = "Paper broker active"
     return result, execution_result_summary(result), status
+
+
+
+
 

@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.execution_engine import build_execution_candidates, execute_live_trades, execute_paper_trades
+from src.execution_engine import execute_live_trades, execute_paper_trades
+from src.execution.pipeline import prepare_candidates_for_execution
 
 
 @dataclass(slots=True)
@@ -17,7 +18,7 @@ class WorkflowResult:
 
 
 def build_backtest_workflow(output_rows: list[dict[str, object]], strategy_label: str, symbol: str) -> WorkflowResult:
-    candidates = build_execution_candidates(strategy_label, output_rows, symbol)
+    candidates = [dict(row) for row in output_rows]
     return WorkflowResult(
         output_rows=output_rows,
         execution_candidates=candidates,
@@ -30,13 +31,14 @@ def run_paper_workflow(
     strategy_label: str,
     symbol: str,
     *,
+    candles: Any | None = None,
     output_path: Path,
     deduplicate: bool = True,
     max_trades_per_day: int | None = None,
     max_daily_loss: float | None = None,
     max_open_trades: int | None = None,
 ) -> WorkflowResult:
-    candidates = build_execution_candidates(strategy_label, output_rows, symbol)
+    candidates = prepare_candidates_for_execution(strategy_label, symbol, candles if candles is not None else __import__('pandas').DataFrame(output_rows), output_rows)
     result = execute_paper_trades(
         candidates,
         output_path,
@@ -59,6 +61,7 @@ def run_live_workflow(
     strategy_label: str,
     symbol: str,
     *,
+    candles: Any | None = None,
     output_path: Path,
     deduplicate: bool = True,
     broker_client: object | None = None,
@@ -68,7 +71,7 @@ def run_live_workflow(
     max_daily_loss: float | None = None,
     max_open_trades: int | None = None,
 ) -> WorkflowResult:
-    candidates = build_execution_candidates(strategy_label, output_rows, symbol)
+    candidates = prepare_candidates_for_execution(strategy_label, symbol, candles if candles is not None else __import__('pandas').DataFrame(output_rows), output_rows)
     result = execute_live_trades(
         candidates,
         output_path,
@@ -145,3 +148,4 @@ def run_live_candidates(
         execution_type='LIVE',
         log_path=str(output_path),
     )
+

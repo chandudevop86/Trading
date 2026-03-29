@@ -14,6 +14,7 @@ from src.execution.contracts import CONTRACT_VERSION, normalize_candidate_contra
 from src.execution.guardrails import GuardConfig, check_all_guards
 from src.execution.paper_execution_service import CanonicalExecutionConfig, ExecutionAuditLogger, execute_candidate
 from src.execution.state import TradingState
+from src.telegram_notifier import build_trade_summary
 import src.execution_engine as execution_engine
 from src.execution.guards import execute_candidates, execute_paper_trades
 from src.strategy_service import standardize_strategy_rows
@@ -40,9 +41,25 @@ class TestProductionExecutionApi(unittest.TestCase):
         )
         self.assertEqual(rows[0]["strategy_name"], "BREAKOUT")
         self.assertTrue(str(rows[0]["zone_id"]).startswith("NIFTY_BREAKOUT_"))
+        self.assertTrue(str(rows[0]["trade_id"]).strip())
         self.assertEqual(rows[0]["validation_status"], "PENDING")
         self.assertFalse(rows[0]["execution_allowed"])
         self.assertEqual(rows[0]["contract_version"], CONTRACT_VERSION)
+    def test_telegram_summary_includes_trade_and_zone_ids(self):
+        summary = build_trade_summary([
+            {
+                "trade_id": "TRADE-123",
+                "zone_id": "ZONE-123",
+                "timestamp": self._current_ts(),
+                "side": "BUY",
+                "entry": 100.0,
+                "stop_loss": 99.0,
+                "target": 102.0,
+            }
+        ])
+        self.assertIn("Trade ID: TRADE-123", summary)
+        self.assertIn("Zone ID: ZONE-123", summary)
+
     def test_strategy_output_missing_zone_id_is_blocked_before_standardization(self):
         raw = {
             "symbol": "NIFTY",
@@ -393,6 +410,9 @@ class TestProductionExecutionApi(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
 
 
 

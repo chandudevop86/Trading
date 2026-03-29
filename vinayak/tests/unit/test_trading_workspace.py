@@ -137,9 +137,35 @@ def test_run_live_trading_analysis_forwards_recent_risk_controls(monkeypatch, tm
     assert result['signal_count'] == 1
 
 
+def test_build_report_artifacts_prefers_execution_rows_for_traceability(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(service, 'store_json_report', lambda name, payload: {'local_path': str(tmp_path / 'report.json')})
+    def _fake_store_text_report(name, body, **kwargs):
+        captured['summary'] = body
+        return {'local_path': str(tmp_path / 'summary.txt')}
+
+    monkeypatch.setattr(service, 'store_text_report', _fake_store_text_report)
+    monkeypatch.setattr(service, 'cache_json_artifact', lambda *args, **kwargs: True)
+
+    result = service._build_report_artifacts(
+        {
+            'signals': [{'trade_id': 'SIGNAL-ID', 'zone_id': 'SIGNAL-ZONE', 'timestamp': '2026-03-24 09:15:00', 'side': 'BUY', 'entry': 101.0, 'stop_loss': 99.0, 'target': 103.0}],
+            'execution_rows': [{'trade_id': 'EXEC-ID', 'zone_id': 'EXEC-ZONE', 'timestamp': '2026-03-24 09:15:00', 'side': 'BUY', 'entry': 101.0, 'stop_loss': 99.0, 'target': 103.0}],
+        }
+    )
+
+    assert result['json_report']['local_path'].endswith('report.json')
+    assert 'Trade ID: EXEC-ID' in captured['summary']
+    assert 'Zone ID: EXEC-ZONE' in captured['summary']
+    assert 'SIGNAL-ID' not in captured['summary']
+
+
 def test_run_live_trading_analysis_uses_workspace_gateway() -> None:
     source = inspect.getsource(service.run_live_trading_analysis)
 
     assert 'execute_workspace_candidates(' in source
     assert 'build_execution_candidates(' not in source
     assert 'execute_paper_trades(' not in source
+
+

@@ -255,7 +255,8 @@ def _resolve_live_execution_kwargs(security_map_path: str) -> dict[str, object]:
 
 
 def _build_report_artifacts(result: dict[str, Any]) -> dict[str, dict[str, str]]:
-    summary_text = build_trade_summary(result.get('signals', [])) if result.get('signals') else 'No signals generated for this run.'
+    trace_rows = result.get('execution_rows') or result.get('signals') or []
+    summary_text = build_trade_summary(trace_rows) if trace_rows else 'No signals generated for this run.'
     json_artifact = store_json_report('live_analysis_result', result)
     summary_artifact = store_text_report('live_analysis_summary', summary_text, extension='txt', content_type='text/plain')
     cache_json_artifact('latest_live_analysis', result)
@@ -452,6 +453,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

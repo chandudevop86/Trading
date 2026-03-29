@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import hashlib
+import uuid
 from dataclasses import asdict, dataclass
 from typing import Any, TypedDict
 
@@ -41,6 +42,7 @@ class StrictTradeCandidateDict(TypedDict, total=False):
     validation_score: float
     validation_reasons: list[str]
     execution_allowed: bool
+    trade_id: str
     zone_type: str
     rr_ratio: float
     vwap_alignment: bool
@@ -68,6 +70,7 @@ class StrictTradeCandidate:
     validation_score: float = 0.0
     validation_reasons: list[str] | None = None
     execution_allowed: bool = False
+    trade_id: str = ""
     zone_type: str = ""
     rr_ratio: float = 0.0
     vwap_alignment: bool | None = None
@@ -126,6 +129,15 @@ def _build_zone_id(candidate: dict[str, Any], strategy_name: str, setup_type: st
     digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
     return f"{symbol.upper()}_{strategy_name}_{digest}"
 
+def _build_trade_id(candidate: dict[str, Any], zone_id: str, symbol: str, strategy_name: str, timestamp: str, side: str, entry: float) -> str:
+    existing = str(candidate.get("trade_id", "") or "").strip()
+    if existing:
+        return existing
+    if zone_id:
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, zone_id.upper()))
+    payload = "|".join([symbol.upper(), strategy_name, timestamp, side.upper(), f"{entry:.6f}"])
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, payload))
+
 
 def normalize_candidate_contract(
     candidate: dict[str, Any],
@@ -171,6 +183,7 @@ def normalize_candidate_contract(
         "validation_score": round(_safe_float(raw.get("validation_score", raw.get("score", 0.0))), 2),
         "validation_reasons": [str(item) for item in validation_reasons if str(item).strip()],
         "execution_allowed": bool(raw.get("execution_allowed", False)),
+        "trade_id": _build_trade_id(raw, _build_zone_id(raw, resolved_strategy, resolved_setup_type, resolved_timestamp, resolved_side, resolved_symbol), resolved_symbol, resolved_strategy, resolved_timestamp, resolved_side, entry),
         "zone_type": str(raw.get("zone_type", "") or ""),
         "rr_ratio": round(rr_ratio, 4),
         "vwap_alignment": raw.get("vwap_alignment") if "vwap_alignment" in raw else None,
@@ -200,6 +213,7 @@ def normalize_candidate_contract(
         "validation_score": normalized["validation_score"],
         "validation_reasons": list(normalized["validation_reasons"]),
         "execution_allowed": bool(normalized["execution_allowed"]),
+        "trade_id": str(normalized.get("trade_id", "") or _build_trade_id(raw, normalized["zone_id"], resolved_symbol, resolved_strategy, resolved_timestamp, resolved_side, entry)),
         "rr_ratio": round(rr_ratio, 4),
         "strategy": resolved_strategy,
         "signal_time": str(raw.get("signal_time") or resolved_timestamp),
@@ -264,3 +278,7 @@ __all__ = [
     "normalize_candidate_contract",
     "validate_candidate_contract",
 ]
+
+
+
+

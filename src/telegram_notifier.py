@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import mimetypes
@@ -24,6 +24,11 @@ def build_trade_summary(trades: list[dict[str, object]]) -> str:
                 return d.get(k)
         return "N/A"
 
+    def _trace_line(d: dict[str, object]) -> str:
+        trade_id = str(d.get('trade_id', '') or '').strip() or 'N/A'
+        zone_id = str(d.get('zone_id', '') or '').strip() or 'N/A'
+        return f"Trade ID: {trade_id}\nZone ID: {zone_id}"
+
     def _is_indicator_row(d: dict[str, object]) -> bool:
         return "market_signal" in d
 
@@ -40,14 +45,14 @@ def build_trade_summary(trades: list[dict[str, object]]) -> str:
     has_pnl = any("pnl" in t for t in trades)
     has_exit = any(("exit_time" in t) or ("exit_reason" in t) for t in trades)
 
-    # Prefer specialized summaries when rows are not completed trades.
     if any(_is_indicator_row(t) for t in trades) and (not has_pnl) and (not has_exit):
         last = trades[-1]
         return (
             "Indicator alert\n"
             f"Rows: {len(trades)}\n"
             f"Last time: {_first_value(last, ['timestamp', 'time', 'date'])}\n"
-            f"Last signal: {_first_value(last, ['market_signal'])}"
+            f"Last signal: {_first_value(last, ['market_signal'])}\n"
+            f"{_trace_line(last)}"
         )
 
     if any(_is_exec_candidate(t) for t in trades) and (not has_pnl) and (not has_exit):
@@ -58,10 +63,10 @@ def build_trade_summary(trades: list[dict[str, object]]) -> str:
             f"Last time: {_first_value(last, ['signal_time', 'timestamp'])}\n"
             f"Last side: {_first_value(last, ['side'])}\n"
             f"Last price: {_first_value(last, ['price', 'entry_price', 'entry'])}\n"
-            f"Option: {_first_value(last, ['option_strike', 'option_type'])}"
+            f"Option: {_first_value(last, ['option_strike', 'option_type'])}\n"
+            f"{_trace_line(last)}"
         )
 
-    # If we have a mix of rows, compute PnL only on closed trades.
     closed = [
         t
         for t in trades
@@ -79,10 +84,10 @@ def build_trade_summary(trades: list[dict[str, object]]) -> str:
             f"Win rate: {win_rate:.2f}%\n"
             f"Total PnL: {total_pnl:.2f}\n"
             f"Last exit: {_first_value(last_trade, ['exit_time', 'timestamp', 'signal_time'])}\n"
-            f"Last reason: {_first_value(last_trade, ['exit_reason', 'reason'])}"
+            f"Last reason: {_first_value(last_trade, ['exit_reason', 'reason'])}\n"
+            f"{_trace_line(last_trade)}"
         )
 
-    # Fallback: treat as trade signals (entries without exits).
     last = trades[-1]
     if any(_is_trade_signal(t) for t in trades):
         return (
@@ -92,13 +97,15 @@ def build_trade_summary(trades: list[dict[str, object]]) -> str:
             f"Last side: {_first_value(last, ['side', 'direction', 'trade_type'])}\n"
             f"Entry: {_first_value(last, ['entry_price', 'entry', 'price'])}\n"
             f"SL: {_first_value(last, ['stop_loss', 'sl', 'stop'])}\n"
-            f"Target: {_first_value(last, ['target_price', 'target', 'tp'])}"
+            f"Target: {_first_value(last, ['target_price', 'target', 'tp'])}\n"
+            f"{_trace_line(last)}"
         )
 
     return (
         "Intratrade alert\n"
         f"Rows: {len(trades)}\n"
-        f"Last time: {_first_value(last, ['exit_time', 'timestamp', 'signal_time', 'time', 'date'])}"
+        f"Last time: {_first_value(last, ['exit_time', 'timestamp', 'signal_time', 'time', 'date'])}\n"
+        f"{_trace_line(last)}"
     )
 
 
@@ -127,6 +134,7 @@ def send_telegram_message(token: str, chat_id: str, text: str, timeout: float = 
         raise RuntimeError(f"Telegram API HTTP {exc.code}: {details}") from exc
     except error.URLError as exc:
         raise RuntimeError(f"Telegram API connection error: {exc}") from exc
+
 def _encode_multipart_formdata(
     fields: dict[str, str],
     files: dict[str, tuple[str, bytes, str]],

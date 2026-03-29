@@ -283,7 +283,7 @@ def _render_scorecard(summary: dict[str, object], status: str, todays_trades: in
     details = _scorecard_detail_map(summary, status=status, todays_trades=todays_trades, strategy_label=strategy_label)
     st.markdown('### Current-State Scorecard')
     st.caption('Green = strong, amber = watchlist, red = needs action.')
-    st.dataframe(_scorecard_styler(rows), use_container_width=True, hide_index=True)
+    st.dataframe(_scorecard_styler(rows), width='stretch', hide_index=True)
     for row in rows:
         with st.expander(f"Why: {row['area']}"):
             for line in details.get(str(row['area']), []):
@@ -325,14 +325,14 @@ def _build_validation_snapshot(summary: dict[str, object]) -> pd.DataFrame:
     duplicates = _safe_int(summary.get('duplicate_rejections'))
     deployment_ready = str(summary.get('deployment_ready', 'NO') or 'NO').upper()
     sample_window = str(summary.get('sample_window_passed', 'NO') or 'NO').upper()
-    return pd.DataFrame([
+    return _arrow_safe_frame(pd.DataFrame([
         {'metric': 'Sample size', 'value': total_trades, 'target': '150-200 trades', 'status': 'PASS' if sample_window == 'YES' else 'WATCH'},
         {'metric': 'Expectancy', 'value': round(expectancy, 2), 'target': '> 0', 'status': 'PASS' if expectancy > 0 else 'FAIL'},
         {'metric': 'Profit factor', 'value': round(profit_factor, 2), 'target': '> 1.30', 'status': 'PASS' if profit_factor > 1.3 else 'FAIL'},
         {'metric': 'Max drawdown %', 'value': round(drawdown, 2), 'target': '<= 10', 'status': 'PASS' if 0 <= drawdown <= 10 else 'FAIL'},
         {'metric': 'Duplicate rejections', 'value': duplicates, 'target': '0', 'status': 'PASS' if duplicates == 0 else 'FAIL'},
         {'metric': 'Deployment ready', 'value': deployment_ready, 'target': 'YES after all gates pass', 'status': 'PASS' if deployment_ready == 'YES' else 'WATCH'},
-    ])
+    ]))
 
 
 def _build_signal_table(trades: list[dict[str, object]]) -> pd.DataFrame:
@@ -358,6 +358,26 @@ def _safe_tail_dataframe(path: Path, columns: list[str], rows: int = 8) -> pd.Da
         return frame.tail(rows)
     except Exception:
         return pd.DataFrame(columns=columns)
+
+
+def _display_value(value: object) -> str:
+    if value is None:
+        return ''
+    if isinstance(value, bool):
+        return 'YES' if value else 'NO'
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return f'{value:.2f}' if value != int(value) else str(int(value))
+    return str(value)
+
+
+def _arrow_safe_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    safe = frame.copy()
+    for column in safe.columns:
+        if str(safe[column].dtype) == 'object':
+            safe[column] = safe[column].map(_display_value)
+    return safe
 
 
 def _safe_log_preview(path: Path, lines: int = 10) -> str:
@@ -397,12 +417,14 @@ def _header_next_action(summary: dict[str, object], broker_choice: str) -> str:
         return 'Live can remain locked until operator approval is explicit.'
     if deployment_ready:
         return 'Run paper execution and verify clean logs before any live promotion.'
+    if total_trades < 150 and expectancy <= 0:
+        return 'This strategy is not ready yet because not enough trades yet, expectancy is not positive. Run a clean backtest until the system has 150 to 200 validated trades.'
     if total_trades < 150:
-        return 'Run a backtest first. The system needs 150 to 200 clean trades before readiness can be judged.'
+        return 'Run a clean backtest until the system has 150 to 200 validated trades.'
     if str(summary.get('deployment_blockers', '') or '').strip():
         return build_plain_english_next_action(summary)
     if expectancy <= 0 or profit_factor <= 1.3 or not drawdown_proven:
-        return 'Improve trade quality first. The system still needs positive expectancy, profit factor above 1.3, and proven drawdown behavior.'
+        return 'This strategy is not ready yet because expectancy is not positive. Run a clean backtest until the system has 150 to 200 validated trades.' if expectancy <= 0 else 'Improve trade quality first. The system still needs profit factor above 1.3 and proven drawdown behavior.'
     return build_quality_ladder_summary(summary)
 
 
@@ -451,7 +473,7 @@ def _render_quality_ladder(summary: dict[str, object]) -> None:
     st.caption('These four checks explain why the system is improving or failing in plain English.')
     st.info(build_quality_ladder_summary(summary))
     frame = build_quality_ladder_frame(summary)
-    st.dataframe(frame, use_container_width=True, hide_index=True)
+    st.dataframe(_arrow_safe_frame(frame), width='stretch', hide_index=True)
 
 
 def _button_clicked(button_host: object, label: str, *, legacy_label: str = '', **kwargs: object) -> bool:
@@ -469,7 +491,7 @@ def _render_dashboard_tab(*, strategy: str, symbol: str, timeframe: str, period:
     with left:
         st.markdown('### Recent Signals')
         st.caption(f'Latest actionable setups for {symbol} on {timeframe} candles.')
-        st.dataframe(_build_signal_table(trades), use_container_width=True, hide_index=True)
+        st.dataframe(_arrow_safe_frame(_build_signal_table(trades)), width='stretch', hide_index=True)
     with right:
         _render_operator_panels(status, trades, symbol, timeframe, period, broker_choice, broker_status)
     _render_quality_ladder(scorecard_summary)
@@ -502,9 +524,9 @@ def _render_charts_tab(*, candles: pd.DataFrame, symbol: str, timeframe: str) ->
         .properties(height=360)
         .interactive()
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width='stretch')
     with st.expander('Recent Candle Data'):
-        st.dataframe(candles.tail(20), use_container_width=True, hide_index=True)
+        st.dataframe(_arrow_safe_frame(candles.tail(20)), width='stretch', hide_index=True)
     st.caption(f'{symbol} | {timeframe} | showing latest {min(len(candles), 240)} candles')
 
 
@@ -533,7 +555,7 @@ def _render_score_backtest_report_tab(*, trades: list[dict[str, object]], summar
             'profit_factor': 'Profit factor',
             'max_drawdown_pct': 'Max DD %',
         })
-        st.dataframe(display, use_container_width=True, hide_index=True)
+        st.dataframe(_arrow_safe_frame(display), width='stretch', hide_index=True)
     st.markdown('#### Threshold Comparison')
     if not threshold_rows.empty:
         display = threshold_rows.rename(columns={
@@ -545,7 +567,7 @@ def _render_score_backtest_report_tab(*, trades: list[dict[str, object]], summar
             'max_drawdown_pct': 'Max DD %',
             'profit_factor': 'Profit factor',
         })
-        st.dataframe(display, use_container_width=True, hide_index=True)
+        st.dataframe(_arrow_safe_frame(display), width='stretch', hide_index=True)
 
 
 def _render_zone_heatmap_tab(*, candles: pd.DataFrame, symbol: str) -> None:
@@ -560,9 +582,9 @@ def _render_zone_heatmap_tab(*, candles: pd.DataFrame, symbol: str) -> None:
         return
     zone_rows = zone_records_to_rows(zone_records)
     heatmap = build_zone_heatmap(candles, zone_rows)
-    st.altair_chart(heatmap, use_container_width=True)
+    st.altair_chart(heatmap, width='stretch')
     with st.expander('Zone Table'):
-        st.dataframe(pd.DataFrame(zone_rows), use_container_width=True, hide_index=True)
+        st.dataframe(_arrow_safe_frame(pd.DataFrame(zone_rows)), width='stretch', hide_index=True)
 
 
 def _render_trades_tab(*, trades: list[dict[str, object]], status: str) -> None:
@@ -576,7 +598,7 @@ def _render_trades_tab(*, trades: list[dict[str, object]], status: str) -> None:
         'score', 'reason', 'trade_status', 'validation_status', 'duplicate_reason'
     ]
     available_columns = [column for column in preferred_columns if column in trades_frame.columns]
-    st.dataframe(trades_frame[available_columns] if available_columns else trades_frame, use_container_width=True, hide_index=True)
+    st.dataframe(_arrow_safe_frame(trades_frame[available_columns] if available_columns else trades_frame), width='stretch', hide_index=True)
     st.caption(f'Trade rows: {len(trades_frame)} | Status: {status}')
 
 
@@ -596,7 +618,7 @@ def _render_validation_tab(summary: dict[str, object]) -> None:
     for idx, action in enumerate(build_top_fix_actions(summary), start=1):
         st.markdown(f'{idx}. {action}')
     st.markdown('### Blocker Groups')
-    st.dataframe(blocker_frame[['severity', 'headline', 'plain_english', 'fix']], use_container_width=True, hide_index=True)
+    st.dataframe(_arrow_safe_frame(blocker_frame[['severity', 'headline', 'plain_english', 'fix']]), width='stretch', hide_index=True)
     if blockers:
         with st.expander('Technical blockers'):
             st.code(blockers)
@@ -609,10 +631,10 @@ def _render_validation_tab(summary: dict[str, object]) -> None:
         {'gate': 'Duplicate trades', 'rule': '= 0'},
         {'gate': 'Max drawdown', 'rule': '<= configured limit'},
     ])
-    st.dataframe(gates, use_container_width=True, hide_index=True)
+    st.dataframe(_arrow_safe_frame(gates), width='stretch', hide_index=True)
 
     st.markdown('### Backtest Metrics')
-    metrics_frame = pd.DataFrame([
+    metrics_frame = _arrow_safe_frame(pd.DataFrame([
         {'metric': 'Total Trades', 'value': _safe_int(summary.get('total_trades', summary.get('closed_trades', 0)))},
         {'metric': 'Wins', 'value': _safe_int(summary.get('wins'))},
         {'metric': 'Losses', 'value': _safe_int(summary.get('losses'))},
@@ -623,10 +645,10 @@ def _render_validation_tab(summary: dict[str, object]) -> None:
         {'metric': 'Expectancy/Trade', 'value': round(_safe_float(summary.get('expectancy_per_trade')), 2)},
         {'metric': 'Profit Factor', 'value': round(_safe_float(summary.get('profit_factor')), 2)},
         {'metric': 'Max Drawdown %', 'value': round(_safe_float(summary.get('max_drawdown_pct')), 2)},
-    ])
-    st.dataframe(metrics_frame, use_container_width=True, hide_index=True)
+    ]))
+    st.dataframe(metrics_frame, width='stretch', hide_index=True)
     st.markdown('### Validation Snapshot')
-    st.dataframe(_build_validation_snapshot(summary), use_container_width=True, hide_index=True)
+    st.dataframe(_build_validation_snapshot(summary), width='stretch', hide_index=True)
     _render_quality_ladder(summary)
     if str(summary.get('deployment_ready', 'NO') or 'NO').upper() == 'YES':
         st.success('PASS: eligible for paper or live consideration, subject to operator approval.')
@@ -642,17 +664,17 @@ def _render_execution_tab(*, status: str, broker_status: str, todays_trades: int
     col_three.metric("Today's Trades", todays_trades)
 
     st.markdown('### Discipline Metrics')
-    discipline = pd.DataFrame([
+    discipline = _arrow_safe_frame(pd.DataFrame([
         {'metric': 'Duplicate rejections', 'value': _safe_int(summary.get('duplicate_rejections'))},
         {'metric': 'Risk-rule rejections', 'value': _safe_int(summary.get('risk_rule_rejections'))},
         {'metric': 'Avg trades/day', 'value': round(_safe_float(summary.get('avg_trades_per_day')), 2)},
         {'metric': 'Deployment Ready', 'value': str(summary.get('deployment_ready', 'NO') or 'NO')},
-    ])
-    st.dataframe(discipline, use_container_width=True, hide_index=True)
+    ]))
+    st.dataframe(discipline, width='stretch', hide_index=True)
 
     st.markdown('### Recent Executions')
     executions = _safe_tail_dataframe(EXECUTED_TRADES_OUTPUT, ['timestamp', 'strategy', 'symbol', 'side', 'quantity', 'entry', 'status', 'broker_message'])
-    st.dataframe(executions, use_container_width=True, hide_index=True)
+    st.dataframe(_arrow_safe_frame(executions), width='stretch', hide_index=True)
 
     st.markdown('### Log Previews')
     log_col_one, log_col_two = st.columns(2)
@@ -666,7 +688,7 @@ def _render_execution_tab(*, status: str, broker_status: str, todays_trades: int
             st.markdown(f"```text\n{_safe_log_preview(REJECTIONS_LOG)}\n```")
         with st.expander('Recent Rejections Table'):
             rejections = _safe_tail_dataframe(REJECTIONS_LOG, ['timestamp', 'rejection_reason', 'rejection_category', 'rejection_detail'])
-            st.dataframe(rejections, use_container_width=True, hide_index=True)
+            st.dataframe(_arrow_safe_frame(rejections), width='stretch', hide_index=True)
 
 
 def _render_tabs(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], candles: pd.DataFrame, active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int, market_data_summary: dict[str, object] | None = None) -> None:
@@ -706,8 +728,8 @@ def main() -> None:
         period = period_for_interval(timeframe)
         st.caption(f'Fetch window: {period}')
         action_row = st.columns(2)
-        run_clicked = _button_clicked(action_row[0], 'Start Paper', legacy_label='Run', type='primary', use_container_width=True)
-        backtest_clicked = _button_clicked(action_row[1], 'Run Backtest', legacy_label='Backtest', use_container_width=True)
+        run_clicked = _button_clicked(action_row[0], 'Start Paper', legacy_label='Run', type='primary', width='stretch')
+        backtest_clicked = _button_clicked(action_row[1], 'Run Backtest', legacy_label='Backtest', width='stretch')
 
     normalized_symbol = symbol.strip() or DEFAULT_SYMBOL
     resting_summary = dict(st.session_state.get('backtest_summary', {}) or {})
@@ -750,6 +772,9 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+
+
 
 
 

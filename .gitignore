@@ -8,6 +8,10 @@ __pycache__/
 # Runtime logs
 logs/
 *.log
+ data/legacy_runtime.db
+        logs/errors.log
+        logs/execution.log
+        logs/rejections.log
 
 # Local generated data and caches
 data/*.csv

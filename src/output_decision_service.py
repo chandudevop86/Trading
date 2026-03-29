@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Any
 
@@ -64,7 +64,7 @@ def _blocker_details(blocker: str) -> dict[str, str]:
             'severity': 'RED',
             'headline': 'Expectancy is not positive',
             'plain_english': 'Average trade quality is still negative.',
-            'fix': 'Remove weak setups first and keep only the cleanest retest entries.',
+            'fix': 'Run a clean backtest until the system has 150 to 200 validated trades.',
         }
     if token.startswith('EXPECTANCY_STABILITY_GAP>'):
         return {
@@ -174,6 +174,11 @@ def build_plain_english_next_action(summary: dict[str, object]) -> str:
     blockers = _split_blockers(summary)
     if not blockers:
         return 'The validation stack is clear. Continue paper trading and keep monitoring rolling samples.'
+    blocker_tokens = [str(blocker or '').strip().upper() for blocker in blockers]
+    not_enough_trades = any(token.startswith('MIN_TRADES<') for token in blocker_tokens)
+    expectancy_not_positive = any(token in {'NEGATIVE_EXPECTANCY'} or token.startswith('EXPECTANCY<=') for token in blocker_tokens)
+    if not_enough_trades and expectancy_not_positive:
+        return 'This strategy is not ready yet because not enough trades yet, expectancy is not positive. Run a clean backtest until the system has 150 to 200 validated trades.'
     details = [_blocker_details(blocker) for blocker in blockers]
     top_reasons = ', '.join(detail['headline'].lower() for detail in details[:2])
     top_fix = build_top_fix_actions(summary, limit=1)[0]
@@ -266,3 +271,4 @@ __all__ = [
     'build_strategy_quality_ladder',
     'build_top_fix_actions',
 ]
+

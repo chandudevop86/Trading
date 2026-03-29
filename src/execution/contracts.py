@@ -1,10 +1,29 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 from dataclasses import asdict, dataclass
 from typing import Any, TypedDict
 
 import pandas as pd
+
+
+CONTRACT_VERSION = "strict_trade_candidate_v1"
+REQUIRED_CANDIDATE_FIELDS = [
+    "symbol",
+    "timestamp",
+    "strategy_name",
+    "setup_type",
+    "zone_id",
+    "side",
+    "entry",
+    "stop_loss",
+    "target",
+    "timeframe",
+    "validation_status",
+    "validation_score",
+    "validation_reasons",
+    "execution_allowed",
+]
 
 
 class StrictTradeCandidateDict(TypedDict, total=False):
@@ -30,6 +49,7 @@ class StrictTradeCandidateDict(TypedDict, total=False):
     trend_alignment: bool
     session_tag: str
     source_strategy_version: str
+    contract_version: str
 
 
 @dataclass(slots=True)
@@ -55,30 +75,13 @@ class StrictTradeCandidate:
     retest_score: float = 0.0
     trend_alignment: bool | None = None
     session_tag: str = ""
-    source_strategy_version: str = "strict_trade_candidate_v1"
+    source_strategy_version: str = CONTRACT_VERSION
+    contract_version: str = CONTRACT_VERSION
 
     def to_dict(self) -> StrictTradeCandidateDict:
         payload = asdict(self)
         payload["validation_reasons"] = list(payload.get("validation_reasons") or [])
         return payload
-
-
-_REQUIRED_FIELDS = [
-    "symbol",
-    "timestamp",
-    "strategy_name",
-    "setup_type",
-    "zone_id",
-    "side",
-    "entry",
-    "stop_loss",
-    "target",
-    "timeframe",
-    "validation_status",
-    "validation_score",
-    "validation_reasons",
-    "execution_allowed",
-]
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -124,7 +127,13 @@ def _build_zone_id(candidate: dict[str, Any], strategy_name: str, setup_type: st
     return f"{symbol.upper()}_{strategy_name}_{digest}"
 
 
-def normalize_candidate_contract(candidate: dict[str, Any], *, symbol: str | None = None, strategy_name: str | None = None, timeframe: str | None = None) -> StrictTradeCandidateDict:
+def normalize_candidate_contract(
+    candidate: dict[str, Any],
+    *,
+    symbol: str | None = None,
+    strategy_name: str | None = None,
+    timeframe: str | None = None,
+) -> StrictTradeCandidateDict:
     raw = dict(candidate)
     for drop_key in ("pnl", "gross_pnl", "exit_time", "exit_reason"):
         raw.pop(drop_key, None)
@@ -146,6 +155,7 @@ def normalize_candidate_contract(candidate: dict[str, Any], *, symbol: str | Non
         validation_reasons = [part.strip() for part in validation_reasons.split(",") if part.strip()]
     elif not isinstance(validation_reasons, list):
         validation_reasons = []
+
     normalized: StrictTradeCandidateDict = {
         "symbol": resolved_symbol,
         "timestamp": resolved_timestamp,
@@ -168,7 +178,8 @@ def normalize_candidate_contract(candidate: dict[str, Any], *, symbol: str | Non
         "retest_score": round(_safe_float(raw.get("retest_score", raw.get("retest_quality", 0.0))), 2),
         "trend_alignment": raw.get("trend_alignment") if "trend_alignment" in raw else None,
         "session_tag": str(raw.get("session_tag", "") or ""),
-        "source_strategy_version": str(raw.get("source_strategy_version", raw.get("contract_version", "strict_trade_candidate_v1")) or "strict_trade_candidate_v1"),
+        "source_strategy_version": str(raw.get("source_strategy_version", raw.get("contract_version", CONTRACT_VERSION)) or CONTRACT_VERSION),
+        "contract_version": CONTRACT_VERSION,
     }
     normalized.update(raw)
     normalized.update({
@@ -193,6 +204,7 @@ def normalize_candidate_contract(candidate: dict[str, Any], *, symbol: str | Non
         "strategy": resolved_strategy,
         "signal_time": str(raw.get("signal_time") or resolved_timestamp),
         "entry_time": str(raw.get("entry_time") or resolved_timestamp),
+        "contract_version": CONTRACT_VERSION,
     })
     return normalized
 
@@ -201,19 +213,27 @@ def validate_candidate_contract(candidate: dict[str, Any]) -> tuple[bool, list[s
     raw = dict(candidate)
     normalized = normalize_candidate_contract(raw)
     reasons: list[str] = []
-    for field in _REQUIRED_FIELDS:
-        value = normalized.get(field)
+
+    for field in REQUIRED_CANDIDATE_FIELDS:
+        if field not in raw:
+            reasons.append(f"MISSING_{field.upper()}")
+            continue
+        value = raw.get(field)
         if field == "validation_reasons":
             if not isinstance(value, list):
-                reasons.append(f"INVALID_{field.upper()}")
+                reasons.append("INVALID_VALIDATION_REASONS")
+            continue
+        if field == "execution_allowed":
+            if not isinstance(value, bool):
+                reasons.append("INVALID_EXECUTION_ALLOWED")
             continue
         if value in (None, ""):
             reasons.append(f"MISSING_{field.upper()}")
-    contract_version = str(raw.get("contract_version", raw.get("source_strategy_version", "")) or "").strip()
-    if "zone_id" not in raw and contract_version != "strict_trade_candidate_v1":
-        reasons.append("MISSING_ZONE_ID")
+
     if str(normalized.get("side", "")).upper() not in {"BUY", "SELL"}:
         reasons.append("INVALID_SIDE")
+    if _safe_float(raw.get("validation_score", normalized.get("validation_score"))) <= 0:
+        reasons.append("INVALID_VALIDATION_SCORE")
     if _safe_float(normalized.get("entry")) <= 0:
         reasons.append("INVALID_ENTRY")
     if _safe_float(normalized.get("stop_loss")) <= 0:
@@ -222,16 +242,25 @@ def validate_candidate_contract(candidate: dict[str, Any]) -> tuple[bool, list[s
         reasons.append("INVALID_TARGET")
     if str(normalized.get("timestamp", "")).strip() == "":
         reasons.append("INVALID_TIMESTAMP")
-    return len(reasons) == 0, reasons, normalized
+
+    validation_status = str(raw.get("validation_status", normalized.get("validation_status", "")) or "").upper()
+    if validation_status not in {"PASS", "FAIL", "PENDING"}:
+        reasons.append("INVALID_VALIDATION_STATUS")
+
+    unique_reasons: list[str] = []
+    seen: set[str] = set()
+    for reason in reasons:
+        if reason not in seen:
+            seen.add(reason)
+            unique_reasons.append(reason)
+    return len(unique_reasons) == 0, unique_reasons, normalized
 
 
 __all__ = [
+    "CONTRACT_VERSION",
+    "REQUIRED_CANDIDATE_FIELDS",
     "StrictTradeCandidate",
     "StrictTradeCandidateDict",
     "normalize_candidate_contract",
     "validate_candidate_contract",
 ]
-
-
-
-

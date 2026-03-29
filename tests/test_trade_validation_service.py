@@ -1,8 +1,10 @@
-import tempfile
+﻿import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from src.execution.contracts import CONTRACT_VERSION, normalize_candidate_contract
+from src.execution.contracts import CONTRACT_VERSION, normalize_candidate_contract
 from src.execution_engine import execute_paper_trades
 from src.preprocessing import prepare_trading_data
 from src.reporting_service import paper_execution_summary
@@ -69,19 +71,63 @@ class TestTradeValidationService(unittest.TestCase):
         self.assertIn('expectancy is not positive yet', readiness['paper_readiness_summary'])
         self.assertIn('Stay in paper trading', readiness['paper_readiness_next_step'])
 
-    def test_execute_paper_trades_enforces_invalid_and_daily_limit_constraints(self):
+    def test_execute_paper_trades_enforces_invalid_contract_and_daily_limit_constraints(self):
         candidates = [
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-28 09:20:00', 'side': 'BUY', 'price': 100.0, 'quantity': 65, 'reason': 'valid one'},
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-28 09:50:00', 'side': 'SELL', 'price': 101.0, 'quantity': 65, 'reason': 'valid two'},
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-28 09:35:00', 'side': 'HOLD', 'price': 101.5, 'quantity': 65, 'reason': 'invalid side'},
+            normalize_candidate_contract({
+                'symbol': 'NIFTY',
+                'timestamp': '2026-03-28 09:20:00',
+                'strategy_name': 'BREAKOUT',
+                'setup_type': 'BREAKOUT',
+                'zone_id': 'NIFTY_BREAKOUT_01',
+                'side': 'BUY',
+                'entry': 100.0,
+                'stop_loss': 99.0,
+                'target': 102.0,
+                'quantity': 65,
+                'timeframe': '5m',
+                'validation_status': 'PASS',
+                'validation_score': 8.0,
+                'validation_reasons': [],
+                'execution_allowed': True,
+                'contract_version': CONTRACT_VERSION,
+            }),
+            normalize_candidate_contract({
+                'symbol': 'NIFTY',
+                'timestamp': '2026-03-28 09:50:00',
+                'strategy_name': 'BREAKOUT',
+                'setup_type': 'BREAKOUT',
+                'zone_id': 'NIFTY_BREAKOUT_02',
+                'side': 'SELL',
+                'entry': 101.0,
+                'stop_loss': 102.0,
+                'target': 99.0,
+                'quantity': 65,
+                'timeframe': '5m',
+                'validation_status': 'PASS',
+                'validation_score': 8.0,
+                'validation_reasons': [],
+                'execution_allowed': True,
+                'contract_version': CONTRACT_VERSION,
+            }),
+            {
+                'strategy': 'BREAKOUT',
+                'symbol': 'NIFTY',
+                'signal_time': '2026-03-28 09:35:00',
+                'side': 'HOLD',
+                'price': 101.5,
+                'quantity': 65,
+                'reason': 'invalid side',
+            },
         ]
         with tempfile.TemporaryDirectory() as td:
             result = execute_paper_trades(candidates, Path(td) / 'executed.csv', max_trades_per_day=1)
         self.assertEqual(result.executed_count, 1)
-        self.assertEqual(result.blocked_count, 1)
-        self.assertEqual(result.skipped_count, 1)
-        self.assertEqual(result.blocked_rows[0]['blocked_reason'], 'MAX_TRADES_PER_DAY')
-        self.assertEqual(result.skipped_rows[0]['rejection_reason'], 'INVALID_SIDE')
+        self.assertEqual(result.blocked_count, 2)
+        blocked_reasons = {row['blocked_reason'] for row in result.blocked_rows}
+        self.assertIn('MAX_TRADES_PER_DAY', blocked_reasons)
+        legacy_block = next(row for row in result.blocked_rows if row['blocked_reason'] != 'MAX_TRADES_PER_DAY')
+        self.assertIn('MISSING_STRATEGY_NAME', legacy_block['reason_codes'])
+        self.assertIn('MISSING_TIMESTAMP', legacy_block['reason_codes'])
 
     def test_paper_execution_summary_returns_metrics_readiness_and_output_views(self):
         with tempfile.TemporaryDirectory() as td:
@@ -163,3 +209,7 @@ class TestTradeValidationService(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+
+

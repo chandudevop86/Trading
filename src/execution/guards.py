@@ -1,7 +1,8 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -144,4 +145,50 @@ def evaluate_trade_guards(
     }
 
 
-__all__ = ["ExecutionGuardConfig", "evaluate_trade_guards", "normalize_trade_schema", "trade_unique_key"]
+def execute_paper_trades(
+    candidates: list[dict[str, Any]],
+    output_path: Path,
+    deduplicate: bool = True,
+    *,
+    max_trades_per_day: int | None = None,
+    max_daily_loss: float | None = None,
+    max_open_trades: int | None = None,
+    order_history_path: Path | None = None,
+):
+    """Mandatory paper-execution gateway for all repo execution paths."""
+    from src.execution.paper_execution_service import CanonicalExecutionConfig, run_canonical_paper_execution
+    from src.execution_engine import _execute_candidates, _read_trade_rows
+
+    existing_rows = _read_trade_rows(output_path)
+    result, _blocked_rows, _state = run_canonical_paper_execution(
+        candidates,
+        config=CanonicalExecutionConfig(
+            output_path=output_path,
+            order_history_path=order_history_path,
+            deduplicate=deduplicate,
+            max_trades_per_day=int(max_trades_per_day or 0),
+            max_daily_loss=float(max_daily_loss or 0.0),
+            max_open_trades=max_open_trades,
+        ),
+        adapter=lambda allowed, resolved_output_path, **kwargs: _execute_candidates(
+            allowed,
+            resolved_output_path,
+            execution_type="PAPER",
+            deduplicate=bool(kwargs.get("deduplicate", deduplicate)),
+            max_trades_per_day=(None if not kwargs.get("max_trades_per_day") else kwargs.get("max_trades_per_day")),
+            max_daily_loss=(None if not kwargs.get("max_daily_loss") else kwargs.get("max_daily_loss")),
+            max_open_trades=kwargs.get("max_open_trades"),
+            order_history_path=kwargs.get("order_history_path"),
+        ),
+        existing_rows=existing_rows,
+    )
+    return result
+
+
+__all__ = [
+    "ExecutionGuardConfig",
+    "evaluate_trade_guards",
+    "execute_paper_trades",
+    "normalize_trade_schema",
+    "trade_unique_key",
+]

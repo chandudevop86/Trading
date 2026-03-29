@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -49,6 +49,20 @@ def _rename_columns(frame: pd.DataFrame) -> pd.DataFrame:
     mapped = [COLUMN_ALIASES.get(column, column) for column in renamed]
     out = frame.copy()
     out.columns = mapped
+    return out
+
+
+def _coalesce_duplicate_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    out = pd.DataFrame(index=frame.index)
+    for column_name in dict.fromkeys(str(column) for column in frame.columns):
+        column = frame.loc[:, column_name]
+        if isinstance(column, pd.DataFrame):
+            out[column_name] = column.apply(
+                lambda row: next((value for value in row if not pd.isna(value)), pd.NA),
+                axis=1,
+            )
+        else:
+            out[column_name] = column
     return out
 
 
@@ -149,7 +163,7 @@ def coerce_ohlcv(df: Any, config: CleanerConfig | None = None) -> pd.DataFrame:
     if source.empty:
         raise OHLCVValidationError("empty dataframe")
 
-    frame = _rename_columns(source)
+    frame = _coalesce_duplicate_columns(_rename_columns(source))
     timestamp_series = _build_timestamp_series(frame)
     if timestamp_series is None:
         raise OHLCVValidationError("missing timestamp/date/time column")

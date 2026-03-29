@@ -1,10 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.execution_engine import execute_live_trades, execute_paper_trades
+from src.execution.guards import execute_paper_trades
+from src.execution_engine import execute_live_trades
 from src.execution.pipeline import prepare_candidates_for_execution
 
 
@@ -148,4 +149,3 @@ def run_live_candidates(
         execution_type='LIVE',
         log_path=str(output_path),
     )
-

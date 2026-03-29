@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 from typing import Any, Callable
@@ -6,11 +6,11 @@ from typing import Any, Callable
 import pandas as pd
 
 from src.backtest_engine import run_backtest, summarize_trade_log
+from src.execution.guards import execute_paper_trades
+from src.execution.pipeline import prepare_candidates_for_execution
 from src.execution_engine import (
-    build_execution_candidates,
     close_paper_trades,
     execute_live_trades,
-    execute_paper_trades,
     execution_result_summary,
 )
 from src.runtime_defaults import (
@@ -203,8 +203,7 @@ def run_execution(
     actionable_trades = latest_actionable_trades(trades)
     if not actionable_trades:
         return None, [("info", "No actionable trade candidates")], "Paper standby"
-    validated_trades = _validate_execution_candidates(request.strategy, request.symbol, candles, actionable_trades)
-    candidates = build_execution_candidates(request.strategy, validated_trades, request.symbol)
+    candidates = prepare_candidates_for_execution(request.strategy, request.symbol, candles, actionable_trades)
     if request.broker_choice == "Dhan Live":
         optimizer_ready, optimizer_reason = latest_optimizer_gate(request.strategy)
         if not optimizer_ready:
@@ -233,6 +232,12 @@ def run_execution(
         refresh_paper_trade_summary(candles, request.capital)
         status = "Paper broker active"
     return result, execution_result_summary(result), status
+
+
+
+
+
+
 
 
 

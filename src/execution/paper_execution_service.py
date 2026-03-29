@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
@@ -109,10 +109,11 @@ def execute_candidate(
     config: CanonicalExecutionConfig,
     logger: ExecutionAuditLogger,
 ) -> CanonicalExecutionResult:
-    normalized = normalize_candidate_contract(candidate)
+    raw_candidate = dict(candidate)
+    normalized = normalize_candidate_contract(raw_candidate)
     logger.log_candidate(normalized, status="CANDIDATE_RECEIVED", reasons=[])
     guard_result = check_all_guards(
-        normalized,
+        raw_candidate,
         state,
         GuardConfig(
             cooldown_minutes=config.cooldown_minutes,
@@ -195,5 +196,6 @@ __all__ = [
     "execute_candidate",
     "run_canonical_paper_execution",
 ]
+
 
 

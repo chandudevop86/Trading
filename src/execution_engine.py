@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import hashlib
@@ -1564,50 +1564,17 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
 
 
 def execute_paper_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, max_trades_per_day: int | None = None, max_daily_loss: float | None = None, max_open_trades: int | None = None, order_history_path: Path | None = None) -> ExecutionResult:
-    strict_contract_markers = {"validation_status", "execution_allowed", "contract_version", "strategy_name", "setup_type", "validation_reasons"}
-    should_use_canonical_gate = any(any(marker in candidate for marker in strict_contract_markers) for candidate in candidates)
-    if not should_use_canonical_gate:
-        legacy_candidates: list[dict[str, object]] = []
-        for candidate in candidates:
-            item = dict(candidate)
-            if not str(item.get("zone_id", "") or "").strip():
-                normalized = normalize_candidate_contract(item)
-                zone_suffix = str(item.get("price", item.get("entry", item.get("entry_price", ""))) or "").replace(".", "_")
-                item["zone_id"] = f"{normalized.get('zone_id', '')}_{zone_suffix}".strip("_")
-            item.pop("validation_status", None)
-            item.pop("validation_score", None)
-            item.pop("validation_reasons", None)
-            item.pop("execution_allowed", None)
-            legacy_candidates.append(item)
-        return _execute_candidates(legacy_candidates, output_path, execution_type="PAPER", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, max_open_trades=max_open_trades, order_history_path=order_history_path)
+    from src.execution.guards import execute_paper_trades as execute_paper_trades_gateway
 
-    from src.execution.paper_execution_service import CanonicalExecutionConfig, run_canonical_paper_execution
-
-    existing_rows = _read_trade_rows(output_path)
-    result, _blocked_rows, _state = run_canonical_paper_execution(
+    return execute_paper_trades_gateway(
         candidates,
-        config=CanonicalExecutionConfig(
-            output_path=output_path,
-            order_history_path=order_history_path,
-            deduplicate=deduplicate,
-            max_trades_per_day=int(max_trades_per_day or 0),
-            max_daily_loss=float(max_daily_loss or 0.0),
-            max_open_trades=max_open_trades,
-        ),
-        adapter=lambda allowed, resolved_output_path, **kwargs: _execute_candidates(
-            allowed,
-            resolved_output_path,
-            execution_type="PAPER",
-            deduplicate=bool(kwargs.get("deduplicate", deduplicate)),
-            max_trades_per_day=(None if not kwargs.get("max_trades_per_day") else kwargs.get("max_trades_per_day")),
-            max_daily_loss=(None if not kwargs.get("max_daily_loss") else kwargs.get("max_daily_loss")),
-            max_open_trades=kwargs.get("max_open_trades"),
-            order_history_path=kwargs.get("order_history_path"),
-        ),
-        existing_rows=existing_rows,
+        output_path,
+        deduplicate=deduplicate,
+        max_trades_per_day=max_trades_per_day,
+        max_daily_loss=max_daily_loss,
+        max_open_trades=max_open_trades,
+        order_history_path=order_history_path,
     )
-    return result
-
 
 def execute_live_trades(candidates: list[dict[str, object]], output_path: Path, deduplicate: bool = True, *, broker_client: object | None = None, broker_name: str | None = None, security_map: dict[str, dict[str, str]] | None = None, max_trades_per_day: int | None = None, max_daily_loss: float | None = None, max_open_trades: int | None = None, live_enabled: bool | None = None, symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None, max_order_quantity: int | None = None, max_order_value: float | None = None, order_history_path: Path | None = None, optimizer_report_path: Path | None = None, enforce_optimizer_gate: bool | None = None) -> ExecutionResult:
     return _execute_candidates(candidates, output_path, execution_type="LIVE", deduplicate=deduplicate, max_trades_per_day=max_trades_per_day, max_daily_loss=max_daily_loss, max_open_trades=max_open_trades, broker_client=broker_client, broker_name=broker_name, security_map=security_map, live_enabled=live_enabled, symbol_allowlist=symbol_allowlist, max_order_quantity=max_order_quantity, max_order_value=max_order_value, order_history_path=order_history_path, optimizer_report_path=optimizer_report_path, enforce_optimizer_gate=enforce_optimizer_gate)
@@ -2117,6 +2084,11 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
+
+
+
+
+
 
 
 

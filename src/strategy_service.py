@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
@@ -123,6 +123,7 @@ def _base_contract_fields(row: dict[str, object], *, strategy_name: str, symbol:
     return base
 def standardize_strategy_rows(rows: list[dict[str, object]], *, strategy_name: str, symbol: str) -> list[dict[str, object]]:
     standardized: list[dict[str, object]] = []
+    canonical_strategy = _canonical_strategy_name(strategy_name)
     for idx, row in enumerate(rows, start=1):
         item = _base_contract_fields(dict(row), strategy_name=strategy_name, symbol=symbol, trade_no=idx)
         side = str(item.get('side', '')).upper()
@@ -142,13 +143,28 @@ def standardize_strategy_rows(rows: list[dict[str, object]], *, strategy_name: s
         item['target'] = target_value
         item['target_price'] = _coerce_trade_price(item, 'target_price', 'target', 'tp')
         item['price'] = _coerce_trade_price(item, 'price', 'entry', 'entry_price', 'close')
+        item['strategy_name'] = str(item.get('strategy_name') or canonical_strategy)
+        item['setup_type'] = str(item.get('setup_type') or item.get('zone_type') or canonical_strategy)
+        item['timeframe'] = str(item.get('timeframe') or item.get('interval') or '')
+        item['validation_status'] = str(item.get('validation_status') or 'PENDING').upper()
+        item['validation_score'] = round(_safe_float(item.get('validation_score', item.get('score', 0.0))), 2)
+        item['validation_reasons'] = list(item.get('validation_reasons', [])) if isinstance(item.get('validation_reasons', []), list) else []
+        item['execution_allowed'] = bool(item.get('execution_allowed', False))
 
         entry_numeric = _safe_float(item.get('entry'))
         stop_numeric = _safe_float(item.get('stop_loss'))
         risk_per_unit = abs(entry_numeric - stop_numeric) if entry_numeric is not None and stop_numeric is not None else 0.0
         item['risk_per_unit'] = round(risk_per_unit, 4)
-        standardized.append(item)
+        standardized.append(
+            normalize_candidate_contract(
+                item,
+                symbol=symbol,
+                strategy_name=strategy_name,
+                timeframe=item['timeframe'],
+            )
+        )
     return standardized
+
 def normalize_strategy_rows(rows: list[dict[str, object]], *, strategy_name: str, symbol: str) -> list[dict[str, object]]:
     return standardize_strategy_rows(rows, strategy_name=strategy_name, symbol=symbol)
 
@@ -433,6 +449,8 @@ def run_strategy_workflow(
         attach_option_strikes_fn=attach_option_strikes_fn,
         attach_option_metrics_fn=attach_option_metrics_fn,
     )
+
+
 
 
 

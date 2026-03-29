@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import types
 import unittest
 from unittest.mock import patch
@@ -9,6 +9,7 @@ sys.modules.setdefault('yfinance', types.SimpleNamespace())
 sys.modules.setdefault('certifi', types.SimpleNamespace(where=lambda: ''))
 
 from src.analytics.metrics import compute_trade_metrics, evaluate_production_readiness
+from src.analytics.readiness_api import evaluate_readiness
 from src.data.cleaner import CleanerConfig, OHLCVValidationError, coerce_ohlcv
 from src.execution.guards import ExecutionGuardConfig, evaluate_trade_guards
 from src.runtime_models import TradingActionRequest
@@ -114,21 +115,19 @@ class TestProductionPipeline(unittest.TestCase):
 
         captured = {}
 
-        def _capture_candidates(strategy, output_rows, symbol):
+        def _capture_candidates(strategy, symbol, candles_frame, output_rows):
             captured["rows"] = output_rows
             return output_rows
 
-        with patch("src.runtime_workflow_service.validate_trade", return_value={"decision": "PASS", "score": 8.2, "reasons": [], "metrics": {}}):
-            with patch("src.runtime_workflow_service.build_execution_candidates", side_effect=_capture_candidates):
-                with patch("src.runtime_workflow_service.execute_paper_trades", return_value=[]):
-                    with patch("src.runtime_workflow_service.execution_result_summary", return_value=[]):
-                        with patch("src.runtime_workflow_service.refresh_paper_trade_summary", return_value={}):
-                            with patch("src.runtime_workflow_service.mirror_output_file"):
-                                run_execution(request, trades, candles)
+        with patch("src.runtime_workflow_service.prepare_candidates_for_execution", side_effect=_capture_candidates):
+            with patch("src.runtime_workflow_service.execute_paper_trades", return_value=[]):
+                with patch("src.runtime_workflow_service.execution_result_summary", return_value=[]):
+                    with patch("src.runtime_workflow_service.refresh_paper_trade_summary", return_value={}):
+                        with patch("src.runtime_workflow_service.mirror_output_file"):
+                            run_execution(request, trades, candles)
 
-        self.assertEqual(captured["rows"][0]["validation_status"], "PASS")
-        self.assertTrue(captured["rows"][0]["execution_allowed"])
-        self.assertIn("validation_score", captured["rows"][0])
+        self.assertEqual(captured["rows"][0]["side"], "BUY")
+        self.assertEqual(captured["rows"][0]["entry"], 100.0)
 
     def test_metrics_and_readiness(self):
         rows = [
@@ -140,6 +139,10 @@ class TestProductionPipeline(unittest.TestCase):
         self.assertEqual(metrics["total_trades"], 2)
         self.assertIn("bad_rr", metrics["rejection_reasons_count"])
         self.assertEqual(evaluate_production_readiness(metrics), "NOT_READY")
+        readiness = evaluate_readiness(rows, [{"reasons": "bad_rr"}])
+        self.assertEqual(readiness["verdict"], "NOT_READY")
+        self.assertIn("thresholds", readiness)
+        self.assertIn("failure_counts", readiness)
         self.assertEqual(
             evaluate_production_readiness(
                 {
@@ -157,4 +160,6 @@ class TestProductionPipeline(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
 

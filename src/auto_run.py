@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -105,6 +106,42 @@ def write_html_report(path: Path, title: str, summary_rows: list[dict[str, Any]]
     path.write_text(html, encoding='utf-8')
 
 
+def _top_validation_reasons(summary_rows: list[dict[str, Any]], *, limit: int = 5) -> list[tuple[str, int]]:
+    reason_counter: Counter[str] = Counter()
+    for row in summary_rows:
+        raw = str(row.get('validation_reasons', '') or '').strip()
+        if not raw:
+            continue
+        for reason in raw.split('|'):
+            normalized = reason.strip()
+            if normalized:
+                reason_counter[normalized] += 1
+    return reason_counter.most_common(limit)
+
+
+def _build_console_summary(out: dict[str, Any]) -> list[str]:
+    summary_rows = list(out.get('summary_rows') or [])
+    pass_count = sum(1 for row in summary_rows if str(row.get('validation_status', 'FAIL')).upper() == 'PASS')
+    fail_count = max(0, len(summary_rows) - pass_count)
+    executed_count = int(out.get('executed_rows_count') or 0)
+    top_reasons = _top_validation_reasons(summary_rows)
+
+    lines = [
+        '[RUN SUMMARY]',
+        f"Strategies evaluated: {len(summary_rows)}",
+        f"Validation passed: {pass_count}",
+        f"Validation failed: {fail_count}",
+        f"Paper trades executed: {executed_count}",
+    ]
+    if top_reasons:
+        formatted = ', '.join(f'{reason} ({count})' for reason, count in top_reasons)
+        lines.append(f'Top rejection reasons: {formatted}')
+    else:
+        lines.append('Top rejection reasons: none')
+    lines.append(f"Execution log: {out.get('executed_log_path')}")
+    return lines
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description='Auto-run: fetch data, backtest, execute, report, telegram')
     p.add_argument('--symbol', default='^NSEI')
@@ -157,6 +194,14 @@ def main() -> None:
         data_output=Path('data/live_ohlcv.csv'),
         summary_output=Path('data/backtest_results_all.csv'),
         summary_history_output=Path('data/backtest_results_history.csv'),
+        ranking_output=Path('data/strategy_expectancy_report.csv'),
+        optimizer_output=Path('data/strategy_optimizer_report.csv'),
+        validation_output=Path('data/backtest_validation.csv'),
+        validation_report_output=Path('data/backtest_validation_report.csv'),
+        deployable_summary_output=Path('data/deployable_summary.csv'),
+        go_live_output_json=Path('data/go_live_validation_summary.json'),
+        go_live_checklist_output=Path('data/go_live_validation_checklist.csv'),
+        crisis_output_json=Path('data/crisis_risk_summary.json'),
         equity_curve_output=Path('data/backtest_equity_curves.csv'),
         paper_log_output=args.paper_log_output,
         execution_type=execution_type,
@@ -223,9 +268,12 @@ def main() -> None:
         if args.send_telegram_pdf:
             send_telegram_document(token, chat, str(pdf_path), caption=title)
 
+    for line in _build_console_summary(out):
+        print(line)
     print(f"Wrote report: {html_path}")
     print(f"Wrote report: {pdf_path}")
 
 
 if __name__ == '__main__':
     main()
+

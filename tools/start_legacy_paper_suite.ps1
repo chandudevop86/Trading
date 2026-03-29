@@ -1,48 +1,47 @@
-﻿param(
-    [switch]$Once
+param(
+    [switch]$Once,
+    [int]$PollSeconds = 120
 )
 
 $ErrorActionPreference = 'Stop'
 Set-Location 'F:\Trading'
+$env:MARKET_DATA_PROVIDER = 'YAHOO'
+$env:TRADING_BROKER_MODE = 'PAPER'
+$env:LIVE_TRADING_ENABLED = 'false'
 
-$baseEnv = @{
-    TRADING_BROKER_MODE = 'PAPER'
-    TRADING_SYMBOL = '^NSEI'
-    TRADING_INTERVAL = '5m'
-    TRADING_PERIOD = '5d'
-    TRADING_CAPITAL = '100000'
-    TRADING_RISK_PCT = '1.0'
-    TRADING_RR_RATIO = '2.0'
-    MAX_TRADES_PER_DAY = '3'
-    MAX_DAILY_LOSS = '2500'
-    LIVE_TRADING_ENABLED = 'false'
-}
-
-$strategies = @(
-    'Breakout'
-    'Demand Supply (Retest)'
-    'Indicator'
-    'One Trade/Day'
-    'MTF 5m'
-    'BTST'
-    'AMD + FVG + Supply/Demand'
+$commonArgs = @(
+    '-3',
+    '-m', 'src.auto_run',
+    '--execution-type', 'PAPER',
+    '--symbol', '^NSEI',
+    '--interval', '5m',
+    '--period', '5d',
+    '--capital', '100000',
+    '--risk-pct', '1.0',
+    '--rr-ratio', '2.0',
+    '--execution-symbol', 'NIFTY'
 )
 
-$daemonArgs = 'py -3 -m src.operational_daemon'
+function Invoke-PaperRun {
+    Write-Host ('Starting legacy paper auto-run at {0}' -f (Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))
+    Write-Host ('Market data provider: {0}' -f $env:MARKET_DATA_PROVIDER)
+    & py @commonArgs
+    $script:lastRunExitCode = $LASTEXITCODE
+    Write-Host ('Legacy paper auto-run finished with exit code {0}' -f $script:lastRunExitCode)
+}
+
 if ($Once) {
-    $daemonArgs += ' --once'
+    Invoke-PaperRun
+    exit $script:lastRunExitCode
 }
 
-foreach ($strategy in $strategies) {
-    $envAssignments = foreach ($item in $baseEnv.GetEnumerator()) {
-        '$env:{0}=''{1}''' -f $item.Key, $item.Value
-    }
-    $envAssignments += '$env:TRADING_STRATEGY=''{0}''' -f $strategy
-    $command = @(
-        'Set-Location ''F:\Trading'''
-        $envAssignments
-        $daemonArgs
-    ) -join '; '
+Write-Host 'Legacy paper suite running in continuous paper mode.'
+Write-Host ('Polling interval: {0} seconds' -f $PollSeconds)
+Write-Host 'Press Ctrl+C in this window to stop the legacy paper suite.'
 
-    Start-Process powershell -ArgumentList '-NoExit', '-Command', $command
+while ($true) {
+    Invoke-PaperRun
+    Write-Host ('Sleeping for {0} seconds before next cycle...' -f $PollSeconds)
+    Start-Sleep -Seconds $PollSeconds
 }
+

@@ -1,0 +1,460 @@
+{
+  "backtest_metrics": {
+    "avg_rr": 2.0,
+    "completed_trades": 99,
+    "cooldown_controls_enforced": false,
+    "drawdown_proven": false,
+    "duplicate_trade_count": 0,
+    "execution_error_count": 0,
+    "expectancy_per_trade": 0.0,
+    "expectancy_stability_gap_ratio": 0.0,
+    "first_half_expectancy_per_trade": 0.0,
+    "invalid_trade_count": 0,
+    "losses": 0,
+    "market_session": "09:15-15:30",
+    "max_drawdown_pct": 0.0,
+    "profit_factor": 0.0,
+    "second_half_expectancy_per_trade": 0.0,
+    "strategy": "INDICATOR",
+    "win_rate_pct": 0.0
+  },
+  "blocking_reasons": [
+    "backtest_trade_count_below_minimum",
+    "backtest_expectancy_not_positive",
+    "backtest_second_half_expectancy_not_positive",
+    "backtest_profit_factor_below_threshold",
+    "backtest_drawdown_not_proven",
+    "cooldown_duplicate_controls_not_enforced",
+    "win_rate_below_rr_breakeven"
+  ],
+  "config": {
+    "absolute_min_win_rate_pct": 35.0,
+    "market_close": "15:30",
+    "market_label": "NSE_NIFTY_INTRADAY",
+    "market_open": "09:15",
+    "max_completed_trades": 200,
+    "max_drawdown_pct": 12.0,
+    "max_duplicate_trades": 0,
+    "max_execution_errors": 0,
+    "max_expectancy_stability_gap_ratio": 0.5,
+    "max_invalid_trades": 0,
+    "max_material_expectancy_gap_ratio": 0.5,
+    "max_material_profit_factor_gap": 0.2,
+    "max_material_win_rate_gap_pct": 8.0,
+    "min_completed_trades": 150,
+    "min_expectancy_per_trade": 0.0,
+    "min_loss_trades_for_drawdown_proof": 1,
+    "min_paper_trades": 20,
+    "min_profit_factor": 1.3,
+    "preferred_completed_trades": 200,
+    "require_cooldown_controls": true,
+    "require_drawdown_proof": true,
+    "require_second_half_positive_expectancy": true,
+    "rr_win_rate_buffer_pct": 4.0
+  },
+  "context": {
+    "market": "NSE_NIFTY_INTRADAY",
+    "market_hours": "09:15-15:30",
+    "required_win_rate_pct": 37.33,
+    "rr_breakeven_win_rate_pct": 33.33
+  },
+  "decision_status": "FAIL_NOT_READY",
+  "human_readable_summary": "Go-live status: FAIL_NOT_READY. Passed checks: 10. Failed checks: 7. Next action: Keep the system off live capital, fix blocking rules, and continue Nifty intraday backtest/paper validation within 09:15-15:30 session controls.",
+  "paper_metrics": {
+    "avg_rr": 2.0,
+    "completed_trades": 0,
+    "cooldown_controls_enforced": false,
+    "drawdown_proven": false,
+    "duplicate_trade_count": 0,
+    "execution_error_count": 0,
+    "expectancy_per_trade": 0.0,
+    "expectancy_stability_gap_ratio": 0.0,
+    "first_half_expectancy_per_trade": 0.0,
+    "invalid_trade_count": 0,
+    "losses": 0,
+    "market_session": "09:15-15:30",
+    "max_drawdown_pct": 0.0,
+    "profit_factor": 0.0,
+    "second_half_expectancy_per_trade": 0.0,
+    "strategy": "PAPER_VALIDATION",
+    "win_rate_pct": 0.0
+  },
+  "pass_fail_by_rule": {
+    "backtest_drawdown": {
+      "actual": 0.0,
+      "message": "Backtest drawdown stays within the configured limit.",
+      "rule": "backtest_drawdown",
+      "source": "backtest",
+      "status": "PASS",
+      "threshold": "<=12.0"
+    },
+    "backtest_drawdown_proof": {
+      "actual": {
+        "losses": 0,
+        "max_drawdown_pct": 0.0
+      },
+      "message": "Backtest does not contain enough adverse-path evidence to trust drawdown.",
+      "rule": "backtest_drawdown_proof",
+      "source": "backtest",
+      "status": "FAIL",
+      "threshold": {
+        "drawdown_required": true,
+        "min_loss_trades": 1
+      }
+    },
+    "backtest_duplicates": {
+      "actual": 0,
+      "message": "Backtest duplicate trade count is clean.",
+      "rule": "backtest_duplicates",
+      "source": "backtest",
+      "status": "PASS",
+      "threshold": 0
+    },
+    "backtest_expectancy": {
+      "actual": 0.0,
+      "message": "Backtest expectancy must be positive.",
+      "rule": "backtest_expectancy",
+      "source": "backtest",
+      "status": "FAIL",
+      "threshold": ">0.0"
+    },
+    "backtest_invalid_trades": {
+      "actual": 0,
+      "message": "Backtest invalid trade count is clean.",
+      "rule": "backtest_invalid_trades",
+      "source": "backtest",
+      "status": "PASS",
+      "threshold": 0
+    },
+    "backtest_profit_factor": {
+      "actual": 0.0,
+      "message": "Backtest profit factor is too weak for go-live.",
+      "rule": "backtest_profit_factor",
+      "source": "backtest",
+      "status": "FAIL",
+      "threshold": ">1.3"
+    },
+    "cooldown_duplicate_controls": {
+      "actual": {
+        "backtest": false,
+        "paper": false
+      },
+      "message": "Cooldown and duplicate controls must be actively enforced before go-live.",
+      "rule": "cooldown_duplicate_controls",
+      "source": "system",
+      "status": "FAIL",
+      "threshold": true
+    },
+    "expectancy_stability_gap": {
+      "actual": 0.0,
+      "message": "Expectancy drift remains within the configured limit.",
+      "rule": "expectancy_stability_gap",
+      "source": "backtest",
+      "status": "PASS",
+      "threshold": "<=0.5"
+    },
+    "expectancy_stability_second_half": {
+      "actual": 0.0,
+      "message": "Second-half expectancy must remain positive to prove stability.",
+      "rule": "expectancy_stability_second_half",
+      "source": "backtest",
+      "status": "FAIL",
+      "threshold": ">0.0"
+    },
+    "minimum_trade_confidence": {
+      "actual": 99,
+      "message": "Need at least 150 completed backtest trades before live use.",
+      "rule": "minimum_trade_confidence",
+      "source": "backtest",
+      "status": "FAIL",
+      "threshold": 150
+    },
+    "paper_drawdown": {
+      "actual": 0.0,
+      "message": "Paper drawdown stays within the configured limit.",
+      "rule": "paper_drawdown",
+      "source": "paper",
+      "status": "PASS",
+      "threshold": "<=12.0"
+    },
+    "paper_duplicates": {
+      "actual": 0,
+      "message": "Paper duplicate trade count is clean.",
+      "rule": "paper_duplicates",
+      "source": "paper",
+      "status": "PASS",
+      "threshold": 0
+    },
+    "paper_execution_errors": {
+      "actual": 0,
+      "message": "Paper execution completed without crashes.",
+      "rule": "paper_execution_errors",
+      "source": "paper",
+      "status": "PASS",
+      "threshold": 0
+    },
+    "paper_invalid_trades": {
+      "actual": 0,
+      "message": "Paper invalid trade count is clean.",
+      "rule": "paper_invalid_trades",
+      "source": "paper",
+      "status": "PASS",
+      "threshold": 0
+    },
+    "paper_profit_factor": {
+      "actual": 0.0,
+      "message": "Paper profit factor is too weak for go-live.",
+      "rule": "paper_profit_factor",
+      "source": "paper",
+      "status": "CONDITIONAL PASS",
+      "threshold": ">1.3"
+    },
+    "paper_trade_count": {
+      "actual": 0,
+      "message": "Paper trading sample is too small for live approval.",
+      "rule": "paper_trade_count",
+      "source": "paper",
+      "status": "CONDITIONAL PASS",
+      "threshold": 20
+    },
+    "paper_vs_backtest_alignment": {
+      "actual": {
+        "expectancy_gap_ratio": 0.0,
+        "profit_factor_gap": 0.0,
+        "win_rate_gap_pct": 0.0
+      },
+      "message": "Paper and backtest remain within configured drift limits.",
+      "rule": "paper_vs_backtest_alignment",
+      "source": "system",
+      "status": "PASS",
+      "threshold": {
+        "max_expectancy_gap_ratio": 0.5,
+        "max_profit_factor_gap": 0.2,
+        "max_win_rate_gap_pct": 8.0
+      }
+    },
+    "session_context": {
+      "actual": {
+        "backtest": "09:15-15:30",
+        "paper": "09:15-15:30"
+      },
+      "message": "Validation context matches normal NSE market hours 09:15-15:30.",
+      "rule": "session_context",
+      "source": "system",
+      "status": "PASS",
+      "threshold": "09:15-15:30"
+    },
+    "win_rate_vs_rr": {
+      "actual": 0.0,
+      "message": "Win rate is below the RR-adjusted breakeven threshold.",
+      "rule": "win_rate_vs_rr",
+      "source": "system",
+      "status": "FAIL",
+      "threshold": ">=33.33"
+    }
+  },
+  "pass_fail_checklist": [
+    {
+      "actual": {
+        "backtest": "09:15-15:30",
+        "paper": "09:15-15:30"
+      },
+      "message": "Validation context matches normal NSE market hours 09:15-15:30.",
+      "rule": "session_context",
+      "source": "system",
+      "status": "PASS",
+      "threshold": "09:15-15:30"
+    },
+    {
+      "actual": 99,
+      "message": "Need at least 150 completed backtest trades before live use.",
+      "rule": "minimum_trade_confidence",
+      "source": "backtest",
+      "status": "FAIL",
+      "threshold": 150
+    },
+    {
+      "actual": 0.0,
+      "message": "Backtest expectancy must be positive.",
+      "rule": "backtest_expectancy",
+      "source": "backtest",
+      "status": "FAIL",
+      "threshold": ">0.0"
+    },
+    {
+      "actual": 0.0,
+      "message": "Second-half expectancy must remain positive to prove stability.",
+      "rule": "expectancy_stability_second_half",
+      "source": "backtest",
+      "status": "FAIL",
+      "threshold": ">0.0"
+    },
+    {
+      "actual": 0.0,
+      "message": "Expectancy drift remains within the configured limit.",
+      "rule": "expectancy_stability_gap",
+      "source": "backtest",
+      "status": "PASS",
+      "threshold": "<=0.5"
+    },
+    {
+      "actual": 0,
+      "message": "Paper trading sample is too small for live approval.",
+      "rule": "paper_trade_count",
+      "source": "paper",
+      "status": "CONDITIONAL PASS",
+      "threshold": 20
+    },
+    {
+      "actual": 0.0,
+      "message": "Backtest profit factor is too weak for go-live.",
+      "rule": "backtest_profit_factor",
+      "source": "backtest",
+      "status": "FAIL",
+      "threshold": ">1.3"
+    },
+    {
+      "actual": 0.0,
+      "message": "Backtest drawdown stays within the configured limit.",
+      "rule": "backtest_drawdown",
+      "source": "backtest",
+      "status": "PASS",
+      "threshold": "<=12.0"
+    },
+    {
+      "actual": 0,
+      "message": "Backtest duplicate trade count is clean.",
+      "rule": "backtest_duplicates",
+      "source": "backtest",
+      "status": "PASS",
+      "threshold": 0
+    },
+    {
+      "actual": 0,
+      "message": "Backtest invalid trade count is clean.",
+      "rule": "backtest_invalid_trades",
+      "source": "backtest",
+      "status": "PASS",
+      "threshold": 0
+    },
+    {
+      "actual": {
+        "losses": 0,
+        "max_drawdown_pct": 0.0
+      },
+      "message": "Backtest does not contain enough adverse-path evidence to trust drawdown.",
+      "rule": "backtest_drawdown_proof",
+      "source": "backtest",
+      "status": "FAIL",
+      "threshold": {
+        "drawdown_required": true,
+        "min_loss_trades": 1
+      }
+    },
+    {
+      "actual": 0.0,
+      "message": "Paper profit factor is too weak for go-live.",
+      "rule": "paper_profit_factor",
+      "source": "paper",
+      "status": "CONDITIONAL PASS",
+      "threshold": ">1.3"
+    },
+    {
+      "actual": 0.0,
+      "message": "Paper drawdown stays within the configured limit.",
+      "rule": "paper_drawdown",
+      "source": "paper",
+      "status": "PASS",
+      "threshold": "<=12.0"
+    },
+    {
+      "actual": 0,
+      "message": "Paper duplicate trade count is clean.",
+      "rule": "paper_duplicates",
+      "source": "paper",
+      "status": "PASS",
+      "threshold": 0
+    },
+    {
+      "actual": 0,
+      "message": "Paper invalid trade count is clean.",
+      "rule": "paper_invalid_trades",
+      "source": "paper",
+      "status": "PASS",
+      "threshold": 0
+    },
+    {
+      "actual": 0,
+      "message": "Paper execution completed without crashes.",
+      "rule": "paper_execution_errors",
+      "source": "paper",
+      "status": "PASS",
+      "threshold": 0
+    },
+    {
+      "actual": {
+        "backtest": false,
+        "paper": false
+      },
+      "message": "Cooldown and duplicate controls must be actively enforced before go-live.",
+      "rule": "cooldown_duplicate_controls",
+      "source": "system",
+      "status": "FAIL",
+      "threshold": true
+    },
+    {
+      "actual": 0.0,
+      "message": "Win rate is below the RR-adjusted breakeven threshold.",
+      "rule": "win_rate_vs_rr",
+      "source": "system",
+      "status": "FAIL",
+      "threshold": ">=33.33"
+    },
+    {
+      "actual": {
+        "expectancy_gap_ratio": 0.0,
+        "profit_factor_gap": 0.0,
+        "win_rate_gap_pct": 0.0
+      },
+      "message": "Paper and backtest remain within configured drift limits.",
+      "rule": "paper_vs_backtest_alignment",
+      "source": "system",
+      "status": "PASS",
+      "threshold": {
+        "max_expectancy_gap_ratio": 0.5,
+        "max_profit_factor_gap": 0.2,
+        "max_win_rate_gap_pct": 8.0
+      }
+    }
+  ],
+  "recommended_next_action": "Keep the system off live capital, fix blocking rules, and continue Nifty intraday backtest/paper validation within 09:15-15:30 session controls.",
+  "ui_summary": {
+    "failed_checks": [
+      "minimum_trade_confidence",
+      "backtest_expectancy",
+      "expectancy_stability_second_half",
+      "backtest_profit_factor",
+      "backtest_drawdown_proof",
+      "cooldown_duplicate_controls",
+      "win_rate_vs_rr"
+    ],
+    "go_live_status": "FAIL_NOT_READY",
+    "next_action": "Keep the system off live capital, fix blocking rules, and continue Nifty intraday backtest/paper validation within 09:15-15:30 session controls.",
+    "passed_checks": [
+      "session_context",
+      "expectancy_stability_gap",
+      "backtest_drawdown",
+      "backtest_duplicates",
+      "backtest_invalid_trades",
+      "paper_drawdown",
+      "paper_duplicates",
+      "paper_invalid_trades",
+      "paper_execution_errors",
+      "paper_vs_backtest_alignment"
+    ]
+  },
+  "warnings": [
+    "paper_trade_count_below_minimum",
+    "paper_profit_factor_below_threshold"
+  ]
+}

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import csv
@@ -682,7 +682,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
-    from src.amd_fvg_sd_bot import generate_trades as generate_amd_fvg_sd_trades
+    from src.amd_fvg_sd_bot import ConfluenceConfig, generate_trades as generate_amd_fvg_sd_trades
     from src.breakout_bot import generate_trades as generate_breakout_trades
     from src.breakout_bot import load_candles
     from src.indicator_bot import generate_trades as generate_indicator_trades
@@ -798,7 +798,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     )
     ds_rows = generate_strategy_rows(demand_supply_context)
     indicator_trade_rows = generate_indicator_trades(rows, capital=capital, risk_pct=risk_pct, rr_ratio=rr_ratio, config=indicator_cfg)
-    amd_rows = generate_amd_fvg_sd_trades(rows, capital=capital, risk_pct=risk_pct, rr_ratio=rr_ratio, mode=mode)
+    amd_rows = generate_amd_fvg_sd_trades(
+        rows,
+        capital=capital,
+        risk_pct=risk_pct,
+        rr_ratio=rr_ratio,
+        config=ConfluenceConfig.for_mode(mode),
+    )
     indicator_rows = generate_indicator_rows(candles, config=indicator_cfg)
     one_trade_rows = generate_strategy_rows(one_trade_context)
     btst_rows = generate_strategy_rows(btst_context)
@@ -815,12 +821,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     summary_rows = [apply_strategy_benchmark(summary) for summary in summary_rows]
     breakout_bias_evaluation = _build_breakout_bias_evaluation(summary_rows[0], summary_rows[1])
 
-    for summary in summary_rows:
-        summary['timeframe'] = timeframe
-        summary['data_start'] = data_start
-        summary['data_end'] = data_end
-        summary['run_at_utc'] = run_at
-        summary['equity_curve_output'] = str(equity_curve_output)
 
     summary_rows = [_apply_validation(summary, validation_thresholds) for summary in summary_rows]
     ranked_summary_rows = rank_strategy_summaries(summary_rows)
@@ -846,9 +846,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     for summary in summary_rows:
         if str(summary.get('validation_status', 'FAIL')).upper() == 'PASS':
-            print(f"[VALIDATION] Strategy {summary['strategy']} PASSED")
         else:
-            print(f"[VALIDATION] Strategy {summary['strategy']} FAILED: {summary.get('validation_reasons', '')}")
     if not promotable_rows:
         print('[RESULT] No promotable strategies found')
 
@@ -1118,6 +1116,8 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+
 
 
 

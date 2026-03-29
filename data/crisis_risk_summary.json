@@ -1,0 +1,135 @@
+{
+  "execution_overrides": {
+    "candidates": [],
+    "execution_type": "PAPER",
+    "max_daily_loss": null,
+    "max_open_trades": 1,
+    "max_trades_per_day": 1,
+    "override_notes": [
+      "caution_mode_reduces_size"
+    ],
+    "requested_execution_type": "PAPER"
+  },
+  "final_crisis_evaluation": {
+    "blocking_reasons": [],
+    "config": {
+      "afternoon_end": "14:45",
+      "afternoon_start": "13:46",
+      "caution_daily_loss_scale": 0.5,
+      "caution_first_15m_range_pct": 0.9,
+      "caution_first_hour_range_pct": 1.8,
+      "caution_first_hour_vol_ratio": 1.6,
+      "caution_max_open_trades": 1,
+      "caution_max_trades_per_day": 1,
+      "caution_opening_gap_pct": 0.75,
+      "caution_quantity_scale": 0.5,
+      "core_session_end": "11:15",
+      "core_session_start": "09:25",
+      "crisis_daily_loss_scale": 0.35,
+      "crisis_first_15m_range_pct": 1.5,
+      "crisis_first_hour_range_pct": 2.8,
+      "crisis_first_hour_vol_ratio": 2.1,
+      "crisis_opening_gap_pct": 1.25,
+      "crisis_quantity_scale": 0.5,
+      "market_close": "15:30",
+      "market_label": "NSE_NIFTY_INTRADAY",
+      "market_open": "09:15",
+      "max_execution_errors_before_halt": 0,
+      "max_missing_bars_before_halt": 0,
+      "midday_end": "13:45",
+      "midday_start": "11:16"
+    },
+    "market_metrics": {
+      "execution_error_count": 0,
+      "first_15m_range_pct": 1.1135,
+      "first_hour_range_pct": 1.9129,
+      "first_hour_volatility_ratio": 1.6071,
+      "latest_day_rows": 75,
+      "latest_session_window": "MORNING",
+      "market_label": "NSE_NIFTY_INTRADAY",
+      "missing_bar_count": 0,
+      "opening_gap_pct": 0.9054,
+      "timeframe": "5m"
+    },
+    "recommended_action": "Keep the system in reduced-size live mode or paper until volatility normalizes.",
+    "stress_state": "CAUTION",
+    "warnings": [
+      "first_15m_range_caution",
+      "first_hour_range_caution",
+      "first_hour_volatility_caution",
+      "opening_gap_caution"
+    ]
+  },
+  "initial_crisis_evaluation": {
+    "blocking_reasons": [],
+    "config": {
+      "afternoon_end": "14:45",
+      "afternoon_start": "13:46",
+      "caution_daily_loss_scale": 0.5,
+      "caution_first_15m_range_pct": 0.9,
+      "caution_first_hour_range_pct": 1.8,
+      "caution_first_hour_vol_ratio": 1.6,
+      "caution_max_open_trades": 1,
+      "caution_max_trades_per_day": 1,
+      "caution_opening_gap_pct": 0.75,
+      "caution_quantity_scale": 0.5,
+      "core_session_end": "11:15",
+      "core_session_start": "09:25",
+      "crisis_daily_loss_scale": 0.35,
+      "crisis_first_15m_range_pct": 1.5,
+      "crisis_first_hour_range_pct": 2.8,
+      "crisis_first_hour_vol_ratio": 2.1,
+      "crisis_opening_gap_pct": 1.25,
+      "crisis_quantity_scale": 0.5,
+      "market_close": "15:30",
+      "market_label": "NSE_NIFTY_INTRADAY",
+      "market_open": "09:15",
+      "max_execution_errors_before_halt": 0,
+      "max_missing_bars_before_halt": 0,
+      "midday_end": "13:45",
+      "midday_start": "11:16"
+    },
+    "market_metrics": {
+      "execution_error_count": 0,
+      "first_15m_range_pct": 1.1135,
+      "first_hour_range_pct": 1.9129,
+      "first_hour_volatility_ratio": 1.6071,
+      "latest_day_rows": 75,
+      "latest_session_window": "MORNING",
+      "market_label": "NSE_NIFTY_INTRADAY",
+      "missing_bar_count": 0,
+      "opening_gap_pct": 0.9054,
+      "timeframe": "5m"
+    },
+    "recommended_action": "Keep the system in reduced-size live mode or paper until volatility normalizes.",
+    "stress_state": "CAUTION",
+    "warnings": [
+      "first_15m_range_caution",
+      "first_hour_range_caution",
+      "first_hour_volatility_caution",
+      "opening_gap_caution"
+    ]
+  },
+  "live_permission": {
+    "blocking_reasons": [
+      "backtest_drawdown_not_proven",
+      "backtest_expectancy_not_positive",
+      "backtest_profit_factor_below_threshold",
+      "backtest_second_half_expectancy_not_positive",
+      "backtest_trade_count_below_minimum",
+      "cooldown_duplicate_controls_not_enforced",
+      "win_rate_below_rr_breakeven"
+    ],
+    "decision_status": "PAPER_ONLY",
+    "recommended_execution_type": "PAPER",
+    "recommended_next_action": "Stay on paper until both crisis conditions and go-live blockers clear.",
+    "warnings": [
+      "first_15m_range_caution",
+      "first_hour_range_caution",
+      "first_hour_volatility_caution",
+      "opening_gap_caution",
+      "paper_profit_factor_below_threshold",
+      "paper_trade_count_below_minimum"
+    ]
+  }
+}

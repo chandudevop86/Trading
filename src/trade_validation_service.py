@@ -1615,39 +1615,340 @@ def evaluate_paper_readiness(summary: dict[str, Any], config: PaperReadinessConf
     }
 
 
+def _time_anchor(record: TradeEvaluationRecord) -> datetime:
+    return record.exit_time or record.entry_time or record.signal_time or datetime.min
+
+
+STRICT_FAIL_MIN_TRADES = 100
+STRICT_LIVE_READY_TRADES = 150
+STRICT_EXPECTANCY_PASS_R = 0.0
+STRICT_EXPECTANCY_LIVE_READY_R = 0.30
+STRICT_MIN_PROFIT_FACTOR = 1.30
+STRICT_STRONG_PROFIT_FACTOR = 1.50
+STRICT_MAX_DRAWDOWN_PASS_PCT = 20.0
+STRICT_MAX_DRAWDOWN_FAIL_PCT = 25.0
+STRICT_LIVE_READY_MAX_DRAWDOWN_PCT = 15.0
+STRICT_MIN_WIN_RATE_PCT = 30.0
+STRICT_ACCEPTABLE_WIN_RATE_LOW_PCT = 35.0
+STRICT_ACCEPTABLE_WIN_RATE_HIGH_PCT = 65.0
+STRICT_MIN_RR = 1.50
+STRICT_IDEAL_RR = 2.00
+STRICT_MAX_LOSS_STREAK = 7
+STRICT_STRONG_MAX_LOSS_STREAK = 5
+STRICT_MIN_RECOVERY_FACTOR = 1.50
+
+
+def _timeframe_minutes(value: Any) -> int:
+    raw = str(value or '').strip().lower()
+    if not raw:
+        return 0
+    if raw.endswith('min'):
+        raw = raw[:-3]
+    if raw.endswith('m'):
+        return safe_int(raw[:-1], 0)
+    if raw.endswith('h'):
+        return safe_int(raw[:-1], 0) * 60
+    return safe_int(raw, 0)
+
+
+def _cooldown_window_minutes(raw: dict[str, Any]) -> int:
+    explicit_minutes = safe_int(raw.get('duplicate_signal_cooldown_minutes'), 0)
+    if explicit_minutes > 0:
+        return explicit_minutes
+    bars = safe_int(raw.get('duplicate_signal_cooldown_bars'), 0)
+    timeframe_minutes = _timeframe_minutes(raw.get('timeframe', raw.get('interval', '')))
+    if bars > 0 and timeframe_minutes > 0:
+        return bars * timeframe_minutes
+    return 0
+
+
+def _strict_execution_discipline_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    records = standardize_trade_records(rows)
+    pairs = [(standardize_trade_record(dict(row)), dict(row)) for row in rows]
+    ordered_pairs = sorted(pairs, key=lambda item: _time_anchor(item[0]))
+
+    duplicate_trade_count = sum(1 for record in records if str(record.duplicate_reason).startswith('DUPLICATE_'))
+    cooldown_violation_count = sum(
+        1
+        for record, raw in ordered_pairs
+        if 'DUPLICATE_SIGNAL_COOLDOWN' in {
+            str(record.duplicate_reason or '').strip().upper(),
+            str(record.validation_error or '').strip().upper(),
+            str(raw.get('blocked_reason', '') or '').strip().upper(),
+            str(raw.get('rejection_reason', '') or '').strip().upper(),
+        }
+    )
+    max_trades_day_violation_count = sum(
+        1
+        for _, raw in ordered_pairs
+        if 'MAX_TRADES_PER_DAY' in {
+            str(raw.get('blocked_reason', '') or '').strip().upper(),
+            str(raw.get('risk_limit_reason', '') or '').strip().upper(),
+            str(raw.get('rejection_reason', '') or '').strip().upper(),
+        }
+    )
+
+    revenge_entry_count = 0
+    previous_closed_loss: tuple[TradeEvaluationRecord, dict[str, Any]] | None = None
+    for record, raw in ordered_pairs:
+        if not (_record_counts_as_trade(record) and _trade_is_closed(record)):
+            continue
+        if previous_closed_loss is not None:
+            prev_record, prev_raw = previous_closed_loss
+            same_setup = (
+                str(prev_record.strategy).upper() == str(record.strategy).upper()
+                and str(prev_record.symbol).upper() == str(record.symbol).upper()
+            )
+            entry_time = record.entry_time or record.signal_time
+            prev_exit = prev_record.exit_time or prev_record.entry_time or prev_record.signal_time
+            cooldown_minutes = _cooldown_window_minutes(raw) or _cooldown_window_minutes(prev_raw) or 30
+            if same_setup and entry_time is not None and prev_exit is not None:
+                elapsed_minutes = (entry_time - prev_exit).total_seconds() / 60.0
+                if elapsed_minutes >= 0 and elapsed_minutes < cooldown_minutes:
+                    revenge_entry_count += 1
+        previous_closed_loss = (record, raw) if record.pnl < 0 else None
+
+    violation_count = duplicate_trade_count + cooldown_violation_count + max_trades_day_violation_count + revenge_entry_count
+    return {
+        'duplicate_trade_count': duplicate_trade_count,
+        'cooldown_violation_count': cooldown_violation_count,
+        'max_trades_day_violation_count': max_trades_day_violation_count,
+        'revenge_entry_count': revenge_entry_count,
+        'execution_violation_count': violation_count,
+        'execution_discipline_ok': violation_count == 0,
+        'execution_discipline_status': 'PASS' if violation_count == 0 else 'FAIL',
+    }
+
+
+def _strict_equity_curve_stability(summary: dict[str, Any]) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+    expectancy_stability_score = safe_float(summary.get('expectancy_stability_score'))
+    pf_stability_score = safe_float(summary.get('profit_factor_stability_score'))
+    positive_expectancy_segment_ratio = safe_float(summary.get('positive_expectancy_segment_ratio'))
+    one_trade_concentration = safe_float(summary.get('one_trade_profit_concentration'))
+    top3_concentration = safe_float(summary.get('top_3_trade_profit_concentration'))
+    pnl_std_dev = safe_float(summary.get('pnl_std_dev'))
+    expectancy = abs(safe_float(summary.get('expectancy_per_trade')))
+
+    if expectancy_stability_score < 6.0:
+        reasons.append('expectancy unstable across segments')
+    if pf_stability_score < 6.0:
+        reasons.append('profit factor unstable across segments')
+    if positive_expectancy_segment_ratio < 0.60:
+        reasons.append('too many negative expectancy segments')
+    if one_trade_concentration > 0.30:
+        reasons.append('single trade dominates profit curve')
+    if top3_concentration > 0.60:
+        reasons.append('top 3 trades dominate profit curve')
+    if pnl_std_dev > max(expectancy * 4.0, 1.0):
+        reasons.append('equity volatility too high for the observed expectancy')
+    return len(reasons) == 0, reasons
+
+
+def _strict_metric_rows(summary: dict[str, Any]) -> list[dict[str, str]]:
+    expectancy_r = safe_float(summary.get('expectancy_r'))
+    profit_factor_raw = summary.get('profit_factor', 0.0)
+    profit_factor = float('inf') if str(profit_factor_raw).strip().lower() == 'inf' else safe_float(profit_factor_raw)
+    max_drawdown_pct = safe_float(summary.get('max_drawdown_pct'))
+    win_rate = safe_float(summary.get('win_rate'))
+    rr_ratio = safe_float(summary.get('reward_risk_ratio', summary.get('payoff_ratio')))
+    trade_count = safe_int(summary.get('clean_trades', summary.get('closed_trades', summary.get('total_trades'))))
+    loss_streak = safe_int(summary.get('consecutive_losses_max', summary.get('longest_loss_streak')))
+    recovery_factor_raw = summary.get('recovery_factor', 0.0)
+    recovery_factor = float('inf') if str(recovery_factor_raw).strip().lower() == 'inf' else safe_float(recovery_factor_raw)
+    equity_stable = bool(summary.get('equity_curve_stable', False))
+    execution_discipline_ok = bool(summary.get('execution_discipline_ok', False))
+
+    def status_label(passed: bool) -> str:
+        return '✅ PASS' if passed else '❌ FAIL'
+
+    rows = [
+        {
+            'Metric': 'Expectancy',
+            'Value': f'{expectancy_r:.2f}R',
+            'Status': status_label(expectancy_r > STRICT_EXPECTANCY_PASS_R),
+            'Comment': 'Strong edge' if expectancy_r > STRICT_EXPECTANCY_LIVE_READY_R else 'Positive but below live-ready target' if expectancy_r > 0 else 'No positive edge',
+        },
+        {
+            'Metric': 'Profit Factor',
+            'Value': 'inf' if profit_factor == float('inf') else f'{profit_factor:.2f}',
+            'Status': status_label(profit_factor == float('inf') or profit_factor >= STRICT_MIN_PROFIT_FACTOR),
+            'Comment': 'Good efficiency' if profit_factor == float('inf') or profit_factor > STRICT_STRONG_PROFIT_FACTOR else 'Below strict threshold' if profit_factor < STRICT_MIN_PROFIT_FACTOR else 'Tradable but not strong',
+        },
+        {
+            'Metric': 'Max Drawdown',
+            'Value': f'{max_drawdown_pct:.2f}%',
+            'Status': status_label(max_drawdown_pct <= STRICT_MAX_DRAWDOWN_PASS_PCT),
+            'Comment': 'Controlled' if max_drawdown_pct < STRICT_LIVE_READY_MAX_DRAWDOWN_PCT else 'Acceptable but not live-ready' if max_drawdown_pct <= STRICT_MAX_DRAWDOWN_PASS_PCT else 'Risk too high',
+        },
+        {
+            'Metric': 'Win Rate',
+            'Value': f'{win_rate:.2f}%',
+            'Status': status_label(win_rate >= STRICT_MIN_WIN_RATE_PCT),
+            'Comment': 'Within preferred band' if STRICT_ACCEPTABLE_WIN_RATE_LOW_PCT <= win_rate <= STRICT_ACCEPTABLE_WIN_RATE_HIGH_PCT else 'Too low' if win_rate < STRICT_MIN_WIN_RATE_PCT else 'Usable but secondary metric',
+        },
+        {
+            'Metric': 'Risk-Reward Ratio',
+            'Value': 'inf' if rr_ratio == float('inf') else f'{rr_ratio:.2f}',
+            'Status': status_label(rr_ratio == float('inf') or rr_ratio >= STRICT_MIN_RR),
+            'Comment': 'Ideal' if rr_ratio == float('inf') or rr_ratio >= STRICT_IDEAL_RR else 'Meets minimum' if rr_ratio >= STRICT_MIN_RR else 'Reward too small for risk',
+        },
+        {
+            'Metric': 'Trade Count',
+            'Value': str(trade_count),
+            'Status': status_label(trade_count >= STRICT_FAIL_MIN_TRADES),
+            'Comment': 'Sample strong enough for live review' if trade_count >= STRICT_LIVE_READY_TRADES else 'Minimum sample reached' if trade_count >= STRICT_FAIL_MIN_TRADES else 'Insufficient sample size',
+        },
+        {
+            'Metric': 'Equity Curve Stability',
+            'Value': 'Stable' if equity_stable else 'Unstable',
+            'Status': status_label(equity_stable),
+            'Comment': 'Smooth upward profile' if equity_stable else '; '.join(summary.get('equity_curve_instability_reasons', []) or ['Spikes detected']),
+        },
+        {
+            'Metric': 'Loss Streak Control',
+            'Value': str(loss_streak),
+            'Status': status_label(loss_streak <= STRICT_MAX_LOSS_STREAK),
+            'Comment': 'Controlled' if loss_streak <= STRICT_STRONG_MAX_LOSS_STREAK else 'Monitor closely' if loss_streak <= STRICT_MAX_LOSS_STREAK else 'Strategy unstable under loss clustering',
+        },
+        {
+            'Metric': 'Recovery Factor',
+            'Value': 'inf' if recovery_factor == float('inf') else f'{recovery_factor:.2f}',
+            'Status': status_label(recovery_factor == float('inf') or recovery_factor > STRICT_MIN_RECOVERY_FACTOR),
+            'Comment': 'Capital recovers efficiently' if recovery_factor == float('inf') or recovery_factor > STRICT_MIN_RECOVERY_FACTOR else 'Recovery too weak',
+        },
+        {
+            'Metric': 'Execution Discipline',
+            'Value': 'Clean' if execution_discipline_ok else 'Violations',
+            'Status': status_label(execution_discipline_ok),
+            'Comment': 'No duplicate/cooldown/overtrade/revenge violations' if execution_discipline_ok else '; '.join(summary.get('execution_discipline_comments', []) or ['Execution violations detected']),
+        },
+    ]
+    return rows
+
+
+def _strict_validation_markdown(rows: list[dict[str, str]]) -> str:
+    lines = [
+        '| Metric | Value | Status | Comment |',
+        '|--------|------|--------|---------|',
+    ]
+    for row in rows:
+        lines.append(f"| {row['Metric']} | {row['Value']} | {row['Status']} | {row['Comment']} |")
+    return '\n'.join(lines)
+
+
+def evaluate_paper_readiness(summary: dict[str, Any], config: PaperReadinessConfig | None = None) -> dict[str, Any]:
+    _ = config or PaperReadinessConfig()
+    trade_count = safe_int(summary.get('clean_trades', summary.get('closed_trades', summary.get('total_trades'))))
+    expectancy_r = safe_float(summary.get('expectancy_r'))
+    profit_factor_raw = summary.get('profit_factor', 0.0)
+    profit_factor = float('inf') if str(profit_factor_raw).strip().lower() == 'inf' else safe_float(profit_factor_raw)
+    max_drawdown_pct = safe_float(summary.get('max_drawdown_pct'))
+    recovery_factor_raw = summary.get('recovery_factor', 0.0)
+    recovery_factor = float('inf') if str(recovery_factor_raw).strip().lower() == 'inf' else safe_float(recovery_factor_raw)
+    win_rate = safe_float(summary.get('win_rate'))
+    rr_ratio = safe_float(summary.get('reward_risk_ratio', summary.get('payoff_ratio')))
+    loss_streak = safe_int(summary.get('consecutive_losses_max', summary.get('longest_loss_streak')))
+    execution_discipline_ok = bool(summary.get('execution_discipline_ok', False))
+    equity_stable = bool(summary.get('equity_curve_stable', False))
+    duplicate_trade_count = safe_int(summary.get('duplicate_trade_count'))
+
+    blockers: list[str] = []
+    if trade_count < STRICT_FAIL_MIN_TRADES:
+        blockers.append('not enough paper trades yet')
+    if expectancy_r <= STRICT_EXPECTANCY_PASS_R:
+        blockers.append('expectancy is not positive yet')
+    if profit_factor != float('inf') and profit_factor < STRICT_MIN_PROFIT_FACTOR:
+        blockers.append('profit factor is below 1.3')
+    if max_drawdown_pct > STRICT_MAX_DRAWDOWN_FAIL_PCT:
+        blockers.append('max drawdown is above 25%')
+    if duplicate_trade_count > 0:
+        blockers.append('duplicate trades were detected')
+    if not equity_stable:
+        blockers.append('equity curve is unstable')
+    if rr_ratio != float('inf') and rr_ratio < STRICT_MIN_RR:
+        blockers.append('risk-reward ratio is below 1.5')
+    if win_rate < STRICT_MIN_WIN_RATE_PCT:
+        blockers.append('win rate is below 30%')
+    if loss_streak > STRICT_MAX_LOSS_STREAK:
+        blockers.append('loss streak is too long')
+    if recovery_factor != float('inf') and recovery_factor <= STRICT_MIN_RECOVERY_FACTOR:
+        blockers.append('recovery factor is too weak')
+    if not execution_discipline_ok:
+        blockers.append('execution discipline violations are present')
+
+    hard_fail = len(blockers) > 0
+    live_ready = (
+        expectancy_r > STRICT_EXPECTANCY_LIVE_READY_R
+        and (profit_factor == float('inf') or profit_factor > STRICT_STRONG_PROFIT_FACTOR)
+        and max_drawdown_pct < STRICT_LIVE_READY_MAX_DRAWDOWN_PCT
+        and trade_count >= STRICT_LIVE_READY_TRADES
+        and equity_stable
+        and execution_discipline_ok
+    )
+
+    if live_ready:
+        status = 'PASS'
+        blocker_text = ''
+        readiness_summary = 'Strict validation passed. Statistical edge, drawdown control, and execution discipline are live-ready.'
+        next_step = 'System is eligible for controlled go-live with the current hard risk limits unchanged.'
+        confidence_label = 'HIGH'
+    elif hard_fail:
+        status = 'FAIL'
+        blocker_text = '; '.join(blockers)
+        readiness_summary = f'Validation failed because {blocker_text}.'
+        next_step = 'Stay in paper trading. Clear every blocker before any live deployment.'
+        confidence_label = 'REJECT'
+    else:
+        status = 'NEED_MORE_DATA'
+        blocker_text = 'strict hard-fail rules passed, but live-ready thresholds are not all satisfied yet'
+        readiness_summary = 'Validation is improving, but the system still needs more confirmed edge or more sample depth before go-live.'
+        next_step = 'Continue paper trading until expectancy exceeds 0.30R, profit factor exceeds 1.5, drawdown stays below 15%, and the sample reaches 150 trades.'
+        confidence_label = 'MEDIUM'
+
+    return {
+        'paper_ready': 'YES' if live_ready else 'NO',
+        'paper_readiness_status': 'READY_FOR_LIVE' if live_ready else 'FAIL_STRICT_VALIDATION' if hard_fail else 'CONTINUE_PAPER_VALIDATION',
+        'paper_readiness_blockers': blocker_text,
+        'paper_readiness_summary': readiness_summary,
+        'paper_readiness_next_step': next_step,
+        'pass_fail_status': status,
+        'pass_fail_reasons': blockers,
+        'warnings': [] if live_ready else ['Win rate remains secondary. Expectancy, PF, drawdown, and discipline drive the decision.'],
+        'confidence_label': confidence_label,
+        'go_live_status': 'LIVE_READY' if live_ready else 'REJECT' if hard_fail else 'PAPER_ONLY',
+        'deployment_confidence_label': confidence_label,
+    }
+
+
 def metrics_frame(summary: dict[str, Any]) -> pd.DataFrame:
     rows = [
-        {'metric': 'Total trades', 'value': safe_int(summary.get('total_trades'))},
-        {'metric': 'Clean trades', 'value': safe_int(summary.get('clean_trades', summary.get('closed_trades')))},
-        {'metric': 'Trade data quality', 'value': str(summary.get('trade_data_quality_label', 'NA'))},
-        {'metric': 'Expectancy / trade', 'value': round(safe_float(summary.get('expectancy_per_trade')), 2)},
-        {'metric': 'Expectancy stability', 'value': round(safe_float(summary.get('expectancy_stability_score')), 2)},
-        {'metric': 'Profit factor', 'value': summary.get('profit_factor', 0.0)},
-        {'metric': 'PF stability', 'value': round(safe_float(summary.get('profit_factor_stability_score')), 2)},
-        {'metric': 'Max drawdown %', 'value': round(safe_float(summary.get('max_drawdown_pct')), 2)},
-        {'metric': 'Recovery factor', 'value': summary.get('recovery_factor', 0.0)},
-        {'metric': 'Decision', 'value': str(summary.get('pass_fail_status', 'NA'))},
-        {'metric': 'Confidence', 'value': str(summary.get('confidence_label', 'NA'))},
+        {
+            'metric': row['Metric'],
+            'value': row['Value'],
+            'status': row['Status'],
+            'comment': row['Comment'],
+        }
+        for row in summary.get('strict_validation_rows', [])
     ]
     return pd.DataFrame(rows)
 
 
 def terminal_lines(summary: dict[str, Any]) -> list[str]:
-    return [
+    lines = [
         'Validation Summary',
         f"Total trades: {safe_int(summary.get('total_trades'))}",
         f"- Clean Trades: {safe_int(summary.get('clean_trades', summary.get('closed_trades')))}",
-        f"- Expectancy: {safe_float(summary.get('expectancy_per_trade')):.2f}",
-        f"- Expectancy Stability: {safe_float(summary.get('expectancy_stability_score')):.2f}",
-        f"- Profit Factor: {summary.get('profit_factor', 0.0)}",
-        f"- PF Stability: {safe_float(summary.get('profit_factor_stability_score')):.2f}",
-        f"- Max Drawdown: {safe_float(summary.get('max_drawdown_pct')):.2f}%",
-        f"- Recovery Factor: {summary.get('recovery_factor', 0.0)}",
-        f"- Decision: {summary.get('pass_fail_status', 'NA')}",
-        f"- Confidence: {summary.get('confidence_label', 'NA')}",
-        *[f'- {reason}' for reason in (summary.get('pass_fail_reasons', []) or [])],
-        *[f'- WARNING: {warning}' for warning in (summary.get('warnings', []) or [])],
+        f"- Pre-Execution Validation: {summary.get('pre_execution_validation_status', 'NA')}",
+        f"- Post-Execution Validation: {summary.get('post_execution_validation_status', 'NA')}",
+        f"- Live Status: {summary.get('go_live_status', 'NA')}",
+        'Strict Validation Table',
+        *summary.get('strict_validation_markdown', '').splitlines(),
     ]
+    blockers = summary.get('pass_fail_reasons', []) or []
+    for blocker in blockers:
+        lines.append(f'- {blocker}')
+    return lines
 
 
 def build_trade_evaluation_summary(
@@ -1658,108 +1959,60 @@ def build_trade_evaluation_summary(
 ) -> dict[str, Any]:
     cfg = readiness_config or PaperReadinessConfig()
     summary = calculate_trade_metrics(rows, strategy_name=strategy_name)
-    summary.update(_advanced_validation_metrics(rows, summary, cfg))
-    summary.update(_walkforward_metrics(rows))
-    summary.update(_monitoring_readiness())
-    summary.update(evaluate_paper_readiness(summary, cfg))
-    summary.update(evaluate_go_live_readiness(summary, cfg))
-    summary.update(_promotion_decision(summary))
-    summary['terminal_metrics_lines'] = terminal_lines(summary)
-    summary['validation_summary_lines'] = list(summary['terminal_metrics_lines'])
-    summary['dashboard_metrics_rows'] = metrics_frame(summary).to_dict(orient='records')
-    summary['trade_evaluation_records'] = [asdict(record) for record in standardize_trade_records(rows)]
-    return summary
 
+    average_loss = safe_float(summary.get('average_loss'))
+    expectancy_per_trade = safe_float(summary.get('expectancy_per_trade'))
+    expectancy_r = round(_safe_ratio(expectancy_per_trade, average_loss), 2) if average_loss > 0 else (0.0 if expectancy_per_trade <= 0 else float('inf'))
+    summary['expectancy_r'] = expectancy_r
 
-def evaluate_paper_readiness(summary: dict[str, Any], config: PaperReadinessConfig | None = None) -> dict[str, Any]:
-    cfg = config or PaperReadinessConfig()
-    clean_trades = safe_int(summary.get('clean_trades', summary.get('closed_trades', summary.get('total_trades'))))
-    expectancy = safe_float(summary.get('expectancy_per_trade'))
+    discipline = _strict_execution_discipline_metrics(rows)
+    summary.update(discipline)
+    summary['pre_execution_validation_status'] = 'PASS' if (
+        safe_int(summary.get('invalid_trade_count')) == 0 and discipline['execution_discipline_ok']
+    ) else 'FAIL'
+
+    equity_stable, instability_reasons = _strict_equity_curve_stability(summary)
+    summary['equity_curve_stable'] = equity_stable
+    summary['equity_curve_instability_reasons'] = instability_reasons
+
+    discipline_comments: list[str] = []
+    if discipline['duplicate_trade_count'] > 0:
+        discipline_comments.append('duplicate trades detected')
+    if discipline['cooldown_violation_count'] > 0:
+        discipline_comments.append('cooldown violations detected')
+    if discipline['max_trades_day_violation_count'] > 0:
+        discipline_comments.append('max trades/day exceeded')
+    if discipline['revenge_entry_count'] > 0:
+        discipline_comments.append('revenge entries detected')
+    summary['execution_discipline_comments'] = discipline_comments
+
+    hard_fail_reasons: list[str] = []
+    trade_count = safe_int(summary.get('clean_trades', summary.get('closed_trades', summary.get('total_trades'))))
     profit_factor_raw = summary.get('profit_factor', 0.0)
     profit_factor = float('inf') if str(profit_factor_raw).strip().lower() == 'inf' else safe_float(profit_factor_raw)
     max_drawdown_pct = safe_float(summary.get('max_drawdown_pct'))
-    recovery_factor_raw = summary.get('recovery_factor', 0.0)
-    recovery_factor = float('inf') if str(recovery_factor_raw).strip().lower() == 'inf' else safe_float(recovery_factor_raw)
-    expectancy_stability_score = safe_float(summary.get('expectancy_stability_score'))
-    pf_stability_score = safe_float(summary.get('profit_factor_stability_score'))
-    segment_count = safe_int(summary.get('segment_count'))
-    malformed_ratio = 1.0 - safe_float(summary.get('clean_trade_ratio'))
+    if safe_float(summary.get('expectancy_r')) <= STRICT_EXPECTANCY_PASS_R:
+        hard_fail_reasons.append('EXPECTANCY<=0R')
+    if profit_factor != float('inf') and profit_factor < STRICT_MIN_PROFIT_FACTOR:
+        hard_fail_reasons.append('PROFIT_FACTOR<1.3')
+    if max_drawdown_pct > STRICT_MAX_DRAWDOWN_FAIL_PCT:
+        hard_fail_reasons.append('MAX_DRAWDOWN>25%')
+    if trade_count < STRICT_FAIL_MIN_TRADES:
+        hard_fail_reasons.append('TRADES<100')
+    if safe_int(summary.get('duplicate_trade_count')) > 0:
+        hard_fail_reasons.append('DUPLICATE_TRADES_DETECTED')
+    if not equity_stable:
+        hard_fail_reasons.append('EQUITY_CURVE_UNSTABLE')
+    summary['strict_fail_reasons'] = hard_fail_reasons
 
-    reasons: list[str] = []
-    blocker_messages: list[str] = []
-    status = 'PASS'
-    if clean_trades < MIN_CLEAN_TRADES_WARN or segment_count < 4:
-        status = 'NEED_MORE_DATA'
-        reasons.append(f'NEED_MORE_DATA: only {clean_trades} clean trades')
-        blocker_messages.append('not enough paper trades yet')
-    if malformed_ratio > 0.25:
-        status = 'NEED_MORE_DATA'
-        reasons.append('NEED_MORE_DATA: too many malformed trades removed')
-        blocker_messages.append('too many malformed trades removed')
-    if expectancy <= max(cfg.min_expectancy_per_trade, MIN_EXPECTANCY):
-        reasons.append('FAIL: expectancy is not positive')
-        blocker_messages.append('expectancy is not positive yet')
-    if expectancy_stability_score < MIN_EXPECTANCY_STABILITY_SCORE or safe_float(summary.get('positive_expectancy_segment_ratio')) < 0.60:
-        reasons.append('FAIL: expectancy is positive globally but unstable across segments')
-        blocker_messages.append('expectancy stability is too weak')
-    if profit_factor != float('inf') and profit_factor < max(cfg.min_profit_factor, MIN_PROFIT_FACTOR):
-        reasons.append('FAIL: profit factor below 1.3')
-        blocker_messages.append('profit factor is below 1.3')
-    if pf_stability_score < MIN_PF_STABILITY_SCORE or safe_float(summary.get('positive_pf_segment_ratio')) < 0.60:
-        reasons.append('FAIL: profit factor is unstable across segments')
-        blocker_messages.append('profit factor stability is too weak')
-    if max_drawdown_pct > min(cfg.max_drawdown_pct, STRICT_MAX_DRAWDOWN_PCT):
-        reasons.append('FAIL: drawdown too high for current edge')
-        blocker_messages.append('drawdown is too high')
-    if recovery_factor != float('inf') and recovery_factor < cfg.min_recovery_factor:
-        reasons.append('FAIL: recovery factor too weak')
-        blocker_messages.append('recovery factor is too weak')
-    if safe_float(summary.get('one_trade_profit_concentration')) > cfg.max_one_trade_profit_concentration:
-        reasons.append('FAIL: results depend too much on one oversized winner')
-        blocker_messages.append('results are too concentrated in one trade')
-    if safe_float(summary.get('top_3_trade_profit_concentration')) > cfg.max_top3_profit_concentration:
-        reasons.append('FAIL: top 3 trades contribute too much profit')
-        blocker_messages.append('results are too concentrated in top winners')
+    strict_rows = _strict_metric_rows(summary)
+    summary['strict_validation_rows'] = strict_rows
+    summary['strict_validation_markdown'] = _strict_validation_markdown(strict_rows)
+    summary['post_execution_validation_status'] = 'FAIL' if hard_fail_reasons else 'PASS'
 
-    if status != 'NEED_MORE_DATA' and reasons:
-        status = 'FAIL'
-
-    warnings: list[str] = []
-    if clean_trades < MIN_CLEAN_TRADES_PASS:
-        warnings.append(f'Sample is above {MIN_CLEAN_TRADES_WARN} but still below {MIN_CLEAN_TRADES_PASS} clean trades.')
-    if malformed_ratio > 0.10:
-        warnings.append('Too many malformed trades removed.')
-    if safe_float(summary.get('one_trade_profit_concentration')) > 0.30:
-        warnings.append('Positive expectancy is too dependent on a small subset of trades.')
-    if safe_float(summary.get('top_3_trade_profit_concentration')) > 0.60:
-        warnings.append(f"Top 3 trades contributed {safe_float(summary.get('top_3_wins_pct_of_total_profit')):.0f}% of total profits.")
-    if expectancy_stability_score < 7.0:
-        warnings.append('Profitability is unstable across chronological segments.')
-    if safe_float(summary.get('drawdown_stability_score')) < 6.0:
-        warnings.append('Drawdown control is too weak for live confidence.')
-    confidence_label = 'NEED_MORE_DATA' if status == 'NEED_MORE_DATA' else 'FAIL' if status == 'FAIL' else 'STRONG_PASS' if clean_trades >= MIN_CLEAN_TRADES_PASS and expectancy_stability_score >= 7.0 and pf_stability_score >= 7.0 and max_drawdown_pct <= 12.0 else 'PASS' if clean_trades >= MIN_CLEAN_TRADES_WARN else 'BORDERLINE'
-
-    if status == 'PASS':
-        blocker_text = ''
-        readiness_summary = 'Validation passed with enough clean trades, positive stable expectancy, profit factor above target, and controlled drawdown.'
-        next_step = 'Continue paper deployment and keep monitoring before any live decision.'
-    elif status == 'NEED_MORE_DATA':
-        blocker_text = '; '.join(blocker_messages or ['not enough paper trades yet'])
-        readiness_summary = f'Validation needs more data because {'; '.join(blocker_messages).lower() if blocker_messages else 'not enough paper trades yet'}.'
-        next_step = 'Stay in paper trading. Keep collecting closed trades before making any pass/fail decision.'
-    else:
-        blocker_text = '; '.join(blocker_messages or reasons)
-        readiness_summary = f'Validation failed because {blocker_text.lower()}.'
-        next_step = 'Stay in paper trading. Clear the listed blockers before any live decision.'
-
-    return {
-        'paper_ready': 'YES' if status == 'PASS' else 'NO',
-        'paper_readiness_status': 'READY_FOR_PAPER_PHASE' if status == 'PASS' else 'NOT_READY_FOR_PAPER_PHASE',
-        'paper_readiness_blockers': blocker_text,
-        'paper_readiness_summary': readiness_summary,
-        'paper_readiness_next_step': next_step,
-        'pass_fail_status': status,
-        'pass_fail_reasons': reasons,
-        'warnings': warnings,
-        'confidence_label': confidence_label,
-    }
+    summary.update(evaluate_paper_readiness(summary, cfg))
+    summary['validation_summary_lines'] = terminal_lines(summary)
+    summary['terminal_metrics_lines'] = list(summary['validation_summary_lines'])
+    summary['dashboard_metrics_rows'] = metrics_frame(summary).to_dict(orient='records')
+    summary['trade_evaluation_records'] = [asdict(record) for record in standardize_trade_records(rows)]
+    return summary

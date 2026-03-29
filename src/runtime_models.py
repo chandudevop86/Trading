@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 
@@ -31,6 +31,7 @@ class TradingActionResult:
     active_summary: dict[str, object]
     backtest_summary: dict[str, object]
     paper_summary: dict[str, object]
+    market_data_summary: dict[str, object]
     todays_trades: int
     execution_messages: list[tuple[str, str]]
 

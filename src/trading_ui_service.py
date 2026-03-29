@@ -382,7 +382,13 @@ def apply_minimal_theme() -> None:
     )
 
 
-def render_summary_cards(trades: list[dict[str, object]], summary: dict[str, object], todays_trades: int, candles: pd.DataFrame | None = None) -> None:
+def render_summary_cards(
+    trades: list[dict[str, object]],
+    summary: dict[str, object],
+    todays_trades: int,
+    candles: pd.DataFrame | None = None,
+    market_data_summary: dict[str, object] | None = None,
+) -> None:
     total_trades = safe_int(summary.get('total_trades', 0))
     win_rate = safe_float(summary.get('win_rate', 0.0))
     pnl = safe_float(summary.get('total_pnl', summary.get('pnl', 0.0)))
@@ -422,7 +428,34 @@ def render_summary_cards(trades: list[dict[str, object]], summary: dict[str, obj
         unsafe_allow_html=True,
     )
 
-
+    data_summary = dict(market_data_summary or {})
+    if data_summary:
+        quality_score = safe_float(data_summary.get('data_quality_score', 0.0))
+        provider = str(data_summary.get('provider', 'UNKNOWN') or 'UNKNOWN')
+        rows_out = safe_int(data_summary.get('rows_out', 0))
+        age_minutes = data_summary.get('last_candle_age_minutes')
+        freshness = 'PASS' if bool(data_summary.get('freshness_passed', True)) else 'FAIL'
+        freshness_label = 'ENFORCED' if bool(data_summary.get('freshness_enforced')) else 'INFO'
+        issues = data_summary.get('issues', []) or []
+        warnings = data_summary.get('warnings', []) or []
+        attempts = data_summary.get('provider_attempts', []) or []
+        age_display = 'NA' if age_minutes in (None, '') else f'{safe_float(age_minutes):.2f}m'
+        attempts_display = ' -> '.join(str(item.get('provider', '')) for item in attempts if isinstance(item, dict)) or provider
+        health_comment = 'Validation clean' if not issues else '; '.join(str(item) for item in issues[:2])
+        if not issues and warnings:
+            health_comment = '; '.join(str(item) for item in warnings[:2])
+        st.markdown(
+            (
+                '<div class="desk-card" style="margin-top:12px;">'
+                '<div class="desk-panel-title">Market Data Quality</div>'
+                f'<div class="desk-note" style="margin-bottom:10px;">Provider: <strong>{provider}</strong> | Attempts: <strong>{attempts_display}</strong> | Quality Score: <strong>{quality_score:.2f} / 10</strong></div>'
+                f'<div class="desk-note">Rows: {rows_out} | Latest Candle: {data_summary.get("latest_timestamp", "NA")} | Candle Age: {age_display}</div>'
+                f'<div class="desk-note">Freshness: <strong>{freshness}</strong> ({freshness_label}) | Gaps: {safe_int(data_summary.get("gap_count", 0))} | Invalid Intervals: {safe_int(data_summary.get("invalid_interval_count", 0))} | Misaligned: {safe_int(data_summary.get("misaligned_timestamp_count", 0))}</div>'
+                f'<div class="desk-note" style="margin-top:8px;">Comment: <strong>{health_comment}</strong></div>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
 def render_operator_panels(status: str, trades: list[dict[str, object]], symbol: str, timeframe: str, period: str, broker_choice: str, broker_status: str) -> None:
     st.markdown('<div class="desk-card">', unsafe_allow_html=True)
     st.markdown('<div class="desk-label">Current Status</div>', unsafe_allow_html=True)
@@ -454,3 +487,6 @@ def build_request(strategy: str, symbol: str, timeframe: str, capital: float, ri
         run_requested=bool(run_clicked),
         backtest_requested=bool(backtest_clicked),
     )
+
+
+

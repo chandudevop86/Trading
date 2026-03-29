@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import io
 import json
 import os
@@ -559,6 +559,23 @@ class TestExecutionEngine(unittest.TestCase):
 
 
 
+    def test_validate_candidate_rejects_low_risk_reward_trade(self):
+        ok, reason, normalized = validate_candidate(
+            {
+                'strategy': 'BREAKOUT',
+                'symbol': 'NIFTY',
+                'signal_time': '2026-03-06 10:00:00',
+                'side': 'BUY',
+                'price': 100.0,
+                'quantity': 65,
+                'stop_loss': 99.0,
+                'target_price': 101.0,
+            }
+        )
+        self.assertFalse(ok)
+        self.assertEqual(reason, 'RISK_REWARD_TOO_LOW')
+        self.assertEqual(normalized['risk_reward_ratio'], 1.0)
+
     def test_validate_dhan_preflight_blocks_missing_security_map(self):
         ok, reason, enriched = validate_dhan_preflight(
             {
@@ -893,4 +910,3 @@ class TestExecutionEngine(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

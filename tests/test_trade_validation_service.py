@@ -1,5 +1,6 @@
-﻿import tempfile
+import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from src.execution_engine import execute_paper_trades
@@ -131,6 +132,34 @@ class TestTradeValidationService(unittest.TestCase):
         )
         self.assertEqual(summary['invalid_trade_count'], 1)
 
+    def test_build_trade_evaluation_summary_emits_strict_live_ready_table(self):
+        rows = []
+        base_time = datetime(2026, 1, 1, 9, 15)
+        for index in range(160):
+            trade_time = (base_time + timedelta(hours=index)).strftime('%Y-%m-%d %H:%M:%S')
+            pnl = -100.0 if index % 5 == 0 else 220.0
+            rows.append(
+                {
+                    'strategy': 'Breakout',
+                    'symbol': 'NIFTY',
+                    'execution_type': 'PAPER',
+                    'side': 'BUY' if index % 2 == 0 else 'SELL',
+                    'signal_time': trade_time,
+                    'entry_time': trade_time,
+                    'exit_time': trade_time,
+                    'entry_price': 100.0,
+                    'exit_price': 102.0 if pnl > 0 else 99.0,
+                    'pnl': pnl,
+                    'execution_status': 'CLOSED',
+                }
+            )
+        summary = build_trade_evaluation_summary(rows, strategy_name='BREAKOUT')
+        self.assertEqual(summary['go_live_status'], 'LIVE_READY')
+        self.assertEqual(summary['paper_ready'], 'YES')
+        self.assertEqual(summary['pre_execution_validation_status'], 'PASS')
+        self.assertEqual(summary['post_execution_validation_status'], 'PASS')
+        self.assertIn('| Metric | Value | Status | Comment |', summary['strict_validation_markdown'])
+        self.assertTrue(any(row['Metric'] == 'Expectancy' for row in summary['strict_validation_rows']))
 
 if __name__ == '__main__':
     unittest.main()

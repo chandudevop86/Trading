@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import hashlib
@@ -63,6 +63,7 @@ SKIP_REASON_MISSING_TIMESTAMP = "MISSING_TIMESTAMP"
 SKIP_REASON_MISSING_STOP_LOSS = "MISSING_STOP_LOSS"
 SKIP_REASON_MISSING_TARGET = "MISSING_TARGET"
 SKIP_REASON_INVALID_TRADE_LEVELS = "INVALID_TRADE_LEVELS"
+SKIP_REASON_RISK_REWARD_TOO_LOW = "RISK_REWARD_TOO_LOW"
 SKIP_REASON_DUPLICATE_BATCH_TRADE = "DUPLICATE_BATCH_TRADE"
 SKIP_REASON_DUPLICATE_SIGNAL_KEY = "DUPLICATE_SIGNAL_KEY"
 SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN = "DUPLICATE_SIGNAL_COOLDOWN"
@@ -517,6 +518,13 @@ def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[st
         return False, SKIP_REASON_INVALID_TRADE_LEVELS, normalized
     if side == 'SELL' and not (float(normalized['target_price']) < price < float(normalized['stop_loss'])):
         return False, SKIP_REASON_INVALID_TRADE_LEVELS, normalized
+
+    risk_per_unit = abs(price - float(normalized['stop_loss']))
+    reward_per_unit = abs(float(normalized['target_price']) - price)
+    rr_ratio = reward_per_unit / risk_per_unit if risk_per_unit > 0 else 0.0
+    normalized['risk_reward_ratio'] = round(rr_ratio, 2)
+    if rr_ratio < 1.5:
+        return False, SKIP_REASON_RISK_REWARD_TOO_LOW, normalized
 
     return True, '', normalized
 
@@ -2015,13 +2023,3 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
-
-
-
-
-
-
-
-
-
-

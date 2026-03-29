@@ -163,6 +163,7 @@ class TestTradingPage(unittest.TestCase):
             active_summary={'total_trades': 1},
             backtest_summary=backtest_summary or {},
             paper_summary={'total_trades': 1},
+            market_data_summary={},
             todays_trades=1,
             execution_messages=execution_messages or [],
         )
@@ -225,3 +226,4 @@ class TestTradingPage(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

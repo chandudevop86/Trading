@@ -5,7 +5,7 @@ from typing import Any
 import pandas as pd
 
 from src.breakout_bot import Candle
-from src.live_ohlcv import fetch_live_ohlcv
+from src.nifty_data_integration import fetch_nifty_ohlcv_frame
 from src.trading_core import prepare_trading_data
 
 
@@ -39,8 +39,7 @@ def dataframe_to_candles(df: pd.DataFrame) -> list[Candle]:
 
 
 def fetch_ohlcv_data(symbol: str, interval: str = '5m', period: str = '5d') -> pd.DataFrame:
-    rows = fetch_live_ohlcv(symbol, interval, period)
-    return prepare_trading_data(pd.DataFrame(rows or []))
+    return fetch_nifty_ohlcv_frame(symbol, interval=interval, period=period)
 
 
 def paper_candle_rows(candles: pd.DataFrame | list[dict[str, Any]]) -> list[dict[str, object]]:

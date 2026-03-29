@@ -79,8 +79,14 @@ def _minimal_theme() -> None:
     apply_minimal_theme()
 
 
-def _render_summary_cards(trades: list[dict[str, object]], summary: dict[str, object], todays_trades: int, candles: pd.DataFrame | None = None) -> None:
-    render_summary_cards(trades, summary, todays_trades, candles)
+def _render_summary_cards(
+    trades: list[dict[str, object]],
+    summary: dict[str, object],
+    todays_trades: int,
+    candles: pd.DataFrame | None = None,
+    market_data_summary: dict[str, object] | None = None,
+) -> None:
+    render_summary_cards(trades, summary, todays_trades, candles, market_data_summary)
 
 
 def _render_operator_panels(status: str, trades: list[dict[str, object]], symbol: str, timeframe: str, period: str, broker_choice: str, broker_status: str) -> None:
@@ -457,8 +463,8 @@ def _button_clicked(button_host: object, label: str, *, legacy_label: str = '', 
     return False
 
 
-def _render_dashboard_tab(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int, candles: pd.DataFrame | None = None) -> None:
-    _render_summary_cards(trades, active_summary, todays_trades, candles)
+def _render_dashboard_tab(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int, candles: pd.DataFrame | None = None, market_data_summary: dict[str, object] | None = None) -> None:
+    _render_summary_cards(trades, active_summary, todays_trades, candles, market_data_summary)
     left, right = st.columns(2)
     with left:
         st.markdown('### Recent Signals')
@@ -663,10 +669,10 @@ def _render_execution_tab(*, status: str, broker_status: str, todays_trades: int
             st.dataframe(rejections, use_container_width=True, hide_index=True)
 
 
-def _render_tabs(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], candles: pd.DataFrame, active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int) -> None:
+def _render_tabs(*, strategy: str, symbol: str, timeframe: str, period: str, broker_choice: str, status: str, broker_status: str, trades: list[dict[str, object]], candles: pd.DataFrame, active_summary: dict[str, object], scorecard_summary: dict[str, object], todays_trades: int, market_data_summary: dict[str, object] | None = None) -> None:
     dashboard_tab, score_report_tab, zone_heatmap_tab, charts_tab, validation_tab, trades_tab, execution_tab = st.tabs(['Dashboard', 'Score Backtest Report', 'Zone Heatmap', 'Charts', 'Validation', 'Trades', 'Execution Logs'])
     with dashboard_tab:
-        _render_dashboard_tab(strategy=strategy, symbol=symbol, timeframe=timeframe, period=period, broker_choice=broker_choice, status=status, broker_status=broker_status, trades=trades, active_summary=active_summary, scorecard_summary=scorecard_summary, todays_trades=todays_trades)
+        _render_dashboard_tab(strategy=strategy, symbol=symbol, timeframe=timeframe, period=period, broker_choice=broker_choice, status=status, broker_status=broker_status, trades=trades, active_summary=active_summary, scorecard_summary=scorecard_summary, todays_trades=todays_trades, candles=candles, market_data_summary=market_data_summary)
     with score_report_tab:
         _render_score_backtest_report_tab(trades=trades, summary=scorecard_summary)
     with zone_heatmap_tab:
@@ -707,7 +713,7 @@ def main() -> None:
     resting_summary = dict(st.session_state.get('backtest_summary', {}) or {})
     if not run_clicked and not backtest_clicked:
         _render_header(strategy, normalized_symbol, timeframe, mode, broker_choice, resting_summary)
-        _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=period_for_interval(timeframe), broker_choice=broker_choice, status='Ready', broker_status='Paper broker active', trades=[], candles=pd.DataFrame(), active_summary={}, scorecard_summary=resting_summary, todays_trades=0)
+        _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=period_for_interval(timeframe), broker_choice=broker_choice, status='Ready', broker_status='Paper broker active', trades=[], candles=pd.DataFrame(), active_summary={}, scorecard_summary=resting_summary, todays_trades=0, market_data_summary={})
         return
 
     try:
@@ -719,7 +725,7 @@ def main() -> None:
             st.session_state.pop('backtest_summary', None)
             _append_text_log(APP_LOG, result.status)
             _append_text_log(ERRORS_LOG, result.status)
-            _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=result.period, broker_choice=broker_choice, status=result.status, broker_status=result.broker_status, trades=result.trades, candles=result.candles, active_summary=result.active_summary, scorecard_summary=summary, todays_trades=result.todays_trades)
+            _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=result.period, broker_choice=broker_choice, status=result.status, broker_status=result.broker_status, trades=result.trades, candles=result.candles, active_summary=result.active_summary, scorecard_summary=summary, todays_trades=result.todays_trades, market_data_summary=result.market_data_summary)
             _render_execution_feedback(result.execution_messages)
             st.error(result.status)
             return
@@ -732,7 +738,7 @@ def main() -> None:
             _append_text_log(APP_LOG, f'BACKTEST completed for {strategy} {normalized_symbol} {timeframe}')
 
         _append_text_log(APP_LOG, result.status)
-        _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=result.period, broker_choice=broker_choice, status=result.status, broker_status=result.broker_status, trades=result.trades, candles=result.candles, active_summary=result.active_summary, scorecard_summary=summary, todays_trades=result.todays_trades)
+        _render_tabs(strategy=strategy, symbol=normalized_symbol, timeframe=timeframe, period=result.period, broker_choice=broker_choice, status=result.status, broker_status=result.broker_status, trades=result.trades, candles=result.candles, active_summary=result.active_summary, scorecard_summary=summary, todays_trades=result.todays_trades, market_data_summary=result.market_data_summary)
         _render_execution_feedback(result.execution_messages)
     except Exception as exc:
         message = f'Trading UI failure: {exc}'
@@ -744,5 +750,6 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 

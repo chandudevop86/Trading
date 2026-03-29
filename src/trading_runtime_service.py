@@ -9,7 +9,7 @@ from src.amd_fvg_sd_bot import generate_trades as generate_amd_fvg_sd_trades
 from src.breakout_bot import Candle, generate_trades as generate_breakout_trades
 from src.strategy_demand_supply import generate_trades as generate_demand_supply_trades
 from src.indicator_bot import generate_indicator_rows
-from src.live_ohlcv import fetch_live_ohlcv
+from src.nifty_data_integration import NiftyDataBundle, fetch_nifty_data_bundle, fetch_nifty_ohlcv_frame
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.nse_option_chain import build_metrics_map, extract_option_records, fetch_option_chain
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
@@ -46,8 +46,7 @@ def _df_to_candles(df: pd.DataFrame) -> list[Candle]:
 
 
 def fetch_ohlcv_data(symbol: str, interval: str = DEFAULT_INTERVAL, period: str = DEFAULT_PERIOD) -> pd.DataFrame:
-    rows = fetch_live_ohlcv(symbol, interval, period)
-    return prepare_trading_data(pd.DataFrame(rows or []))
+    return fetch_nifty_ohlcv_frame(symbol, interval=interval, period=period, require_freshness=True)
 
 
 def _safe_option_float(value: object, default: float = 0.0) -> float:
@@ -309,12 +308,50 @@ def _status_message(run_clicked: bool, backtest_clicked: bool) -> str:
     return status_message(run_clicked, backtest_clicked)
 
 
-def _run_live_strategy(request: TradingActionRequest) -> tuple[pd.DataFrame, list[dict[str, object]], str]:
-    return run_live_strategy_workflow(
+def _use_dhan_market_data(broker_choice: str) -> bool:
+    return str(broker_choice or '').strip().upper() == 'DHAN LIVE'
+
+
+
+def _load_runtime_security_map() -> dict[str, object] | None:
+    try:
+        from src.dhan_api import load_security_map
+
+        return load_security_map()
+    except Exception:
+        return None
+
+
+
+def _market_data_summary(bundle: NiftyDataBundle, request: TradingActionRequest) -> dict[str, object]:
+    summary = dict(bundle.validation_report or {})
+    summary['provider'] = bundle.provider
+    summary['provider_attempts'] = [attempt.to_dict() for attempt in bundle.provider_attempts]
+    summary['provider_attempt_count'] = len(bundle.provider_attempts)
+    summary['symbol'] = bundle.symbol
+    summary['interval'] = bundle.interval
+    summary['period'] = bundle.period
+    summary['broker_market_data_enabled'] = _use_dhan_market_data(request.broker_choice)
+    return summary
+
+
+
+def _run_live_strategy(request: TradingActionRequest) -> tuple[pd.DataFrame, list[dict[str, object]], str, dict[str, object]]:
+    period = period_for_interval(request.timeframe)
+    bundle = fetch_nifty_data_bundle(
+        request.symbol,
+        interval=request.timeframe,
+        period=period,
+        provider='DHAN' if _use_dhan_market_data(request.broker_choice) else 'AUTO',
+        security_map=_load_runtime_security_map() if _use_dhan_market_data(request.broker_choice) else None,
+        require_freshness=True,
+    )
+    candles, trades, resolved_period = run_live_strategy_workflow(
         request,
-        fetch_ohlcv_data_fn=fetch_ohlcv_data,
+        fetch_ohlcv_data_fn=lambda symbol, interval, requested_period: bundle.frame.copy(),
         run_strategy_fn=run_strategy,
     )
+    return candles, trades, resolved_period, _market_data_summary(bundle, request)
 
 
 def _run_strategy_backtest(candles: pd.DataFrame, request: TradingActionRequest) -> dict[str, object]:
@@ -331,7 +368,12 @@ def _run_execution(request: TradingActionRequest, trades: list[dict[str, object]
 
 def run_operator_action(request: TradingActionRequest) -> TradingActionResult:
     try:
-        candles, trades, period = _run_live_strategy(request)
+        live_strategy_result = _run_live_strategy(request)
+        market_data_summary: dict[str, object] = {}
+        if len(live_strategy_result) == 3:
+            candles, trades, period = live_strategy_result
+        else:
+            candles, trades, period, market_data_summary = live_strategy_result
         backtest_summary: dict[str, object] = {}
         paper_summary: dict[str, object] = {}
         execution_messages: list[tuple[str, str]] = []
@@ -347,6 +389,7 @@ def run_operator_action(request: TradingActionRequest) -> TradingActionResult:
                 active_summary=backtest_summary,
                 backtest_summary=backtest_summary,
                 paper_summary={},
+                market_data_summary=market_data_summary,
                 execution_messages=[],
                 todays_trades=0,
             )
@@ -366,6 +409,7 @@ def run_operator_action(request: TradingActionRequest) -> TradingActionResult:
             active_summary=active_summary,
             backtest_summary=backtest_summary,
             paper_summary=paper_summary,
+            market_data_summary=market_data_summary,
             execution_messages=execution_messages,
             todays_trades=today_count,
         )
@@ -381,6 +425,10 @@ def run_operator_action(request: TradingActionRequest) -> TradingActionResult:
             active_summary={},
             backtest_summary={},
             paper_summary={},
+            market_data_summary={},
             execution_messages=[('error', str(exc))],
             todays_trades=0,
         )
+
+
+

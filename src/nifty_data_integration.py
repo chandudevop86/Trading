@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
@@ -29,6 +29,12 @@ STRICT_MAX_ABNORMAL_RETURN_PCT = 15.0
 CRITICAL_DERIVED_COLUMNS = ['vwap', 'atr_14', 'atr_pct', 'range', 'interval_minutes']
 STRICT_FRESHNESS_INTERVAL_MULTIPLIER = 3
 STRICT_MAX_MISALIGNED_TIMESTAMP_RATIO = 0.05
+MIN_RSI_CANDLES = 14
+MIN_EMA20_CANDLES = 20
+MIN_MACD_CANDLES = 35
+MIN_ADX_CANDLES = 28
+MIN_VWAP_CANDLES = 1
+MIN_ATR_CANDLES = 14
 MARKET_TZ = 'Asia/Kolkata'
 MARKET_OPEN_HHMM = '09:15'
 MARKET_CLOSE_HHMM = '15:30'
@@ -219,6 +225,88 @@ def _quality_score(row_count: int, metrics: dict[str, float | int | bool | list[
     return round(max(score, 0.0), 2)
 
 
+
+def _intraday_interval(interval: str) -> bool:
+    return 0 < _interval_minutes(interval) < 375
+
+
+
+def _expected_session_close_timestamp(session_date: str) -> pd.Timestamp:
+    return pd.Timestamp(f'{session_date} {MARKET_CLOSE_HHMM}:00')
+
+
+
+def _session_boundary_issues(frame: pd.DataFrame, interval: str, *, require_market_hours: bool) -> tuple[int, int]:
+    if frame.empty or not require_market_hours or not _intraday_interval(interval) or 'session_date' not in frame.columns:
+        return 0, 0
+    broken_first = 0
+    broken_last = 0
+    latest_session = str(frame['session_date'].max()) if not frame.empty else ''
+    skip_latest_last_check = bool(_is_market_session_now())
+    for session_date, session_frame in frame.groupby('session_date', sort=True):
+        ordered = session_frame.sort_values('timestamp')
+        first_ts = pd.Timestamp(ordered['timestamp'].iloc[0])
+        last_ts = pd.Timestamp(ordered['timestamp'].iloc[-1])
+        session_blocks = set(ordered['time_block'].astype(str)) if 'time_block' in ordered.columns else set()
+        if 'open' in session_blocks and first_ts.strftime('%H:%M:%S') != f'{MARKET_OPEN_HHMM}:00':
+            broken_first += 1
+        if skip_latest_last_check and str(session_date) == latest_session:
+            continue
+        if 'close' in session_blocks and last_ts != _expected_session_close_timestamp(str(session_date)):
+            broken_last += 1
+    return broken_first, broken_last
+
+
+
+def _vwap_ready(frame: pd.DataFrame) -> bool:
+    if frame.empty or 'volume' not in frame.columns or 'vwap' not in frame.columns:
+        return False
+    if pd.to_numeric(frame['volume'], errors='coerce').fillna(0.0).sum() <= 0:
+        return False
+    return bool(pd.to_numeric(frame['vwap'], errors='coerce').notna().all())
+
+
+
+def _indicator_readiness(frame: pd.DataFrame) -> dict[str, bool]:
+    row_count = int(len(frame))
+    atr_ready = row_count >= MIN_ATR_CANDLES and 'atr_14' in frame.columns and pd.to_numeric(frame['atr_14'], errors='coerce').notna().all()
+    return {
+        'rsi_14_ready': row_count >= MIN_RSI_CANDLES,
+        'ema_20_ready': row_count >= MIN_EMA20_CANDLES,
+        'macd_ready': row_count >= MIN_MACD_CANDLES,
+        'adx_ready': row_count >= MIN_ADX_CANDLES,
+        'vwap_ready': row_count >= MIN_VWAP_CANDLES and _vwap_ready(frame),
+        'atr_ready': bool(atr_ready),
+    }
+
+
+
+def _usability_flags(
+    row_count: int,
+    indicators: dict[str, bool],
+    *,
+    passed: bool,
+    freshness_passed: bool,
+    zero_volume_ratio: float,
+    invalid_interval_ratio: float,
+    gap_ratio: float,
+    broken_first_session_count: int,
+    broken_last_session_count: int,
+) -> dict[str, bool]:
+    boundary_clean = broken_first_session_count == 0 and broken_last_session_count == 0
+    breakout_ready = passed and boundary_clean and row_count >= 40 and indicators['ema_20_ready'] and indicators['macd_ready'] and indicators['vwap_ready'] and indicators['atr_ready'] and gap_ratio <= 0.10 and invalid_interval_ratio <= 0.02
+    retest_ready = passed and boundary_clean and row_count >= 50 and indicators['rsi_14_ready'] and indicators['ema_20_ready'] and indicators['vwap_ready'] and indicators['atr_ready'] and gap_ratio <= 0.10
+    demand_supply_ready = passed and boundary_clean and row_count >= 60 and indicators['atr_ready'] and gap_ratio <= 0.15 and invalid_interval_ratio <= 0.05
+    execution_ready = passed and boundary_clean and freshness_passed and indicators['vwap_ready'] and indicators['atr_ready'] and zero_volume_ratio <= 0.05 and invalid_interval_ratio <= 0.02
+    return {
+        'breakout_strategy_usable': breakout_ready,
+        'retest_strategy_usable': retest_ready,
+        'demand_supply_zone_usable': demand_supply_ready,
+        'execution_engine_usable': execution_ready,
+    }
+
+
+
 def _staleness_minutes(frame: pd.DataFrame) -> float | None:
     latest = _latest_timestamp(frame)
     if latest is None:
@@ -226,6 +314,7 @@ def _staleness_minutes(frame: pd.DataFrame) -> float | None:
     now = pd.Timestamp.now().tz_localize(None)
     age_seconds = (now - latest).total_seconds()
     return round(age_seconds / 60.0, 2)
+
 
 
 def _strict_validate_market_data(
@@ -259,6 +348,10 @@ def _strict_validate_market_data(
     if _future_timestamp_count(frame) > 0:
         issues.append('future timestamps detected')
 
+    timestamp_parse_failures = int(report.get('rejection_counts', {}).get('invalid_timestamp', 0))
+    if timestamp_parse_failures > 0:
+        issues.append('timestamp parsing produced invalid values before normalization')
+
     non_positive_price_count = _non_positive_price_count(frame)
     if non_positive_price_count > 0:
         issues.append('non-positive OHLC prices detected')
@@ -267,7 +360,7 @@ def _strict_validate_market_data(
     if critical_nan_columns:
         issues.append(f'critical derived columns contain nulls: {critical_nan_columns}')
 
-    if require_market_hours and _interval_minutes(interval) > 0 and _session_violation_count(frame) > 0:
+    if require_market_hours and _intraday_interval(interval) and _session_violation_count(frame) > 0:
         issues.append('offhours candles detected in intraday dataset')
 
     zero_volume_count = _zero_volume_count(frame)
@@ -303,10 +396,20 @@ def _strict_validate_market_data(
     if misaligned_timestamp_ratio > STRICT_MAX_MISALIGNED_TIMESTAMP_RATIO:
         issues.append(f'timestamp alignment too weak: {misaligned_timestamp_count}/{row_count}')
 
+    broken_first_session_count, broken_last_session_count = _session_boundary_issues(
+        frame,
+        interval,
+        require_market_hours=require_market_hours,
+    )
+    if broken_first_session_count > 0:
+        issues.append(f'broken first candle detected in {broken_first_session_count} sessions')
+    if broken_last_session_count > 0:
+        issues.append(f'broken last candle detected in {broken_last_session_count} sessions')
+
     latest_timestamp = _latest_timestamp(frame)
     staleness_minutes = _staleness_minutes(frame)
     resolved_max_staleness = int(max_staleness_minutes if max_staleness_minutes is not None else _default_max_staleness_minutes(interval))
-    freshness_checked = bool(require_freshness and _interval_minutes(interval) > 0)
+    freshness_checked = bool(require_freshness and _intraday_interval(interval))
     freshness_enforced = bool(freshness_checked and _is_market_session_now())
     freshness_passed = True
     if freshness_checked and not freshness_enforced:
@@ -328,15 +431,35 @@ def _strict_validate_market_data(
     for warning in report.get('interval_warnings', []) or []:
         warnings.append(str(warning))
 
+    indicator_readiness = _indicator_readiness(frame)
+    passed = not issues
+    usability_flags = _usability_flags(
+        row_count,
+        indicator_readiness,
+        passed=passed,
+        freshness_passed=freshness_passed,
+        zero_volume_ratio=zero_volume_ratio,
+        invalid_interval_ratio=invalid_interval_ratio,
+        gap_ratio=gap_ratio,
+        broken_first_session_count=broken_first_session_count,
+        broken_last_session_count=broken_last_session_count,
+    )
+
     return {
         'symbol': _normalize_symbol(symbol),
         'interval': interval,
         'rows_in': int(report.get('rows_in', 0)),
         'rows_out': row_count,
+        'canonical_columns': list(CANONICAL_MARKET_DATA_COLUMNS),
+        'canonical_columns_mapped': not missing_columns,
+        'columns_lowercased': all(str(column) == str(column).lower() for column in frame.columns),
+        'columns_normalized': list(report.get('columns_normalized', [])),
         'final_columns': list(frame.columns),
+        'timestamp_parse_failures': timestamp_parse_failures,
+        'timezone_safe_timestamps': bool(frame['timestamp'].map(lambda value: pd.Timestamp(value).tzinfo is None).all()) if not frame.empty else True,
         'issues': issues,
         'warnings': warnings,
-        'passed': not issues,
+        'passed': passed,
         'non_positive_price_count': non_positive_price_count,
         'zero_volume_count': zero_volume_count,
         'zero_volume_ratio': round(zero_volume_ratio, 4),
@@ -348,6 +471,8 @@ def _strict_validate_market_data(
         'zero_range_ratio': round(zero_range_ratio, 4),
         'abnormal_return_count': abnormal_return_count,
         'critical_nan_columns': critical_nan_columns,
+        'broken_first_session_count': broken_first_session_count,
+        'broken_last_session_count': broken_last_session_count,
         'misaligned_timestamp_count': misaligned_timestamp_count,
         'misaligned_timestamp_ratio': round(misaligned_timestamp_ratio, 4),
         'latest_timestamp': latest_timestamp.strftime('%Y-%m-%d %H:%M:%S') if latest_timestamp is not None else '',
@@ -356,6 +481,8 @@ def _strict_validate_market_data(
         'freshness_enforced': freshness_enforced,
         'freshness_passed': freshness_passed,
         'max_staleness_minutes': resolved_max_staleness if freshness_checked else None,
+        'indicator_readiness': indicator_readiness,
+        'usable_for': usability_flags,
         'data_quality_score': _quality_score(
             row_count,
             {
@@ -371,7 +498,6 @@ def _strict_validate_market_data(
             },
         ),
     }
-
 
 def fetch_nifty_data_bundle(
     symbol: str,
@@ -476,6 +602,9 @@ __all__ = [
     'fetch_nifty_data_bundle',
     'fetch_nifty_ohlcv_frame',
 ]
+
+
+
 
 
 

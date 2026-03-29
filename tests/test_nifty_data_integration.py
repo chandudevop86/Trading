@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 from unittest.mock import patch
 
 import pandas as pd
@@ -9,6 +9,24 @@ from src.trading_runtime_service import fetch_ohlcv_data as fetch_runtime_data_f
 
 
 class TestNiftyDataIntegration(unittest.TestCase):
+    def _rows(self, count: int = 20, *, start_hour: int = 9, start_minute: int = 15) -> list[dict[str, object]]:
+        rows: list[dict[str, object]] = []
+        for minute in range(count):
+            total_minutes = start_minute + minute
+            hour = start_hour + (total_minutes // 60)
+            mm = total_minutes % 60
+            rows.append(
+                {
+                    'timestamp': f'2026-03-20 {hour:02d}:{mm:02d}:00',
+                    'open': 100.0 + minute,
+                    'high': 100.5 + minute,
+                    'low': 99.5 + minute,
+                    'close': 100.2 + minute,
+                    'volume': 1000 + minute,
+                }
+            )
+        return rows
+
     def test_fetch_bundle_falls_back_when_first_provider_fails_strict_validation(self):
         yahoo_rows = [
             {
@@ -28,18 +46,7 @@ class TestNiftyDataIntegration(unittest.TestCase):
                 'volume': 0,
             },
         ]
-        dhan_rows = []
-        for minute in range(20):
-            dhan_rows.append(
-                {
-                    'timestamp': f'2026-03-20 09:{15 + minute:02d}:00',
-                    'open': 100.0 + minute,
-                    'high': 100.5 + minute,
-                    'low': 99.5 + minute,
-                    'close': 100.2 + minute,
-                    'volume': 1000 + minute,
-                }
-            )
+        dhan_rows = self._rows(count=20)
 
         def fake_fetch(symbol, interval, period, **kwargs):
             provider = kwargs.get('provider')
@@ -56,23 +63,46 @@ class TestNiftyDataIntegration(unittest.TestCase):
         self.assertIn('vwap', bundle.frame.columns)
         self.assertEqual(bundle.symbol, 'NIFTY')
 
+    def test_fetch_bundle_normalizes_alias_columns_and_exposes_usability_flags(self):
+        rows = []
+        for minute, row in enumerate(self._rows(count=40)):
+            rows.append(
+                {
+                    'Datetime': f"{row['timestamp']}+05:30",
+                    'Open': 100.0 + minute,
+                    'High': 100.5 + minute,
+                    'Low': 99.5 + minute,
+                    'Close': 100.2 + minute,
+                    'Vol': 1000 + minute,
+                }
+            )
+
+        with patch('src.nifty_data_integration.fetch_live_ohlcv', return_value=rows):
+            bundle = fetch_nifty_data_bundle('NIFTY', interval='1m', period='1d', provider='YAHOO')
+
+        self.assertEqual(list(bundle.frame.columns[:6]), ['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        self.assertTrue(bundle.validation_report['canonical_columns_mapped'])
+        self.assertTrue(bundle.validation_report['columns_lowercased'])
+        self.assertTrue(bundle.validation_report['timezone_safe_timestamps'])
+        self.assertEqual(bundle.validation_report['timestamp_parse_failures'], 0)
+        self.assertTrue(bundle.validation_report['indicator_readiness']['rsi_14_ready'])
+        self.assertTrue(bundle.validation_report['indicator_readiness']['ema_20_ready'])
+        self.assertTrue(bundle.validation_report['indicator_readiness']['macd_ready'])
+        self.assertTrue(bundle.validation_report['usable_for']['breakout_strategy_usable'])
+        self.assertFalse(bundle.validation_report['usable_for']['demand_supply_zone_usable'])
+
     def test_fetch_bundle_rejects_offhours_intraday_rows(self):
-        rows = [
-            {
-                'timestamp': '2026-03-20 08:00:00',
-                'open': 100.0,
-                'high': 101.0,
-                'low': 99.0,
-                'close': 100.5,
-                'volume': 1000,
-            }
-            for _ in range(20)
-        ]
-        for index, row in enumerate(rows):
-            row['timestamp'] = f'2026-03-20 08:{index:02d}:00'
+        rows = self._rows(count=20, start_hour=8, start_minute=0)
 
         with patch('src.nifty_data_integration.fetch_live_ohlcv', return_value=rows):
             with self.assertRaisesRegex(NiftyDataValidationError, 'offhours candles detected'):
+                fetch_nifty_data_bundle('NIFTY', interval='1m', period='1d', provider='YAHOO')
+
+    def test_fetch_bundle_rejects_broken_first_session_candle(self):
+        rows = self._rows(count=20, start_hour=9, start_minute=20)
+
+        with patch('src.nifty_data_integration.fetch_live_ohlcv', return_value=rows):
+            with self.assertRaisesRegex(NiftyDataValidationError, 'broken first candle detected'):
                 fetch_nifty_data_bundle('NIFTY', interval='1m', period='1d', provider='YAHOO')
 
     def test_fetch_bundle_rejects_too_many_interval_breaks(self):
@@ -118,18 +148,7 @@ class TestNiftyDataIntegration(unittest.TestCase):
                 fetch_nifty_data_bundle('NIFTY', interval='1m', period='1d', provider='YAHOO')
 
     def test_fetch_bundle_exposes_deep_validation_metrics(self):
-        rows = []
-        for minute in range(20):
-            rows.append(
-                {
-                    'timestamp': f'2026-03-20 09:{15 + minute:02d}:00',
-                    'open': 100.0 + minute,
-                    'high': 100.5 + minute,
-                    'low': 99.5 + minute,
-                    'close': 100.2 + minute,
-                    'volume': 1000 + minute,
-                }
-            )
+        rows = self._rows(count=20)
 
         with patch('src.nifty_data_integration.fetch_live_ohlcv', return_value=rows):
             bundle = fetch_nifty_data_bundle('NIFTY', interval='1m', period='1d', provider='YAHOO')
@@ -138,21 +157,12 @@ class TestNiftyDataIntegration(unittest.TestCase):
         self.assertEqual(bundle.validation_report['invalid_interval_count'], 0)
         self.assertEqual(bundle.validation_report['abnormal_return_count'], 0)
         self.assertEqual(bundle.validation_report['critical_nan_columns'], [])
+        self.assertEqual(bundle.validation_report['broken_first_session_count'], 0)
+        self.assertEqual(bundle.validation_report['broken_last_session_count'], 0)
         self.assertTrue(bundle.validation_report['passed'])
 
     def test_fetch_bundle_skips_freshness_hard_fail_outside_market_session(self):
-        rows = []
-        for minute in range(20):
-            rows.append(
-                {
-                    'timestamp': f'2026-03-20 09:{15 + minute:02d}:00',
-                    'open': 100.0 + minute,
-                    'high': 100.5 + minute,
-                    'low': 99.5 + minute,
-                    'close': 100.2 + minute,
-                    'volume': 1000 + minute,
-                }
-            )
+        rows = self._rows(count=20)
 
         with patch('src.nifty_data_integration.fetch_live_ohlcv', return_value=rows), patch('src.nifty_data_integration._is_market_session_now', return_value=False):
             bundle = fetch_nifty_data_bundle(
@@ -170,18 +180,7 @@ class TestNiftyDataIntegration(unittest.TestCase):
         self.assertIn('freshness_not_enforced_outside_market_session', bundle.validation_report['warnings'])
 
     def test_fetch_bundle_rejects_stale_intraday_feed_when_freshness_required(self):
-        rows = []
-        for minute in range(20):
-            rows.append(
-                {
-                    'timestamp': f'2026-03-20 09:{15 + minute:02d}:00',
-                    'open': 100.0 + minute,
-                    'high': 100.5 + minute,
-                    'low': 99.5 + minute,
-                    'close': 100.2 + minute,
-                    'volume': 1000 + minute,
-                }
-            )
+        rows = self._rows(count=20)
 
         with patch('src.nifty_data_integration.fetch_live_ohlcv', return_value=rows), patch('src.nifty_data_integration._is_market_session_now', return_value=True):
             with self.assertRaisesRegex(NiftyDataValidationError, 'stale intraday feed'):
@@ -221,6 +220,4 @@ class TestNiftyDataIntegration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-
 

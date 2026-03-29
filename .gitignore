@@ -6,12 +6,10 @@ __pycache__/
 .pytest_cache/
 
 # Runtime logs
-logs/
-*.log
- data/legacy_runtime.db
-        logs/errors.log
-        logs/execution.log
-        logs/rejections.log
+logs/*.log
+logs/errors.log
+logs/execution.log
+logs/rejections.log
 
 # Local generated data and caches
 data/*.csv
@@ -19,6 +17,7 @@ data/*.db
 data/cache/
 data/cache/**
 src/**/__pycache__/
+data/legacy_runtime.db
 
 # OS/editor noise
 .DS_Store

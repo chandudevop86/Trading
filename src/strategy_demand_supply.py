@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Mapping
@@ -15,7 +15,7 @@ from src.strategy_common import session_window
 from src.trading_core import ScoreThresholds
 
 
-_SESSION_ALLOWED = {'MORNING'}
+_SESSION_ALLOWED = {'OPENING', 'OPENING_BUFFER', 'MORNING'}
 
 
 def _coerce_config(config: DemandSupplyConfig | Mapping[str, Any] | None) -> DemandSupplyConfig:
@@ -53,7 +53,7 @@ def is_session_valid(ts: object, config: DemandSupplyConfig | Mapping[str, Any] 
         afternoon_start=cfg.afternoon_session_start,
         afternoon_end=cfg.afternoon_session_end,
     )
-    return window in _SESSION_ALLOWED
+    return window in _SESSION_ALLOWED or str(window).upper() == 'OPEN'
 
 
 def is_vwap_valid(price: float, vwap: float, side: str, config: DemandSupplyConfig | Mapping[str, Any] | None = None) -> bool:
@@ -100,9 +100,15 @@ def rejection_candle(row: Mapping[str, Any], side: str, config: DemandSupplyConf
     close_pos = (float(row['close']) - float(row['low'])) / candle_range
     normalized_side = str(side or '').strip().upper()
     if normalized_side == 'BUY':
-        return wick_body_ratio >= float(cfg.strict_rejection_wick_body_ratio) and wick_dominance >= float(cfg.strict_wick_dominance_ratio) and close_pos >= float(cfg.strict_close_position_buy)
+        min_wick_body = min(float(cfg.strict_rejection_wick_body_ratio), 1.2)
+        min_dominance = min(float(cfg.strict_wick_dominance_ratio), 1.2)
+        min_close = min(float(cfg.strict_close_position_buy), 0.65)
+        return wick_body_ratio >= min_wick_body and wick_dominance >= min_dominance and close_pos >= min_close
     if normalized_side == 'SELL':
-        return wick_body_ratio >= float(cfg.strict_rejection_wick_body_ratio) and wick_dominance >= float(cfg.strict_wick_dominance_ratio) and close_pos <= float(cfg.strict_close_position_sell)
+        min_wick_body = min(float(cfg.strict_rejection_wick_body_ratio), 1.2)
+        min_dominance = min(float(cfg.strict_wick_dominance_ratio), 1.2)
+        max_close = max(float(cfg.strict_close_position_sell), 0.35)
+        return wick_body_ratio >= min_wick_body and wick_dominance >= min_dominance and close_pos <= max_close
     return False
 
 
@@ -123,6 +129,7 @@ __all__ = [
     'is_vwap_valid',
     'rejection_candle',
 ]
+
 
 
 

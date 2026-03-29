@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -23,6 +23,8 @@ class ZoneRecord:
     touch_count: int
     base_candle_count: int
     zone_kind: str
+    zone_status: str = 'PASS'
+    zone_fail_reasons: str = ''
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -65,6 +67,13 @@ def detect_scored_zones(
             retest_status = 'NOT_RETESTED'
             score_interpretation = 'SKIP'
             base_candle_count = 0
+            zone_status = 'PASS'
+            zone_fail_reasons = ''
+
+            if zone_score < float(cfg.min_zone_selection_score):
+                zone_status = 'FAIL'
+                score_interpretation = 'REJECT'
+                zone_fail_reasons = 'prequal_score_too_low'
 
             retest = ds.detect_retest(day_candles, zone, side, zone.idx + 1, cfg)
             if retest is not None:
@@ -81,15 +90,27 @@ def detect_scored_zones(
                 )
                 if score_result is not None:
                     score_value, _, _, _, diagnostics = score_result
-                    zone_score = float(diagnostics.get('raw_total_score', score_value) or score_value)
+                    zone_score = float(diagnostics.get('total_zone_score', diagnostics.get('raw_total_score', score_value)) or score_value)
                     score_interpretation = str(diagnostics.get('score_interpretation', 'SKIP') or 'SKIP')
                     base_candle_count = int(diagnostics.get('base_candle_count', 0) or 0)
                     zone_end_time = day_candles[confirmation_idx].timestamp.strftime('%Y-%m-%d %H:%M:%S')
                     retest_status = 'CONFIRMED'
+                    zone_status = str(diagnostics.get('zone_status', 'PASS') or 'PASS')
+                    zone_fail_reasons = ','.join(str(item) for item in diagnostics.get('zone_fail_reasons', []) or [])
                 else:
                     retest_status = 'RETESTED_REJECTED'
+                    rejection = ds.evaluate_zone_status(day_candles, confirmation_idx, zone, side, cfg, touch_idx=touch_idx)
+                    zone_score = float(rejection.get('total_zone_score', zone_score) or zone_score)
+                    score_interpretation = 'REJECT'
+                    base_candle_count = int(rejection.get('base_candle_count', 0) or 0)
+                    zone_end_time = day_candles[confirmation_idx].timestamp.strftime('%Y-%m-%d %H:%M:%S')
+                    zone_status = str(rejection.get('zone_status', 'FAIL') or 'FAIL')
+                    zone_fail_reasons = ','.join(str(item) for item in rejection.get('zone_fail_reasons', []) or [])
             elif touch_count > 0:
                 retest_status = 'REVISITED'
+                zone_status = 'FAIL'
+                score_interpretation = 'REJECT'
+                zone_fail_reasons = 'weak_rejection'
 
             zone_records.append(
                 ZoneRecord(
@@ -108,6 +129,8 @@ def detect_scored_zones(
                     touch_count=int(touch_count),
                     base_candle_count=int(base_candle_count),
                     zone_kind=zone.kind,
+                    zone_status=zone_status,
+                    zone_fail_reasons=zone_fail_reasons,
                 )
             )
     return zone_records
@@ -115,3 +138,4 @@ def detect_scored_zones(
 
 def zone_records_to_rows(records: list[ZoneRecord]) -> list[dict[str, object]]:
     return [record.to_dict() for record in records]
+

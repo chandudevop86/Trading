@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 
 from src.breakout_bot import load_candles
 from src.demand_supply_bot import DemandSupplyConfig, Zone, generate_trades, score_zone
@@ -120,9 +120,33 @@ class TestDemandSupplyBot(unittest.TestCase):
         self.assertIn('retest_confirmation', components)
         self.assertGreater(float(diagnostics['reaction_score']), 0.0)
         self.assertGreater(float(diagnostics['zone_selection_score']), 0.0)
+        self.assertEqual(diagnostics['zone_status'], 'PASS')
+        self.assertEqual(diagnostics['zone_fail_reasons'], [])
 
 
+
+    def test_rejected_zone_reports_fail_reasons_in_zone_records(self):
+        from src.strategies.supply_demand import detect_scored_zones
+
+        rows = [
+            {"timestamp": "2026-03-05 09:15:00", "open": "100.0", "high": "100.5", "low": "99.8", "close": "100.1", "volume": "1000"},
+            {"timestamp": "2026-03-05 09:20:00", "open": "100.1", "high": "100.2", "low": "98.9", "close": "99.2", "volume": "1100"},
+            {"timestamp": "2026-03-05 09:25:00", "open": "99.2", "high": "99.5", "low": "99.0", "close": "99.3", "volume": "900"},
+            {"timestamp": "2026-03-05 09:30:00", "open": "99.3", "high": "99.7", "low": "99.1", "close": "99.4", "volume": "850"},
+            {"timestamp": "2026-03-05 09:35:00", "open": "99.4", "high": "99.8", "low": "99.2", "close": "99.5", "volume": "820"},
+            {"timestamp": "2026-03-05 09:40:00", "open": "99.5", "high": "99.7", "low": "99.0", "close": "99.1", "volume": "840"},
+            {"timestamp": "2026-03-05 09:45:00", "open": "99.1", "high": "99.6", "low": "99.0", "close": "99.4", "volume": "830"},
+            {"timestamp": "2026-03-05 09:50:00", "open": "99.4", "high": "99.9", "low": "99.3", "close": "99.5", "volume": "810"},
+            {"timestamp": "2026-03-05 09:55:00", "open": "99.5", "high": "100.0", "low": "99.4", "close": "99.6", "volume": "805"},
+        ]
+
+        zones = detect_scored_zones(rows, symbol='NIFTY')
+        rejected = [zone for zone in zones if zone.zone_status == 'FAIL']
+
+        self.assertTrue(rejected)
+        self.assertTrue(any(reason for reason in rejected[0].zone_fail_reasons.split(',') if reason))
 if __name__ == '__main__':
     unittest.main()
+
 
 

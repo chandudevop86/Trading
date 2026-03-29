@@ -241,3 +241,5 @@
 2026-03-29 13:02:37,160 INFO runtime_error[run_operator_action] ValueError: bad candle payload
 2026-03-29 13:02:44,030 INFO runtime_error[run_operator_action] ValueError: bad candle payload
 2026-03-29 13:02:44,041 INFO runtime_error[run_operator_action] ValueError: bad candle payload
+2026-03-29 14:29:40,792 INFO runtime_error[run_operator_action] ValueError: bad candle payload
+2026-03-29 14:29:40,815 INFO runtime_error[run_operator_action] ValueError: bad candle payload

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src.breakout_bot import Candle, _coerce_candles, add_intraday_vwap
+from src.demand_supply_validation import ZoneValidationConfig, candles_to_dataframe, validate_zone
 from src.strategy_common import session_allowed, session_window
 from src.trading_core import ScoringConfig, ScoreThresholds, StandardTrade, safe_quantity
 
@@ -1199,6 +1200,8 @@ def score_zone(
     touch: bool,
     retest_confirmed: bool,
 ) -> tuple[float, dict[str, float], str, str, dict[str, object]] | None:
+    if day_candles and any(getattr(candle, 'vwap', 0.0) in (0, 0.0, None) for candle in day_candles):
+        calculate_vwap(day_candles)
     touch_idx = idx - 1 if idx > 0 else None
     return _quality_score(day_candles, idx, zone, side, config, touch=touch, retest_confirmed=retest_confirmed, touch_idx=touch_idx)
 
@@ -1274,6 +1277,7 @@ def generate_trades(
 
     for day in sorted(by_day.keys()):
         day_candles = sorted(by_day[day], key=lambda candle: candle.timestamp)
+        day_frame = candles_to_dataframe(day_candles)
         if len(day_candles) < (cfg.pivot_window * 2 + 7):
             continue
         zones = _find_zones(day_candles, cfg.pivot_window)
@@ -1337,6 +1341,27 @@ def generate_trades(
 
             avg_range = max(_avg_range(day_candles, confirmation_idx, cfg.atr_window), 0.0001)
             entry, stop, target, buffer = _entry_levels(entry_candle, zone, side, rr_ratio, avg_range, cfg)
+            validation_result = validate_zone(
+                day_frame,
+                zone_type=zone.kind,
+                zone_low=float(zone.low),
+                zone_high=float(zone.high),
+                created_idx=int(zone.idx),
+                touch_idx=int(touch_idx),
+                entry_idx=int(confirmation_idx),
+                entry_price=float(entry),
+                stop_loss=float(stop),
+                target_price=float(target),
+                symbol='^NSEI',
+                config=ZoneValidationConfig(
+                    require_sweep=False,
+                    allowed_sessions=('OPENING', 'OPENING_BUFFER', 'MORNING') if not cfg.allow_afternoon_session else ('OPENING', 'OPENING_BUFFER', 'MORNING', 'AFTERNOON'),
+                    soft_score_threshold=6.0,
+                    max_retest_delay=max(int(cfg.max_retest_bars) * 3, 12),
+                ),
+            )
+            if str(validation_result.get('status', 'FAIL')).upper() != 'PASS':
+                continue
             quantity = safe_quantity(capital=capital, risk_pct=risk_pct, entry=entry, stop_loss=stop)
             if quantity <= 0:
                 continue
@@ -1371,7 +1396,7 @@ def generate_trades(
                     'zone_high': round(float(zone.high), 4),
                     'zone_buffer': round(buffer, 4),
                     'zone_reaction_strength': round(float(zone.reaction_strength), 4),
-                    'score_threshold': round(float(cfg.scoring.threshold()), 2),
+                    'score_threshold': round(float(cfg.min_zone_selection_score), 2),
                     'freshness_score': round(float(components['freshness']), 2),
                     'reaction_component': round(float(components['reaction_strength']), 2),
                     'structure_component': round(float(components['structure_clarity']), 2),
@@ -1382,7 +1407,9 @@ def generate_trades(
                     'volatility_component': round(float(components['volatility_quality']), 2),
                     'session_component': round(float(components['session_quality']), 2),
                     'zone_strength_score': round(float(diagnostics['zone_strength_score']), 2),
-                    'total_score': round(float(diagnostics['raw_total_score']), 2),
+                    'total_score': round(float(diagnostics.get('total_zone_score', diagnostics['raw_total_score'])), 2),
+                    'zone_status': str(diagnostics.get('zone_status', 'PASS')),
+                    'zone_fail_reasons': ','.join(str(item) for item in diagnostics.get('zone_fail_reasons', []) or []),
                     'score_interpretation': str(diagnostics['score_interpretation']),
                     'zone_selection_score': round(float(zone_selection_score), 2),
                     'zone_gate_score': round(float(zone_selection_score), 2),
@@ -1703,6 +1730,7 @@ def _rejection_score(day_candles: list[Candle], idx: int, candle: Candle, zone: 
         'upper_wick': round(upper_wick, 4),
         'lower_wick': round(lower_wick, 4),
         'wick_to_body_ratio': round(wick_to_body_ratio, 4),
+        'wick_body_ratio': round(wick_to_body_ratio, 4),
         'wick_dominance_ratio': round(wick_dominance_ratio, 4),
         'close_position': round(close_position, 4),
         'close_strength_score': round(close_strength_score, 2),
@@ -1979,5 +2007,238 @@ def _quality_score(
 
 ZONE_SMALL_VALUE = 1e-4
 SMALL_VALUE = ZONE_SMALL_VALUE
+
+
+
+FAIL_SCORE_THRESHOLD = 24.0
+
+
+def _zone_bos(day_candles: list[Candle], idx: int, zone: Zone, side: str, config: DemandSupplyConfig) -> bool:
+    highs, lows = _recent_swings(day_candles, idx, config.structure_swing_window)
+    if side == 'BUY':
+        reference = max(highs) if highs else max(float(c.high) for c in day_candles[max(zone.idx - 3, 0):zone.idx + 1])
+        return any(float(c.high) > float(reference) for c in day_candles[zone.idx + 1:min(idx + 1, len(day_candles))])
+    reference = min(lows) if lows else min(float(c.low) for c in day_candles[max(zone.idx - 3, 0):zone.idx + 1])
+    return any(float(c.low) < float(reference) for c in day_candles[zone.idx + 1:min(idx + 1, len(day_candles))])
+
+
+
+def _liquidity_sweep(day_candles: list[Candle], touch_idx: int, side: str) -> bool:
+    if touch_idx <= 0:
+        return False
+    candle = day_candles[touch_idx]
+    lookback = day_candles[max(0, touch_idx - 3):touch_idx]
+    if not lookback:
+        return False
+    if side == 'BUY':
+        return float(candle.low) < min(float(item.low) for item in lookback)
+    return float(candle.high) > max(float(item.high) for item in lookback)
+
+
+
+def _imbalance_present(day_candles: list[Candle], zone: Zone, side: str, idx: int) -> bool:
+    sample = day_candles[zone.idx:min(len(day_candles), zone.idx + 4, idx + 1)]
+    if len(sample) < 3:
+        return False
+    for left, middle, right in zip(sample, sample[1:], sample[2:]):
+        if side == 'BUY' and float(right.low) > float(left.high):
+            return True
+        if side == 'SELL' and float(right.high) < float(left.low):
+            return True
+    return False
+
+
+
+def _zone_failure_evaluation(
+    day_candles: list[Candle],
+    idx: int,
+    zone: Zone,
+    side: str,
+    config: DemandSupplyConfig,
+    *,
+    touch_idx: int,
+    rr_ratio: float,
+) -> tuple[list[str], dict[str, object]]:
+    candle = day_candles[idx]
+    touch_candle = day_candles[touch_idx]
+    trend_bias = _higher_tf_bias(day_candles, idx)
+    bias_aligned = trend_bias == ('BULLISH' if side == 'BUY' else 'BEARISH')
+    trend_ok = _trend_ok(day_candles, idx, side)
+    structure_ok, market_structure_label = _market_structure(day_candles, idx, side, config)
+    base_score, base_candle_count, base_range_threshold = _base_candle_profile(day_candles, idx, config)
+    impulse_score, impulse_range, avg_candle_range = _impulse_score(day_candles, idx, config)
+    volume_component, volume_spike, breakout_volume, avg_volume = _volume_component(day_candles, idx, config)
+    fresh_touch_component, touch_count = _fresh_touch_score(day_candles, zone, side, idx, config)
+    time_component, time_score = _time_component(base_candle_count, config)
+    trend_component, trend_score = _trend_component(bias_aligned, trend_ok)
+    vwap_component, vwap_ok = _vwap_component(candle, side)
+    retest_component, retest_ratio = _retest_component(touch_candle, candle, zone, side, config)
+    retest_score = _retest_hold_score(candle, zone, side, True)
+    volatility_component, volatility_ratio = _volatility_component(day_candles, idx, config)
+    session_component, session_name = _session_component(candle, config)
+    zone_selection_score = _zone_selection_score(day_candles, idx, zone, side, config)
+    rejection_score, rejection_diagnostics = _rejection_score(day_candles, touch_idx, touch_candle, zone, side, config)
+    zone_quality_score, zone_quality_diagnostics = _zone_quality_score(day_candles, idx, zone, side, touch_count, base_candle_count, config)
+    move_strength = max(float(zone_quality_diagnostics.get('move_away_score', 0.0)), 0.0)
+    rejection_strength = float(rejection_score)
+    structure_score = float(zone_quality_diagnostics.get('structure_clarity_score', 0.0))
+    bos = _zone_bos(day_candles, idx, zone, side, config)
+    liquidity_sweep = _liquidity_sweep(day_candles, touch_idx, side)
+    imbalance_present = _imbalance_present(day_candles, zone, side, idx)
+    zone_width_pct = float(zone_quality_diagnostics.get('zone_width_pct', 999.0))
+    internal_overlap_ratio = float(zone_quality_diagnostics.get('internal_overlap_ratio', 1.0))
+    vwap_extension_pct = abs(float(candle.close) - float(candle.vwap)) / max(abs(float(candle.vwap)), SMALL_VALUE)
+    meaningful_retests = int(zone_quality_diagnostics.get('retest_count', 0) or 0)
+    freshness_points = 10.0 if meaningful_retests == 0 else 6.0 if meaningful_retests == 1 else 2.0 if meaningful_retests == 2 else 0.0
+    total_zone_score = move_strength + freshness_points + rejection_strength + structure_score + (8.0 if bias_aligned and trend_ok else 0.0)
+
+    fail_reasons: list[str] = []
+    departure_ratio = float(zone_quality_diagnostics.get('departure_ratio', 0.0))
+    strong_departure_candles = int(zone_quality_diagnostics.get('strong_departure_candles', 0) or 0)
+
+    if move_strength < 1.25 and departure_ratio < 0.8 and strong_departure_candles < 2 and not imbalance_present:
+        fail_reasons.append('weak_move_away')
+    if not bos:
+        fail_reasons.append('no_bos')
+    if int(base_candle_count) > 5 or internal_overlap_ratio > 0.55:
+        fail_reasons.append('dirty_base')
+    if int(zone_quality_diagnostics.get('retest_count', 0)) >= 2:
+        fail_reasons.append('zone_not_fresh')
+    if rejection_strength < 4.0:
+        fail_reasons.append('weak_rejection')
+    if structure_score < 4.5 or (not structure_ok and str(market_structure_label or '') not in {'INSUFFICIENT'}):
+        fail_reasons.append('unclear_structure')
+    if not bias_aligned or not trend_ok:
+        fail_reasons.append('trend_misaligned')
+    if not liquidity_sweep and (move_strength < 1.25 or rejection_strength < 4.0 or structure_score < 4.5):
+        fail_reasons.append('no_liquidity_sweep')
+    if not imbalance_present and departure_ratio < 1.0 and strong_departure_candles < 2:
+        fail_reasons.append('no_imbalance')
+    if volatility_ratio < float(config.min_volatility_ratio):
+        fail_reasons.append('low_volatility')
+    if float(rr_ratio) < 2.0:
+        fail_reasons.append('bad_rr')
+    if vwap_extension_pct > 0.025:
+        fail_reasons.append('extended_move')
+
+    diagnostics = {
+        'move_strength': round(move_strength, 2),
+        'break_of_structure': bool(bos),
+        'rejection_strength': round(rejection_strength, 2),
+        'structure_score': round(structure_score, 2),
+        'trend_misaligned': not (bias_aligned and trend_ok),
+        'liquidity_sweep': bool(liquidity_sweep),
+        'imbalance_present': bool(imbalance_present),
+        'rr_ratio_gate': round(float(rr_ratio), 2),
+        'vwap_extension_pct': round(vwap_extension_pct * 100.0, 2),
+        'total_zone_score': round(total_zone_score, 2),
+        'zone_status': 'FAIL' if fail_reasons or total_zone_score < FAIL_SCORE_THRESHOLD else 'PASS',
+        'zone_fail_reasons': fail_reasons,
+        'zone_fail_count': len(fail_reasons),
+        'zone_evaluation_summary': (
+            f"Zone status={('FAIL' if fail_reasons or total_zone_score < FAIL_SCORE_THRESHOLD else 'PASS')} | "
+            f"move={move_strength:.2f} bos={('YES' if bos else 'NO')} retests={meaningful_retests} "
+            f"rejection={rejection_strength:.2f} structure={structure_score:.2f} rr={float(rr_ratio):.2f}"
+        ),
+        'trend_bias': trend_bias,
+        'bias_aligned': bias_aligned,
+        'vwap_aligned': vwap_ok,
+        'trend_ok': trend_ok,
+        'market_structure_ok': structure_ok,
+        'market_structure_label': market_structure_label,
+        'session_window': session_name,
+        'reaction_score': round(float(zone.reaction_strength), 4),
+        'retest_ratio': round(float(retest_ratio), 4),
+        'retest_score': round(float(retest_score), 2),
+        'volatility_ratio': round(float(volatility_ratio), 4),
+        'volume_spike': volume_spike,
+        'volume_score': round(float(volume_component), 2),
+        'breakout_volume': round(float(breakout_volume), 4),
+        'avg_volume': round(float(avg_volume), 4),
+        'touch_count': int(touch_count),
+        'fresh_score': round(float(fresh_touch_component), 2),
+        'freshness_ratio': round(float(fresh_touch_component) / 10.0, 4),
+        'base_score': round(float(base_score), 2),
+        'base_candle_count': int(base_candle_count),
+        'time_in_base': int(base_candle_count),
+        'base_range_threshold': round(float(base_range_threshold), 4),
+        'impulse_score': round(float(impulse_score), 2),
+        'impulse_range': round(float(impulse_range), 4),
+        'avg_candle_range': round(float(avg_candle_range), 4),
+        'time_score': round(float(time_score), 2),
+        'trend_score': round(float(trend_score), 2),
+        'zone_strength_score': round(float(zone_selection_score), 2),
+        'zone_selection_score': round(float(zone_selection_score), 2),
+        'raw_total_score': round(float(zone_selection_score), 2),
+        'zone_quality_score': round(float(zone_quality_score), 2),
+        'zone_quality_label': str(zone_quality_diagnostics.get('zone_quality_label', 'REJECT')),
+        'score_interpretation': 'REJECT' if fail_reasons or total_zone_score < FAIL_SCORE_THRESHOLD else 'A_GRADE_TRADE' if total_zone_score >= 42 else 'B_GRADE_TRADE',
+        'score_threshold': float(FAIL_SCORE_THRESHOLD),
+        'rejection_score': round(float(rejection_score), 2),
+        'structure_score': round(float(structure_score), 4),
+        **rejection_diagnostics,
+        **zone_quality_diagnostics,
+    }
+    if total_zone_score < FAIL_SCORE_THRESHOLD and 'score_below_threshold' not in fail_reasons:
+        fail_reasons.append('score_below_threshold')
+        diagnostics['zone_fail_reasons'] = fail_reasons
+        diagnostics['zone_fail_count'] = len(fail_reasons)
+        diagnostics['zone_status'] = 'FAIL'
+    return fail_reasons, diagnostics
+
+
+
+def evaluate_zone_status(
+    day_candles: list[Candle],
+    idx: int,
+    zone: Zone,
+    side: str,
+    config: DemandSupplyConfig,
+    *,
+    touch_idx: int,
+    rr_ratio: float = 2.0,
+) -> dict[str, object]:
+    fail_reasons, diagnostics = _zone_failure_evaluation(day_candles, idx, zone, side, config, touch_idx=touch_idx, rr_ratio=rr_ratio)
+    return dict(diagnostics, zone_fail_reasons=list(fail_reasons), zone_status='FAIL' if fail_reasons else str(diagnostics.get('zone_status', 'PASS')))
+
+
+
+def _quality_score(
+    day_candles: list[Candle],
+    idx: int,
+    zone: Zone,
+    side: str,
+    config: DemandSupplyConfig,
+    *,
+    touch: bool,
+    retest_confirmed: bool,
+    touch_idx: int | None = None,
+) -> tuple[float, dict[str, float], str, str, dict[str, object]] | None:
+    if not touch or not retest_confirmed or touch_idx is None:
+        return None
+    fail_reasons, diagnostics = _zone_failure_evaluation(day_candles, idx, zone, side, config, touch_idx=touch_idx, rr_ratio=2.0)
+    if fail_reasons:
+        return None
+    components = {
+        'freshness': round(float(diagnostics.get('freshness_weight_component', 0.0)), 4),
+        'reaction_strength': round(min(float(diagnostics.get('reaction_score', 0.0)) / 1.1, 1.0) * _SCORE_WEIGHTS['reaction_strength'], 4),
+        'structure_clarity': round(min(float(diagnostics.get('structure_clarity_score', 0.0)) / 10.0, 1.0) * _SCORE_WEIGHTS['structure_clarity'], 4),
+        'base_quality': round((1.0 if float(diagnostics.get('base_score', 0.0)) >= 2.0 else 0.5) * _SCORE_WEIGHTS['base_quality'], 4),
+        'impulse_quality': round((1.0 if float(diagnostics.get('impulse_score', 0.0)) >= 3.0 else 0.33) * _SCORE_WEIGHTS['impulse_quality'], 4),
+        'volume_quality': round(float(diagnostics.get('volume_score', 0.0)), 4),
+        'trend_alignment': round((1.0 if bool(diagnostics.get('bias_aligned')) and bool(diagnostics.get('trend_ok')) else 0.0) * _SCORE_WEIGHTS['trend_alignment'], 4),
+        'time_quality': round(float(diagnostics.get('time_score', 0.0)) * 0.5, 4),
+        'vwap_alignment': round((_SCORE_WEIGHTS['vwap_alignment'] if bool(diagnostics.get('vwap_aligned')) else 0.0), 4),
+        'retest_confirmation': round(min(float(diagnostics.get('retest_ratio', 0.0)), 1.0) * _SCORE_WEIGHTS['retest_confirmation'], 4),
+        'volatility_quality': round(min(float(diagnostics.get('volatility_ratio', 0.0)) / max(float(config.min_volatility_ratio), SMALL_VALUE), 1.0) * _SCORE_WEIGHTS['volatility_quality'], 4),
+        'session_quality': round((_SCORE_WEIGHTS['session_quality'] if str(diagnostics.get('session_window')) == 'MORNING' else 0.0), 4),
+    }
+    total_score = round(float(diagnostics.get('total_zone_score', 0.0)), 2)
+    reason = (
+        f"{side.lower()} demand_supply zone_status=PASS score={total_score:.2f} "
+        f"move={float(diagnostics.get('move_strength', 0.0)):.2f} fresh={max(0, 10 - int(diagnostics.get('touch_count', 0)) * 4):.2f} "
+        f"rejection={float(diagnostics.get('rejection_strength', 0.0)):.2f} structure={float(diagnostics.get('structure_score', 0.0)):.2f}"
+    )
+    return total_score, components, reason, '', diagnostics
 
 

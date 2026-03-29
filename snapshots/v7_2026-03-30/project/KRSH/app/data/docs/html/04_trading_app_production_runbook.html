@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>04_trading_app_production_runbook</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; color: #111; line-height: 1.5; font-size: 14px; }
+h1 { font-size: 24px; margin-bottom: 24px; }
+.section { margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<h1>04_trading_app_production_runbook</h1>
+<div class="section">TRADING APP PRODUCTION RUNBOOK<br/>
+<br/>
+Purpose<br/>
+This runbook explains how to operate, monitor, and troubleshoot the Trading App in a production or semi-production environment.<br/>
+<br/>
+STARTUP CHECKLIST<br/>
+1. Verify Python environment is available.<br/>
+2. Verify required packages are installed.<br/>
+3. Verify Streamlit app starts successfully.<br/>
+4. Verify data folder is writable.<br/>
+5. Verify Telegram credentials are configured if alerts are needed.<br/>
+6. Verify broker credentials are configured if future live execution is enabled.<br/>
+<br/>
+RUNTIME CHECKS<br/>
+1. Confirm dashboard is reachable.<br/>
+2. Confirm OHLCV data is loading.<br/>
+3. Confirm strategy outputs are generated.<br/>
+4. Confirm paper execution logs are updating.<br/>
+5. Confirm report files are being created.<br/>
+6. Confirm Telegram alerts are delivered when enabled.<br/>
+<br/>
+DAILY OPERATIONS<br/>
+Review live candles and trade signals.<br/>
+Check paper or live trading logs.<br/>
+Check backtest summary outputs.<br/>
+Archive important CSV and PDF reports.<br/>
+Validate that scheduled tasks completed without failure.<br/>
+<br/>
+INCIDENT SCENARIOS<br/>
+No market data:<br/>
+Check external data provider access and symbol formatting.<br/>
+<br/>
+No trade signals:<br/>
+Check strategy settings, timeframe, and available candles.<br/>
+<br/>
+Execution log not updating:<br/>
+Check write permission on data directory and execution mode.<br/>
+<br/>
+Telegram not sending:<br/>
+Check token, chat ID, internet access, and notifier settings.<br/>
+<br/>
+Wrong contract mapping:<br/>
+Check whether Options or Futures mode is selected.<br/>
+Check strike step, moneyness, and symbol normalization.<br/>
+<br/>
+BACKUP RECOMMENDATION<br/>
+Back up data folder regularly.<br/>
+Critical files include paper trading logs, live trading logs, backtest summaries, and generated reports.<br/>
+<br/>
+CHANGE MANAGEMENT<br/>
+Apply changes first in local or testing environment.<br/>
+Validate strategies and outputs.<br/>
+Then promote to production server.<br/>
+Avoid editing live configuration without backup.<br/>
+<br/>
+FUTURE OPERATIONS IMPROVEMENT<br/>
+Add service monitoring.<br/>
+Add broker health checks.<br/>
+Add log rotation.<br/>
+Add alerting for failed scheduled runs.<br/>
+Add persistent cloud storage for reports.<br/>
+</div>
+</body>
+</html>

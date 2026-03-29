@@ -4,8 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.execution.guards import execute_paper_trades
-from src.execution_engine import execute_live_trades
+from src.execution.guards import execute_candidates
 from src.execution.pipeline import prepare_candidates_for_execution
 
 
@@ -40,10 +39,11 @@ def run_paper_workflow(
     max_open_trades: int | None = None,
 ) -> WorkflowResult:
     candidates = prepare_candidates_for_execution(strategy_label, symbol, candles if candles is not None else __import__('pandas').DataFrame(output_rows), output_rows)
-    result = execute_paper_trades(
+    result = execute_candidates(
         candidates,
         output_path,
         deduplicate=deduplicate,
+        execution_mode='PAPER',
         max_trades_per_day=max_trades_per_day,
         max_daily_loss=max_daily_loss,
         max_open_trades=max_open_trades,
@@ -73,10 +73,11 @@ def run_live_workflow(
     max_open_trades: int | None = None,
 ) -> WorkflowResult:
     candidates = prepare_candidates_for_execution(strategy_label, symbol, candles if candles is not None else __import__('pandas').DataFrame(output_rows), output_rows)
-    result = execute_live_trades(
+    result = execute_candidates(
         candidates,
         output_path,
         deduplicate=deduplicate,
+        execution_mode='LIVE',
         broker_client=broker_client,
         broker_name=broker_name,
         security_map=security_map,
@@ -102,10 +103,11 @@ def run_paper_candidates(
     max_daily_loss: float | None = None,
     max_open_trades: int | None = None,
 ) -> WorkflowResult:
-    result = execute_paper_trades(
+    result = execute_candidates(
         candidates,
         output_path,
         deduplicate=deduplicate,
+        execution_mode='PAPER',
         max_trades_per_day=max_trades_per_day,
         max_daily_loss=max_daily_loss,
         max_open_trades=max_open_trades,
@@ -131,10 +133,11 @@ def run_live_candidates(
     max_daily_loss: float | None = None,
     max_open_trades: int | None = None,
 ) -> WorkflowResult:
-    result = execute_live_trades(
+    result = execute_candidates(
         candidates,
         output_path,
         deduplicate=deduplicate,
+        execution_mode='LIVE',
         broker_client=broker_client,
         broker_name=broker_name,
         security_map=security_map,

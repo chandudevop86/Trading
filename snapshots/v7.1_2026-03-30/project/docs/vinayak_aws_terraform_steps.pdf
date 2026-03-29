@@ -1,0 +1,230 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2214 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Vinayak AWS Implementation Guide 1) Tj
+1 0 0 1 50 786 Tm (Terraform Stack) Tj
+1 0 0 1 50 772 Tm () Tj
+1 0 0 1 50 758 Tm (Goal) Tj
+1 0 0 1 50 744 Tm (Build the full AWS target using Terraform so infra is repeatable.) Tj
+1 0 0 1 50 730 Tm () Tj
+1 0 0 1 50 716 Tm (Scope) Tj
+1 0 0 1 50 702 Tm (1. VPC) Tj
+1 0 0 1 50 688 Tm (2. Public and private subnets) Tj
+1 0 0 1 50 674 Tm (3. Internet gateway and NAT) Tj
+1 0 0 1 50 660 Tm (4. Security groups) Tj
+1 0 0 1 50 646 Tm (5. ALB) Tj
+1 0 0 1 50 632 Tm (6. ECS cluster and Fargate service) Tj
+1 0 0 1 50 618 Tm (7. ECR repository) Tj
+1 0 0 1 50 604 Tm (8. RDS PostgreSQL) Tj
+1 0 0 1 50 590 Tm (9. ElastiCache Redis) Tj
+1 0 0 1 50 576 Tm (10. S3 bucket for reports) Tj
+1 0 0 1 50 562 Tm (11. Secrets Manager secrets) Tj
+1 0 0 1 50 548 Tm (12. CloudWatch logs and alarms) Tj
+1 0 0 1 50 534 Tm (13. Route 53 records and ACM certificate) Tj
+1 0 0 1 50 520 Tm () Tj
+1 0 0 1 50 506 Tm (Recommended folder structure) Tj
+1 0 0 1 50 492 Tm (terraform/) Tj
+1 0 0 1 50 478 Tm (  providers.tf) Tj
+1 0 0 1 50 464 Tm (  versions.tf) Tj
+1 0 0 1 50 450 Tm (  variables.tf) Tj
+1 0 0 1 50 436 Tm (  outputs.tf) Tj
+1 0 0 1 50 422 Tm (  main.tf) Tj
+1 0 0 1 50 408 Tm (  networking.tf) Tj
+1 0 0 1 50 394 Tm (  security.tf) Tj
+1 0 0 1 50 380 Tm (  alb.tf) Tj
+1 0 0 1 50 366 Tm (  ecs.tf) Tj
+1 0 0 1 50 352 Tm (  ecr.tf) Tj
+1 0 0 1 50 338 Tm (  rds.tf) Tj
+1 0 0 1 50 324 Tm (  redis.tf) Tj
+1 0 0 1 50 310 Tm (  s3.tf) Tj
+1 0 0 1 50 296 Tm (  secrets.tf) Tj
+1 0 0 1 50 282 Tm (  route53_acm.tf) Tj
+1 0 0 1 50 268 Tm (  cloudwatch.tf) Tj
+1 0 0 1 50 254 Tm (  terraform.tfvars) Tj
+1 0 0 1 50 240 Tm () Tj
+1 0 0 1 50 226 Tm (Step 1) Tj
+1 0 0 1 50 212 Tm (Create the Terraform root and pin providers.) Tj
+1 0 0 1 50 198 Tm (Use AWS provider and remote state if possible.) Tj
+1 0 0 1 50 184 Tm () Tj
+1 0 0 1 50 170 Tm (Step 2) Tj
+1 0 0 1 50 156 Tm (Build networking first.) Tj
+1 0 0 1 50 142 Tm (Create one VPC across 2 or 3 AZs.) Tj
+1 0 0 1 50 128 Tm (Create public subnets for ALB.) Tj
+1 0 0 1 50 114 Tm (Create private app subnets for ECS tasks.) Tj
+1 0 0 1 50 100 Tm (Create private data subnets for RDS and Redis.) Tj
+1 0 0 1 50 86 Tm (Attach route tables.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2729 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Create one NAT gateway per environment if budget is tight, per AZ if higher availability is needed.) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Step 3) Tj
+1 0 0 1 50 758 Tm (Add security groups.) Tj
+1 0 0 1 50 744 Tm (ALB SG should accept 80 and 443 from the internet.) Tj
+1 0 0 1 50 730 Tm (ECS SG should allow only ALB to reach port 8000.) Tj
+1 0 0 1 50 716 Tm (RDS SG should allow only ECS SG on 5432.) Tj
+1 0 0 1 50 702 Tm (Redis SG should allow only ECS SG on 6379.) Tj
+1 0 0 1 50 688 Tm () Tj
+1 0 0 1 50 674 Tm (Step 4) Tj
+1 0 0 1 50 660 Tm (Provision ACM and Route 53.) Tj
+1 0 0 1 50 646 Tm (Create or use the hosted zone.) Tj
+1 0 0 1 50 632 Tm (Request certificate for the domain and validate by DNS.) Tj
+1 0 0 1 50 618 Tm (Create ALB listener 443 with ACM.) Tj
+1 0 0 1 50 604 Tm (Redirect 80 to 443.) Tj
+1 0 0 1 50 590 Tm () Tj
+1 0 0 1 50 576 Tm (Step 5) Tj
+1 0 0 1 50 562 Tm (Create ECR repository.) Tj
+1 0 0 1 50 548 Tm (Name it vinayak-api.) Tj
+1 0 0 1 50 534 Tm (Enable image scanning on push.) Tj
+1 0 0 1 50 520 Tm (Add lifecycle policy to delete old untagged images.) Tj
+1 0 0 1 50 506 Tm () Tj
+1 0 0 1 50 492 Tm (Step 6) Tj
+1 0 0 1 50 478 Tm (Create ECS cluster and task definition.) Tj
+1 0 0 1 50 464 Tm (Use Fargate.) Tj
+1 0 0 1 50 450 Tm (Attach execution role and task role.) Tj
+1 0 0 1 50 436 Tm (Map port 8000.) Tj
+1 0 0 1 50 422 Tm (Send logs to CloudWatch.) Tj
+1 0 0 1 50 408 Tm (Use Secrets Manager refs for DB, Dhan, and Telegram secrets.) Tj
+1 0 0 1 50 394 Tm (Use env vars for AWS region, Redis URL, and S3 bucket.) Tj
+1 0 0 1 50 380 Tm () Tj
+1 0 0 1 50 366 Tm (Step 7) Tj
+1 0 0 1 50 352 Tm (Create ALB target group and ECS service.) Tj
+1 0 0 1 50 338 Tm (Point the target group to the ECS service.) Tj
+1 0 0 1 50 324 Tm (Use /health/live or /health/ready for health checks.) Tj
+1 0 0 1 50 310 Tm (Set minimum healthy percent so deploys stay online.) Tj
+1 0 0 1 50 296 Tm () Tj
+1 0 0 1 50 282 Tm (Step 8) Tj
+1 0 0 1 50 268 Tm (Create RDS PostgreSQL.) Tj
+1 0 0 1 50 254 Tm (Use private subnets only.) Tj
+1 0 0 1 50 240 Tm (Start with a small instance for dev.) Tj
+1 0 0 1 50 226 Tm (Enable backups and Multi-AZ for production.) Tj
+1 0 0 1 50 212 Tm (Create the vinayak database and store the full SQLAlchemy URL in Secrets Manager.) Tj
+1 0 0 1 50 198 Tm () Tj
+1 0 0 1 50 184 Tm (Step 9) Tj
+1 0 0 1 50 170 Tm (Create ElastiCache Redis.) Tj
+1 0 0 1 50 156 Tm (Use a subnet group in private subnets.) Tj
+1 0 0 1 50 142 Tm (Set a security group allowing ECS only.) Tj
+1 0 0 1 50 128 Tm (Expose REDIS_URL to the app through env vars.) Tj
+1 0 0 1 50 114 Tm (Use it first for OHLCV cache and option metrics cache.) Tj
+1 0 0 1 50 100 Tm () Tj
+1 0 0 1 50 86 Tm (Step 10) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2662 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Create S3 bucket.) Tj
+1 0 0 1 50 786 Tm (Use bucket encryption.) Tj
+1 0 0 1 50 772 Tm (Block public access.) Tj
+1 0 0 1 50 758 Tm (Create prefixes such as reports/, exports/, and archives/.) Tj
+1 0 0 1 50 744 Tm (Grant ECS task role read write access only to that bucket.) Tj
+1 0 0 1 50 730 Tm () Tj
+1 0 0 1 50 716 Tm (Step 11) Tj
+1 0 0 1 50 702 Tm (Create Secrets Manager secrets.) Tj
+1 0 0 1 50 688 Tm (Store VINAYAK_DATABASE_URL.) Tj
+1 0 0 1 50 674 Tm (Store DHAN_CLIENT_ID.) Tj
+1 0 0 1 50 660 Tm (Store DHAN_ACCESS_TOKEN.) Tj
+1 0 0 1 50 646 Tm (Store TELEGRAM_TOKEN.) Tj
+1 0 0 1 50 632 Tm (Store TELEGRAM_CHAT_ID.) Tj
+1 0 0 1 50 618 Tm (Reference them from the ECS task definition.) Tj
+1 0 0 1 50 604 Tm () Tj
+1 0 0 1 50 590 Tm (Step 12) Tj
+1 0 0 1 50 576 Tm (Create CloudWatch resources.) Tj
+1 0 0 1 50 562 Tm (Log group /ecs/vinayak-api.) Tj
+1 0 0 1 50 548 Tm (Alarms for ALB 5xx, ECS task restarts, RDS CPU/storage, and unhealthy target count.) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (Step 13) Tj
+1 0 0 1 50 506 Tm (Deploy order.) Tj
+1 0 0 1 50 492 Tm (Run terraform init.) Tj
+1 0 0 1 50 478 Tm (Run terraform plan.) Tj
+1 0 0 1 50 464 Tm (Run terraform apply.) Tj
+1 0 0 1 50 450 Tm (Push app image to ECR.) Tj
+1 0 0 1 50 436 Tm (Update ECS service to new task definition.) Tj
+1 0 0 1 50 422 Tm (Run alembic migrations against RDS.) Tj
+1 0 0 1 50 408 Tm (Open the ALB DNS and verify admin and workspace pages.) Tj
+1 0 0 1 50 394 Tm () Tj
+1 0 0 1 50 380 Tm (Step 14) Tj
+1 0 0 1 50 366 Tm (Post deployment checks.) Tj
+1 0 0 1 50 352 Tm (Check /health/live.) Tj
+1 0 0 1 50 338 Tm (Check /health/ready.) Tj
+1 0 0 1 50 324 Tm (Check /workspace.) Tj
+1 0 0 1 50 310 Tm (Run one live-analysis request.) Tj
+1 0 0 1 50 296 Tm (Verify RDS connectivity.) Tj
+1 0 0 1 50 282 Tm (Verify Redis reachability.) Tj
+1 0 0 1 50 268 Tm (Verify S3 upload path.) Tj
+1 0 0 1 50 254 Tm (Verify Secrets Manager access through task role.) Tj
+1 0 0 1 50 240 Tm () Tj
+1 0 0 1 50 226 Tm (Step 15) Tj
+1 0 0 1 50 212 Tm (Hardening.) Tj
+1 0 0 1 50 198 Tm (Split modules later by networking, data, and app.) Tj
+1 0 0 1 50 184 Tm (Add separate workspaces for dev, stage, and prod.) Tj
+1 0 0 1 50 170 Tm (Use remote state locking.) Tj
+1 0 0 1 50 156 Tm (Add GitHub Actions or another CI job to run terraform fmt and plan.) Tj
+1 0 0 1 50 142 Tm () Tj
+1 0 0 1 50 128 Tm (What you should implement later in code) Tj
+1 0 0 1 50 114 Tm (1. Replace local report storage with S3 writes.) Tj
+1 0 0 1 50 100 Tm (2. Replace SQLite demos with RDS by default in production.) Tj
+1 0 0 1 50 86 Tm (3. Add Redis caching reads in the OHLCV and option metrics path.) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 85 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (4. Move long-running jobs to a worker service.) Tj
+ET
+endstream
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000134 00000 n 
+0000000204 00000 n 
+0000000330 00000 n 
+0000002596 00000 n 
+0000002722 00000 n 
+0000005503 00000 n 
+0000005629 00000 n 
+0000008343 00000 n 
+0000008471 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+8607
+%%EOF

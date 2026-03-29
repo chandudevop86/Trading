@@ -1,0 +1,82 @@
+{
+  "generated_at": "2026-03-28 19:08:02",
+  "overall_status": "PASS",
+  "suites": [
+    {
+      "area": "Functional",
+      "pattern": "test_compatibility_suite.py",
+      "description": "Imports, preprocessing, end-to-end operator flow, and paper-broker safety.",
+      "status": "PASS",
+      "tests_run": 6,
+      "failures": 0,
+      "errors": 0,
+      "output": "test_duplicate_prevention_and_schema_consistency (test_compatibility_suite.TestTradingCompatibilitySuite.test_duplicate_prevention_and_schema_consistency) ... ok\ntest_end_to_end_operator_pipeline_from_raw_data_to_files (test_compatibility_suite.TestTradingCompatibilitySuite.test_end_to_end_operator_pipeline_from_raw_data_to_files) ... ok\ntest_import_smoke_for_core_operator_modules (test_compatibility_suite.TestTradingCompatibilitySuite.test_import_smoke_for_core_operator_modules) ... ok\ntest_paper_broker_stays_local_and_safe (test_compatibility_suite.TestTradingCompatibilitySuite.test_paper_broker_stays_local_and_safe) ... ok\ntest_strategy_signature_contracts_remain_compatible (test_compatibility_suite.TestTradingCompatibilitySuite.test_strategy_signature_contracts_remain_compatible) ... ok\ntest_streamlit_page_starts_without_runtime_errors (test_compatibility_suite.TestTradingCompatibilitySuite.test_streamlit_page_starts_without_runtime_errors) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 6.162s\n\nOK"
+    },
+    {
+      "area": "Functional",
+      "pattern": "test_trade_validation_service.py",
+      "description": "Shared trade metrics, timestamp parsing, OHLCV normalization, and paper readiness.",
+      "status": "PASS",
+      "tests_run": 9,
+      "failures": 0,
+      "errors": 0,
+      "output": "test_blocked_rows_do_not_inflate_trade_count_or_readiness (test_trade_validation_service.TestTradeValidationService.test_blocked_rows_do_not_inflate_trade_count_or_readiness) ... ok\ntest_build_trade_evaluation_summary_exposes_records_for_dashboard_or_export (test_trade_validation_service.TestTradeValidationService.test_build_trade_evaluation_summary_exposes_records_for_dashboard_or_export) ... ok\ntest_calculate_trade_metrics_returns_consistent_summary (test_trade_validation_service.TestTradeValidationService.test_calculate_trade_metrics_returns_consistent_summary) ... ok\ntest_evaluate_paper_readiness_blocks_weak_sample_in_plain_english (test_trade_validation_service.TestTradeValidationService.test_evaluate_paper_readiness_blocks_weak_sample_in_plain_english) ... ok\ntest_execute_paper_trades_enforces_invalid_and_daily_limit_constraints (test_trade_validation_service.TestTradeValidationService.test_execute_paper_trades_enforces_invalid_and_daily_limit_constraints) ... ok\ntest_paper_execution_summary_returns_metrics_readiness_and_output_views (test_trade_validation_service.TestTradeValidationService.test_paper_execution_summary_returns_metrics_readiness_and_output_views) ... ok\ntest_parse_trade_timestamp_normalizes_offset_aware_values (test_trade_validation_service.TestTradeValidationService.test_parse_trade_timestamp_normalizes_offset_aware_values) ... ok\ntest_prepare_trading_data_normalizes_ohlcv_schema (test_trade_validation_service.TestTradeValidationService.test_prepare_trading_data_normalizes_ohlcv_schema) ... ok\ntest_rejection_reason_maps_into_invalid_trade_count (test_trade_validation_service.TestTradeValidationService.test_rejection_reason_maps_into_invalid_trade_count) ... ok\n\n----------------------------------------------------------------------\nRan 9 tests in 1.639s\n\nOK"
+    },
+    {
+      "area": "Functional",
+      "pattern": "test_dhan_api.py",
+      "description": "DHAN symbol resolution, option instrument lookup, and broker request shaping.",
+      "status": "PASS",
+      "tests_run": 7,
+      "failures": 0,
+      "errors": 0,
+      "output": "test_build_order_request_fails_when_security_map_missing (test_dhan_api.TestDhanApi.test_build_order_request_fails_when_security_map_missing) ... ok\ntest_build_order_request_from_candidate_creates_v2_payload (test_dhan_api.TestDhanApi.test_build_order_request_from_candidate_creates_v2_payload) ... ok\ntest_find_option_instrument_resolves_ce_and_pe (test_dhan_api.TestDhanApi.test_find_option_instrument_resolves_ce_and_pe) ... ok\ntest_normalize_trading_symbol_maps_yahoo_indexes (test_dhan_api.TestDhanApi.test_normalize_trading_symbol_maps_yahoo_indexes) ... ok\ntest_resolve_security_fails_when_expiry_missing (test_dhan_api.TestDhanApi.test_resolve_security_fails_when_expiry_missing) ... ok\ntest_resolve_security_fails_when_strike_missing (test_dhan_api.TestDhanApi.test_resolve_security_fails_when_strike_missing) ... ok\ntest_resolve_security_preserves_data_symbol_and_trade_symbol (test_dhan_api.TestDhanApi.test_resolve_security_preserves_data_symbol_and_trade_symbol) ... ok\n\n----------------------------------------------------------------------\nRan 7 tests in 0.048s\n\nOK"
+    },
+    {
+      "area": "Functional",
+      "pattern": "test_execution_engine.py",
+      "description": "Execution safety, duplicate prevention, daily limits, and live compatibility guards.",
+      "status": "PASS",
+      "tests_run": 38,
+      "failures": 0,
+      "errors": 0,
+      "output": "test_build_analysis_queue_filters_actionable_candidates (test_execution_engine.TestExecutionEngine.test_build_analysis_queue_filters_actionable_candidates) ... ok\ntest_build_execution_candidates_drops_simulated_exit_fields (test_execution_engine.TestExecutionEngine.test_build_execution_candidates_drops_simulated_exit_fields) ... ok\ntest_build_execution_candidates_preserves_reason_and_target_fallback (test_execution_engine.TestExecutionEngine.test_build_execution_candidates_preserves_reason_and_target_fallback) ... ok\ntest_build_execution_candidates_preserves_trade_labels (test_execution_engine.TestExecutionEngine.test_build_execution_candidates_preserves_trade_labels) ... ok\ntest_build_execution_candidates_standardizes_trade_schema_aliases (test_execution_engine.TestExecutionEngine.test_build_execution_candidates_standardizes_trade_schema_aliases) ... ok\ntest_build_indicator_candidate (test_execution_engine.TestExecutionEngine.test_build_indicator_candidate) ... ok\ntest_default_quantity_for_symbol (test_execution_engine.TestExecutionEngine.test_default_quantity_for_symbol) ... ok\ntest_execute_live_trades_blocks_after_daily_loss_limit (test_execution_engine.TestExecutionEngine.test_execute_live_trades_blocks_after_daily_loss_limit) ... ok\ntest_execute_live_trades_blocks_when_dhan_preflight_fails (test_execution_engine.TestExecutionEngine.test_execute_live_trades_blocks_when_dhan_preflight_fails) ... ok\ntest_execute_live_trades_blocks_when_kill_switch_enabled (test_execution_engine.TestExecutionEngine.test_execute_live_trades_blocks_when_kill_switch_enabled) ... ok\ntest_execute_live_trades_blocks_when_optimizer_gate_fails (test_execution_engine.TestExecutionEngine.test_execute_live_trades_blocks_when_optimizer_gate_fails) ... ok\ntest_execute_live_trades_resolves_dhan_security_metadata (test_execution_engine.TestExecutionEngine.test_execute_live_trades_resolves_dhan_security_metadata) ... ok\ntest_execute_live_trades_writes_structured_error_log_on_broker_failure (test_execution_engine.TestExecutionEngine.test_execute_live_trades_writes_structured_error_log_on_broker_failure) ... ok\ntest_execute_paper_trades (test_execution_engine.TestExecutionEngine.test_execute_paper_trades) ... ok\ntest_execute_paper_trades_blocks_after_daily_trade_limit (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_blocks_after_daily_trade_limit) ... ok\ntest_execute_paper_trades_blocks_when_max_open_trades_hit (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_blocks_when_max_open_trades_hit) ... ok\ntest_execute_paper_trades_deduplicates (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_deduplicates) ... ok\ntest_execute_paper_trades_derives_trade_levels_for_legacy_candidate (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_derives_trade_levels_for_legacy_candidate) ... ok\ntest_execute_paper_trades_enforces_duplicate_signal_cooldown (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_enforces_duplicate_signal_cooldown) ... ok\ntest_execute_paper_trades_exposes_rejection_metadata_for_duplicates (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_exposes_rejection_metadata_for_duplicates) ... ok\ntest_execute_paper_trades_returns_structured_summary (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_returns_structured_summary) ... ok\ntest_execute_paper_trades_rewrites_file_when_schema_expands (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_rewrites_file_when_schema_expands) ... ok\ntest_execute_paper_trades_skips_duplicate_batch_trade (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_skips_duplicate_batch_trade) ... ok\ntest_execute_paper_trades_skips_duplicate_signal_key_same_candle (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_skips_duplicate_signal_key_same_candle) ... ok\ntest_execute_paper_trades_uses_strategy_default_cooldown_minutes (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_uses_strategy_default_cooldown_minutes) ... ok\ntest_execute_paper_trades_uses_strategy_default_trade_cap (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_uses_strategy_default_trade_cap) ... ok\ntest_execute_paper_trades_writes_structured_validation_and_execution_logs (test_execution_engine.TestExecutionEngine.test_execute_paper_trades_writes_structured_validation_and_execution_logs) ... ok\ntest_filter_unlogged_candidates_enforces_duplicate_signal_cooldown (test_execution_engine.TestExecutionEngine.test_filter_unlogged_candidates_enforces_duplicate_signal_cooldown) ... ok\ntest_filter_unlogged_candidates_skips_already_logged_rows (test_execution_engine.TestExecutionEngine.test_filter_unlogged_candidates_skips_already_logged_rows) ... ok\ntest_filter_unlogged_candidates_skips_duplicate_signal_key_from_logged_rows (test_execution_engine.TestExecutionEngine.test_filter_unlogged_candidates_skips_duplicate_signal_key_from_logged_rows) ... ok\ntest_live_kill_switch_enabled_helper (test_execution_engine.TestExecutionEngine.test_live_kill_switch_enabled_helper) ... ok\ntest_live_trading_unlock_after_30_days (test_execution_engine.TestExecutionEngine.test_live_trading_unlock_after_30_days) ... ok\ntest_make_trade_identity_is_stable (test_execution_engine.TestExecutionEngine.test_make_trade_identity_is_stable) ... ok\ntest_normalize_order_quantity_nifty (test_execution_engine.TestExecutionEngine.test_normalize_order_quantity_nifty) ... ok\ntest_reconcile_live_positions_compares_expected_vs_broker (test_execution_engine.TestExecutionEngine.test_reconcile_live_positions_compares_expected_vs_broker) ... ok\ntest_reconcile_live_trades_updates_filled_orders (test_execution_engine.TestExecutionEngine.test_reconcile_live_trades_updates_filled_orders) ... ok\ntest_validate_candidate_derives_stop_and_target_when_missing (test_execution_engine.TestExecutionEngine.test_validate_candidate_derives_stop_and_target_when_missing) ... ok\ntest_validate_dhan_preflight_blocks_missing_security_map (test_execution_engine.TestExecutionEngine.test_validate_dhan_preflight_blocks_missing_security_map) ... ok\n\n----------------------------------------------------------------------\nRan 38 tests in 26.518s\n\nOK"
+    },
+    {
+      "area": "UAT",
+      "pattern": "test_trading_runtime_service.py",
+      "description": "Operator run and backtest actions through the runtime service.",
+      "status": "PASS",
+      "tests_run": 6,
+      "failures": 0,
+      "errors": 0,
+      "output": "test_backtest_action_returns_backtest_failure_payload_when_runtime_fails (test_trading_runtime_service.TestTradingRuntimeService.test_backtest_action_returns_backtest_failure_payload_when_runtime_fails) ... ok\ntest_backtest_action_returns_summary_without_live_trade_payload (test_trading_runtime_service.TestTradingRuntimeService.test_backtest_action_returns_summary_without_live_trade_payload) ... ok\ntest_latest_optimizer_gate_requires_deployment_ready_yes (test_trading_runtime_service.TestTradingRuntimeService.test_latest_optimizer_gate_requires_deployment_ready_yes) ... ok\ntest_run_action_keeps_trade_payload_and_execution_messages (test_trading_runtime_service.TestTradingRuntimeService.test_run_action_keeps_trade_payload_and_execution_messages) ... ok\ntest_run_action_returns_safe_error_payload_when_runtime_fails (test_trading_runtime_service.TestTradingRuntimeService.test_run_action_returns_safe_error_payload_when_runtime_fails) ... ok\ntest_run_execution_blocks_live_deployment_when_optimizer_gate_fails (test_trading_runtime_service.TestTradingRuntimeService.test_run_execution_blocks_live_deployment_when_optimizer_gate_fails) ... ok\n\n----------------------------------------------------------------------\nRan 6 tests in 0.034s\n\nOK"
+    },
+    {
+      "area": "UAT/UI",
+      "pattern": "test_trading_page.py",
+      "description": "Page-level operator flows, state cleanup, and safe failure rendering.",
+      "status": "PASS",
+      "tests_run": 5,
+      "failures": 0,
+      "errors": 0,
+      "output": "test_backtest_success_persists_backtest_summary (test_trading_page.TestTradingPage.test_backtest_success_persists_backtest_summary) ... ok\ntest_build_scorecard_rows_uses_validation_summary (test_trading_page.TestTradingPage.test_build_scorecard_rows_uses_validation_summary) ... ok\ntest_build_validation_snapshot_uses_expected_gates (test_trading_page.TestTradingPage.test_build_validation_snapshot_uses_expected_gates) ... ok\ntest_run_success_renders_feedback_and_clears_stale_backtest_summary (test_trading_page.TestTradingPage.test_run_success_renders_feedback_and_clears_stale_backtest_summary) ... ok\ntest_safe_failure_payload_is_rendered_as_error_instead_of_success (test_trading_page.TestTradingPage.test_safe_failure_payload_is_rendered_as_error_instead_of_success) ... ok\n\n----------------------------------------------------------------------\nRan 5 tests in 0.104s\n\nOK"
+    },
+    {
+      "area": "UI",
+      "pattern": "test_trading_ui_service.py",
+      "description": "UI runtime initialization, request building, and UI logging support.",
+      "status": "PASS",
+      "tests_run": 3,
+      "failures": 0,
+      "errors": 0,
+      "output": "test_build_request_returns_runtime_request (test_trading_ui_service.TestTradingUiService.test_build_request_returns_runtime_request) ... ok\ntest_initialize_ui_runtime_creates_output_and_log_paths (test_trading_ui_service.TestTradingUiService.test_initialize_ui_runtime_creates_output_and_log_paths) ... ok\ntest_log_ui_event_appends_message (test_trading_ui_service.TestTradingUiService.test_log_ui_event_appends_message) ... ok\n\n----------------------------------------------------------------------\nRan 3 tests in 0.065s\n\nOK"
+    }
+  ],
+  "missing_output_suggestions": [
+    "Add data/test_reports/latest_test_summary.json for quick CI-friendly health checks.",
+    "Add one plain-English operator readiness file for paper-trading status.",
+    "Show latest verification date and latest readiness result on the dashboard.",
+    "Keep one rolling PDF review file such as data/reports/preprod_review_latest.pdf."
+  ]
+}

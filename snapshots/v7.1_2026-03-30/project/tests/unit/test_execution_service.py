@@ -1,0 +1,351 @@
+﻿from datetime import UTC, datetime
+import json
+from pathlib import Path
+from unittest.mock import patch
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from vinayak.db.models.execution import ExecutionRecord
+from vinayak.db.models.reviewed_trade import ReviewedTradeRecord
+from vinayak.db.models.signal import SignalRecord
+from vinayak.db.session import build_session_factory, get_engine, initialize_database, reset_database_state
+from vinayak.execution.reviewed_trade_service import ReviewedTradeService, ReviewedTradeStatusUpdateCommand
+from vinayak.execution.service import ExecutionCreateCommand, ExecutionService
+
+
+def _write_security_map(path: Path) -> None:
+    path.write_text(
+        'alias,security_id,exchange_segment,product_type,order_type,trading_symbol\n'
+        '^NSEI,IDXNIFTY,NSE_FNO,INTRADAY,MARKET,NIFTY 50\n',
+        encoding='utf-8',
+    )
+
+
+def test_execution_service_creates_and_lists_records(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_execution_service.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:15:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        reviewed_trade = ReviewedTradeRecord(
+            signal_id=signal.id,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            quantity=25,
+            lots=1,
+            status='APPROVED',
+            notes='Approved for execution',
+        )
+        session.add(reviewed_trade)
+        session.commit()
+        session.refresh(reviewed_trade)
+
+        service = ExecutionService(session)
+        record = service.create_execution(
+            ExecutionCreateCommand(
+                reviewed_trade_id=reviewed_trade.id,
+                mode='PAPER',
+                broker='SIM',
+            )
+        )
+
+        assert isinstance(record, ExecutionRecord)
+        assert record.signal_id == signal.id
+        assert record.reviewed_trade_id == reviewed_trade.id
+        assert record.mode == 'PAPER'
+        assert record.status == 'FILLED'
+
+        session.refresh(reviewed_trade)
+        assert reviewed_trade.status == 'EXECUTED'
+
+        executions = service.list_executions()
+        assert len(executions) == 1
+        assert executions[0].broker_reference is not None
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_database_state()
+
+
+def test_reviewed_trade_must_be_approved_before_execution(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_execution_gate.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:15:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        reviewed_trade = ReviewedTradeRecord(
+            signal_id=signal.id,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            quantity=25,
+            lots=1,
+            status='REVIEWED',
+            notes='Awaiting approval',
+        )
+        session.add(reviewed_trade)
+        session.commit()
+        session.refresh(reviewed_trade)
+
+        service = ExecutionService(session)
+        try:
+            service.create_execution(
+                ExecutionCreateCommand(
+                    reviewed_trade_id=reviewed_trade.id,
+                    mode='PAPER',
+                    broker='SIM',
+                )
+            )
+            assert False, 'Expected approval gate to block execution.'
+        except ValueError as exc:
+            assert 'must be APPROVED before execution' in str(exc)
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_database_state()
+
+
+def test_reviewed_trade_status_transition_service(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_reviewed_trade_status.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        reviewed_trade = ReviewedTradeRecord(
+            signal_id=None,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            quantity=25,
+            lots=1,
+            status='REVIEWED',
+            notes='Awaiting approval',
+        )
+        session.add(reviewed_trade)
+        session.commit()
+        session.refresh(reviewed_trade)
+
+        service = ReviewedTradeService(session)
+        updated = service.update_reviewed_trade_status(
+            ReviewedTradeStatusUpdateCommand(
+                reviewed_trade_id=reviewed_trade.id,
+                status='APPROVED',
+                notes='Approved by desk review.',
+            )
+        )
+        assert updated.status == 'APPROVED'
+        assert updated.notes == 'Approved by desk review.'
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_database_state()
+
+
+def test_live_execution_adapter_blocks_without_credentials(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_live_execution_service.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    os.environ.pop('DHAN_CLIENT_ID', None)
+    os.environ.pop('DHAN_ACCESS_TOKEN', None)
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=110.0,
+            stop_loss=108.0,
+            target_price=114.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:20:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        reviewed_trade = ReviewedTradeRecord(
+            signal_id=signal.id,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=110.0,
+            stop_loss=108.0,
+            target_price=114.0,
+            quantity=10,
+            lots=1,
+            status='APPROVED',
+            notes='Approved for live route',
+        )
+        session.add(reviewed_trade)
+        session.commit()
+        session.refresh(reviewed_trade)
+
+        service = ExecutionService(session)
+        record = service.create_execution(
+            ExecutionCreateCommand(
+                reviewed_trade_id=reviewed_trade.id,
+                mode='LIVE',
+                broker='DHAN',
+            )
+        )
+
+        assert record.mode == 'LIVE'
+        assert record.status == 'BLOCKED'
+        assert record.notes is not None
+        assert 'Dhan credentials are missing' in record.notes
+
+        with get_engine().connect() as conn:
+            audit_count = conn.execute(text('select count(*) from execution_audit_logs')).scalar_one()
+            request_payload = conn.execute(text('select request_payload from execution_audit_logs')).scalar_one()
+            response_payload = conn.execute(text('select response_payload from execution_audit_logs')).scalar_one()
+        assert audit_count == 1
+        assert 'Dhan credentials are missing' in response_payload
+        assert request_payload != ''
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_database_state()
+
+
+def test_live_execution_adapter_uses_real_dhan_shape_when_ready(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_live_execution_ready.db'
+    security_map_path = tmp_path / 'dhan_security_map.csv'
+    _write_security_map(security_map_path)
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    os.environ['DHAN_CLIENT_ID'] = 'demo-client'
+    os.environ['DHAN_ACCESS_TOKEN'] = 'demo-token'
+    os.environ['DHAN_SECURITY_MAP'] = str(security_map_path)
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='SELL',
+            entry_price=23080.0,
+            stop_loss=23120.0,
+            target_price=23000.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:20:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        reviewed_trade = ReviewedTradeRecord(
+            signal_id=signal.id,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='SELL',
+            entry_price=23080.0,
+            stop_loss=23120.0,
+            target_price=23000.0,
+            quantity=15,
+            lots=1,
+            status='APPROVED',
+            notes='Approved for live route',
+        )
+        session.add(reviewed_trade)
+        session.commit()
+        session.refresh(reviewed_trade)
+
+        with patch('vinayak.execution.broker.dhan_client.DhanClient._request', return_value={
+            'status': 'accepted',
+            'orderId': '1234567890',
+        }):
+            service = ExecutionService(session)
+            record = service.create_execution(
+                ExecutionCreateCommand(
+                    reviewed_trade_id=reviewed_trade.id,
+                    mode='LIVE',
+                    broker='DHAN',
+                )
+            )
+
+        assert record.mode == 'LIVE'
+        assert record.status == 'ACCEPTED'
+        assert record.broker_reference == '1234567890'
+        assert record.notes is not None
+        assert 'configured broker API' in record.notes
+
+        with get_engine().connect() as conn:
+            audit_count = conn.execute(text('select count(*) from execution_audit_logs')).scalar_one()
+            request_payload = conn.execute(text('select request_payload from execution_audit_logs')).scalar_one()
+            response_payload = conn.execute(text('select response_payload from execution_audit_logs')).scalar_one()
+        assert audit_count == 1
+        parsed_request = json.loads(request_payload)
+        parsed_response = json.loads(response_payload)
+        assert parsed_request['transactionType'] == 'SELL'
+        assert parsed_request['quantity'] == 15
+        assert parsed_request['securityId'] == 'IDXNIFTY'
+        assert parsed_response['status'] == 'accepted'
+        assert parsed_response['orderId'] == '1234567890'
+
+        session.refresh(reviewed_trade)
+        assert reviewed_trade.status == 'EXECUTED'
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    os.environ.pop('DHAN_CLIENT_ID', None)
+    os.environ.pop('DHAN_ACCESS_TOKEN', None)
+    os.environ.pop('DHAN_SECURITY_MAP', None)
+    reset_database_state()

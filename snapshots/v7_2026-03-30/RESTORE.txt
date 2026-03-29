@@ -1,0 +1,4 @@
+﻿Snapshot: v7_2026-03-30
+Created from: F:\Trading (legacy root project)
+Purpose: legacy project checkpoint
+Restore: copy contents of the project directory back into the workspace root.

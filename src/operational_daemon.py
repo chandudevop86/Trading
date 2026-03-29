@@ -9,8 +9,8 @@ from typing import Any
 from src.Trading import fetch_ohlcv_data, run_strategy
 from src.aws_storage import sync_path_to_s3_if_enabled
 from src.backtest_engine import BacktestConfig, run_backtest, summarize_trade_log
-from src.execution.guards import execute_paper_trades
-from src.execution_engine import close_paper_trades, execute_live_trades, execution_result_summary
+from src.execution.guards import execute_candidates
+from src.execution_engine import close_paper_trades, execution_result_summary
 from src.execution.pipeline import prepare_candidates_for_execution
 from src.legacy_scope import fail_noncanonical_entrypoint
 from src.runtime_config import RuntimeConfig
@@ -110,9 +110,10 @@ def execute_trading_cycle(config: RuntimeConfig) -> dict[str, Any]:
 
     candidates = prepare_candidates_for_execution(daemon.strategy, symbol, candles, trades)
     if broker_config.mode == 'LIVE':
-        execution_result = execute_live_trades(
+        execution_result = execute_candidates(
             candidates,
             paths.executed_trades_csv,
+            execution_mode='LIVE',
             broker_name='DHAN',
             live_enabled=broker_config.live_enabled,
             max_trades_per_day=broker_config.max_trades_per_day,
@@ -123,9 +124,10 @@ def execute_trading_cycle(config: RuntimeConfig) -> dict[str, Any]:
             order_history_path=paths.order_history_csv,
         )
     else:
-        execution_result = execute_paper_trades(
+        execution_result = execute_candidates(
             candidates,
             paths.executed_trades_csv,
+            execution_mode='PAPER',
             max_trades_per_day=broker_config.max_trades_per_day,
             max_daily_loss=broker_config.max_daily_loss or None,
             order_history_path=paths.order_history_csv,
@@ -260,6 +262,7 @@ def main() -> None:
 
 if __name__ == '__main__':
     fail_noncanonical_entrypoint('src/operational_daemon.py', canonical='src.auto_run')
+
 
 
 

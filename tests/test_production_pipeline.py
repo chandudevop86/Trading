@@ -120,7 +120,7 @@ class TestProductionPipeline(unittest.TestCase):
             return output_rows
 
         with patch("src.runtime_workflow_service.prepare_candidates_for_execution", side_effect=_capture_candidates):
-            with patch("src.runtime_workflow_service.execute_paper_trades", return_value=[]):
+            with patch("src.runtime_workflow_service.execute_candidates", return_value=[]):
                 with patch("src.runtime_workflow_service.execution_result_summary", return_value=[]):
                     with patch("src.runtime_workflow_service.refresh_paper_trade_summary", return_value={}):
                         with patch("src.runtime_workflow_service.mirror_output_file"):
@@ -160,6 +160,7 @@ class TestProductionPipeline(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

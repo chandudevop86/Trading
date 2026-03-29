@@ -145,20 +145,31 @@ def evaluate_trade_guards(
     }
 
 
-def execute_paper_trades(
+def execute_candidates(
     candidates: list[dict[str, Any]],
     output_path: Path,
     deduplicate: bool = True,
     *,
+    execution_mode: str = "PAPER",
+    broker_client: object | None = None,
+    broker_name: str | None = None,
+    security_map: dict[str, dict[str, str]] | None = None,
     max_trades_per_day: int | None = None,
     max_daily_loss: float | None = None,
     max_open_trades: int | None = None,
+    live_enabled: bool | None = None,
+    symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None,
+    max_order_quantity: int | None = None,
+    max_order_value: float | None = None,
     order_history_path: Path | None = None,
+    optimizer_report_path: Path | None = None,
+    enforce_optimizer_gate: bool | None = None,
 ):
-    """Mandatory paper-execution gateway for all repo execution paths."""
+    """Mandatory canonical execution gateway for all execution-capable paths."""
     from src.execution.paper_execution_service import CanonicalExecutionConfig, run_canonical_paper_execution
     from src.execution_engine import _execute_candidates, _read_trade_rows
 
+    mode = str(execution_mode or "PAPER").upper()
     existing_rows = _read_trade_rows(output_path)
     result, _blocked_rows, _state = run_canonical_paper_execution(
         candidates,
@@ -173,21 +184,94 @@ def execute_paper_trades(
         adapter=lambda allowed, resolved_output_path, **kwargs: _execute_candidates(
             allowed,
             resolved_output_path,
-            execution_type="PAPER",
+            execution_type=mode,
             deduplicate=bool(kwargs.get("deduplicate", deduplicate)),
             max_trades_per_day=(None if not kwargs.get("max_trades_per_day") else kwargs.get("max_trades_per_day")),
             max_daily_loss=(None if not kwargs.get("max_daily_loss") else kwargs.get("max_daily_loss")),
             max_open_trades=kwargs.get("max_open_trades"),
+            broker_client=broker_client,
+            broker_name=broker_name,
+            security_map=security_map,
+            live_enabled=live_enabled,
+            symbol_allowlist=symbol_allowlist,
+            max_order_quantity=max_order_quantity,
+            max_order_value=max_order_value,
             order_history_path=kwargs.get("order_history_path"),
+            optimizer_report_path=optimizer_report_path,
+            enforce_optimizer_gate=enforce_optimizer_gate,
         ),
         existing_rows=existing_rows,
     )
     return result
 
 
+def execute_paper_trades(
+    candidates: list[dict[str, Any]],
+    output_path: Path,
+    deduplicate: bool = True,
+    *,
+    max_trades_per_day: int | None = None,
+    max_daily_loss: float | None = None,
+    max_open_trades: int | None = None,
+    order_history_path: Path | None = None,
+):
+    return execute_candidates(
+        candidates,
+        output_path,
+        deduplicate=deduplicate,
+        execution_mode="PAPER",
+        max_trades_per_day=max_trades_per_day,
+        max_daily_loss=max_daily_loss,
+        max_open_trades=max_open_trades,
+        order_history_path=order_history_path,
+    )
+
+
+def execute_live_trades(
+    candidates: list[dict[str, Any]],
+    output_path: Path,
+    deduplicate: bool = True,
+    *,
+    broker_client: object | None = None,
+    broker_name: str | None = None,
+    security_map: dict[str, dict[str, str]] | None = None,
+    max_trades_per_day: int | None = None,
+    max_daily_loss: float | None = None,
+    max_open_trades: int | None = None,
+    live_enabled: bool | None = None,
+    symbol_allowlist: list[str] | set[str] | tuple[str, ...] | None = None,
+    max_order_quantity: int | None = None,
+    max_order_value: float | None = None,
+    order_history_path: Path | None = None,
+    optimizer_report_path: Path | None = None,
+    enforce_optimizer_gate: bool | None = None,
+):
+    return execute_candidates(
+        candidates,
+        output_path,
+        deduplicate=deduplicate,
+        execution_mode="LIVE",
+        broker_client=broker_client,
+        broker_name=broker_name,
+        security_map=security_map,
+        max_trades_per_day=max_trades_per_day,
+        max_daily_loss=max_daily_loss,
+        max_open_trades=max_open_trades,
+        live_enabled=live_enabled,
+        symbol_allowlist=symbol_allowlist,
+        max_order_quantity=max_order_quantity,
+        max_order_value=max_order_value,
+        order_history_path=order_history_path,
+        optimizer_report_path=optimizer_report_path,
+        enforce_optimizer_gate=enforce_optimizer_gate,
+    )
+
+
 __all__ = [
     "ExecutionGuardConfig",
     "evaluate_trade_guards",
+    "execute_candidates",
+    "execute_live_trades",
     "execute_paper_trades",
     "normalize_trade_schema",
     "trade_unique_key",

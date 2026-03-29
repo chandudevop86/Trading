@@ -1,0 +1,61 @@
+﻿TRADING APP PRODUCTION RUNBOOK
+
+Purpose
+This runbook explains how to operate, monitor, and troubleshoot the Trading App in a production or semi-production environment.
+
+STARTUP CHECKLIST
+1. Verify Python environment is available.
+2. Verify required packages are installed.
+3. Verify Streamlit app starts successfully.
+4. Verify data folder is writable.
+5. Verify Telegram credentials are configured if alerts are needed.
+6. Verify broker credentials are configured if future live execution is enabled.
+
+RUNTIME CHECKS
+1. Confirm dashboard is reachable.
+2. Confirm OHLCV data is loading.
+3. Confirm strategy outputs are generated.
+4. Confirm paper execution logs are updating.
+5. Confirm report files are being created.
+6. Confirm Telegram alerts are delivered when enabled.
+
+DAILY OPERATIONS
+Review live candles and trade signals.
+Check paper or live trading logs.
+Check backtest summary outputs.
+Archive important CSV and PDF reports.
+Validate that scheduled tasks completed without failure.
+
+INCIDENT SCENARIOS
+No market data:
+Check external data provider access and symbol formatting.
+
+No trade signals:
+Check strategy settings, timeframe, and available candles.
+
+Execution log not updating:
+Check write permission on data directory and execution mode.
+
+Telegram not sending:
+Check token, chat ID, internet access, and notifier settings.
+
+Wrong contract mapping:
+Check whether Options or Futures mode is selected.
+Check strike step, moneyness, and symbol normalization.
+
+BACKUP RECOMMENDATION
+Back up data folder regularly.
+Critical files include paper trading logs, live trading logs, backtest summaries, and generated reports.
+
+CHANGE MANAGEMENT
+Apply changes first in local or testing environment.
+Validate strategies and outputs.
+Then promote to production server.
+Avoid editing live configuration without backup.
+
+FUTURE OPERATIONS IMPROVEMENT
+Add service monitoring.
+Add broker health checks.
+Add log rotation.
+Add alerting for failed scheduled runs.
+Add persistent cloud storage for reports.

@@ -1,0 +1,131 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#07111d"/>
+      <stop offset="100%" stop-color="#10233a"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#132942"/>
+      <stop offset="100%" stop-color="#0d1c2f"/>
+    </linearGradient>
+    <linearGradient id="data" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a1f35"/>
+      <stop offset="100%" stop-color="#231525"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffb24a"/>
+      <stop offset="100%" stop-color="#4fd1ff"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L0,12 L12,6 z" fill="#7fd0ff"/>
+    </marker>
+    <style>
+      .title { font: 800 34px 'Segoe UI', Arial, sans-serif; fill: #eef6ff; }
+      .subtitle { font: 500 16px 'Segoe UI', Arial, sans-serif; fill: #a9c0dc; }
+      .group { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #ffd28b; letter-spacing: 1px; }
+      .h { font: 700 24px 'Segoe UI', Arial, sans-serif; fill: #eef6ff; }
+      .t { font: 500 15px 'Segoe UI', Arial, sans-serif; fill: #bfd2e8; }
+      .small { font: 600 13px 'Segoe UI', Arial, sans-serif; fill: #86a7c8; }
+      .label { font: 700 14px 'Segoe UI', Arial, sans-serif; fill: #10233a; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="980" fill="url(#bg)"/>
+  <circle cx="180" cy="120" r="160" fill="#ff9f3f" opacity="0.09"/>
+  <circle cx="1390" cy="150" r="180" fill="#38bdf8" opacity="0.08"/>
+  <circle cx="1290" cy="830" r="220" fill="#22c55e" opacity="0.06"/>
+
+  <text x="70" y="70" class="title">Vinayak AWS 3-Tier Production Architecture</text>
+  <text x="70" y="102" class="subtitle">Route 53 + ACM + ALB + ECS Fargate + RDS PostgreSQL + ElastiCache Redis + S3 + Secrets Manager + CloudWatch</text>
+
+  <rect x="58" y="140" width="1484" height="185" rx="28" fill="#0b1829" stroke="#28435f"/>
+  <text x="82" y="176" class="group">PUBLIC WEB TIER</text>
+
+  <rect x="90" y="200" width="230" height="88" rx="22" fill="#fff3df" stroke="#ffbf64"/>
+  <text x="205" y="237" text-anchor="middle" class="label">Users / Browser</text>
+  <text x="205" y="262" text-anchor="middle" class="label">Desktop and Mobile Access</text>
+
+  <rect x="400" y="200" width="230" height="88" rx="22" fill="url(#panel)" stroke="#4c6d91"/>
+  <text x="515" y="235" text-anchor="middle" class="h">Route 53</text>
+  <text x="515" y="259" text-anchor="middle" class="t">DNS resolution for Vinayak domain</text>
+
+  <rect x="685" y="200" width="230" height="88" rx="22" fill="url(#panel)" stroke="#4c6d91"/>
+  <text x="800" y="235" text-anchor="middle" class="h">ACM + ALB</text>
+  <text x="800" y="259" text-anchor="middle" class="t">TLS termination and HTTP routing</text>
+
+  <rect x="970" y="200" width="260" height="88" rx="22" fill="url(#panel)" stroke="#4c6d91"/>
+  <text x="1100" y="235" text-anchor="middle" class="h">Web Endpoints</text>
+  <text x="1100" y="259" text-anchor="middle" class="t">/, /admin, /workspace</text>
+
+  <rect x="1285" y="200" width="220" height="88" rx="22" fill="url(#panel)" stroke="#4c6d91"/>
+  <text x="1395" y="235" text-anchor="middle" class="h">Public Routing</text>
+  <text x="1395" y="259" text-anchor="middle" class="t">/dashboard/* /executions/*</text>
+
+  <rect x="58" y="360" width="1484" height="270" rx="28" fill="#0a1625" stroke="#28435f"/>
+  <text x="82" y="396" class="group">PRIVATE APP TIER</text>
+
+  <rect x="100" y="430" width="560" height="150" rx="24" fill="url(#panel)" stroke="#4c6d91"/>
+  <text x="130" y="468" class="h">ECS Fargate Service: vinayak-api</text>
+  <text x="130" y="502" class="t">FastAPI routes, admin console, workspace UI, live analysis workflow</text>
+  <text x="130" y="530" class="t">Reuses Trading strategy logic, OHLCV fetch, option enrichment, Telegram and execution paths</text>
+  <text x="130" y="558" class="small">Health checks: /health/live and /health/ready</text>
+
+  <rect x="715" y="430" width="250" height="150" rx="24" fill="url(#panel)" stroke="#4c6d91"/>
+  <text x="840" y="470" text-anchor="middle" class="h">CloudWatch</text>
+  <text x="840" y="500" text-anchor="middle" class="t">Logs, metrics, alarms</text>
+  <text x="840" y="526" text-anchor="middle" class="t">ALB, ECS, RDS monitoring</text>
+
+  <rect x="1010" y="430" width="250" height="150" rx="24" fill="url(#panel)" stroke="#4c6d91"/>
+  <text x="1135" y="470" text-anchor="middle" class="h">Secrets Manager</text>
+  <text x="1135" y="500" text-anchor="middle" class="t">DB URL, Dhan, Telegram</text>
+  <text x="1135" y="526" text-anchor="middle" class="t">Secret injection to ECS task</text>
+
+  <rect x="1305" y="430" width="200" height="150" rx="24" fill="url(#panel)" stroke="#4c6d91"/>
+  <text x="1405" y="470" text-anchor="middle" class="h">Worker Tier</text>
+  <text x="1405" y="500" text-anchor="middle" class="t">Optional later</text>
+  <text x="1405" y="526" text-anchor="middle" class="t">async jobs and reports</text>
+
+  <rect x="58" y="670" width="1484" height="230" rx="28" fill="#11111a" stroke="#4b3652"/>
+  <text x="82" y="706" class="group">PRIVATE DATA TIER</text>
+
+  <rect x="110" y="740" width="330" height="110" rx="24" fill="url(#data)" stroke="#b47dc7"/>
+  <text x="275" y="780" text-anchor="middle" class="h">RDS PostgreSQL</text>
+  <text x="275" y="808" text-anchor="middle" class="t">signals, reviewed trades, executions, audit logs</text>
+
+  <rect x="505" y="740" width="300" height="110" rx="24" fill="url(#data)" stroke="#b47dc7"/>
+  <text x="655" y="780" text-anchor="middle" class="h">ElastiCache Redis</text>
+  <text x="655" y="808" text-anchor="middle" class="t">OHLCV cache, option metrics cache, hot state</text>
+
+  <rect x="870" y="740" width="280" height="110" rx="24" fill="url(#data)" stroke="#b47dc7"/>
+  <text x="1010" y="780" text-anchor="middle" class="h">S3</text>
+  <text x="1010" y="808" text-anchor="middle" class="t">reports, exports, archives, artifacts</text>
+
+  <rect x="1215" y="740" width="250" height="110" rx="24" fill="url(#data)" stroke="#b47dc7"/>
+  <text x="1340" y="780" text-anchor="middle" class="h">Backup / Future Queue</text>
+  <text x="1340" y="808" text-anchor="middle" class="t">reconciliation and async scale path</text>
+
+  <rect x="1190" y="140" width="350" height="185" rx="28" fill="#0b1829" stroke="#28435f" opacity="0.9"/>
+  <text x="1218" y="176" class="group">EXTERNAL INTEGRATIONS</text>
+  <rect x="1220" y="198" width="135" height="44" rx="14" fill="#17304b" stroke="#4c6d91"/>
+  <text x="1288" y="226" text-anchor="middle" class="t">Yahoo Finance</text>
+  <rect x="1370" y="198" width="135" height="44" rx="14" fill="#17304b" stroke="#4c6d91"/>
+  <text x="1438" y="226" text-anchor="middle" class="t">NSE Option Chain</text>
+  <rect x="1220" y="258" width="135" height="44" rx="14" fill="#17304b" stroke="#4c6d91"/>
+  <text x="1288" y="286" text-anchor="middle" class="t">Dhan Broker API</text>
+  <rect x="1370" y="258" width="135" height="44" rx="14" fill="#17304b" stroke="#4c6d91"/>
+  <text x="1438" y="286" text-anchor="middle" class="t">Telegram API</text>
+
+  <line x1="320" y1="244" x2="400" y2="244" stroke="url(#edge)" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="630" y1="244" x2="685" y2="244" stroke="url(#edge)" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="915" y1="244" x2="970" y2="244" stroke="url(#edge)" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <line x1="800" y1="288" x2="380" y2="430" stroke="#7fd0ff" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="380" y1="580" x2="275" y2="740" stroke="#ffb24a" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="460" y1="580" x2="655" y2="740" stroke="#ffb24a" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="540" y1="580" x2="1010" y2="740" stroke="#ffb24a" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="660" y1="505" x2="715" y2="505" stroke="#7fd0ff" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="660" y1="520" x2="1010" y2="520" stroke="#7fd0ff" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="660" y1="540" x2="1190" y2="270" stroke="#7fd0ff" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <text x="70" y="940" class="subtitle">Traffic enters through Route 53 and ALB, Vinayak runs on ECS Fargate, business state persists in RDS, cache lives in Redis, artifacts move to S3, and secrets are pulled from Secrets Manager.</text>
+</svg>

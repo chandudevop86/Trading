@@ -1,0 +1,59 @@
+﻿TRADING APP ARCHITECTURE DIAGRAM DOCUMENTATION
+
+High Level Component View
+
+USER
+  |
+  v
+STREAMLIT DASHBOARD
+  |
+  v
+APPLICATION LOGIC LAYER
+  |
+  +--> MARKET DATA CONNECTORS
+  |      +--> Yahoo Finance OHLCV
+  |      +--> NSE Option Chain
+  |      +--> NSE Futures Data
+  |
+  +--> STRATEGY ENGINES
+  |      +--> Breakout Strategy
+  |      +--> Demand Supply Strategy
+  |      +--> Indicator Strategy
+  |      +--> One Trade Day Strategy
+  |      +--> MTF 5m Strategy
+  |
+  +--> CONTRACT MAPPING LAYER
+  |      +--> Option Strike Selection
+  |      +--> Futures Contract Attachment
+  |
+  +--> EXECUTION ENGINE
+  |      +--> Paper Execution
+  |      +--> Live Ready Execution
+  |
+  +--> NOTIFICATION LAYER
+  |      +--> Telegram Alerts
+  |
+  +--> REPORTING LAYER
+         +--> CSV Outputs
+         +--> HTML Reports
+         +--> PDF Reports
+
+STORAGE LAYER
+  +--> CSV Files
+  +--> YAML Rules
+  +--> HTML Files
+  +--> PDF Files
+  +--> Optional S3 Upload
+
+Communication Notes
+The dashboard does not directly execute trades by itself.
+It passes user-selected settings into the application logic layer.
+The application logic layer fetches market data, runs strategies, maps contracts, and prepares execution rows.
+The execution engine stores output into log files.
+The reporting layer converts those outputs into readable summaries.
+The notification layer shares important signals through Telegram.
+
+Security Notes
+UI can be exposed with controlled access.
+Execution internals and secrets should remain protected.
+Broker integrations should be attached only inside secure backend flow.

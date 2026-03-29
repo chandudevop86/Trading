@@ -6,11 +6,10 @@ from typing import Any, Callable
 import pandas as pd
 
 from src.backtest_engine import run_backtest, summarize_trade_log
-from src.execution.guards import execute_paper_trades
+from src.execution.guards import execute_candidates
 from src.execution.pipeline import prepare_candidates_for_execution
 from src.execution_engine import (
     close_paper_trades,
-    execute_live_trades,
     execution_result_summary,
 )
 from src.runtime_defaults import (
@@ -209,9 +208,10 @@ def run_execution(
         if not optimizer_ready:
             return None, [("warning", f"Live blocked: {optimizer_reason}")], "Live broker blocked by optimizer gate"
         live_enabled = str(os.getenv("LIVE_TRADING_ENABLED", "") or "").strip().lower() in {"1", "true", "yes", "on"}
-        result = execute_live_trades(
+        result = execute_candidates(
             candidates,
             EXECUTED_TRADES_OUTPUT,
+            execution_mode="LIVE",
             broker_name="DHAN",
             live_enabled=live_enabled,
             max_trades_per_day=1,
@@ -221,9 +221,10 @@ def run_execution(
         mirror_output_file(EXECUTED_TRADES_OUTPUT, LIVE_LOG_OUTPUT)
         status = "Live broker armed" if live_enabled else "Live broker blocked by config"
     else:
-        result = execute_paper_trades(
+        result = execute_candidates(
             candidates,
             EXECUTED_TRADES_OUTPUT,
+            execution_mode="PAPER",
             max_trades_per_day=1,
             max_open_trades=1,
             order_history_path=PAPER_ORDER_HISTORY_OUTPUT,
@@ -232,6 +233,8 @@ def run_execution(
         refresh_paper_trade_summary(candles, request.capital)
         status = "Paper broker active"
     return result, execution_result_summary(result), status
+
+
 
 
 

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vinayak AWS Deployment Roadmap</title>
+  <style>
+    @page { size: A4; margin: 18mm; }
+    body { font-family: Arial, sans-serif; color: #102033; line-height: 1.5; }
+    h1, h2, h3 { margin: 0 0 8px 0; color: #0f2742; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 18px; margin-top: 22px; border-bottom: 2px solid #d9e4f2; padding-bottom: 6px; }
+    h3 { font-size: 14px; margin-top: 14px; }
+    p { margin: 6px 0; }
+    ul, ol { margin: 8px 0 8px 20px; }
+    li { margin: 4px 0; }
+    .hero { padding: 18px 20px; border-radius: 18px; background: linear-gradient(135deg, #0e233b, #173b63); color: #fff; margin-bottom: 16px; }
+    .hero p { color: #d9e8f7; }
+    .stage { border: 1px solid #d8e2ee; border-radius: 14px; padding: 14px; margin: 12px 0; background: #fbfdff; }
+    .stage-title { font-size: 18px; font-weight: 700; color: #12375d; }
+    .note { background: #eef6ff; border-left: 4px solid #2f80ed; padding: 10px 12px; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #d8e2ee; padding: 8px 10px; text-align: left; vertical-align: top; font-size: 13px; }
+    th { background: #eef4fb; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Vinayak AWS Deployment Roadmap</h1>
+    <p>Step-by-step plan to move from the current trading workspace into a structured AWS deployment path that is also easy to explain in interviews.</p>
+  </div>
+
+  <h2>1. Goal</h2>
+  <p>The goal is to deploy the current project safely first, then evolve it into the `Vinayak` target architecture without breaking the stable `v3` baseline.</p>
+
+  <h2>2. Stage-by-Stage Roadmap</h2>
+
+  <div class="stage">
+    <div class="stage-title">Stage 1: Single-Server AWS Deployment</div>
+    <ul>
+      <li>Create an EC2 instance.</li>
+      <li>Install Python, Nginx, and system service setup.</li>
+      <li>Deploy the current stable app behind Nginx.</li>
+      <li>Point Route 53 domain to the server.</li>
+      <li>Attach TLS using ACM or Certbot depending on architecture.</li>
+    </ul>
+    <p><strong>Outcome:</strong> live reachable app with simple operational control.</p>
+  </div>
+
+  <div class="stage">
+    <div class="stage-title">Stage 2: Persistence and Storage</div>
+    <ul>
+      <li>Introduce RDS PostgreSQL for signals, reviewed queue, executions, and logs.</li>
+      <li>Move file-based critical state into database-backed records.</li>
+      <li>Store exports and report artifacts in S3.</li>
+    </ul>
+    <p><strong>Outcome:</strong> less risk of instance-local data loss and cleaner audit history.</p>
+  </div>
+
+  <div class="stage">
+    <div class="stage-title">Stage 3: Cache and Fast Reads</div>
+    <ul>
+      <li>Add ElastiCache Redis.</li>
+      <li>Cache option-chain responses and hot OHLCV context.</li>
+      <li>Use Redis for short-lived reviewed queue and live state if needed.</li>
+    </ul>
+    <p><strong>Outcome:</strong> faster UI and lower repeated fetch cost.</p>
+  </div>
+
+  <div class="stage">
+    <div class="stage-title">Stage 4: Async Workflows</div>
+    <ul>
+      <li>Add SQS or Amazon MQ.</li>
+      <li>Push Telegram alerts, background tasks, and execution requests asynchronously.</li>
+      <li>Keep the user-facing app responsive while workers handle slow tasks.</li>
+    </ul>
+    <p><strong>Outcome:</strong> better reliability and cleaner service boundaries.</p>
+  </div>
+
+  <div class="stage">
+    <div class="stage-title">Stage 5: Containerization and Scale</div>
+    <ul>
+      <li>Package `Vinayak` API and web layers into Docker images.</li>
+      <li>Deploy on ECS first for simplicity.</li>
+      <li>Use EKS later if Kubernetes depth is needed.</li>
+      <li>Add CloudWatch alarms, autoscaling, and CI/CD.</li>
+    </ul>
+    <p><strong>Outcome:</strong> production-ready cloud platform with stronger deployment discipline.</p>
+  </div>
+
+  <h2>3. Recommended AWS Services by Phase</h2>
+  <table>
+    <thead>
+      <tr><th>Phase</th><th>AWS Services</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Initial</td><td>EC2, Route 53, Nginx, CloudWatch</td><td>First working cloud deployment</td></tr>
+      <tr><td>Persistence</td><td>RDS PostgreSQL, S3</td><td>Reliable data and storage</td></tr>
+      <tr><td>Performance</td><td>ElastiCache Redis</td><td>Fast cache and hot state</td></tr>
+      <tr><td>Async</td><td>SQS or Amazon MQ</td><td>Background jobs and event flow</td></tr>
+      <tr><td>Scale</td><td>ECS, ALB, Auto Scaling</td><td>Containerized production deployment</td></tr>
+    </tbody>
+  </table>
+
+  <h2>4. Deployment Order I Recommend</h2>
+  <ol>
+    <li>Freeze and protect `v3`.</li>
+    <li>Deploy current app on EC2.</li>
+    <li>Add Route 53 and HTTPS.</li>
+    <li>Move key records to RDS.</li>
+    <li>Add S3 for exports and archives.</li>
+    <li>Add Redis.</li>
+    <li>Split logic into `Vinayak` modules.</li>
+    <li>Move to ECS when stable.</li>
+  </ol>
+
+  <div class="note">
+    Interview line: "I would first deploy the stable monolith safely, then incrementally introduce managed services instead of redesigning everything in one risky step."
+  </div>
+</body>
+</html>

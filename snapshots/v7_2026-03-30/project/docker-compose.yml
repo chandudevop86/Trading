@@ -1,0 +1,26 @@
+version: '3.9'
+
+services:
+  trading-ui:
+    build: .
+    container_name: trading-ui
+    env_file:
+      - deploy/config/trading.env.example
+    ports:
+      - '8501:8501'
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    command: ["streamlit", "run", "src/Trading.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+
+  trading-daemon:
+    build: .
+    container_name: trading-daemon
+    env_file:
+      - deploy/config/trading.env.example
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    command: ["python", "-m", "src.operational_daemon", "--env-file", "deploy/config/trading.env.example"]

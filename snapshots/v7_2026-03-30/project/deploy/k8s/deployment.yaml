@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: intratrade-app
+  namespace: intratrade
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: intratrade-app
+  template:
+    metadata:
+      labels:
+        app: intratrade-app
+    spec:
+      containers:
+        - name: intratrade
+          image: intratrade:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8501
+          envFrom:
+            - configMapRef:
+                name: intratrade-config
+            - secretRef:
+                name: intratrade-secrets
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8501
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8501
+            initialDelaySeconds: 30
+            periodSeconds: 15

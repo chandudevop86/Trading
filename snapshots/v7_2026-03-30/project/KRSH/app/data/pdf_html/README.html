@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>AWS README</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; color: #111; line-height: 1.5; font-size: 14px; }
+h1 { font-size: 24px; margin-bottom: 24px; }
+.section { margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<h1>AWS README</h1>
+<div class="section"># AWS Deployment Files<br/>
+<br/>
+This folder contains ready-to-use deployment files for hosting Intratrade on AWS EC2.<br/>
+<br/>
+## Files<br/>
+- `deploy/aws/intratrade.service`: systemd service for Streamlit app<br/>
+- `deploy/aws/chandudevopai.shop.nginx.conf`: nginx reverse proxy config<br/>
+- `deploy/aws/iam-policy-s3.json`: IAM policy template for S3 access<br/>
+- `deploy/aws/deploy.sh`: one-shot setup script (Ubuntu)<br/>
+- `deploy/aws/deploy-amzn-linux-2023.sh`: one-shot setup script (Amazon Linux 2023)<br/>
+- `deploy/streamlit/config.toml`: streamlit server config for reverse proxy mode<br/>
+<br/>
+## Quick steps (manual)<br/>
+1. Copy streamlit config:<br/>
+   - `cp deploy/streamlit/config.toml .streamlit/config.toml`<br/>
+2. Install service:<br/>
+   - `sudo cp deploy/aws/intratrade.service /etc/systemd/system/`<br/>
+   - `sudo systemctl daemon-reload &amp;&amp; sudo systemctl enable --now intratrade`<br/>
+3. Install nginx vhost:<br/>
+   - Ubuntu/Debian:<br/>
+     - `sudo cp deploy/aws/chandudevopai.shop.nginx.conf /etc/nginx/sites-available/chandudevopai.shop.conf`<br/>
+     - `sudo ln -s /etc/nginx/sites-available/chandudevopai.shop.conf /etc/nginx/sites-enabled/`<br/>
+   - Amazon Linux 2023:<br/>
+     - `sudo cp deploy/aws/chandudevopai.shop.nginx.conf /etc/nginx/conf.d/chandudevopai.shop.conf`<br/>
+   - `sudo nginx -t &amp;&amp; sudo systemctl reload nginx`<br/>
+4. Issue SSL cert:<br/>
+   - `sudo certbot --nginx -d chandudevopai.shop -d www.chandudevopai.shop`<br/>
+<br/>
+## One-shot script (Ubuntu)<br/>
+Update placeholders in `deploy/aws/deploy.sh`:<br/>
+- `REPLACE_GIT_REPO_URL`<br/>
+- `REPLACE_EMAIL`<br/>
+<br/>
+Run:<br/>
+```bash<br/>
+chmod +x deploy/aws/deploy.sh<br/>
+./deploy/aws/deploy.sh<br/>
+```<br/>
+<br/>
+## One-shot script (Amazon Linux 2023)<br/>
+Update placeholders in `deploy/aws/deploy-amzn-linux-2023.sh`:<br/>
+- `REPLACE_GIT_REPO_URL`<br/>
+- `REPLACE_EMAIL`<br/>
+<br/>
+Run:<br/>
+```bash<br/>
+chmod +x deploy/aws/deploy-amzn-linux-2023.sh<br/>
+./deploy/aws/deploy-amzn-linux-2023.sh<br/>
+```<br/>
+</div>
+</body>
+</html>

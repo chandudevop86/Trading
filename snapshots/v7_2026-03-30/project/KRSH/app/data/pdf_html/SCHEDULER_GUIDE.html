@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Scheduler Guide</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; color: #111; line-height: 1.5; font-size: 14px; }
+h1 { font-size: 24px; margin-bottom: 24px; }
+.section { margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<h1>Scheduler Guide</h1>
+<div class="section"># Auto Backtest Scheduler Guide<br/>
+<br/>
+This sets fully automatic backtest + paper logs without manual intervention.<br/>
+<br/>
+## Output files updated each run<br/>
+- `data/live_ohlcv.csv`<br/>
+- `data/backtest_results_all.csv`<br/>
+- `data/backtest_results_history.csv`<br/>
+- `data/paper_trading_logs_all.csv`<br/>
+<br/>
+## Windows Task Scheduler<br/>
+<br/>
+### 1) Test manually once<br/>
+```powershell<br/>
+cd F:\Trading<br/>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_auto_backtest.ps1<br/>
+```<br/>
+<br/>
+### 2) Register recurring task (every 15 minutes)<br/>
+```powershell<br/>
+cd F:\Trading<br/>
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy\scheduler\register_windows_task.ps1 -TaskName &quot;IntratradeAutoBacktest&quot; -Schedule MINUTE -Modifier 15 -StartTime &quot;09:15&quot;<br/>
+```<br/>
+<br/>
+### 3) Run on demand<br/>
+```powershell<br/>
+schtasks /Run /TN &quot;IntratradeAutoBacktest&quot;<br/>
+```<br/>
+<br/>
+### 4) Check status<br/>
+```powershell<br/>
+schtasks /Query /TN &quot;IntratradeAutoBacktest&quot; /V /FO LIST<br/>
+```<br/>
+<br/>
+### 5) Delete task<br/>
+```powershell<br/>
+schtasks /Delete /TN &quot;IntratradeAutoBacktest&quot; /F<br/>
+```<br/>
+<br/>
+## Linux Cron (if deployed on Linux)<br/>
+<br/>
+### 1) Make runner executable<br/>
+```bash<br/>
+cd /opt/intratrade<br/>
+chmod +x deploy/scheduler/run_auto_backtest.sh<br/>
+```<br/>
+<br/>
+### 2) Add cron entry (every 15 minutes)<br/>
+```bash<br/>
+crontab -e<br/>
+```<br/>
+Add this line:<br/>
+```cron<br/>
+*/15 * * * * REPO_DIR=/opt/intratrade SYMBOL=RELIANCE.NS INTERVAL=5m PERIOD=5d EXEC_SYMBOL=RELIANCE /opt/intratrade/deploy/scheduler/run_auto_backtest.sh &gt;&gt; /opt/intratrade/data/cron_backtest.log 2&gt;&amp;1<br/>
+```<br/>
+<br/>
+### 3) Verify cron installed<br/>
+```bash<br/>
+crontab -l<br/>
+```<br/>
+<br/>
+## Customize strategy feed<br/>
+- Symbol: `RELIANCE.NS` / `^NSEI` / other Yahoo ticker<br/>
+- Interval: `1m|2m|5m|15m|30m|60m|1d`<br/>
+- Period: `1d|5d|1mo`<br/>
+<br/>
+## Notes<br/>
+- Uses live OHLCV fetch from Yahoo on each run.<br/>
+- No manual CSV upload needed.<br/>
+- NIFTY quantity enforcement remains in execution engine (lot multiple logic).</div>
+</body>
+</html>

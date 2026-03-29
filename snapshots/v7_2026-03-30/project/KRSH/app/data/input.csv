@@ -1,0 +1,5 @@
+﻿customer_id,amount,country,status
+1,12000,US,active
+2,3500,IN,blocked
+3,22000,SY,active
+4,800,GB,inactive

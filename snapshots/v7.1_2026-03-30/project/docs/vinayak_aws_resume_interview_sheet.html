@@ -1,0 +1,115 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vinayak AWS Resume and Interview Architecture Sheet</title>
+  <style>
+    @page { size: A4; margin: 18mm; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #17324d; line-height: 1.55; margin: 0; background: #f5f9fd; }
+    .page { max-width: 980px; margin: 0 auto; padding: 28px; }
+    .hero { background: linear-gradient(135deg, #0e233b, #1b426b); color: #eef6ff; border-radius: 24px; padding: 24px 26px; box-shadow: 0 18px 40px rgba(0,0,0,0.18); }
+    h1, h2, h3 { margin: 0 0 10px; }
+    h1 { font-size: 34px; }
+    h2 { font-size: 20px; margin-top: 24px; color: #113150; border-bottom: 2px solid #d5e3f2; padding-bottom: 6px; }
+    h3 { font-size: 16px; color: #17446e; }
+    p { margin: 8px 0; }
+    ul { margin: 8px 0 8px 20px; }
+    li { margin: 5px 0; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
+    .card { background: #fff; border: 1px solid #d7e4f0; border-radius: 18px; padding: 16px; box-shadow: 0 10px 26px rgba(14,35,59,0.06); }
+    .quote { background: #eef6ff; border-left: 4px solid #2f80ed; padding: 10px 12px; border-radius: 10px; }
+    .pillbar { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+    .pill { background: rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.18); color:#eef6ff; border-radius:999px; padding:6px 10px; font-size:12px; }
+    .section { margin-top: 18px; }
+    .small { font-size: 13px; color: #5d738c; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #d7e4f0; padding: 8px 10px; text-align: left; vertical-align: top; font-size: 13px; }
+    th { background: #eef4fb; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <h1>Vinayak AWS Resume and Interview Sheet</h1>
+      <p>One-page architecture framing for explaining your project as a cloud-ready 3-tier trading platform.</p>
+      <div class="pillbar">
+        <div class="pill">Web Tier</div>
+        <div class="pill">App Tier</div>
+        <div class="pill">Data Tier</div>
+        <div class="pill">ECS</div>
+        <div class="pill">RDS</div>
+        <div class="pill">Redis</div>
+        <div class="pill">S3</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Project Summary</h2>
+      <div class="quote">
+        Vinayak is a Python trading platform evolving from a monolithic trading workspace into a production-ready AWS 3-tier architecture with separated web, application, and data responsibilities.
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>What The Platform Does</h3>
+        <ul>
+          <li>Runs live market analysis and strategy workflows</li>
+          <li>Supports reviewed trade execution paths</li>
+          <li>Integrates with Dhan broker APIs</li>
+          <li>Sends Telegram alerts and summaries</li>
+          <li>Generates reports and exports</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Why It Fits AWS Well</h3>
+        <ul>
+          <li>Clear public web entry through ALB</li>
+          <li>Stateless app layer fits ECS Fargate</li>
+          <li>Relational trade state fits RDS PostgreSQL</li>
+          <li>Hot market data fits Redis caching</li>
+          <li>Artifacts naturally move to S3</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>AWS 3-Tier Mapping</h2>
+      <table>
+        <tr><th>Tier</th><th>AWS Services</th><th>Vinayak Responsibility</th></tr>
+        <tr><td>Web Tier</td><td>Route 53, ACM, ALB</td><td>DNS, HTTPS, public request entry, routing</td></tr>
+        <tr><td>App Tier</td><td>ECS Fargate</td><td>FastAPI, admin UI, workspace, strategy execution, broker and Telegram integrations</td></tr>
+        <tr><td>Data Tier</td><td>RDS PostgreSQL, ElastiCache Redis, S3</td><td>persistent trade state, cache, reports and exports</td></tr>
+      </table>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Interview Explanation</h3>
+        <p>I built a trading platform that originally behaved like a Python monolith, then separated it into a cleaner architecture called Vinayak. The target design uses Route 53 and ALB for the web tier, ECS Fargate for the application tier, and RDS plus Redis plus S3 for the data layer.</p>
+      </div>
+      <div class="card">
+        <h3>Strong Resume Language</h3>
+        <p>Designed a trading platform migration from a monolithic Python workflow into an AWS-ready 3-tier architecture using ALB, ECS Fargate, RDS PostgreSQL, ElastiCache Redis, S3, and Secrets Manager.</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Connection Flow</h2>
+      <ol>
+        <li>User traffic enters through Route 53 and ALB.</li>
+        <li>ALB routes requests to ECS Fargate tasks running Vinayak.</li>
+        <li>Vinayak processes admin, workspace, strategy, and execution flows.</li>
+        <li>Persistent business data is stored in RDS PostgreSQL.</li>
+        <li>Hot cache and repeated market context are stored in Redis.</li>
+        <li>Reports and exported files are stored in S3.</li>
+        <li>Secrets such as DB, Dhan, and Telegram credentials are injected from Secrets Manager.</li>
+      </ol>
+    </div>
+
+    <div class="section small">
+      Current project note: some migration paths still reuse legacy Trading modules and some local-file fallbacks still exist, but the architecture direction now clearly matches a 3-tier AWS model.
+    </div>
+  </div>
+</body>
+</html>

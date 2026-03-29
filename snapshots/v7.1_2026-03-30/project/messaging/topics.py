@@ -1,0 +1,6 @@
+﻿EVENT_SIGNAL_GENERATED = 'signal.generated'
+EVENT_TRADE_REVIEWED = 'trade.reviewed'
+EVENT_TRADE_EXECUTE_REQUESTED = 'trade.execute.requested'
+EVENT_TRADE_EXECUTED = 'trade.executed'
+EVENT_NOTIFICATION_REQUESTED = 'notification.requested'
+EVENT_ANALYSIS_COMPLETED = 'analysis.completed'

@@ -1,0 +1,36 @@
+﻿<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Intratrade Dashboard Fix Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 32px; line-height: 1.45; }
+    h1,h2 { margin: 0.6em 0 0.3em; }
+    code, pre { background: #f6f8fa; padding: 2px 4px; border-radius: 4px; }
+    .box { background: #f6f8fa; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 8px; }
+    ul { margin-top: 0.3em; }
+  </style>
+</head>
+<body>
+  <h1>Intratrade Dashboard Fix Report</h1>
+  <div class="box"><b>Generated:</b> 2026-03-16 (IST)</div>
+
+  <h2>Problem</h2>
+  <p>Dashboard summary was misleading (many rows but 0 PnL / N-A exits). Root cause: non-closed rows were being summarized as if they were closed trades.</p>
+
+  <h2>Fix Location</h2>
+  <ul>
+    <li><code>F:\Trading\src\telegram_notifier.py</code> → <code>build_trade_summary()</code></li>
+  </ul>
+
+  <h2>What Changed (Steps)</h2>
+  <ol>
+    <li>Classify input rows (indicator rows, execution candidates, trade signals).</li>
+    <li>Compute Win rate / PnL only on closed trades (<code>pnl</code> + <code>exit_*</code> present).</li>
+    <li>If there are no closed trades, show a signal summary (last time/side/entry/SL/target).</li>
+  </ol>
+
+  <h2>Export To PDF</h2>
+  <p>Press <b>Ctrl+P</b> and select <b>Save as PDF</b>.</p>
+</body>
+</html>

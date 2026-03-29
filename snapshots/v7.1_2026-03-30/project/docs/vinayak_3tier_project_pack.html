@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vinayak 3-Tier Project Pack</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    body { font-family: Arial, sans-serif; margin: 0; color: #17324a; line-height: 1.55; background: #eef4f9; }
+    .page { max-width: 1020px; margin: 0 auto; background: #fff; padding: 30px 38px 44px; }
+    .hero { padding: 28px 30px; border-radius: 18px; background: linear-gradient(135deg, #0f2842, #2469a6); color: white; }
+    .hero p { color: #ddebf9; }
+    h1 { margin: 0 0 10px; font-size: 34px; }
+    h2 { margin-top: 28px; border-bottom: 2px solid #d9e5f2; padding-bottom: 6px; }
+    h3 { margin-top: 18px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .card { border: 1px solid #dce7f1; border-radius: 16px; padding: 16px 18px; margin-top: 18px; background: #fbfdff; }
+    .badge-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+    .badge { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); border-radius: 999px; padding: 6px 10px; font-size: 12px; }
+    img { width: 100%; height: auto; border: 1px solid #dce7f1; border-radius: 16px; }
+    .page-break { page-break-before: always; }
+    pre { background: #f4f8fc; border: 1px solid #d8e2ee; border-radius: 12px; padding: 12px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <h1>Vinayak 3-Tier Project Pack</h1>
+      <p>Professional combined document pack for the Vinayak trading platform covering architecture, implementation, and production rollout flow.</p>
+      <div class="badge-row">
+        <div class="badge">Architecture Diagram</div>
+        <div class="badge">Web Tier</div>
+        <div class="badge">App Tier</div>
+        <div class="badge">Data Tier</div>
+        <div class="badge">Implementation Flow</div>
+      </div>
+    </div>
+
+    <h2>Architecture Summary</h2>
+    <p>Vinayak now behaves like a 3-tier trading platform in structure. Browser traffic is handled by the web tier, business logic runs in the app tier, and persistence plus cache plus report artifacts belong to the data tier.</p>
+    <img src="vinayak_3tier_architecture.svg" alt="Vinayak 3 tier architecture" />
+
+    <div class="grid">
+      <div class="card">
+        <h3>Web Tier</h3>
+        <ul>
+          <li>Admin and workspace pages</li>
+          <li>Nginx or ALB entry point</li>
+          <li>Public-facing only at ingress layer</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>App Tier</h3>
+        <ul>
+          <li>FastAPI routes and services</li>
+          <li>Live analysis, strategy, execution, Telegram</li>
+          <li>Legacy Trading logic bridged into Vinayak</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Data Tier</h3>
+        <ul>
+          <li>DB-backed trading state</li>
+          <li>Redis hot-cache for candles and artifacts</li>
+          <li>S3 or local report storage</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Production Target</h3>
+        <ul>
+          <li>ALB + ECS Fargate</li>
+          <li>RDS + ElastiCache + S3</li>
+          <li>Secrets Manager + CloudWatch</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Tier Implementation Steps</h2>
+    <div class="card">
+      <h3>01 Web Tier</h3>
+      <p>Install Nginx, configure reverse proxy, and expose only the web entry layer.</p>
+      <pre><code>sudo apt update
+sudo apt install nginx -y
+sudo systemctl enable nginx
+sudo systemctl start nginx</code></pre>
+    </div>
+    <div class="card">
+      <h3>02 App Tier</h3>
+      <p>Install the Vinayak dependencies and run the FastAPI application.</p>
+      <pre><code>py -3 -m pip install -r vinayak/requirements.txt
+py -3 -m uvicorn vinayak.api.main:app --host 0.0.0.0 --port 8000</code></pre>
+    </div>
+    <div class="card">
+      <h3>03 Data Tier</h3>
+      <p>Configure database, Redis, and report artifact storage.</p>
+      <pre><code>REDIS_URL=redis://localhost:6379/0
+REPORTS_DIR=vinayak/data/reports
+REPORTS_S3_BUCKET=your-report-bucket
+AWS_REGION=ap-south-1</code></pre>
+    </div>
+
+    <div class="page-break"></div>
+
+    <h2>Ordered Rollout</h2>
+    <div class="card"><strong>Step 1:</strong> Prepare compute and private networking.</div>
+    <div class="card"><strong>Step 2:</strong> Put Nginx or ALB in front as the web tier.</div>
+    <div class="card"><strong>Step 3:</strong> Start the Vinayak FastAPI service as the app tier.</div>
+    <div class="card"><strong>Step 4:</strong> Connect PostgreSQL, Redis, and S3 as the data tier.</div>
+    <div class="card"><strong>Step 5:</strong> Add deployment controls, logs, alerts, and CI/CD.</div>
+    <div class="card"><strong>Step 6:</strong> Validate end-to-end with live analysis and report artifacts.</div>
+  </div>
+</body>
+</html>

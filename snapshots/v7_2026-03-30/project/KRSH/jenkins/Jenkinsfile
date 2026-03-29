@@ -1,0 +1,52 @@
+﻿pipeline {
+  agent any
+
+  environment {
+    IMAGE_NAME = "krsh-trading"
+    IMAGE_TAG = "${BUILD_NUMBER}"
+    REGISTRY = "your-registry.example.com"
+    KUBECONFIG = credentials('krsh-kubeconfig')
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Install') {
+      steps {
+        bat 'py -3 -m pip install -r KRSH\\app\\requirements.txt'
+      }
+    }
+
+    stage('Test') {
+      steps {
+        bat 'py -3 -m unittest discover -s tests -p "test_*.py" -v'
+      }
+    }
+
+    stage('Build Image') {
+      steps {
+        bat 'docker build -f KRSH\\docker\\Dockerfile -t %REGISTRY%/%IMAGE_NAME%:%IMAGE_TAG% KRSH'
+      }
+    }
+
+    stage('Push Image') {
+      steps {
+        bat 'docker push %REGISTRY%/%IMAGE_NAME%:%IMAGE_TAG%'
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        bat 'kubectl apply -f KRSH\\k8s\\namespace.yaml'
+        bat 'kubectl apply -f KRSH\\k8s\\configmap.yaml'
+        bat 'kubectl apply -f KRSH\\k8s\\deployment.yaml'
+        bat 'kubectl apply -f KRSH\\k8s\\service.yaml'
+        bat 'kubectl apply -f KRSH\\k8s\\ingress.yaml'
+      }
+    }
+  }
+}

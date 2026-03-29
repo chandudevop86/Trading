@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>02_trading_app_deployment</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; color: #111; line-height: 1.5; font-size: 14px; }
+h1 { font-size: 24px; margin-bottom: 24px; }
+.section { margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<h1>02_trading_app_deployment</h1>
+<div class="section">TRADING APP DEPLOYMENT DOCUMENTATION<br/>
+<br/>
+Overview<br/>
+This document explains how the Trading App can be deployed for local use, server use, and production-style access.<br/>
+<br/>
+LOCAL DEPLOYMENT<br/>
+The project can run locally using Python and Streamlit.<br/>
+Install dependencies from requirements.txt.<br/>
+Launch the dashboard using Streamlit.<br/>
+This mode is suitable for development, testing, and strategy review.<br/>
+<br/>
+APPLICATION ENTRY POINTS<br/>
+Main UI entry point is Trading.py.<br/>
+Other entry points include auto_backtest.py, auto_run.py, nifty50.py, nifty_options.py, and nifty_futures.py.<br/>
+These scripts support automation, scoring, and reporting outside the UI.<br/>
+<br/>
+WEB ACCESS LAYER<br/>
+For production-style deployment, Streamlit can be placed behind Nginx.<br/>
+Nginx can work as reverse proxy for domain-based access.<br/>
+This improves routing and gives a cleaner public endpoint.<br/>
+<br/>
+SERVER RECOMMENDATION<br/>
+Recommended server setup:<br/>
+1. Linux or Windows VM.<br/>
+2. Python runtime.<br/>
+3. Streamlit service.<br/>
+4. Optional Nginx reverse proxy.<br/>
+5. Secure secrets storage for tokens and credentials.<br/>
+<br/>
+CONFIGURATION REQUIREMENTS<br/>
+Required configuration may include Telegram bot token, Telegram chat ID, broker credentials for future live trading, and optional AWS S3 configuration.<br/>
+These values should be stored in environment variables, secrets, or protected config files.<br/>
+<br/>
+DATA AND FILE PATHS<br/>
+Application reads and writes under the data folder.<br/>
+Make sure the deployment host has read and write permission for logs, report files, and snapshots.<br/>
+If using persistent server deployment, this folder should be backed up or mounted on persistent storage.<br/>
+<br/>
+SECURITY RECOMMENDATIONS<br/>
+Only UI tier should be internet-facing.<br/>
+App and execution internals should remain private.<br/>
+Do not expose secrets inside source files.<br/>
+Use HTTPS when publishing through a domain.<br/>
+Protect broker APIs and notification credentials.<br/>
+<br/>
+AUTOMATION OPTIONS<br/>
+The project already supports scheduled or repeated runs using scripts and scheduler folders.<br/>
+Auto backtests and reporting tasks can be scheduled using Windows Task Scheduler, cron, or container orchestration.<br/>
+<br/>
+DEPLOYMENT MODES<br/>
+Development Mode:<br/>
+Run Streamlit locally for testing.<br/>
+<br/>
+Internal Server Mode:<br/>
+Run Streamlit on internal network for team use.<br/>
+<br/>
+Production Mode:<br/>
+Run Streamlit behind Nginx with restricted access, secrets management, and scheduled automation.<br/>
+<br/>
+FUTURE EXTENSIONS<br/>
+The deployment design allows addition of:<br/>
+Broker API execution.<br/>
+Container deployment.<br/>
+Kubernetes deployment.<br/>
+Cloud object storage for reports.<br/>
+Monitoring and alerting.<br/>
+</div>
+</body>
+</html>

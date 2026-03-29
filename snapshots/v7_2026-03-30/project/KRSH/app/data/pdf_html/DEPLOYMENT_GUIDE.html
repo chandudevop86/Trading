@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>AWS Deployment Guide</title>
+<style>
+body { font-family: Arial, sans-serif; margin: 40px; color: #111; line-height: 1.5; font-size: 14px; }
+h1 { font-size: 24px; margin-bottom: 24px; }
+.section { margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<h1>AWS Deployment Guide</h1>
+<div class="section"># Deployment Scripts + PDFs<br/>
+<br/>
+## Deploy<br/>
+- Ubuntu: `deploy/aws/deploy.sh`<br/>
+- Amazon Linux 2023: `deploy/aws/deploy-amzn-linux-2023.sh`<br/>
+<br/>
+## Undeploy / Rollback<br/>
+- Ubuntu: `deploy/aws/undeploy.sh`<br/>
+- Amazon Linux 2023: `deploy/aws/undeploy-amzn-linux-2023.sh`<br/>
+<br/>
+## Nginx<br/>
+- `deploy/aws/chandudevopai.shop.nginx.conf`<br/>
+<br/>
+## Service<br/>
+- `deploy/aws/intratrade.service`<br/>
+<br/>
+## Streamlit Config<br/>
+- `deploy/streamlit/config.toml`<br/>
+<br/>
+## IAM Policy<br/>
+- `deploy/aws/iam-policy-s3.json`<br/>
+<br/>
+## Notes<br/>
+1. Update placeholders in deploy scripts before running.<br/>
+2. Test nginx before reload: `sudo nginx -t`.<br/>
+3. Use certbot for TLS certs.<br/>
+</div>
+</body>
+</html>

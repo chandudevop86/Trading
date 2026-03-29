@@ -1,0 +1,9 @@
+﻿- name: banking_stocks
+  field: industry
+  op: "in"
+  value: ["Financial Services"]
+
+- name: starts_with_a
+  field: symbol
+  op: "in"
+  value: ["ADANIENT", "ASIANPAINT", "AXISBANK"]

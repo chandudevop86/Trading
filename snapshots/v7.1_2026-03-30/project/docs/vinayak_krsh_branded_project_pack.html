@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>KRSH Vinayak Branded Guide</title>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    body { margin: 0; font-family: Georgia, 'Times New Roman', serif; background: #f7f2ea; color: #17324a; }
+    .page { max-width: 1040px; margin: 0 auto; background: #fffdf9; padding: 32px 40px 48px; }
+    .hero { background: linear-gradient(135deg, #102a43, #1f6f78); color: #fff; padding: 34px 34px 30px; border-radius: 22px; position: relative; overflow: hidden; }
+    .hero:after { content: ''; position: absolute; right: -40px; top: -40px; width: 180px; height: 180px; border-radius: 50%; background: rgba(255,255,255,0.08); }
+    .brand { letter-spacing: 3px; font: 700 14px Arial, sans-serif; color: #f4d8a6; margin-bottom: 10px; }
+    h1 { margin: 0 0 10px; font-size: 36px; }
+    .hero p { font: 16px Arial, sans-serif; color: #d8ebed; max-width: 780px; }
+    h2 { margin-top: 30px; border-bottom: 2px solid #eadfce; padding-bottom: 8px; font-size: 26px; }
+    h3 { margin-top: 18px; font-size: 20px; }
+    p, li { font: 15px Arial, sans-serif; line-height: 1.65; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .card { border: 1px solid #eadfce; border-radius: 18px; padding: 18px 20px; background: #fff; margin-top: 18px; box-shadow: 0 10px 24px rgba(23,50,74,0.06); }
+    .accent { background: linear-gradient(135deg, #fff7eb, #f6efe4); }
+    .note { background: #eef7f5; border-left: 4px solid #1f6f78; padding: 14px 16px; border-radius: 10px; margin-top: 18px; font: 15px Arial, sans-serif; }
+    .badge-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .badge { font: 12px Arial, sans-serif; color: #fff; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 7px 11px; }
+    img { width: 100%; height: auto; border-radius: 18px; border: 1px solid #eadfce; background: white; }
+    pre { background: #fbf8f2; border: 1px solid #e7dccb; border-radius: 14px; padding: 12px; overflow-x: auto; }
+    .page-break { page-break-before: always; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <div class="brand">KRSH SOLUTIONS</div>
+      <h1>Vinayak 3-Tier Project Guide</h1>
+      <p>Branded documentation pack for the Vinayak trading platform. This version is formatted for project presentation, implementation planning, and architecture discussion.</p>
+      <div class="badge-row">
+        <div class="badge">Architecture</div>
+        <div class="badge">Implementation</div>
+        <div class="badge">AWS Ready</div>
+        <div class="badge">Trading Platform</div>
+      </div>
+    </div>
+
+    <h2>Architecture View</h2>
+    <p>Vinayak now maps cleanly to a 3-tier structure. User traffic enters through the web layer, strategy and execution logic run in the app layer, and persistence plus cache plus report storage live in the data layer.</p>
+    <img src="vinayak_krsh_branded_architecture.svg" alt="KRSH Vinayak branded architecture" />
+
+    <div class="grid">
+      <div class="card accent">
+        <h3>Web Tier</h3>
+        <ul>
+          <li>Public browser entry point</li>
+          <li>Admin and workspace pages</li>
+          <li>Nginx or ALB reverse proxy</li>
+        </ul>
+      </div>
+      <div class="card accent">
+        <h3>App Tier</h3>
+        <ul>
+          <li>FastAPI routes and services</li>
+          <li>Strategy workflow and execution</li>
+          <li>Telegram, options, live OHLCV</li>
+        </ul>
+      </div>
+      <div class="card accent">
+        <h3>Data Tier</h3>
+        <ul>
+          <li>RDS or relational DB layer</li>
+          <li>Redis hot-cache</li>
+          <li>S3 or local report artifacts</li>
+        </ul>
+      </div>
+      <div class="card accent">
+        <h3>Production Target</h3>
+        <ul>
+          <li>ALB plus ECS Fargate</li>
+          <li>RDS plus ElastiCache plus S3</li>
+          <li>Secrets Manager and CloudWatch</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="note">Current status: the project structure satisfies 3-tier logic. The remaining work is production environment verification and deployment hardening.</div>
+
+    <div class="page-break"></div>
+
+    <h2>Implementation Steps</h2>
+    <div class="card">
+      <h3>Step 1: Web Tier</h3>
+      <p>Set up Nginx or ALB and route browser traffic to the Vinayak application.</p>
+      <pre><code>sudo apt update
+sudo apt install nginx -y
+sudo systemctl enable nginx
+sudo systemctl start nginx</code></pre>
+    </div>
+    <div class="card">
+      <h3>Step 2: App Tier</h3>
+      <p>Install dependencies and run the FastAPI service behind the web layer.</p>
+      <pre><code>py -3 -m pip install -r vinayak/requirements.txt
+py -3 -m uvicorn vinayak.api.main:app --host 0.0.0.0 --port 8000</code></pre>
+    </div>
+    <div class="card">
+      <h3>Step 3: Data Tier</h3>
+      <p>Configure database, Redis cache, and S3-backed report artifacts.</p>
+      <pre><code>REDIS_URL=redis://localhost:6379/0
+REPORTS_DIR=vinayak/data/reports
+REPORTS_S3_BUCKET=your-report-bucket
+AWS_REGION=ap-south-1</code></pre>
+    </div>
+    <div class="card">
+      <h3>Step 4: Final Validation</h3>
+      <p>Validate browser flow, private app routing, data-tier connectivity, Redis cache population, and report artifact generation.</p>
+    </div>
+  </div>
+</body>
+</html>

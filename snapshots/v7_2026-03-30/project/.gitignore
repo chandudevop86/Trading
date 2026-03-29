@@ -1,0 +1,24 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Runtime logs
+logs/*.log
+logs/errors.log
+logs/execution.log
+logs/rejections.log
+
+# Local generated data and caches
+data/*.csv
+data/*.db
+data/cache/
+data/cache/**
+src/**/__pycache__/
+data/legacy_runtime.db
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

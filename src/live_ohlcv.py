@@ -30,6 +30,29 @@ try:
 except Exception:
     IST = timezone(timedelta(hours=5, minutes=30))
 INTRADAY_MAX_DAYS = 89
+YAHOO_SYMBOL_ALIASES = {
+    '^NSEI': '^NSEI',
+    'NSEI': '^NSEI',
+    'NIFTY': '^NSEI',
+    'NIFTY50': '^NSEI',
+    'NIFTY 50': '^NSEI',
+    '^NSEBANK': '^NSEBANK',
+    'NSEBANK': '^NSEBANK',
+    'BANKNIFTY': '^NSEBANK',
+    'NIFTYBANK': '^NSEBANK',
+    'NIFTY BANK': '^NSEBANK',
+}
+
+
+def _normalize_yahoo_symbol(symbol: str) -> str:
+    raw = _clean(symbol)
+    if not raw:
+        return raw
+    upper = raw.upper()
+    if upper in YAHOO_SYMBOL_ALIASES:
+        return YAHOO_SYMBOL_ALIASES[upper]
+    compact = re.sub(r'[^A-Z0-9^]', '', upper)
+    return YAHOO_SYMBOL_ALIASES.get(compact, raw)
 
 
 @dataclass(slots=True)
@@ -793,9 +816,11 @@ def _fetch_yfinance_ohlcv(
     except Exception:
         pass
 
+    yahoo_symbol = _normalize_yahoo_symbol(symbol)
+
     try:
         df = yf.download(
-            tickers=symbol,
+            tickers=yahoo_symbol,
             interval=interval,
             period=period,
             auto_adjust=False,

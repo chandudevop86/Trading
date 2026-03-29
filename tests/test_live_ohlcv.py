@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.dhan_api import load_security_map
+import src.live_ohlcv as live_ohlcv
 from src.live_ohlcv import (
     _to_rows,
     _validate_dhan_ohlcv_rows,
@@ -64,6 +65,30 @@ class TestLiveOhlcv(unittest.TestCase):
         path = Path(tmpdir.name) / 'security_map.csv'
         path.write_text(CSV_TEXT, encoding='utf-8')
         return load_security_map(path)
+
+    def test_yahoo_fetch_maps_nifty_to_index_symbol(self):
+        captured = {}
+
+        def fake_download(*, tickers, interval, period, auto_adjust, progress, threads, timeout):
+            captured['tickers'] = tickers
+            return live_ohlcv.pd.DataFrame([
+                {
+                    'Datetime': live_ohlcv.pd.Timestamp('2026-03-05 09:15:00'),
+                    'Open': 100.0,
+                    'High': 101.0,
+                    'Low': 99.5,
+                    'Close': 100.5,
+                    'Volume': 1000,
+                }
+            ])
+
+        fake_yf = type('FakeYFinance', (), {'download': staticmethod(fake_download)})()
+        with patch.object(live_ohlcv, 'yf', fake_yf):
+            rows = live_ohlcv._fetch_yfinance_ohlcv('NIFTY', '5m', '5d', use_cache=False, force_refresh=True)
+
+        self.assertEqual(captured['tickers'], '^NSEI')
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['symbol'], 'NIFTY')
 
     def test_to_rows(self):
         payload = {

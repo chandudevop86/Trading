@@ -439,7 +439,7 @@ def build_fail_reasons(metrics: dict[str, Any], scores: dict[str, float], config
         reasons.append('dirty_base')
     if metrics['touch_count'] >= max(config.max_touch_count + 1, 2):
         reasons.append('not_fresh')
-    if scores['rejection_score'] < config.min_rejection_score or not bool(metrics['strong_rejection_candle']) or metrics['close_away_pct'] < 0.20:
+    if scores['rejection_score'] < config.min_rejection_score or ((not bool(metrics['strong_rejection_candle'])) and (not bool(metrics['engulf_confirmed']))) or metrics['close_away_pct'] < 0.20:
         reasons.append('weak_rejection')
     if scores['structure_score'] < config.min_structure_score or metrics['chop_score'] > config.max_chop_score:
         reasons.append('bad_structure')

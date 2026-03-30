@@ -1,6 +1,7 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
+import os
 from decimal import Decimal, ROUND_HALF_UP
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -164,19 +165,39 @@ def write_rows(path: Path | str, rows: list[dict[str, object]]) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     frame = pd.DataFrame(rows)
-    frame.to_csv(target, index=False)
+    temp_target = target.with_name(f'{target.stem}.tmp{target.suffix}')
+    persisted_target = target
     try:
-        persist_rows(target, frame.to_dict(orient='records'), write_mode='replace')
+        frame.to_csv(temp_target, index=False)
+        os.replace(temp_target, target)
+    except PermissionError as exc:
+        fallback = target.with_name(f'{target.stem}_latest{target.suffix}')
+        frame.to_csv(fallback, index=False)
+        persisted_target = fallback
+        append_log(f'write_rows fallback path used for {target}: {type(exc).__name__}: {exc}', level=logging.WARNING)
+        if temp_target.exists():
+            try:
+                temp_target.unlink()
+            except Exception:
+                pass
+    except Exception:
+        if temp_target.exists():
+            try:
+                temp_target.unlink()
+            except Exception:
+                pass
+        raise
+    try:
+        persist_rows(persisted_target, frame.to_dict(orient='records'), write_mode='replace')
     except Exception as exc:
-        append_log(f'write_rows persistence failed path={target}: {type(exc).__name__}: {exc}', level=logging.WARNING)
+        append_log(f'write_rows persistence failed path={persisted_target}: {type(exc).__name__}: {exc}', level=logging.WARNING)
     try:
         from src.aws_storage import sync_path_to_s3_if_enabled
 
-        key_prefix = target.parent.name if target.parent.name else 'data'
-        sync_path_to_s3_if_enabled(target, key_prefix=key_prefix)
+        key_prefix = persisted_target.parent.name if persisted_target.parent.name else 'data'
+        sync_path_to_s3_if_enabled(persisted_target, key_prefix=key_prefix)
     except Exception as exc:
-        append_log(f'write_rows s3 sync failed path={target}: {type(exc).__name__}: {exc}', level=logging.WARNING)
-
+        append_log(f'write_rows s3 sync failed path={persisted_target}: {type(exc).__name__}: {exc}', level=logging.WARNING)
 
 def append_log(message: str, *, level: int = logging.INFO) -> None:
     configure_file_logging()

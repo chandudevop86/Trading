@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 from src.backtest_engine import nifty_intraday_validation_config, summarize_trade_log
 from src.execution_engine import summarize_execution_result
 from src.live_ohlcv import fetch_live_ohlcv, write_csv
@@ -554,15 +555,70 @@ def _execution_candidates_for_mode(
         if execution_type == 'PAPER':
             if validation_status == 'PASS':
                 print(f"[PROMOTION] Strategy {strategy} approved for paper execution")
-                selected.extend(strategy_candidates)
+                selected.extend(
+                    _prepare_selected_candidates(
+                        strategy_candidates,
+                        mark_execution_ready=True,
+                        strategy_validation_status=validation_status,
+                        strategy_validation_reasons=validation_reasons,
+                    )
+                )
                 continue
             if allow_paper_on_fail:
                 print(f"[PROMOTION] Strategy {strategy} approved for paper execution via override: {validation_reasons}")
-                selected.extend(strategy_candidates)
+                selected.extend(
+                    _prepare_selected_candidates(
+                        strategy_candidates,
+                        mark_execution_ready=True,
+                        strategy_validation_status=validation_status,
+                        strategy_validation_reasons=validation_reasons,
+                    )
+                )
                 continue
             print(f"[PROMOTION] Strategy {strategy} blocked from paper execution: {validation_reasons}")
     return selected
 
+
+
+def _latest_execution_candidates(candidates: list[dict[str, object]]) -> list[dict[str, object]]:
+    if not candidates:
+        return []
+    stamped: list[tuple[pd.Timestamp, dict[str, object]]] = []
+    for candidate in candidates:
+        raw_stamp = candidate.get('timestamp', candidate.get('signal_time', candidate.get('entry_time', '')))
+        stamp = pd.to_datetime(raw_stamp, errors='coerce')
+        if pd.isna(stamp):
+            continue
+        stamped.append((pd.Timestamp(stamp), dict(candidate)))
+    if not stamped:
+        return [dict(candidate) for candidate in candidates]
+    latest_stamp = max(stamp for stamp, _ in stamped)
+    return [candidate for stamp, candidate in stamped if stamp == latest_stamp]
+
+
+def _prepare_selected_candidates(
+    candidates: list[dict[str, object]],
+    *,
+    mark_execution_ready: bool,
+    strategy_validation_status: str,
+    strategy_validation_reasons: str,
+) -> list[dict[str, object]]:
+    selected = _latest_execution_candidates(candidates)
+    prepared: list[dict[str, object]] = []
+    for candidate in selected:
+        item = dict(candidate)
+        item['strategy_validation_status'] = strategy_validation_status
+        item['strategy_validation_reasons'] = strategy_validation_reasons
+        if mark_execution_ready:
+            item['validation_status'] = 'PASS'
+            item['execution_allowed'] = True
+            existing_reasons = item.get('validation_reasons', [])
+            if isinstance(existing_reasons, str):
+                existing_reasons = [part.strip() for part in existing_reasons.split(',') if part.strip()]
+            item['validation_reasons'] = list(existing_reasons) if isinstance(existing_reasons, list) else []
+            item['observation_mode'] = True
+        prepared.append(item)
+    return prepared
 
 def _best_promotable_strategy(ranked_summary_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     for row in ranked_summary_rows:

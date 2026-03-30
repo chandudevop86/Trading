@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Any
 
 import pandas as pd
 
 from src.execution.contracts import normalize_candidate_contract, validate_candidate_contract
 from src.execution.state import TradingState
+
+IST = ZoneInfo('Asia/Kolkata')
+
 
 
 @dataclass(slots=True)
@@ -60,15 +64,21 @@ def check_all_guards(candidate: dict[str, Any], state: TradingState, config: Gua
         reasons.append("MAX_TRADES_PER_DAY")
 
     timestamp = pd.to_datetime(normalized.get("timestamp"), errors="coerce")
+    session_timestamp = pd.NaT
     if pd.isna(timestamp):
         reasons.append("INVALID_SESSION")
     else:
+        if getattr(timestamp, 'tzinfo', None) is None:
+            timestamp = pd.Timestamp(timestamp).tz_localize('UTC')
+        else:
+            timestamp = pd.Timestamp(timestamp)
+        session_timestamp = timestamp.tz_convert(IST)
         start = _parse_time(cfg.allowed_start_time)
         end = _parse_time(cfg.cutoff_time)
-        if timestamp.time() < start or timestamp.time() > end:
+        if session_timestamp.time() < start or session_timestamp.time() > end:
             reasons.append("INVALID_SESSION")
         if cfg.stale_after_minutes > 0:
-            minutes_old = (pd.Timestamp.now() - pd.Timestamp(timestamp)).total_seconds() / 60.0
+            minutes_old = (pd.Timestamp.now(tz=IST) - session_timestamp).total_seconds() / 60.0
             metrics["minutes_old"] = round(minutes_old, 2)
             if minutes_old > float(cfg.stale_after_minutes):
                 reasons.append("STALE_CANDIDATE")

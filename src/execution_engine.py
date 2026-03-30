@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import hashlib
@@ -1197,20 +1197,36 @@ def _write_execution_rows(path: Path, rows_to_write: list[dict[str, object]]) ->
     fieldnames = _stable_fieldnames(rows_to_write, existing_rows)
     existing_fieldnames = _existing_csv_fieldnames(path)
     file_exists = path.exists() and path.stat().st_size > 0
-    if file_exists and existing_fieldnames != fieldnames:
-        with path.open("w", newline="", encoding="utf-8") as f:
+    rows_for_target = list(existing_rows) if file_exists else []
+    rows_for_target.extend(rows_to_write)
+    target_path = path
+    temp_path = path.with_name(f"{path.stem}.tmp{path.suffix}")
+    try:
+        with temp_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(existing_rows)
-            writer.writerows(rows_to_write)
-    else:
-        with path.open("a", newline="", encoding="utf-8") as f:
+            writer.writerows(rows_for_target)
+        os.replace(temp_path, path)
+    except PermissionError:
+        target_path = path.with_name(f"{path.stem}_latest{path.suffix}")
+        with target_path.open("w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
-            if not file_exists:
-                writer.writeheader()
-            writer.writerows(rows_to_write)
+            writer.writeheader()
+            writer.writerows(rows_for_target)
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+    except Exception:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+        raise
     try:
-        persist_rows(path, rows_to_write, write_mode='append')
+        persist_rows(target_path, rows_to_write, write_mode='append')
     except Exception:
         pass
     try:
@@ -1219,8 +1235,8 @@ def _write_execution_rows(path: Path, rows_to_write: list[dict[str, object]]) ->
             for row in rows_to_write
             if str(row.get("execution_type", "")).strip()
         }
-        for row_execution_type in execution_types:
-            refresh_execution_risk_state(path, row_execution_type)
+        if "PAPER" in execution_types:
+            sync_path_to_s3_if_enabled(target_path, key_prefix="data")
     except Exception:
         pass
 

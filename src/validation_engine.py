@@ -1,7 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import json
+import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -354,13 +355,37 @@ def write_pass_fail_checklist_csv(path: str | Path, evaluation: dict[str, Any]) 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     rows = [dict(row) for row in evaluation.get('pass_fail_checklist', [])]
     if not rows:
-        output_path.write_text('', encoding='utf-8')
+        try:
+            output_path.write_text('', encoding='utf-8')
+        except PermissionError:
+            output_path = output_path.with_name(f'{output_path.stem}_latest{output_path.suffix}')
+            output_path.write_text('', encoding='utf-8')
         return output_path
-    with output_path.open('w', newline='', encoding='utf-8') as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
-        writer.writeheader()
-        writer.writerows(rows)
+    fieldnames = list(rows[0].keys())
+    temp_path = output_path.with_name(f'{output_path.stem}.tmp{output_path.suffix}')
+    try:
+        with temp_path.open('w', newline='', encoding='utf-8') as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        os.replace(temp_path, output_path)
+    except PermissionError:
+        output_path = output_path.with_name(f'{output_path.stem}_latest{output_path.suffix}')
+        with output_path.open('w', newline='', encoding='utf-8') as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+    except Exception:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+        raise
     return output_path
-
-
 

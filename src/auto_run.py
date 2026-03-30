@@ -153,6 +153,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument('--trailing-sl-pct', type=float, default=1.0)
     p.add_argument('--execution-symbol', default='NIFTY')
     p.add_argument('--execution-type', default='PAPER', choices=['PAPER', 'LIVE', 'NONE'])
+    p.add_argument('--allow-paper-on-fail', action='store_true')
     p.add_argument('--paper-log-output', type=Path, default=Path('data/paper_trading_logs_all.csv'))
     p.add_argument('--live-log-output', type=Path, default=Path('data/live_trading_logs_all.csv'))
     p.add_argument('--live-broker', default='DHAN', choices=['DHAN', 'NONE'])
@@ -191,6 +192,7 @@ def main() -> None:
         max_daily_loss=0.0,
         max_trades_per_day=1,
         execution_symbol=args.execution_symbol,
+        allow_paper_on_fail=bool(getattr(args, 'allow_paper_on_fail', False)),
         data_output=Path('data/live_ohlcv.csv'),
         summary_output=Path('data/backtest_results_all.csv'),
         summary_history_output=Path('data/backtest_results_history.csv'),
@@ -276,4 +278,5 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 

@@ -1,23 +1,23 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 
-$patterns = @(
-    'src.operational_daemon',
-    'streamlit run src\\Trading.py',
-    'uvicorn vinayak.api.main:app',
-    'start_legacy_paper_suite.ps1',
-    'start_trading_ui_suite.ps1'
+$windowTitles = @(
+    'Trading Legacy Paper Suite',
+    'Trading Legacy Streamlit UI',
+    'Trading Vinayak API'
 )
 
-$targets = Get-CimInstance Win32_Process | Where-Object {
-    $_.Name -match 'powershell(\.exe)?|pwsh(\.exe)?' -and ($patterns | Where-Object { $_ -and $_.Length -gt 0 -and $_.CommandLine -like "*$_*" })
+$stopped = $false
+foreach ($title in $windowTitles) {
+    $output = & taskkill /F /FI "WINDOWTITLE eq $title" 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        $stopped = $true
+        Write-Host "Stopped window title: $title"
+    }
+    else {
+        Write-Host "No running window matched: $title"
+    }
 }
 
-if (-not $targets) {
-    Write-Host 'No matching trading stack PowerShell processes found.'
-    exit 0
-}
-
-$targets | ForEach-Object {
-    Write-Host ("Stopping PID {0}: {1}" -f $_.ProcessId, $_.CommandLine)
-    Stop-Process -Id $_.ProcessId -Force
+if (-not $stopped) {
+    Write-Host 'No matching trading stack windows found.'
 }

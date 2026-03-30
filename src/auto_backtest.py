@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -11,7 +12,7 @@ from src.execution_engine import summarize_execution_result
 from src.live_ohlcv import fetch_live_ohlcv, write_csv
 from src.strategy_evaluator import rank_strategy_summaries
 from src.strategy_tuning import apply_strategy_benchmark, optimizer_report_rows
-from src.strategy_service import StrategyContext, generate_strategy_rows
+from src.strategy_service import StrategyContext, generate_strategy_rows, standardize_strategy_rows
 from src.trading_workflows import build_backtest_workflow, run_live_candidates, run_paper_candidates
 from src.runtime_persistence import persist_rows
 from src.validation_engine import (
@@ -602,20 +603,50 @@ def _build_breakout_bias_evaluation(
 def _write_rows(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
-        path.write_text('', encoding='utf-8')
+        try:
+            path.write_text('', encoding='utf-8')
+        except PermissionError:
+            fallback = path.with_name(f'{path.stem}_latest{path.suffix}')
+            fallback.write_text('', encoding='utf-8')
+            path = fallback
         try:
             persist_rows(path, [], write_mode='replace')
         except Exception:
             pass
         return
-    with path.open('w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-        writer.writeheader()
-        writer.writerows(rows)
+
+    fieldnames = list(rows[0].keys())
+    temp_path = path.with_name(f'{path.stem}.tmp{path.suffix}')
+    try:
+        with temp_path.open('w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        os.replace(temp_path, path)
+    except PermissionError:
+        fallback = path.with_name(f'{path.stem}_latest{path.suffix}')
+        with fallback.open('w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+        path = fallback
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+    except Exception:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except Exception:
+                pass
+        raise
     try:
         persist_rows(path, [dict(row) for row in rows], write_mode='replace')
     except Exception:
         pass
+
 
 
 def _append_rows(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -805,6 +836,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         rr_ratio=rr_ratio,
         config=ConfluenceConfig.for_mode(mode),
     )
+    indicator_exec_rows = standardize_strategy_rows(indicator_trade_rows, strategy_name='Indicator', symbol=args.symbol)
+    amd_exec_rows = standardize_strategy_rows(amd_rows, strategy_name='AMD + FVG + Supply/Demand', symbol=args.symbol)
     indicator_rows = generate_indicator_rows(candles, config=indicator_cfg)
     one_trade_rows = generate_strategy_rows(one_trade_context)
     btst_rows = generate_strategy_rows(btst_context)
@@ -844,9 +877,6 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     _write_rows(Path(getattr(args, 'deployable_summary_output', Path('data/deployable_summary.csv'))), promotable_rows)
     _write_rows(equity_curve_output, equity_curve_rows)
 
-    for summary in summary_rows:
-        if str(summary.get('validation_status', 'FAIL')).upper() == 'PASS':
-        else:
     if not promotable_rows:
         print('[RESULT] No promotable strategies found')
 
@@ -854,8 +884,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     breakout_workflow = build_backtest_workflow(breakout_rows, 'Breakout (15m)', args.execution_symbol)
     ds_workflow = build_backtest_workflow(ds_rows, 'Demand/Supply', args.execution_symbol)
-    ind_workflow = build_backtest_workflow(indicator_trade_rows, 'Indicator (RSI/ADX/MACD+VWAP)', args.execution_symbol)
-    amd_workflow = build_backtest_workflow(amd_rows, 'AMD + FVG + Supply/Demand', args.execution_symbol)
+    ind_workflow = build_backtest_workflow(indicator_exec_rows, 'Indicator (RSI/ADX/MACD+VWAP)', args.execution_symbol)
+    amd_workflow = build_backtest_workflow(amd_exec_rows, 'AMD + FVG + Supply/Demand', args.execution_symbol)
     one_workflow = build_backtest_workflow(one_trade_rows, 'One Trade/Day (All Indicators)', args.execution_symbol)
     btst_workflow = build_backtest_workflow(btst_rows, 'BTST', args.execution_symbol)
     all_candidates = (
@@ -1049,7 +1079,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         'requested_execution_type': requested_execution_type,
         'execution_type': execution_type,
         'executed_log_path': str(executed_log_path),
-        'executed_rows_count': len(paper_rows),
+        'executed_rows_count': int(execution_summary.get('executed_count', 0) or 0),
         'paper_rows_count': len(paper_rows),
         'timeframe': timeframe,
         'data_points': len(rows),
@@ -1116,6 +1146,8 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+
 
 
 

@@ -1,0 +1,41 @@
+%PDF-1.4
+1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj
+2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj
+3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources<< /Font<< /F1 4 0 R >> >> /Contents 5 0 R >>endobj
+4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj
+5 0 obj<< /Length 1228 >>stream
+BT
+/F1 12 Tf
+72 770 Td
+(Intratrade Auto Run - 5m) Tj
+0 -14 Td (Run at: 2026-04-01 10:12:04 UTC) Tj
+0 -14 Td (Data points: 375) Tj
+0 -14 Td (Data range: 2026-03-24 03:45:00 -> 2026-04-01 09:55:00) Tj
+0 -14 Td (Execution requested: PAPER) Tj
+0 -14 Td (Execution used: PAPER) Tj
+0 -14 Td (Executed rows: 0) Tj
+0 -14 Td (Log: data\\\\paper_trading_logs_all.csv) Tj
+0 -14 Td (Equity curves: data\\\\backtest_equity_curves.csv) Tj
+0 -14 Td (Intratrade alert | Trades: 20 | Win rate: 0.00% | Total PnL: 0.00 | Last exit: 2026-04-01 09:40:00 | Last reason: buy indicator score=7.00 | Trade ID: 85169b7a-aed4-5e63-8f64-a137473e5dae | Zone ID: ^NSEI_INDICATOR_82a9e4e9dde0) Tj
+0 -14 Td (BREAKOUT: trades=0 pnl=0 win%=0.0 pf=0.0 max_dd=0.0 \\(0.0%\\)) Tj
+0 -14 Td (BREAKOUT_NO_BIAS: trades=0 pnl=0 win%=0.0 pf=0.0 max_dd=0.0 \\(0.0%\\)) Tj
+0 -14 Td (DEMAND_SUPPLY: trades=0 pnl=0 win%=0.0 pf=0.0 max_dd=0.0 \\(0.0%\\)) Tj
+0 -14 Td (INDICATOR: trades=99 pnl=0.0 win%=0.0 pf=0.0 max_dd=0.0 \\(0.0%\\)) Tj
+0 -14 Td (AMD_FVG_SD: trades=0 pnl=0 win%=0.0 pf=0.0 max_dd=0.0 \\(0.0%\\)) Tj
+0 -14 Td (ONE_TRADE_DAY: trades=0 pnl=0 win%=0.0 pf=0.0 max_dd=0.0 \\(0.0%\\)) Tj
+0 -14 Td (BTST: trades=0 pnl=0 win%=0.0 pf=0.0 max_dd=0.0 \\(0.0%\\)) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000056 00000 n 
+0000000111 00000 n 
+0000000233 00000 n 
+0000000301 00000 n 
+trailer<< /Size 6 /Root 1 0 R >>
+startxref
+1579
+%%EOF

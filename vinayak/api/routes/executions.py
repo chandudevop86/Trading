@@ -9,6 +9,7 @@ from vinayak.api.schemas.signal import ExecutionAuditLogListResponse, ExecutionA
 from vinayak.api.schemas.strategy import ExecutionCreateRequest
 from vinayak.db.repositories.execution_audit_log_repository import ExecutionAuditLogRepository
 from vinayak.execution.service import ExecutionCreateCommand, ExecutionService
+from vinayak.execution.events import  EVENT_TRADE_EXECUTED,EVENT_TRADE_EXECUTE_REQUESTED
 
 
 router = APIRouter(prefix='/executions', tags=['executions'], dependencies=[Depends(require_admin_session)])

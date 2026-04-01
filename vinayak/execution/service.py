@@ -32,7 +32,7 @@ class ExecutionCreateCommand:
     status: str | None = None
     executed_price: float | None = None
 
-
+trade["rejection_reasons"] = []
 class PaperExecutionAdapter:
     def execute(
         self,

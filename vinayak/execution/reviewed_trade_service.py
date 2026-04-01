@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Iterable, Protocol
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from vinayak.db.models.execution import ExecutionRecord
@@ -11,7 +12,6 @@ from vinayak.db.models.reviewed_trade import ReviewedTradeRecord
 from vinayak.db.repositories.execution_audit_log_repository import (
     ExecutionAuditLogRepository,
 )
-from vinayak.db.repositories.execution_repository import ExecutionRepository
 from vinayak.db.repositories.reviewed_trade_repository import ReviewedTradeRepository
 from vinayak.db.repositories.signal_repository import SignalRepository
 from vinayak.execution.events import (
@@ -28,6 +28,7 @@ from vinayak.execution.reviewed_trade_service import ReviewedTradeService
 # STATUS
 # ============================================================
 
+
 class ExecutionStatus(StrEnum):
     PENDING = "PENDING"
     BLOCKED = "BLOCKED"
@@ -35,11 +36,22 @@ class ExecutionStatus(StrEnum):
     EXECUTED = "EXECUTED"
     REJECTED = "REJECTED"
     FAILED = "FAILED"
+    SUBMITTED = "SUBMITTED"
+    PLACED = "PLACED"
+
+
+ACTIVE_EXECUTION_STATUSES: tuple[str, ...] = (
+    ExecutionStatus.PENDING,
+    ExecutionStatus.SUBMITTED,
+    ExecutionStatus.PLACED,
+    ExecutionStatus.EXECUTED,
+)
 
 
 # ============================================================
 # COMMANDS / DTOs
 # ============================================================
+
 
 @dataclass(slots=True)
 class ExecutionCreateCommand:
@@ -194,6 +206,7 @@ class ExecutionBatchResult:
 # ADAPTER CONTRACT
 # ============================================================
 
+
 class AdapterResultLike(Protocol):
     broker: str
     status: str
@@ -206,8 +219,133 @@ class AdapterResultLike(Protocol):
 
 
 # ============================================================
+# REPOSITORY
+# ============================================================
+
+
+class ExecutionRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def list_executions(self) -> list[ExecutionRecord]:
+        stmt = select(ExecutionRecord).order_by(
+            ExecutionRecord.executed_at.desc(),
+            ExecutionRecord.id.desc(),
+        )
+        return list(self.session.scalars(stmt).all())
+
+    def get_execution(self, execution_id: int) -> ExecutionRecord | None:
+        stmt = select(ExecutionRecord).where(ExecutionRecord.id == execution_id)
+        return self.session.scalar(stmt)
+
+    def create_execution(
+        self,
+        *,
+        signal_id: int | None,
+        reviewed_trade_id: int | None,
+        mode: str,
+        broker: str,
+        status: str,
+        executed_price: float | None,
+        executed_at: Any,
+        broker_reference: str | None = None,
+        notes: str | None = None,
+    ) -> ExecutionRecord:
+        record = ExecutionRecord(
+            signal_id=signal_id,
+            reviewed_trade_id=reviewed_trade_id,
+            mode=mode,
+            broker=broker,
+            status=status,
+            executed_price=executed_price,
+            executed_at=executed_at,
+            broker_reference=broker_reference,
+            notes=notes,
+        )
+        self.session.add(record)
+        self.session.flush()
+        return record
+
+    def exists_for_reviewed_trade(
+        self,
+        *,
+        reviewed_trade_id: int,
+        mode: str,
+        statuses: tuple[str, ...] = ACTIVE_EXECUTION_STATUSES,
+    ) -> bool:
+        stmt = (
+            select(func.count())
+            .select_from(ExecutionRecord)
+            .where(ExecutionRecord.reviewed_trade_id == reviewed_trade_id)
+            .where(ExecutionRecord.mode == mode)
+            .where(ExecutionRecord.status.in_(statuses))
+        )
+        count = self.session.scalar(stmt) or 0
+        return count > 0
+
+    def exists_for_signal(
+        self,
+        *,
+        signal_id: int,
+        mode: str,
+        statuses: tuple[str, ...] = ACTIVE_EXECUTION_STATUSES,
+    ) -> bool:
+        stmt = (
+            select(func.count())
+            .select_from(ExecutionRecord)
+            .where(ExecutionRecord.signal_id == signal_id)
+            .where(ExecutionRecord.mode == mode)
+            .where(ExecutionRecord.status.in_(statuses))
+        )
+        count = self.session.scalar(stmt) or 0
+        return count > 0
+
+    def exists_for_broker_reference(self, *, broker_reference: str) -> bool:
+        stmt = (
+            select(func.count())
+            .select_from(ExecutionRecord)
+            .where(ExecutionRecord.broker_reference == broker_reference)
+        )
+        count = self.session.scalar(stmt) or 0
+        return count > 0
+
+    def find_latest_for_reviewed_trade(
+        self,
+        *,
+        reviewed_trade_id: int,
+        mode: str | None = None,
+    ) -> ExecutionRecord | None:
+        stmt = select(ExecutionRecord).where(
+            ExecutionRecord.reviewed_trade_id == reviewed_trade_id
+        )
+        if mode is not None:
+            stmt = stmt.where(ExecutionRecord.mode == mode)
+        stmt = stmt.order_by(
+            ExecutionRecord.executed_at.desc(),
+            ExecutionRecord.id.desc(),
+        )
+        return self.session.scalar(stmt)
+
+    def find_latest_for_signal(
+        self,
+        *,
+        signal_id: int,
+        mode: str | None = None,
+    ) -> ExecutionRecord | None:
+        stmt = select(ExecutionRecord).where(ExecutionRecord.signal_id == signal_id)
+        if mode is not None:
+            stmt = stmt.where(ExecutionRecord.mode == mode)
+        stmt = stmt.order_by(
+            ExecutionRecord.executed_at.desc(),
+            ExecutionRecord.id.desc(),
+        )
+        return self.session.scalar(stmt)
+
+
+# ============================================================
 # SERVICE
 # ============================================================
+
 
 class ExecutionService:
     def __init__(
@@ -240,10 +378,6 @@ class ExecutionService:
     def list_executions(self) -> list[ExecutionRecord]:
         return self.execution_repository.list_executions()
 
-    # ========================================================
-    # SINGLE EXECUTION
-    # ========================================================
-
     def create_execution(
         self,
         command: ExecutionCreateCommand,
@@ -254,7 +388,6 @@ class ExecutionService:
         self._validate_command(command)
 
         reviewed_trade, signal_id, signal = self._resolve_dependencies(command)
-
         trade_payload = self._build_trade_payload_for_block_check(
             command=command,
             reviewed_trade=reviewed_trade,
@@ -296,6 +429,14 @@ class ExecutionService:
         )
 
         self._validate_adapter_result(adapter_result)
+
+        if mode == "LIVE" and adapter_result.broker_reference:
+            if self.execution_repository.exists_for_broker_reference(
+                broker_reference=adapter_result.broker_reference
+            ):
+                raise ValueError(
+                    f"Duplicate broker execution detected for reference {adapter_result.broker_reference}."
+                )
 
         try:
             record = self.execution_repository.create_execution(
@@ -355,10 +496,6 @@ class ExecutionService:
             self.session.rollback()
             raise
 
-    # ========================================================
-    # BATCH EXECUTION
-    # ========================================================
-
     def execute_batch(
         self,
         trades: Iterable[ExecutionBatchItem | dict[str, Any]],
@@ -378,13 +515,12 @@ class ExecutionService:
                     if isinstance(raw_item, ExecutionBatchItem)
                     else ExecutionBatchItem.from_dict(raw_item)
                 )
-
                 trade_payload = item.to_trade_payload()
+
                 reasons = self.reviewed_trade_service.get_block_reasons(
                     trade_payload,
                     context=ctx,
                 )
-
                 if reasons:
                     result.add(
                         ExecutionDecision(
@@ -404,8 +540,8 @@ class ExecutionService:
                     item.to_command(mode=normalized_mode),
                     context=ctx,
                 )
-
                 record_status = str(record.status).upper()
+
                 mapped_status = (
                     record_status
                     if record_status in {
@@ -443,7 +579,7 @@ class ExecutionService:
 
                 if lowered.startswith("execution blocked:"):
                     status = ExecutionStatus.BLOCKED
-                    reasons = [p.strip() for p in message.split(":", 1)[1].split(",")]
+                    reasons = [part.strip() for part in message.split(":", 1)[1].split(",")]
                     reason_code = "blocked_by_execution_gate"
                 elif "already executed" in lowered or "duplicate execution" in lowered:
                     status = ExecutionStatus.REJECTED
@@ -452,22 +588,7 @@ class ExecutionService:
                     status = ExecutionStatus.SKIPPED
                     reason_code = "adapter_invalid_result"
 
-                safe_trade_id = ""
-                safe_strategy_name = ""
-                safe_symbol = ""
-                safe_payload: dict[str, Any] = {}
-
-                if isinstance(raw_item, ExecutionBatchItem):
-                    safe_trade_id = raw_item.trade_id
-                    safe_strategy_name = raw_item.strategy_name
-                    safe_symbol = raw_item.symbol
-                    safe_payload = raw_item.to_trade_payload()
-                elif isinstance(raw_item, dict):
-                    safe_trade_id = str(raw_item.get("trade_id", ""))
-                    safe_strategy_name = str(raw_item.get("strategy_name", ""))
-                    safe_symbol = str(raw_item.get("symbol", ""))
-                    safe_payload = dict(raw_item)
-
+                safe_trade_id, safe_strategy_name, safe_symbol, safe_payload = self._safe_item_fields(raw_item)
                 result.add(
                     ExecutionDecision(
                         trade_id=safe_trade_id,
@@ -486,23 +607,7 @@ class ExecutionService:
 
             except Exception as exc:
                 self.session.rollback()
-
-                safe_trade_id = ""
-                safe_strategy_name = ""
-                safe_symbol = ""
-                safe_payload: dict[str, Any] = {}
-
-                if isinstance(raw_item, ExecutionBatchItem):
-                    safe_trade_id = raw_item.trade_id
-                    safe_strategy_name = raw_item.strategy_name
-                    safe_symbol = raw_item.symbol
-                    safe_payload = raw_item.to_trade_payload()
-                elif isinstance(raw_item, dict):
-                    safe_trade_id = str(raw_item.get("trade_id", ""))
-                    safe_strategy_name = str(raw_item.get("strategy_name", ""))
-                    safe_symbol = str(raw_item.get("symbol", ""))
-                    safe_payload = dict(raw_item)
-
+                safe_trade_id, safe_strategy_name, safe_symbol, safe_payload = self._safe_item_fields(raw_item)
                 result.add(
                     ExecutionDecision(
                         trade_id=safe_trade_id,
@@ -520,10 +625,6 @@ class ExecutionService:
                     break
 
         return result
-
-    # ========================================================
-    # INTERNAL
-    # ========================================================
 
     def _validate_command(self, command: ExecutionCreateCommand) -> None:
         if not str(command.broker or "").strip():
@@ -617,9 +718,7 @@ class ExecutionService:
         signal_id: int | None,
         mode: str,
     ) -> None:
-        if reviewed_trade_id is not None and hasattr(
-            self.execution_repository, "exists_for_reviewed_trade"
-        ):
+        if reviewed_trade_id is not None:
             if self.execution_repository.exists_for_reviewed_trade(
                 reviewed_trade_id=reviewed_trade_id,
                 mode=mode,
@@ -628,7 +727,7 @@ class ExecutionService:
                     f"Reviewed trade {reviewed_trade_id} already executed in {mode} mode."
                 )
 
-        if signal_id is not None and hasattr(self.execution_repository, "exists_for_signal"):
+        if signal_id is not None:
             if self.execution_repository.exists_for_signal(
                 signal_id=signal_id,
                 mode=mode,
@@ -642,7 +741,6 @@ class ExecutionService:
             raise ValueError("Execution adapter returned empty result.")
 
         missing_fields: list[str] = []
-
         if not getattr(result, "broker", None):
             missing_fields.append("broker")
         if not getattr(result, "status", None):
@@ -655,10 +753,29 @@ class ExecutionService:
                 f"Execution adapter returned invalid result. Missing fields: {', '.join(missing_fields)}"
             )
 
+    def _safe_item_fields(
+        self,
+        raw_item: ExecutionBatchItem | dict[str, Any],
+    ) -> tuple[str, str, str, dict[str, Any]]:
+        if isinstance(raw_item, ExecutionBatchItem):
+            return (
+                raw_item.trade_id,
+                raw_item.strategy_name,
+                raw_item.symbol,
+                raw_item.to_trade_payload(),
+            )
+        return (
+            str(raw_item.get("trade_id", "")),
+            str(raw_item.get("strategy_name", "")),
+            str(raw_item.get("symbol", "")),
+            dict(raw_item),
+        )
+
 
 # ============================================================
 # HELPERS
 # ============================================================
+
 
 def _to_float(value: Any) -> float | None:
     if value is None or value == "":

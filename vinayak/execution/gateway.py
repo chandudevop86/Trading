@@ -6,6 +6,8 @@ from datetime import datetime, time
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 import pandas as pd
 
 from vinayak.observability.observability_logger import log_event, log_exception
@@ -14,6 +16,7 @@ from vinayak.validation.engine import validate_trade
 from vinayak.execution.commands import ExecutionCreateCommand
 from vinayak.execution.live_execution_adapter import LiveExecutionAdapter
 from vinayak.execution.paper_execution_adapter import PaperExecutionAdapter
+from vinayak.execution.service import ExecutionService
 
 
 _DEFAULT_SESSION_START = time(9, 15)
@@ -277,6 +280,7 @@ def execute_workspace_candidates(
     max_daily_loss: float | None = None,
     security_map_path: str = 'data/dhan_security_map.csv',
     resolve_live_kwargs: callable | None = None,
+    db_session: Session | None = None,
 ):
     import time
     cycle_started = time.perf_counter()
@@ -291,6 +295,7 @@ def execute_workspace_candidates(
 
     paper_adapter = PaperExecutionAdapter()
     live_adapter = LiveExecutionAdapter()
+    execution_service = ExecutionService(db_session) if db_session is not None else None
     live_kwargs = dict(resolve_live_kwargs(security_map_path) if resolve_live_kwargs is not None and mode == 'LIVE' else {})
     broker_name = str(live_kwargs.get('broker_name', 'SIM' if mode != 'LIVE' else 'LIVE'))
 
@@ -334,17 +339,28 @@ def execute_workspace_candidates(
             executed_price=_safe_float(row.get('entry_price')),
         )
         try:
-            if mode == 'LIVE':
-                adapter_result = live_adapter.execute(command=command, reviewed_trade=None, signal=None)
+            if execution_service is not None:
+                record = execution_service.create_execution(command)
+                row['execution_id'] = record.id
+                row['execution_status'] = str(record.status or 'FILLED').upper()
+                row['trade_status'] = 'EXECUTED' if row['execution_status'] in _EXECUTED_STATUSES else row['execution_status']
+                row['broker_name'] = str(record.broker)
+                row['broker_reference'] = str(record.broker_reference or '')
+                row['price'] = _safe_float(record.executed_price, _safe_float(row.get('entry_price')))
+                row['executed_at_utc'] = record.executed_at.isoformat() if record.executed_at is not None else ''
+                row['reason'] = str(record.notes or '')
             else:
-                adapter_result = paper_adapter.execute(command=command, reviewed_trade=None, signal=None)
-            row['execution_status'] = str(adapter_result.status or 'FILLED').upper()
-            row['trade_status'] = 'EXECUTED' if row['execution_status'] in _EXECUTED_STATUSES else row['execution_status']
-            row['broker_name'] = adapter_result.broker
-            row['broker_reference'] = adapter_result.broker_reference
-            row['price'] = _safe_float(adapter_result.executed_price, _safe_float(row.get('entry_price')))
-            row['executed_at_utc'] = adapter_result.executed_at.isoformat() if adapter_result.executed_at is not None else ''
-            row['reason'] = str(adapter_result.notes or '')
+                if mode == 'LIVE':
+                    adapter_result = live_adapter.execute(command=command, reviewed_trade=None, signal=None)
+                else:
+                    adapter_result = paper_adapter.execute(command=command, reviewed_trade=None, signal=None)
+                row['execution_status'] = str(adapter_result.status or 'FILLED').upper()
+                row['trade_status'] = 'EXECUTED' if row['execution_status'] in _EXECUTED_STATUSES else row['execution_status']
+                row['broker_name'] = adapter_result.broker
+                row['broker_reference'] = adapter_result.broker_reference
+                row['price'] = _safe_float(adapter_result.executed_price, _safe_float(row.get('entry_price')))
+                row['executed_at_utc'] = adapter_result.executed_at.isoformat() if adapter_result.executed_at is not None else ''
+                row['reason'] = str(adapter_result.notes or '')
             row['duplicate_reason'] = ''
             if row['execution_status'] in _EXECUTED_STATUSES:
                 result.executed_rows.append(row)
@@ -358,10 +374,6 @@ def execute_workspace_candidates(
                 increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
                 log_event(component='execution_gateway', event_name='trade_execution_nonfill', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade did not reach executed state', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', '')})
             result.rows.append(row)
-            increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
-            if 'DUPLICATE_TRADE' in reasons:
-                increment_metric('duplicate_trade_blocks_total', 1)
-            log_event(component='execution_gateway', event_name='trade_execution_blocked', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade blocked before execution', context_json={'reasons': reasons, 'trade_id': row.get('trade_id', '')})
             rows_to_write.append(row)
             batch_keys.add(unique_key)
         except Exception as exc:
@@ -392,4 +404,12 @@ __all__ = [
     'execute_workspace_candidates',
     'prepare_workspace_candidates',
 ]
+
+
+
+
+
+
+
+
 

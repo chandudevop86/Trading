@@ -54,7 +54,7 @@ def get_dashboard_candles(
 
 
 @router.post('/live-analysis', response_model=LiveAnalysisResponse)
-def post_live_analysis(request: LiveAnalysisRequest) -> LiveAnalysisResponse:
+def post_live_analysis(request: LiveAnalysisRequest, db: Session = Depends(get_db)) -> LiveAnalysisResponse:
     result = run_live_trading_analysis(
         symbol=request.symbol,
         interval=request.interval,
@@ -87,6 +87,7 @@ def post_live_analysis(request: LiveAnalysisRequest) -> LiveAnalysisResponse:
         fixed_cost_per_trade=request.fixed_cost_per_trade,
         max_daily_loss=request.max_daily_loss,
         max_trades_per_day=request.max_trades_per_day,
+        db_session=db,
     )
     return LiveAnalysisResponse(
         symbol=result['symbol'],
@@ -112,6 +113,7 @@ def post_live_analysis(request: LiveAnalysisRequest) -> LiveAnalysisResponse:
             summary_report=ReportArtifactLocation(**result['report_artifacts']['summary_report']),
         ),
     )
+
 
 
 

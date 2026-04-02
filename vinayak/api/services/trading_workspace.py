@@ -339,6 +339,7 @@ def run_live_trading_analysis(
     security_map_path: str = 'data/dhan_security_map.csv',
     paper_log_path: str = str(DEFAULT_PAPER_LOG_PATH),
     live_log_path: str = str(DEFAULT_LIVE_LOG_PATH),
+    db_session: Session | None = None,
 ) -> dict[str, Any]:
     import time
     trace_id = f"{symbol}_{strategy}_{int(time.time())}"
@@ -434,6 +435,7 @@ def run_live_trading_analysis(
             max_daily_loss=max_daily_loss,
             security_map_path=str(security_map_path),
             resolve_live_kwargs=_resolve_live_execution_kwargs,
+            db_session=db_session,
         )
         execution_summary = {
             'mode': execution_mode,
@@ -487,6 +489,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

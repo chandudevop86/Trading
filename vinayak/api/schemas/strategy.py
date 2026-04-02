@@ -84,6 +84,15 @@ class ReviewedTradeStatusUpdateRequest(BaseModel):
     lots: int | None = Field(default=None, gt=0)
 
 
+class ExecuteTradeRequest(BaseModel):
+    trade_id: str
+    symbol: str
+    side: str
+    entry_price: float
+    stop_loss: float
+    target_price: float
+    quantity: int = Field(gt=0)
+
 class ExecutionCreateRequest(BaseModel):
     signal_id: int | None = Field(default=None, gt=0)
     reviewed_trade_id: int | None = Field(default=None, gt=0)
@@ -131,4 +140,5 @@ class LiveAnalysisRequest(BaseModel):
     fixed_cost_per_trade: float = Field(default=0.0, ge=0)
     max_daily_loss: float | None = Field(default=None, ge=0)
     max_trades_per_day: int | None = Field(default=None, ge=1)
+
 

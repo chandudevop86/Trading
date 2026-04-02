@@ -1,4 +1,5 @@
-﻿from fastapi import FastAPI
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from vinayak.api.routes.catalog import router as catalog_router
 from vinayak.api.routes.dashboard import router as dashboard_router
@@ -12,6 +13,13 @@ from vinayak.web.app.main import router as web_router
 
 
 app = FastAPI(title='Vinayak Trading Platform', version='0.2.0')
+
+
+@app.exception_handler(ValueError)
+def handle_value_error(_, exc):
+    return JSONResponse(status_code=400, content={'error': str(exc)})
+
+
 app.include_router(health_router)
 app.include_router(signals_router)
 app.include_router(reviewed_trades_router)

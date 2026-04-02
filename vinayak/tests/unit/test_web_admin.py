@@ -1,9 +1,9 @@
-from fastapi.testclient import TestClient
+﻿from fastapi.testclient import TestClient
 
 from vinayak.api.main import app
 
 
-def test_admin_console_requires_login_and_then_renders() -> None:
+def test_admin_console_requires_login_and_then_renders_dashboard() -> None:
     fresh = TestClient(app)
     login_page = fresh.get('/admin')
     assert login_page.status_code == 200
@@ -15,24 +15,12 @@ def test_admin_console_requires_login_and_then_renders() -> None:
     })
     assert response.status_code == 200
     html = response.text
-    assert 'Vinayak Admin Console' in html
-    assert '/dashboard/summary' in html
-    assert '/reviewed-trades' in html
-    assert '/executions/audit-logs' in html
-    assert '/executions' in html
-    assert 'Load Execution Audit' in html
-    assert 'Approve' in html
-    assert 'Reject' in html
-    assert 'Execute' in html
-    assert 'Recent Executions' in html
-    assert 'Open Audit' in html
-    assert 'reviewedTradeStatusFilter' in html
-    assert 'executionModeFilter' in html
-    assert 'executionStatusFilter' in html
-    assert 'auditBrokerFilter' in html
-    assert 'auditStatusFilter' in html
-    assert 'executionModeSelect' in html
-    assert 'Logout' in html
+    assert 'Admin Dashboard' in html
+    assert '/admin/validation' in html
+    assert '/admin/execution' in html
+    assert '/admin/logs' in html
+    assert '/admin/settings' in html
+    assert '/workspace' in html
 
 
 def test_workspace_requires_login_and_then_renders() -> None:
@@ -59,6 +47,24 @@ def test_workspace_requires_login_and_then_renders() -> None:
     assert 'Paper Log Path' in workspace.text
     assert 'Live Log Path' in workspace.text
     assert 'v4 Strategy Desk' in workspace.text
+
+
+def test_user_pages_render_without_admin_login() -> None:
+    fresh = TestClient(app)
+
+    home = fresh.get('/app')
+    assert home.status_code == 200
+    assert 'User View' in home.text
+    assert 'Final trading output only.' in home.text
+
+    live_signal = fresh.get('/app/live-signal')
+    assert live_signal.status_code == 200
+    assert 'Required Output' in live_signal.text
+    assert 'status' in live_signal.text
+
+    history = fresh.get('/app/trade-history')
+    assert history.status_code == 200
+    assert 'Trade History' in history.text
 
 
 def test_admin_login_rejects_invalid_credentials() -> None:

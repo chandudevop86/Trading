@@ -20,6 +20,7 @@ from vinayak.api.schemas.strategy import LiveAnalysisRequest
 from vinayak.api.services.dashboard_summary import DashboardSummaryService
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
 from vinayak.api.services.trading_workspace import run_live_trading_analysis
+from vinayak.observability.observability_health import build_observability_dashboard_payload
 
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'], dependencies=[Depends(require_admin_session)])
@@ -29,6 +30,11 @@ router = APIRouter(prefix='/dashboard', tags=['dashboard'], dependencies=[Depend
 def get_dashboard_summary(db: Session = Depends(get_db)) -> DashboardSummaryResponse:
     service = DashboardSummaryService(db)
     return DashboardSummaryResponse(**service.build_summary())
+
+
+@router.get('/observability')
+def get_observability_dashboard() -> dict:
+    return build_observability_dashboard_payload()
 
 
 @router.get('/candles', response_model=LiveOhlcvResponse)

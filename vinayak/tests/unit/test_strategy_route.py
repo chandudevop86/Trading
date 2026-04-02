@@ -1,4 +1,4 @@
-﻿import os
+import os
 import gc
 import time
 import json
@@ -73,19 +73,18 @@ def _demand_supply_payload() -> dict:
     return {
         'symbol': '^NSEI',
         'capital': 100000,
-        'risk_pct': 0.01,
+        'risk_pct': 1.0,
         'rr_ratio': 2.0,
         'candles': [
-            {'timestamp': '2026-03-20T09:15:00', 'open': 100, 'high': 103, 'low': 98, 'close': 101, 'volume': 1000},
-            {'timestamp': '2026-03-20T09:20:00', 'open': 101, 'high': 104, 'low': 99, 'close': 103, 'volume': 1000},
-            {'timestamp': '2026-03-20T09:25:00', 'open': 103, 'high': 107, 'low': 102, 'close': 106, 'volume': 1000},
-            {'timestamp': '2026-03-20T09:30:00', 'open': 106, 'high': 108, 'low': 104, 'close': 105, 'volume': 1000},
-            {'timestamp': '2026-03-20T09:35:00', 'open': 105, 'high': 106, 'low': 100, 'close': 101, 'volume': 1000},
-            {'timestamp': '2026-03-20T09:40:00', 'open': 101, 'high': 105, 'low': 99, 'close': 104, 'volume': 1000},
-            {'timestamp': '2026-03-20T09:45:00', 'open': 104, 'high': 109, 'low': 103, 'close': 108, 'volume': 1000},
+            {'timestamp': '2026-04-01T09:15:00', 'open': 110.0, 'high': 110.5, 'low': 108.8, 'close': 109.0, 'volume': 1000},
+            {'timestamp': '2026-04-01T09:20:00', 'open': 109.0, 'high': 109.2, 'low': 108.5, 'close': 108.6, 'volume': 1200},
+            {'timestamp': '2026-04-01T09:25:00', 'open': 108.6, 'high': 108.9, 'low': 108.3, 'close': 108.5, 'volume': 900},
+            {'timestamp': '2026-04-01T09:30:00', 'open': 108.5, 'high': 108.8, 'low': 108.2, 'close': 108.45, 'volume': 850},
+            {'timestamp': '2026-04-01T09:35:00', 'open': 108.45, 'high': 111.2, 'low': 108.4, 'close': 110.9, 'volume': 2200},
+            {'timestamp': '2026-04-01T09:40:00', 'open': 110.9, 'high': 111.4, 'low': 109.7, 'close': 110.1, 'volume': 1500},
+            {'timestamp': '2026-04-01T09:45:00', 'open': 110.1, 'high': 111.8, 'low': 109.9, 'close': 111.5, 'volume': 1900},
         ],
     }
-
 
 def _indicator_payload() -> dict:
     candles = []
@@ -474,3 +473,7 @@ def test_admin_protected_routes_require_login() -> None:
     assert fresh.get('/executions').status_code == 401
     assert fresh.get('/executions/audit-logs').status_code == 401
     assert fresh.get('/dashboard/summary').status_code == 401
+
+
+
+

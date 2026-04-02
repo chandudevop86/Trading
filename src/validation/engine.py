@@ -5,6 +5,8 @@ from typing import Any
 
 import pandas as pd
 
+from vinayak.observability.observability_logger import log_event, log_exception
+from vinayak.observability.observability_metrics import increment_metric, record_stage, set_metric
 from src.data.cleaner import CleanerConfig, OHLCVValidationError, coerce_ohlcv
 from src.strict_zone_validation import StrictValidationConfig, validate_zone_candidate
 
@@ -129,6 +131,8 @@ def _generic_validate(setup: dict[str, Any], candles: pd.DataFrame, config: Vali
 def validate_trade(setup: dict[str, Any], candles: pd.DataFrame, config: ValidationConfig | None = None) -> dict[str, Any]:
     """Validate a candidate setup against cleaned candles and return an execution gate."""
     cfg = config or ValidationConfig()
+    symbol = str(dict(setup or {}).get('symbol', '') or '')
+    strategy = str(dict(setup or {}).get('strategy_name', dict(setup or {}).get('strategy', '')) or '')
     try:
         if isinstance(setup, dict) and {"zone_id", "zone_type", "zone_low", "zone_high"}.issubset(set(setup.keys())):
             higher_tf = setup.get("higher_tf_candles")
@@ -140,14 +144,29 @@ def validate_trade(setup: dict[str, Any], candles: pd.DataFrame, config: Validat
                     entry_timeframe_minutes=cfg.expected_interval_minutes,
                 )
                 result = validate_zone_candidate(dict(setup), candles, higher_tf, zone_cfg)
-                return {
+                payload = {
                     "decision": str(result.get("status", "FAIL")).upper(),
                     "score": float(result.get("validation_score", 0.0)),
                     "reasons": list(result.get("fail_reasons", []) or []),
                     "metrics": dict(result.get("metrics", {}) or {}),
                 }
-        return _generic_validate(dict(setup), candles, cfg)
+                if payload['decision'] != 'PASS':
+                    increment_metric('trade_validation_failures_total', 1)
+                record_stage('validation', status='SUCCESS' if payload['decision'] == 'PASS' else 'WARN', symbol=symbol, strategy=strategy, message='Zone candidate validated')
+                log_event(component='validation_engine', event_name='trade_validation', symbol=symbol, strategy=strategy, severity='INFO' if payload['decision'] == 'PASS' else 'WARNING', message='Zone validation completed', context_json=payload)
+                return payload
+        payload = _generic_validate(dict(setup), candles, cfg)
+        if payload['decision'] != 'PASS':
+            increment_metric('trade_validation_failures_total', 1)
+        set_metric('last_validation_status', payload['decision'])
+        record_stage('validation', status='SUCCESS' if payload['decision'] == 'PASS' else 'WARN', symbol=symbol, strategy=strategy, message='Trade validation completed')
+        log_event(component='validation_engine', event_name='trade_validation', symbol=symbol, strategy=strategy, severity='INFO' if payload['decision'] == 'PASS' else 'WARNING', message='Trade validation completed', context_json=payload)
+        return payload
     except (OHLCVValidationError, TypeError, ValueError) as exc:
+        increment_metric('schema_validation_failures_total', 1)
+        increment_metric('trade_validation_failures_total', 1)
+        record_stage('validation', status='FAIL', symbol=symbol, strategy=strategy, message=str(exc))
+        log_exception(component='validation_engine', event_name='trade_validation_failed', exc=exc, symbol=symbol, strategy=strategy, message='Trade validation failed')
         return {
             "decision": "FAIL",
             "score": 0.0,

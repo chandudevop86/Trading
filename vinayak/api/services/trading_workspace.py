@@ -16,6 +16,8 @@ from vinayak.api.services.strike_selector import attach_option_strikes
 from vinayak.analytics.readiness import evaluate_readiness
 from vinayak.notifications.telegram.service import build_trade_summary, send_telegram_message
 from vinayak.validation.trade_evaluation import build_trade_evaluation_summary
+from vinayak.observability.observability_logger import log_event, log_exception
+from vinayak.observability.observability_metrics import record_stage, set_metric
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
 from vinayak.execution.gateway import execute_workspace_candidates
 from vinayak.api.services.report_storage import cache_json_artifact, store_json_report, store_text_report
@@ -338,9 +340,16 @@ def run_live_trading_analysis(
     paper_log_path: str = str(DEFAULT_PAPER_LOG_PATH),
     live_log_path: str = str(DEFAULT_LIVE_LOG_PATH),
 ) -> dict[str, Any]:
+    import time
+    trace_id = f"{symbol}_{strategy}_{int(time.time())}"
+    started = time.perf_counter()
+    fetch_started = time.perf_counter()
     live_rows = fetch_live_ohlcv(symbol=symbol, interval=interval, period=period)
+    record_stage('market_fetch', status='SUCCESS', duration_seconds=round(time.perf_counter() - fetch_started, 4), symbol=symbol, strategy=strategy, message='Live market rows fetched', trace_id=trace_id)
+    prep_started = time.perf_counter()
     candles_df = prepare_trading_data(pd.DataFrame(live_rows))
     candle_rows = df_to_candles(candles_df)
+    record_stage('indicator_calc', status='SUCCESS', duration_seconds=round(time.perf_counter() - prep_started, 4), symbol=symbol, strategy=strategy, message='Data prepared for indicators', trace_id=trace_id)
 
     context = StrategyContext(
         strategy=strategy,
@@ -365,12 +374,14 @@ def run_live_trading_analysis(
         max_daily_loss=max_daily_loss,
         max_trades_per_day=max_trades_per_day,
     )
+    strategy_started = time.perf_counter()
     signal_rows = run_strategy_workflow(
         context,
         attach_levels_fn=attach_indicator_trade_levels,
         attach_option_strikes_fn=attach_option_strikes,
         attach_option_metrics_fn=lambda rows, **kwargs: rows,
     )
+    record_stage('zone_detection', status='SUCCESS', duration_seconds=round(time.perf_counter() - strategy_started, 4), symbol=symbol, strategy=strategy, message='Strategy workflow completed', trace_id=trace_id)
     signal_rows = attach_option_metrics(signal_rows, symbol=symbol, fetch_option_metrics=fetch_option_metrics)
     signal_rows = attach_lots(signal_rows, lot_size=lot_size, lots=lots)
     signal_rows = _normalize_rows(signal_rows)
@@ -434,9 +445,13 @@ def run_live_trading_analysis(
         }
         execution_rows = _normalize_rows(result.rows)
 
+    record_stage('trade_build', status='SUCCESS', symbol=symbol, strategy=strategy, message='Trade rows built', trace_id=trace_id)
     validation_rows = execution_rows if execution_rows else signal_rows
     validation_summary = _validation_summary_from_rows(validation_rows, strategy)
 
+    total_duration = round(time.perf_counter() - started, 4)
+    set_metric('trading_cycle_duration_seconds', total_duration)
+    log_event(component='trading_workspace', event_name='live_analysis_run', symbol=symbol, strategy=strategy, severity='INFO', message='Live analysis run completed', context_json={'signal_count': len(signal_rows), 'execution_rows': len(execution_rows), 'duration_seconds': total_duration, 'trace_id': trace_id})
     response: dict[str, Any] = {
         'symbol': symbol,
         'interval': interval,
@@ -454,6 +469,8 @@ def run_live_trading_analysis(
         'execution_summary': execution_summary,
         'execution_rows': execution_rows,
         'validation_summary': validation_summary,
+        'data_status': _data_status(candles_df),
+        'system_status': validation_summary.get('system_status', 'NOT_READY'),
     }
     response['report_artifacts'] = _build_report_artifacts(response)
     message_bus.publish(

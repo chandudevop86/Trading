@@ -8,7 +8,9 @@ from typing import Any
 
 import pandas as pd
 
-from src.validation.engine import validate_trade
+from vinayak.observability.observability_logger import log_event, log_exception
+from vinayak.observability.observability_metrics import increment_metric, record_stage, set_metric
+from vinayak.validation.engine import validate_trade
 from vinayak.execution.commands import ExecutionCreateCommand
 from vinayak.execution.live_execution_adapter import LiveExecutionAdapter
 from vinayak.execution.paper_execution_adapter import PaperExecutionAdapter
@@ -247,6 +249,18 @@ def prepare_workspace_candidates(
         candidate["reason_codes"] = list(candidate.get("reason_codes", [])) if isinstance(candidate.get("reason_codes"), list) else []
         candidate["reason_codes"] = list(dict.fromkeys(candidate["reason_codes"] + candidate["validation_reasons"]))
         prepared.append(candidate)
+    valid_count = sum(1 for item in prepared if str(item.get('validation_status', '')).upper() == 'PASS')
+    rejected_count = max(0, len(prepared) - valid_count)
+    increment_metric('trade_candidates_total', len(prepared))
+    increment_metric('zones_detected_total', len(prepared))
+    increment_metric('zones_accepted_total', valid_count)
+    increment_metric('zones_rejected_total', rejected_count)
+    score_values = [float(item.get('validation_score', item.get('score', 0.0)) or 0.0) for item in prepared]
+    set_metric('zone_score_avg', round(sum(score_values) / len(score_values), 2) if score_values else 0.0)
+    set_metric('total_signals_today', len(prepared))
+    set_metric('valid_signals_today', valid_count)
+    set_metric('rejected_trades_today', rejected_count)
+    log_event(component='execution_gateway', event_name='trade_candidates_prepared', severity='INFO', message='Prepared workspace candidates', context_json={'total': len(prepared), 'valid': valid_count, 'rejected': rejected_count})
     return prepared
 
 
@@ -264,7 +278,10 @@ def execute_workspace_candidates(
     security_map_path: str = 'data/dhan_security_map.csv',
     resolve_live_kwargs: callable | None = None,
 ):
+    import time
+    cycle_started = time.perf_counter()
     candidates = prepare_workspace_candidates(strategy, symbol, candles, signal_rows)
+    set_metric('trading_app_up', 1)
     mode = str(execution_mode or 'NONE').upper()
     output_path = Path(str(live_log_path if mode == 'LIVE' else paper_log_path))
     historical_rows = _existing_rows(output_path)
@@ -298,6 +315,10 @@ def execute_workspace_candidates(
             row['blocked_reason'] = row['reason']
             row['duplicate_reason'] = 'DUPLICATE_TRADE' if 'DUPLICATE_TRADE' in reasons else ''
             result.rows.append(row)
+            increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
+            if 'DUPLICATE_TRADE' in reasons:
+                increment_metric('duplicate_trade_blocks_total', 1)
+            log_event(component='execution_gateway', event_name='trade_execution_blocked', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade blocked before execution', context_json={'reasons': reasons, 'trade_id': row.get('trade_id', '')})
             result.blocked_rows.append(row)
             result.blocked_count += 1
             if 'DUPLICATE_TRADE' in reasons:
@@ -328,10 +349,19 @@ def execute_workspace_candidates(
             if row['execution_status'] in _EXECUTED_STATUSES:
                 result.executed_rows.append(row)
                 result.executed_count += 1
+                increment_metric('paper_trades_executed_total', 1 if mode == 'PAPER' else 0)
+                set_metric('executed_paper_trades_today', result.executed_count if mode == 'PAPER' else 0)
+                log_event(component='execution_gateway', event_name='trade_execution_success', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='INFO', message='Trade executed', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', '')})
             else:
                 result.blocked_rows.append(row)
                 result.blocked_count += 1
+                increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
+                log_event(component='execution_gateway', event_name='trade_execution_nonfill', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade did not reach executed state', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', '')})
             result.rows.append(row)
+            increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
+            if 'DUPLICATE_TRADE' in reasons:
+                increment_metric('duplicate_trade_blocks_total', 1)
+            log_event(component='execution_gateway', event_name='trade_execution_blocked', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade blocked before execution', context_json={'reasons': reasons, 'trade_id': row.get('trade_id', '')})
             rows_to_write.append(row)
             batch_keys.add(unique_key)
         except Exception as exc:
@@ -340,12 +370,20 @@ def execute_workspace_candidates(
             row['reason'] = str(exc)
             row['duplicate_reason'] = ''
             result.rows.append(row)
+            increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
+            if 'DUPLICATE_TRADE' in reasons:
+                increment_metric('duplicate_trade_blocks_total', 1)
+            log_event(component='execution_gateway', event_name='trade_execution_blocked', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade blocked before execution', context_json={'reasons': reasons, 'trade_id': row.get('trade_id', '')})
             result.error_rows.append(row)
             result.error_count += 1
             rows_to_write.append(row)
             batch_keys.add(unique_key)
 
     _write_rows(output_path, rows_to_write)
+    duration = round(time.perf_counter() - cycle_started, 4)
+    set_metric('trading_cycle_duration_seconds', duration)
+    record_stage('execute', status='SUCCESS' if result.error_count == 0 else 'WARN', duration_seconds=duration, symbol=symbol, strategy=strategy, message='Workspace execution cycle finished')
+    set_metric('paper_trade_rejections_total', int(_safe_int(result.blocked_count + result.error_count)))
     return candidates, result
 
 
@@ -354,3 +392,4 @@ __all__ = [
     'execute_workspace_candidates',
     'prepare_workspace_candidates',
 ]
+

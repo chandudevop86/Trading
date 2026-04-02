@@ -14,6 +14,7 @@ from vinayak.api.services.data_preparation import prepare_trading_data as canoni
 from vinayak.api.services.strategy_workflow import Candle, StrategyContext, run_strategy_workflow
 from vinayak.api.services.strike_selector import attach_option_strikes
 from vinayak.analytics.readiness import evaluate_readiness
+from vinayak.metrics import run_full_metrics_engine
 from vinayak.notifications.telegram.service import build_trade_summary, send_telegram_message
 from vinayak.validation.trade_evaluation import build_trade_evaluation_summary
 from vinayak.observability.observability_logger import log_event, log_exception
@@ -306,6 +307,35 @@ def _data_status(candles: pd.DataFrame) -> dict[str, Any]:
         'columns': list(report.get('columns', list(candles.columns))),
     }
 
+
+def _update_observability_metrics_from_run(rows: list[dict[str, Any]], candles: pd.DataFrame) -> None:
+    if candles is not None and not candles.empty:
+        latest_timestamp = str(candles.iloc[-1]['timestamp'])
+        set_metric('latest_data_timestamp', latest_timestamp)
+        set_metric('market_data_rows_loaded_total', int(len(candles)))
+        latest_dt = pd.to_datetime(candles.iloc[-1]['timestamp'], errors='coerce', utc=True)
+        if not pd.isna(latest_dt):
+            delay_seconds = max(0.0, (datetime.now(UTC) - latest_dt.to_pydatetime()).total_seconds())
+            set_metric('market_data_delay_seconds', round(delay_seconds, 2))
+        cleaning_report = dict(getattr(candles, 'attrs', {}).get('cleaning_report', {}) or {})
+        set_metric('market_data_duplicates_total', int(cleaning_report.get('duplicates_removed', 0) or 0))
+        set_metric('market_data_nulls_total', int(cleaning_report.get('null_rows_removed', 0) or 0))
+        set_metric('schema_validation_failures_total', int(len(cleaning_report.get('issues', []) or [])))
+    if not rows:
+        set_metric('rolling_win_rate', 0.0)
+        set_metric('rolling_expectancy', 0.0)
+        set_metric('pnl_today', 0.0)
+        return
+    metrics = run_full_metrics_engine(rows, candles=candles)
+    performance = dict(metrics.get('performance', {}) or {})
+    execution = dict(metrics.get('execution', {}) or {})
+    validation = dict(metrics.get('validation', {}) or {})
+    set_metric('rolling_win_rate', round(float(performance.get('win_rate', 0.0)) * 100.0, 2))
+    set_metric('rolling_expectancy', round(float(performance.get('expectancy', 0.0)), 4))
+    set_metric('pnl_today', round(float(performance.get('net_profit', 0.0)), 2))
+    set_metric('execution_success_rate', round(float(execution.get('execution_success_rate', 0.0)), 4))
+    set_metric('validation_pass_rate', round(float(validation.get('validation_pass_rate', 0.0)), 4))
+    set_metric('high_quality_setup_rate', round(float(validation.get('high_quality_setup_rate', 0.0)), 4))
 def run_live_trading_analysis(
     *,
     symbol: str,
@@ -508,6 +538,12 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
+
+
+
+
+
 
 
 

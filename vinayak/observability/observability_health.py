@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
@@ -169,3 +169,4 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
 
 
 __all__ = ['build_observability_dashboard_payload']
+

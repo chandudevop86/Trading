@@ -383,6 +383,7 @@ def execute_workspace_candidates(
             row['duplicate_reason'] = 'DUPLICATE_TRADE' if 'DUPLICATE_TRADE' in reasons else ''
             result.rows.append(row)
             increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
+            increment_metric('paper_trade_expected_blocks_total', 1 if mode == 'PAPER' else 0)
             if 'DUPLICATE_TRADE' in reasons:
                 increment_metric('duplicate_trade_blocks_total', 1)
             if any(reason.startswith('MAX_') or 'KILL_SWITCH' in reason for reason in reasons):
@@ -439,6 +440,7 @@ def execute_workspace_candidates(
                 result.blocked_rows.append(row)
                 result.blocked_count += 1
                 increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
+                increment_metric('paper_trade_expected_blocks_total', 1 if mode == 'PAPER' else 0)
                 log_event(component='execution_gateway', event_name='trade_execution_nonfill', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade did not reach executed state', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', ''), 'reviewed_trade_id': reviewed_trade.id})
             result.rows.append(row)
             rows_to_write.append(row)
@@ -450,6 +452,7 @@ def execute_workspace_candidates(
             row['duplicate_reason'] = ''
             result.rows.append(row)
             increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
+            increment_metric('paper_trade_errors_total', 1 if mode == 'PAPER' else 0)
             log_event(component='execution_gateway', event_name='trade_execution_error', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='ERROR', message='Trade execution failed', context_json={'trade_id': row.get('trade_id', ''), 'error': str(exc)})
             result.error_rows.append(row)
             result.error_count += 1
@@ -469,5 +472,7 @@ __all__ = [
     'execute_workspace_candidates',
     'prepare_workspace_candidates',
 ]
+
+
 
 

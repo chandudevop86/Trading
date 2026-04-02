@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 
@@ -71,3 +71,4 @@ def test_dashboard_spec_outputs_are_readable() -> None:
     assert grafana['title'] == 'Vinayak Paper Trading Observability'
     assert any(panel['title'] == 'Recent Failures' for panel in grafana['panels'])
     assert '/dashboard/observability' in html
+

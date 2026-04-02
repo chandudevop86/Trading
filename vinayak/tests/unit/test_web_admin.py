@@ -168,3 +168,17 @@ def test_admin_api_routes_use_same_cookie_session(tmp_path: Path) -> None:
         assert authed.status_code == 200
     finally:
         _cleanup_db()
+
+
+def test_admin_validation_page_shows_empty_state_when_no_analysis_exists(tmp_path: Path) -> None:
+    _configure_db(tmp_path)
+    try:
+        fresh = TestClient(app)
+        fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+        response = fresh.get('/admin/validation')
+        assert response.status_code == 200
+        assert 'No analysis run yet' in response.text
+        assert 'Why Not Ready' in response.text
+        assert 'NO_ANALYSIS_RUN_YET' in response.text
+    finally:
+        _cleanup_db()

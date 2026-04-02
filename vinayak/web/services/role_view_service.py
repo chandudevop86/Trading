@@ -57,10 +57,35 @@ class RoleViewService:
 
     def build_validation_page(self) -> dict[str, Any]:
         latest_analysis = self.load_latest_analysis()
+        validation_summary = dict(latest_analysis.get('validation_summary', {}) or {})
+        signals = list(latest_analysis.get('signals', []) or [])
+        history = self.load_trade_history(limit=1)
+        last_signal_time = '-'
+        if signals:
+            last_signal = dict(signals[-1])
+            last_signal_time = str(last_signal.get('timestamp', last_signal.get('signal_time', '-')) or '-')
+        elif history:
+            last_signal_time = str(history[0].get('signal_time', history[0].get('executed_at_utc', '-')) or '-')
+        has_analysis_data = bool(validation_summary) or bool(signals)
+        empty_state = None
+        if not has_analysis_data:
+            empty_state = {
+                'title': 'No analysis run yet',
+                'message': 'Run a fresh analysis from the workspace to populate validation metrics, rejection reasons, and readiness details.',
+                'last_analysis_time': str(latest_analysis.get('generated_at', '-')) if latest_analysis else '-',
+                'last_signal_count': int(latest_analysis.get('signal_count', 0) or 0) if latest_analysis else 0,
+                'last_signal_time': last_signal_time,
+                'why_not_ready': 'System status stays NOT_READY until at least one analysis cycle produces signals and validation output.',
+            }
+            validation_summary = {
+                'system_status': 'NOT_READY',
+                'reason': 'NO_ANALYSIS_RUN_YET',
+            }
         return {
             'latest_signal': self.build_user_signal(),
             'admin_debug': self.build_admin_debug(latest_analysis),
-            'validation_summary': dict(latest_analysis.get('validation_summary', {}) or {}),
+            'validation_summary': validation_summary,
+            'empty_state': empty_state,
         }
 
     def build_execution_page(self) -> dict[str, Any]:
@@ -207,4 +232,5 @@ class RoleViewService:
 
 
 __all__ = ['RoleViewService']
+
 

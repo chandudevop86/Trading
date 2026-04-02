@@ -250,13 +250,29 @@ def render_admin_dashboard_page(payload: dict[str, Any]) -> str:
 def render_admin_validation_page(payload: dict[str, Any]) -> str:
     debug = dict(payload.get('admin_debug', {}) or {})
     validation_summary = dict(payload.get('validation_summary', {}) or {})
+    empty_state = payload.get('empty_state') or {}
     rejection_items = ''.join(f'<li><strong>{html.escape(str(key))}</strong>: {html.escape(str(value))}</li>' for key, value in dict(debug.get('rejection_reasons', {}) or {}).items()) or '<li>No rejection reasons recorded.</li>'
     latest_errors = ''.join(f'<li>{html.escape(str(item))}</li>' for item in list(debug.get('latest_errors', []) or [])) or '<li>No latest errors.</li>'
+    empty_html = ''
+    if empty_state:
+        empty_html = f"""
+        <section class=\"card\" style=\"margin-top:16px;\">
+          <h2>{html.escape(str(empty_state.get('title', 'No analysis data yet')))}</h2>
+          <p class=\"muted\">{html.escape(str(empty_state.get('message', 'Run a fresh analysis from the workspace.')))}</p>
+          <table><tbody>
+            <tr><th>Last Analysis Time</th><td>{html.escape(str(empty_state.get('last_analysis_time', '-')))}</td></tr>
+            <tr><th>Last Signal Count</th><td>{html.escape(str(empty_state.get('last_signal_count', 0)))}</td></tr>
+            <tr><th>Last Signal Time</th><td>{html.escape(str(empty_state.get('last_signal_time', '-')))}</td></tr>
+            <tr><th>Why Not Ready</th><td>{html.escape(str(empty_state.get('why_not_ready', '-')))}</td></tr>
+          </tbody></table>
+        </section>
+        """
     body = f"""
     <section class=\"card\"><div class=\"eyebrow\">Validation</div><h1>Validation Health</h1><p class=\"muted\">Admin-only debug fields and trade validation quality gates.</p></section>
+    {empty_html}
     <div class=\"grid\" style=\"margin-top:16px;\">
-      {_metric('zones_detected', debug.get('zones_detected', 0), 'good')}
-      {_metric('accepted_zones', debug.get('accepted_zones', 0), 'good')}
+      {_metric('zones_detected', debug.get('zones_detected', 0), 'good' if int(debug.get('zones_detected', 0) or 0) else 'warn')}
+      {_metric('accepted_zones', debug.get('accepted_zones', 0), 'good' if int(debug.get('accepted_zones', 0) or 0) else 'warn')}
       {_metric('rejected_zones', debug.get('rejected_zones', 0), 'warn' if int(debug.get('rejected_zones', 0) or 0) else 'good')}
       {_metric('system_status', validation_summary.get('system_status', 'NOT_READY'), 'warn')}
     </div>
@@ -266,7 +282,7 @@ def render_admin_validation_page(payload: dict[str, Any]) -> str:
     </div>
     <section class=\"card\"><h2>Validation Checks</h2><pre>{html.escape(json.dumps(validation_summary, indent=2))}</pre></section>
     """
-    actions = '<a class="button" href="/workspace">Workspace</a><form method="post" action="/admin/logout" style="display:inline;"><button class="button primary" type="submit">Logout</button></form>'
+    actions = '<a class=\"button\" href=\"/workspace\">Workspace</a><form method=\"post\" action=\"/admin/logout\" style=\"display:inline;\"><button class=\"button primary\" type=\"submit\">Logout</button></form>'
     return render_role_page(title='Vinayak Admin Validation', role='Admin', active_path='validation', body=body, top_actions=actions)
 
 
@@ -371,5 +387,6 @@ __all__ = [
     'render_user_home_page',
     'render_user_signal_page',
 ]
+
 
 

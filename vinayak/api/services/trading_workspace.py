@@ -10,13 +10,12 @@ try:
 except Exception:  # pragma: no cover
     pd = None  # type: ignore
 
-from src.breakout_bot import Candle
-from src.preprocessing import prepare_trading_data as canonical_prepare_trading_data
-from src.strategy_service import StrategyContext, run_strategy_workflow
+from vinayak.api.services.data_preparation import prepare_trading_data as canonical_prepare_trading_data
+from vinayak.api.services.strategy_workflow import Candle, StrategyContext, run_strategy_workflow
 from src.strike_selector import attach_option_strikes
-from src.analytics.readiness_api import evaluate_readiness
-from src.telegram_notifier import build_trade_summary, send_telegram_message
-from src.trade_validation_service import build_trade_evaluation_summary
+from vinayak.analytics.readiness import evaluate_readiness
+from vinayak.notifications.telegram.service import build_trade_summary, send_telegram_message
+from vinayak.validation.trade_evaluation import build_trade_evaluation_summary
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
 from vinayak.execution.gateway import execute_workspace_candidates
 from vinayak.api.services.report_storage import cache_json_artifact, store_json_report, store_text_report
@@ -471,6 +470,12 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
+
+
+
+
+
 
 
 

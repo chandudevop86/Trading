@@ -36,7 +36,7 @@ def compute_trade_metrics(rows: Any) -> dict[str, Any]:
             "duplicate_prevention_proven": False,
         }
 
-    pnl = pd.to_numeric(frame.get("pnl", 0.0), errors="coerce").fillna(0.0)
+    pnl = pd.to_numeric(frame.get("pnl", pd.Series([0.0] * len(frame))), errors="coerce").fillna(0.0)
     wins = pnl[pnl > 0]
     losses = pnl[pnl < 0]
     total_trades = int(len(frame))
@@ -52,8 +52,8 @@ def compute_trade_metrics(rows: Any) -> dict[str, Any]:
     drawdown = equity_curve - rolling_peak
     max_drawdown = abs(float(drawdown.min())) if not drawdown.empty else 0.0
 
-    risk_per_trade = pd.to_numeric(frame.get("risk_per_unit", 0.0), errors="coerce").fillna(0.0)
-    quantity = pd.to_numeric(frame.get("quantity", 0.0), errors="coerce").fillna(0.0)
+    risk_per_trade = pd.to_numeric(frame.get("risk_per_unit", pd.Series([0.0] * len(frame))), errors="coerce").fillna(0.0)
+    quantity = pd.to_numeric(frame.get("quantity", pd.Series([0.0] * len(frame))), errors="coerce").fillna(0.0)
     risk_cash = (risk_per_trade * quantity).replace(0.0, pd.NA)
     r_multiple = (pnl / risk_cash).fillna(0.0)
     avg_r_multiple = float(r_multiple.mean()) if not r_multiple.empty else 0.0

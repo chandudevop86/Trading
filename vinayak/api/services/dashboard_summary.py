@@ -7,8 +7,8 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from src.trade_validation_service import build_trade_evaluation_summary
-from src.analytics.readiness_api import evaluate_readiness
+from vinayak.validation.trade_evaluation import build_trade_evaluation_summary
+from vinayak.analytics.readiness import evaluate_readiness
 from vinayak.db.repositories.execution_audit_log_repository import ExecutionAuditLogRepository
 from vinayak.db.repositories.execution_repository import ExecutionRepository
 from vinayak.db.repositories.reviewed_trade_repository import ReviewedTradeRepository

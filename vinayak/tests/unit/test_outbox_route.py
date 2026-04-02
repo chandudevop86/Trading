@@ -7,7 +7,6 @@ from vinayak.api.main import app
 from vinayak.core.config import reset_settings_cache
 from vinayak.db.session import reset_database_state
 from vinayak.execution.reviewed_trade_service import ReviewedTradeCreateCommand, ReviewedTradeService
-from vinayak.api.dependencies.admin_auth import session_token, COOKIE_NAME
 from vinayak.db.session import build_session_factory, initialize_database
 from vinayak.messaging.outbox import dispatch_pending_outbox_events
 
@@ -15,8 +14,9 @@ from vinayak.messaging.outbox import dispatch_pending_outbox_events
 client = TestClient(app)
 
 
-def _admin_cookies() -> dict[str, str]:
-    return {COOKIE_NAME: session_token()}
+def _admin_login() -> None:
+    response = client.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    assert response.status_code == 200
 
 
 def test_outbox_routes_list_and_retry_failed_event(tmp_path: Path) -> None:
@@ -44,19 +44,20 @@ def test_outbox_routes_list_and_retry_failed_event(tmp_path: Path) -> None:
     with session_factory() as session:
         dispatch_pending_outbox_events(session)
 
-    list_response = client.get('/outbox', cookies=_admin_cookies())
+    _admin_login()
+    list_response = client.get('/outbox')
     assert list_response.status_code == 200
     payload = list_response.json()
     assert payload['total'] == 1
     event_id = payload['events'][0]['id']
     assert payload['events'][0]['status'] == 'FAILED'
 
-    retry_response = client.post(f'/outbox/{event_id}/retry', cookies=_admin_cookies())
+    retry_response = client.post(f'/outbox/{event_id}/retry')
     assert retry_response.status_code == 200
     retried = retry_response.json()
     assert retried['event']['status'] == 'PENDING'
 
-    detail_response = client.get(f'/outbox/{event_id}', cookies=_admin_cookies())
+    detail_response = client.get(f'/outbox/{event_id}')
     assert detail_response.status_code == 200
     detail = detail_response.json()
     assert detail['id'] == event_id

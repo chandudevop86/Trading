@@ -313,23 +313,50 @@ def render_admin_logs_page(payload: dict[str, Any]) -> str:
 
 def render_admin_settings_page(payload: dict[str, Any]) -> str:
     settings = dict(payload.get('settings', {}) or {})
+    users = list(settings.get('users', []) or [])
+    flash_message = str(payload.get('flash_message', '') or '')
+    flash_tone = str(payload.get('flash_tone', 'good') or 'good')
+    user_rows = ''.join(
+        f"<tr><td>{html.escape(str(row.get('username', '-')))}</td><td>{html.escape(str(row.get('role', '-')))}</td><td>{html.escape('ACTIVE' if row.get('is_active') else 'DISABLED')}</td><td>{html.escape(str(row.get('created_at', '-')))}</td></tr>"
+        for row in users
+    ) or '<tr><td colspan="4">No users found.</td></tr>'
+    flash_html = f'<div class="pill {flash_tone}" style="margin-bottom:12px;">{html.escape(flash_message)}</div>' if flash_message else ''
     body = f"""
-    <section class=\"card\"><div class=\"eyebrow\">Settings</div><h1>Role-Based Access Model</h1><p class=\"muted\">Shared configuration and separation-of-concerns view for the web app.</p></section>
-    <div class=\"split\" style=\"margin-top:16px;\">
-      <section class=\"card\"><h2>Runtime Paths</h2><table><tbody>
+    <section class="card"><div class="eyebrow">Settings</div><h1>Role-Based Access Model</h1><p class="muted">Shared configuration, user administration, and separation-of-concerns view for the web app.</p></section>
+    <div class="split" style="margin-top:16px;">
+      <section class="card"><h2>Runtime Paths</h2><table><tbody>
         <tr><th>Paper Log</th><td>{html.escape(str(settings.get('paper_log_path', '-')))}</td></tr>
         <tr><th>Reports Dir</th><td>{html.escape(str(settings.get('reports_dir', '-')))}</td></tr>
         <tr><th>Cache Configured</th><td>{html.escape(str(settings.get('cache_configured', False)))}</td></tr>
       </tbody></table></section>
-      <section class=\"card\"><h2>Role Model</h2><pre>{html.escape(json.dumps(settings.get('role_model', {}), indent=2))}</pre></section>
+      <section class="card"><h2>Role Model</h2><pre>{html.escape(json.dumps(settings.get('role_model', {}), indent=2))}</pre></section>
     </div>
-    <section class=\"card\"><h2>UI Separation</h2><ul>
-      <li>Admin pages expose control, validation, execution, logs, and settings.</li>
-      <li>User pages expose only final signal output and trade history.</li>
+    <div class="split" style="margin-top:16px;">
+      <section class="card">
+        <h2>Create User</h2>
+        {flash_html}
+        <form method="post" action="/admin/users/create">
+          <label class="metric-label" for="username">Username</label>
+          <input id="username" name="username" type="text" required style="width:100%; padding:10px 12px; margin:8px 0 14px; border-radius:12px; border:1px solid var(--line); background:rgba(255,255,255,0.03); color:var(--text);" />
+          <label class="metric-label" for="password">Password</label>
+          <input id="password" name="password" type="password" required style="width:100%; padding:10px 12px; margin:8px 0 14px; border-radius:12px; border:1px solid var(--line); background:rgba(255,255,255,0.03); color:var(--text);" />
+          <label class="metric-label" for="role">Role</label>
+          <select id="role" name="role" style="width:100%; padding:10px 12px; margin:8px 0 14px; border-radius:12px; border:1px solid var(--line); background:rgba(255,255,255,0.03); color:var(--text);">
+            <option value="USER">USER</option>
+            <option value="ADMIN">ADMIN</option>
+          </select>
+          <button class="button primary" type="submit">Create User</button>
+        </form>
+      </section>
+      <section class="card"><h2>Current Users</h2><table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Created</th></tr></thead><tbody>{user_rows}</tbody></table></section>
+    </div>
+    <section class="card"><h2>UI Separation</h2><ul>
+      <li>Admin pages expose control, validation, execution, logs, settings, and user creation.</li>
+      <li>User pages expose only final signal output and trade history after login.</li>
       <li>Business logic stays behind services and API layers, not inside templates.</li>
     </ul></section>
     """
-    actions = '<a class="button" href="/workspace">Workspace</a><form method="post" action="/admin/logout" style="display:inline;"><button class="button primary" type="submit">Logout</button></form>'
+    actions = '<a class="button" href="/workspace">Workspace</a><form method="post" action="/logout" style="display:inline;"><button class="button primary" type="submit">Logout</button></form>'
     return render_role_page(title='Vinayak Admin Settings', role='Admin', active_path='settings', body=body, top_actions=actions)
 
 
@@ -344,3 +371,5 @@ __all__ = [
     'render_user_home_page',
     'render_user_signal_page',
 ]
+
+

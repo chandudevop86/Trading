@@ -1,11 +1,20 @@
 ﻿from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from vinayak.api.dependencies.admin_auth import COOKIE_NAME, admin_password, admin_username, is_authenticated, session_token
+from vinayak.api.dependencies.admin_auth import (
+    COOKIE_NAME,
+    LEGACY_COOKIE_NAME,
+    admin_password,
+    admin_username,
+    get_current_user,
+    require_admin_session,
+    require_user_session,
+)
 from vinayak.api.dependencies.db import get_db
+from vinayak.auth.service import ADMIN_ROLE, UserAuthService
 from vinayak.observability.observability_dashboard_spec import build_observability_dashboard_html
 from vinayak.web.app.role_pages import (
     render_admin_dashboard_page,
@@ -80,7 +89,7 @@ HOME_HTML = """
       <div class="brand">Vinayak</div>
       <div class="nav-links">
         <a class="button secondary" href="/health">Health</a>
-        <a class="button secondary" href="/app">User App</a>
+        <a class="button secondary" href="/login">User Login</a>
         <a class="button secondary" href="/workspace">Workspace</a>
         <a class="button primary" href="/admin">Admin</a>
       </div>
@@ -89,10 +98,10 @@ HOME_HTML = """
     <div class="hero">
       <section class="card">
         <div class="eyebrow">Role-Based Trading Platform</div>
-        <h1>Admin controls and user-safe signals now live in separate page flows.</h1>
-        <p class="lead">Vinayak now supports role-based navigation: Admin pages for validation, execution, logs, and settings, plus User pages that only show final BUY, SELL, or NO TRADE output.</p>
+        <h1>Admin accounts manage the system. User accounts get final trading output only.</h1>
+        <p class="lead">Vinayak now supports database-backed users and roles: Admin pages for validation, execution, logs, settings, and user creation, plus User pages that only show final BUY, SELL, or NO TRADE output.</p>
         <div class="actions">
-          <a class="button primary" href="/app">Open User View</a>
+          <a class="button primary" href="/login">Open User Login</a>
           <a class="button secondary" href="/admin">Open Admin View</a>
           <a class="button secondary" href="/workspace/observability">Observability</a>
         </div>
@@ -111,7 +120,7 @@ HOME_HTML = """
 
     <div class="feature-grid">
       <section class="card feature"><h2>User Output</h2><p>Only required trade fields are shown: symbol, status, entry, stop, target, RR, confidence, last updated, and message.</p></section>
-      <section class="card feature"><h2>Admin Control</h2><p>Validation internals, rejection reasons, execution health, logs, and settings stay visible only to the admin role.</p></section>
+      <section class="card feature"><h2>Admin Control</h2><p>Validation internals, rejection reasons, execution health, logs, settings, and user creation stay visible only to the admin role.</p></section>
       <section class="card feature"><h2>Service-Layer Driven</h2><p>The web pages read from existing Vinayak services and persisted outputs instead of calling strategy logic directly from the UI.</p></section>
     </div>
   </div>
@@ -125,7 +134,7 @@ LOGIN_HTML = """
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Vinayak Admin Login</title>
+  <title>Vinayak Login</title>
   <style>
     :root { --bg:#081421; --panel:#102338; --panel-2:#0d1d2f; --text:#eef4ff; --muted:#8ea6c7; --accent:#ff9f3f; --line:#28435f; --bad:#ff6b6b; }
     * { box-sizing: border-box; }
@@ -141,10 +150,10 @@ LOGIN_HTML = """
 </head>
 <body>
   <div class="panel">
-    <h1>Vinayak Admin Login</h1>
-    <p>Sign in to access the admin dashboard, validation, execution, logs, and settings pages.</p>
+    <h1>Vinayak Login</h1>
+    <p>Sign in with an admin or user account. Admins go to the operations console. Users go to the signal view.</p>
     __ERROR_BLOCK__
-    <form method="post" action="/admin/login">
+    <form method="post" action="/login">
       <label for="username">Username</label>
       <input id="username" name="username" type="text" autocomplete="username" required />
       <label for="password">Password</label>
@@ -162,8 +171,17 @@ def _render_login(error_message: str | None = None) -> HTMLResponse:
     return HTMLResponse(LOGIN_HTML.replace('__ERROR_BLOCK__', error_block))
 
 
-def _require_admin_page(request: Request) -> bool:
-    return is_authenticated(request)
+def _redirect_for_role(role: str) -> str:
+    return '/admin/dashboard' if str(role).upper() == ADMIN_ROLE else '/app'
+
+
+def _admin_or_login(request: Request) -> bool:
+    user = get_current_user(request)
+    return user is not None and str(user.role).upper() == ADMIN_ROLE
+
+
+def _user_or_login(request: Request) -> bool:
+    return get_current_user(request) is not None
 
 
 @router.get('/', response_class=HTMLResponse)
@@ -171,106 +189,168 @@ def home_page() -> HTMLResponse:
     return HTMLResponse(HOME_HTML)
 
 
+@router.get('/login', response_class=HTMLResponse)
+def login_page(request: Request) -> HTMLResponse:
+    user = get_current_user(request)
+    if user is not None:
+        return RedirectResponse(url=_redirect_for_role(user.role), status_code=303)
+    return _render_login()
+
+
+@router.post('/login', response_model=None)
+def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    auth = UserAuthService(db)
+    user = auth.authenticate(username, password)
+    if user is None:
+        return _render_login('Invalid username or password.')
+    response = RedirectResponse(url=_redirect_for_role(user.role), status_code=303)
+    response.set_cookie(COOKIE_NAME, user.to_cookie_token(auth.auth_secret()), httponly=True, samesite='lax')
+    if str(user.role).upper() == ADMIN_ROLE:
+        response.set_cookie(LEGACY_COOKIE_NAME, UserAuthService.auth_secret() and __import__('hashlib').sha256(f"{admin_username()}:{admin_password()}:{UserAuthService.auth_secret()}".encode('utf-8')).hexdigest(), httponly=True, samesite='lax')
+    return response
+
+
+@router.post('/logout', response_model=None)
+def logout():
+    response = RedirectResponse(url='/login', status_code=303)
+    response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(LEGACY_COOKIE_NAME)
+    return response
+
+
 @router.get('/app', response_class=HTMLResponse)
-def user_home_page(db: Session = Depends(get_db)) -> HTMLResponse:
+def user_home_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if not _user_or_login(request):
+        return _render_login('Sign in to access the user view.')
     service = RoleViewService(db)
     return HTMLResponse(render_user_home_page(service.build_user_home()))
 
 
 @router.get('/app/live-signal', response_class=HTMLResponse)
-def user_live_signal_page(db: Session = Depends(get_db)) -> HTMLResponse:
+def user_live_signal_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if not _user_or_login(request):
+        return _render_login('Sign in to access the live signal view.')
     service = RoleViewService(db)
     return HTMLResponse(render_user_signal_page(service.build_user_signal()))
 
 
 @router.get('/app/trade-history', response_class=HTMLResponse)
-def user_trade_history_page(db: Session = Depends(get_db)) -> HTMLResponse:
+def user_trade_history_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    if not _user_or_login(request):
+        return _render_login('Sign in to access trade history.')
     service = RoleViewService(db)
     return HTMLResponse(render_trade_history_page(service.build_user_trade_history()))
 
 
 @router.get('/workspace', response_class=HTMLResponse)
 def live_workspace(request: Request) -> HTMLResponse:
-    if not _require_admin_page(request):
-        return _render_login()
+    if not _admin_or_login(request):
+        return _render_login('Admin login required for the workspace.')
     return HTMLResponse(WORKSPACE_HTML)
 
 
 @router.get('/workspace/observability', response_class=HTMLResponse)
 def observability_page(request: Request) -> HTMLResponse:
-    if not _require_admin_page(request):
-        return _render_login()
+    if not _admin_or_login(request):
+        return _render_login('Admin login required for observability.')
     return HTMLResponse(build_observability_dashboard_html())
 
 
 @router.get('/workspace/reports', response_class=HTMLResponse)
 def live_workspace_reports(request: Request) -> HTMLResponse:
-    if not _require_admin_page(request):
-        return _render_login()
+    if not _admin_or_login(request):
+        return _render_login('Admin login required for reports.')
     return HTMLResponse(WORKSPACE_REPORTS_HTML)
 
 
 @router.get('/workspace/downloads', response_class=HTMLResponse)
 def live_workspace_downloads(request: Request) -> HTMLResponse:
-    if not _require_admin_page(request):
-        return _render_login()
+    if not _admin_or_login(request):
+        return _render_login('Admin login required for downloads.')
     return HTMLResponse(WORKSPACE_DOWNLOADS_HTML)
 
 
 @router.get('/admin', response_class=HTMLResponse)
 def admin_console(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if not _require_admin_page(request):
-        return _render_login()
+    if not _admin_or_login(request):
+        return _render_login('Admin sign in to access the operations console.')
     service = RoleViewService(db)
     return HTMLResponse(render_admin_dashboard_page(service.build_admin_dashboard()))
 
 
 @router.get('/admin/dashboard', response_class=HTMLResponse)
 def admin_dashboard_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if not _require_admin_page(request):
-        return _render_login()
+    require_admin_session(request)
     service = RoleViewService(db)
     return HTMLResponse(render_admin_dashboard_page(service.build_admin_dashboard()))
 
 
 @router.get('/admin/validation', response_class=HTMLResponse)
 def admin_validation_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if not _require_admin_page(request):
-        return _render_login()
+    require_admin_session(request)
     service = RoleViewService(db)
     return HTMLResponse(render_admin_validation_page(service.build_validation_page()))
 
 
 @router.get('/admin/execution', response_class=HTMLResponse)
 def admin_execution_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if not _require_admin_page(request):
-        return _render_login()
+    require_admin_session(request)
     service = RoleViewService(db)
     return HTMLResponse(render_admin_execution_page(service.build_execution_page()))
 
 
 @router.get('/admin/logs', response_class=HTMLResponse)
 def admin_logs_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if not _require_admin_page(request):
-        return _render_login()
+    require_admin_session(request)
     service = RoleViewService(db)
     return HTMLResponse(render_admin_logs_page(service.build_logs_page()))
 
 
 @router.get('/admin/settings', response_class=HTMLResponse)
-def admin_settings_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if not _require_admin_page(request):
-        return _render_login()
+def admin_settings_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    created: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> HTMLResponse:
+    require_admin_session(request)
     service = RoleViewService(db)
-    return HTMLResponse(render_admin_settings_page(service.build_settings_page()))
+    payload = service.build_settings_page()
+    if created:
+        payload['flash_message'] = created
+        payload['flash_tone'] = 'good'
+    if error:
+        payload['flash_message'] = error
+        payload['flash_tone'] = 'bad'
+    return HTMLResponse(render_admin_settings_page(payload))
+
+
+@router.post('/admin/users/create', response_model=None)
+def admin_create_user(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str = Form('USER'),
+    db: Session = Depends(get_db),
+):
+    require_admin_session(request)
+    auth = UserAuthService(db)
+    try:
+        user = auth.create_user(username=username, password=password, role=role)
+    except ValueError as exc:
+        return RedirectResponse(url=f'/admin/settings?error={str(exc)}', status_code=303)
+    return RedirectResponse(url=f'/admin/settings?created=User%20{user.username}%20created', status_code=303)
 
 
 @router.post('/admin/login', response_model=None)
-def admin_login(username: str = Form(...), password: str = Form(...)):
-    if username != admin_username() or password != admin_password():
+def admin_login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    auth = UserAuthService(db)
+    user = auth.authenticate(username, password)
+    if user is None or str(user.role).upper() != ADMIN_ROLE:
         return _render_login('Invalid admin username or password.')
     response = RedirectResponse(url='/admin/dashboard', status_code=303)
-    response.set_cookie(COOKIE_NAME, session_token(), httponly=True, samesite='lax')
+    response.set_cookie(COOKIE_NAME, user.to_cookie_token(auth.auth_secret()), httponly=True, samesite='lax')
+    response.set_cookie(LEGACY_COOKIE_NAME, __import__('hashlib').sha256(f"{admin_username()}:{admin_password()}:{UserAuthService.auth_secret()}".encode('utf-8')).hexdigest(), httponly=True, samesite='lax')
     return response
 
 
@@ -278,4 +358,5 @@ def admin_login(username: str = Form(...), password: str = Form(...)):
 def admin_logout():
     response = RedirectResponse(url='/admin', status_code=303)
     response.delete_cookie(COOKIE_NAME)
+    response.delete_cookie(LEGACY_COOKIE_NAME)
     return response

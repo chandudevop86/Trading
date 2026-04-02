@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from vinayak.api.services.dashboard_summary import DashboardSummaryService
+from vinayak.auth.service import UserAuthService
 from vinayak.cache.redis_client import RedisCache
 
 
@@ -75,6 +76,7 @@ class RoleViewService:
         return {'logs': self.load_logs()}
 
     def build_settings_page(self) -> dict[str, Any]:
+        users = UserAuthService(self.session).list_users() if self.session is not None else []
         return {
             'settings': {
                 'paper_log_path': str(DEFAULT_PAPER_LOG_PATH),
@@ -84,6 +86,7 @@ class RoleViewService:
                     'admin_pages': ['Dashboard', 'Validation', 'Execution', 'Logs', 'Settings'],
                     'user_pages': ['Home', 'Live Signal', 'Trade History'],
                 },
+                'users': users,
             }
         }
 
@@ -204,3 +207,4 @@ class RoleViewService:
 
 
 __all__ = ['RoleViewService']
+

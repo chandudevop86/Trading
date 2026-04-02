@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import UTC, datetime
 
@@ -12,9 +12,13 @@ class ExecutionRecord(Base):
     __tablename__ = 'executions'
     __table_args__ = (
         UniqueConstraint('reviewed_trade_id', 'mode', name='uq_reviewed_trade_execution'),
+        UniqueConstraint('signal_id', 'mode', name='uq_execution_signal_mode'),
+        UniqueConstraint('broker', 'broker_reference', name='uq_execution_broker_reference'),
+        Index('idx_signal_id', 'signal_id'),
         Index('idx_signal_mode', 'signal_id', 'mode'),
         Index('idx_reviewed_trade_id', 'reviewed_trade_id'),
         Index('idx_reviewed_trade_mode', 'reviewed_trade_id', 'mode'),
+        Index('idx_mode', 'mode'),
         Index('idx_broker_ref', 'broker_reference'),
     )
 

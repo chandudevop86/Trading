@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from vinayak.strategies.breakout.service import Candle
 from vinayak.strategies.indicator.service import run_indicator_strategy
@@ -31,3 +31,4 @@ def test_indicator_returns_standardized_signal_shape() -> None:
     assert signal.entry_price > 0
     assert signal.stop_loss > 0
     assert signal.target_price > 0
+

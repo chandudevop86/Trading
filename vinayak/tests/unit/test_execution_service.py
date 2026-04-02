@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+﻿from datetime import UTC, datetime
 import json
 from pathlib import Path
 from unittest.mock import patch
@@ -379,7 +379,12 @@ def test_execution_model_exposes_execution_uniqueness_and_indexes(tmp_path: Path
     index_names = {item.get('name') for item in inspector.get_indexes('executions')}
 
     assert 'uq_reviewed_trade_execution' in unique_names
+    assert 'uq_execution_signal_mode' in unique_names
+    assert 'uq_execution_broker_reference' in unique_names
+    assert 'idx_signal_id' in index_names
     assert 'idx_signal_mode' in index_names
+    assert 'idx_reviewed_trade_id' in index_names
+    assert 'idx_mode' in index_names
     assert 'idx_broker_ref' in index_names
 
     os.environ.pop('VINAYAK_DATABASE_URL', None)
@@ -885,7 +890,7 @@ def test_execution_service_blocks_duplicate_broker_reference_before_persist(tmp_
                 )
                 raise AssertionError('expected duplicate broker reference execution to be blocked')
             except ValueError as exc:
-                assert 'Duplicate execution blocked for broker_reference FIXED-BROKER-REF' in str(exc)
+                assert 'Duplicate execution blocked for broker SIM broker_reference FIXED-BROKER-REF' in str(exc)
 
     os.environ.pop('VINAYAK_DATABASE_URL', None)
     reset_settings_cache()
@@ -956,6 +961,113 @@ def test_execution_service_requires_broker_reference_for_successful_adapter_resu
                 raise AssertionError('expected adapter result validation to fail without broker reference')
             except ValueError as exc:
                 assert 'must include broker_reference' in str(exc)
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
+    reset_database_state()
+
+def test_execution_model_unique_constraint_blocks_duplicate_signal_mode(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_execution_duplicate_signal_constraint.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:15:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        first = ExecutionRecord(
+            signal_id=signal.id,
+            reviewed_trade_id=None,
+            mode='PAPER',
+            broker='SIM',
+            status='FILLED',
+            executed_price=100.0,
+            executed_at=datetime.now(UTC),
+            broker_reference='SIGNAL-CONSTRAINT-1',
+        )
+        session.add(first)
+        session.commit()
+
+        duplicate = ExecutionRecord(
+            signal_id=signal.id,
+            reviewed_trade_id=None,
+            mode='PAPER',
+            broker='SIM',
+            status='FILLED',
+            executed_price=100.0,
+            executed_at=datetime.now(UTC),
+            broker_reference='SIGNAL-CONSTRAINT-2',
+        )
+        session.add(duplicate)
+        try:
+            session.commit()
+            raise AssertionError('expected duplicate signal+mode execution constraint to fail')
+        except IntegrityError:
+            session.rollback()
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
+    reset_database_state()
+
+
+def test_execution_model_unique_constraint_blocks_duplicate_broker_reference_pair(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_execution_duplicate_broker_reference_constraint.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        first = ExecutionRecord(
+            signal_id=None,
+            reviewed_trade_id=None,
+            mode='LIVE',
+            broker='DHAN',
+            status='ACCEPTED',
+            executed_price=None,
+            executed_at=datetime.now(UTC),
+            broker_reference='BROKER-CONSTRAINT-1',
+        )
+        session.add(first)
+        session.commit()
+
+        duplicate = ExecutionRecord(
+            signal_id=None,
+            reviewed_trade_id=None,
+            mode='LIVE',
+            broker='DHAN',
+            status='ACCEPTED',
+            executed_price=None,
+            executed_at=datetime.now(UTC),
+            broker_reference='BROKER-CONSTRAINT-1',
+        )
+        session.add(duplicate)
+        try:
+            session.commit()
+            raise AssertionError('expected duplicate broker reference constraint to fail')
+        except IntegrityError:
+            session.rollback()
 
     os.environ.pop('VINAYAK_DATABASE_URL', None)
     reset_settings_cache()

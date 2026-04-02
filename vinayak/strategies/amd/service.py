@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import floor
@@ -135,8 +135,23 @@ def _prepare_df(data: Any) -> pd.DataFrame:
 
     df['bar_range'] = (df['high'] - df['low']).clip(lower=0.0)
     df['body_size'] = (df['close'] - df['open']).abs()
-    df['ema_fast'] = df['close'].ewm(span=8, adjust=False).mean()
-    df['ema_slow'] = df['close'].ewm(span=21, adjust=False).mean()
+    df['ema_9'] = df['close'].ewm(span=9, adjust=False).mean()
+    df['ema_21'] = df['close'].ewm(span=21, adjust=False).mean()
+    df['ema_50'] = df['close'].ewm(span=50, adjust=False).mean()
+    df['ema_200'] = df['close'].ewm(span=200, adjust=False).mean()
+    df['ema_fast'] = df['ema_9']
+    df['ema_slow'] = df['ema_21']
+    macd_line = df['ema_9'] - df['ema_21']
+    df['macd'] = macd_line
+    df['macd_signal'] = macd_line.ewm(span=9, adjust=False).mean()
+    df['macd_hist'] = df['macd'] - df['macd_signal']
+    delta = df['close'].diff().fillna(0.0)
+    gain = delta.clip(lower=0.0)
+    loss = (-delta).clip(lower=0.0)
+    avg_gain = gain.ewm(alpha=1 / 14, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / 14, adjust=False).mean().replace(0.0, pd.NA)
+    rs = avg_gain.div(avg_loss)
+    df['rsi'] = (100.0 - (100.0 / (1.0 + rs))).fillna(50.0)
     df['session_day'] = df['timestamp'].dt.strftime('%Y-%m-%d')
     typical_price = (df['high'] + df['low'] + df['close']) / 3.0
     session_value = (typical_price * df['volume'].fillna(0.0)).groupby(df['session_day']).cumsum()
@@ -176,6 +191,15 @@ def _build_signal(row: pd.Series, *, symbol: str, side: str, stop_loss: float, t
             'imbalance_type': imbalance_type,
             'amd_phase': amd_phase,
             'market_signal': f'{side} + {imbalance_type} + {amd_phase}',
+            'ema_9': round(float(row['ema_9']), 4),
+            'ema_21': round(float(row['ema_21']), 4),
+            'ema_50': round(float(row['ema_50']), 4),
+            'ema_200': round(float(row['ema_200']), 4),
+            'rsi': round(float(row['rsi']), 2),
+            'macd': round(float(row['macd']), 4),
+            'macd_signal': round(float(row['macd_signal']), 4),
+            'macd_hist': round(float(row['macd_hist']), 4),
+            'vwap': round(float(row['vwap']), 4),
         },
     )
 
@@ -230,8 +254,9 @@ def run_amd_strategy(
             if bool(cfg.require_distribution_phase) and not bool(row[dist_col]):
                 continue
 
-            trend_ok = float(row['close']) >= float(row['ema_fast']) >= float(row['ema_slow']) if is_buy else float(row['close']) <= float(row['ema_fast']) <= float(row['ema_slow'])
+            trend_ok = float(row['close']) >= float(row['ema_9']) >= float(row['ema_21']) >= float(row['ema_50']) >= float(row['ema_200']) if is_buy else float(row['close']) <= float(row['ema_9']) <= float(row['ema_21']) <= float(row['ema_50']) <= float(row['ema_200'])
             vwap_ok = float(row['close']) >= float(row['vwap']) if is_buy else float(row['close']) <= float(row['vwap'])
+            momentum_ok = float(row['macd']) >= float(row['macd_signal']) and float(row['rsi']) >= 50.0 if is_buy else float(row['macd']) <= float(row['macd_signal']) and float(row['rsi']) <= 50.0
             if bool(cfg.require_trend_alignment) and not trend_ok:
                 continue
             if bool(cfg.require_vwap_alignment) and not vwap_ok:
@@ -243,6 +268,7 @@ def run_amd_strategy(
             fvg_score += 1.0 if float(row['bullish_fvg_gap'] if is_buy else row['bearish_fvg_gap']) >= float(cfg.min_fvg_size) * 1.25 else 0.0
             sd_score = 2.0 if trend_ok else 0.0
             sd_score += 1.0 if vwap_ok else 0.0
+            sd_score += 1.0 if momentum_ok else 0.0
             total_score = amd_score + fvg_score + sd_score
             if total_score < threshold:
                 continue
@@ -285,3 +311,4 @@ def run_amd_strategy(
             break
 
     return trades
+

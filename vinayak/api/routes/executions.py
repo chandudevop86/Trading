@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -84,6 +84,16 @@ def create_execution(request: ExecutionCreateRequest, db: Session = Depends(get_
             ExecutionCreateCommand(
                 signal_id=request.signal_id,
                 reviewed_trade_id=request.reviewed_trade_id,
+                trade_id=request.trade_id,
+                strategy_name=request.strategy_name,
+                symbol=request.symbol,
+                side=request.side,
+                entry_price=request.entry_price,
+                stop_loss=request.stop_loss,
+                target_price=request.target_price,
+                quantity=request.quantity,
+                validation_status=request.validation_status,
+                reviewed_trade_status=request.reviewed_trade_status,
                 mode=request.mode,
                 broker=request.broker,
                 status=request.status,
@@ -107,4 +117,6 @@ def create_execution(request: ExecutionCreateRequest, db: Session = Depends(get_
         broker_reference=record.broker_reference,
         notes=record.notes,
     )
+
+
 

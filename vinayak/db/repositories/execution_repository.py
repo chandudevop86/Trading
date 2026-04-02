@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 
@@ -70,13 +70,22 @@ class ExecutionRepository:
             .first()
         )
 
-    def get_by_broker_reference(self, broker_reference: str) -> ExecutionRecord | None:
-        normalized = str(broker_reference or '').strip()
-        if not normalized:
+    def get_by_broker_reference(
+        self,
+        *,
+        broker: str,
+        broker_reference: str,
+    ) -> ExecutionRecord | None:
+        normalized_broker = str(broker or '').strip().upper()
+        normalized_reference = str(broker_reference or '').strip()
+        if not normalized_broker or not normalized_reference:
             return None
         return (
             self.session.query(ExecutionRecord)
-            .filter(ExecutionRecord.broker_reference == normalized)
+            .filter(
+                ExecutionRecord.broker == normalized_broker,
+                ExecutionRecord.broker_reference == normalized_reference,
+            )
             .order_by(ExecutionRecord.id.desc())
             .first()
         )

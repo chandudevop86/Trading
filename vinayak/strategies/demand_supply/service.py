@@ -1,4 +1,4 @@
-
+﻿
 from __future__ import annotations
 
 from collections import Counter
@@ -15,7 +15,7 @@ from vinayak.strategies.common.base import StrategySignal
 
 
 REQUIRED_FIELDS = ["timestamp", "open", "high", "low", "close", "volume"]
-_OPTIONAL_FIELDS = ["vwap", "ema_20", "ema_50", "session", "symbol"]
+_OPTIONAL_FIELDS = ["vwap", "ema_9", "ema_20", "ema_21", "ema_50", "ema_200", "rsi", "macd", "macd_signal", "macd_hist", "session", "symbol"]
 _ALIAS_MAP = {
     "datetime": "timestamp",
     "date": "date",
@@ -223,10 +223,32 @@ def _enrich_frame(frame: pd.DataFrame) -> pd.DataFrame:
     ], axis=1).max(axis=1)
     out["atr_14"] = tr.rolling(14, min_periods=1).mean()
     out["atr_pct"] = ((out["atr_14"] / out["close"].replace(0.0, pd.NA)) * 100.0).fillna(0.0)
+    if "ema_9" not in out.columns:
+        out["ema_9"] = out["close"].ewm(span=9, adjust=False).mean()
     if "ema_20" not in out.columns:
         out["ema_20"] = out["close"].ewm(span=20, adjust=False).mean()
+    if "ema_21" not in out.columns:
+        out["ema_21"] = out["close"].ewm(span=21, adjust=False).mean()
     if "ema_50" not in out.columns:
         out["ema_50"] = out["close"].ewm(span=50, adjust=False).mean()
+    if "ema_200" not in out.columns:
+        out["ema_200"] = out["close"].ewm(span=200, adjust=False).mean()
+    macd_fast = out["ema_9"]
+    macd_slow = out["ema_21"]
+    if "macd" not in out.columns:
+        out["macd"] = macd_fast - macd_slow
+    if "macd_signal" not in out.columns:
+        out["macd_signal"] = out["macd"].ewm(span=9, adjust=False).mean()
+    if "macd_hist" not in out.columns:
+        out["macd_hist"] = out["macd"] - out["macd_signal"]
+    if "rsi" not in out.columns:
+        delta = out["close"].diff().fillna(0.0)
+        gain = delta.clip(lower=0.0)
+        loss = (-delta).clip(lower=0.0)
+        avg_gain = gain.ewm(alpha=1 / 14, adjust=False).mean()
+        avg_loss = loss.ewm(alpha=1 / 14, adjust=False).mean().replace(0.0, pd.NA)
+        rs = avg_gain.div(avg_loss)
+        out["rsi"] = (100.0 - (100.0 / (1.0 + rs))).fillna(50.0)
     if "session" not in out.columns:
         out["session"] = out["timestamp"].dt.strftime("%H:%M:%S").map(_session_label)
     return out
@@ -331,11 +353,11 @@ def score_supply_demand_zone(frame: pd.DataFrame, structure: StructureRecord, co
     test_count = int(touched.sum()) if not future.empty else 0
     if zone_type == "demand":
         violated = bool((future["close"] < zone_low).any()) if not future.empty else False
-        trend_ok = bool(frame.iloc[structure.base_end_index]["ema_20"] >= frame.iloc[structure.base_end_index]["ema_50"])
+        trend_ok = bool(frame.iloc[structure.base_end_index]["ema_21"] >= frame.iloc[structure.base_end_index]["ema_50"])
         vwap_ok = bool(frame.iloc[structure.base_end_index]["close"] >= frame.iloc[structure.base_end_index].get("vwap", frame.iloc[structure.base_end_index]["close"]))
     else:
         violated = bool((future["close"] > zone_high).any()) if not future.empty else False
-        trend_ok = bool(frame.iloc[structure.base_end_index]["ema_20"] <= frame.iloc[structure.base_end_index]["ema_50"])
+        trend_ok = bool(frame.iloc[structure.base_end_index]["ema_21"] <= frame.iloc[structure.base_end_index]["ema_50"])
         vwap_ok = bool(frame.iloc[structure.base_end_index]["close"] <= frame.iloc[structure.base_end_index].get("vwap", frame.iloc[structure.base_end_index]["close"]))
     move_away_score = min(100.0, (structure.departure_ratio / max(float(cfg.min_departure_ratio), 1e-6)) * 40.0)
     base_tightness_score = max(0.0, (1.0 - min(structure.base_range_pct / max(float(cfg.max_base_range_pct), 1e-6), 1.0)) * 100.0)
@@ -455,11 +477,11 @@ def validate_supply_demand_trade(
         if side == "SELL" and float(row["close"]) > float(row["vwap"]):
             reasons.append("vwap_alignment_failed")
     if bool(cfg.use_trend_filter):
-        ema20 = float(row.get("ema_20", row["close"]))
+        ema21 = float(row.get("ema_21", row["close"]))
         ema50 = float(row.get("ema_50", row["close"]))
-        if side == "BUY" and ema20 < ema50:
+        if side == "BUY" and ema21 < ema50:
             reasons.append("trend_alignment_failed")
-        if side == "SELL" and ema20 > ema50:
+        if side == "SELL" and ema21 > ema50:
             reasons.append("trend_alignment_failed")
     if bool(cfg.use_volatility_filter) and float(row.get("atr_pct", 0.0)) < float(cfg.volatility_floor_pct):
         reasons.append("weak_departure")
@@ -728,11 +750,19 @@ def _candles_to_frame(candles: Sequence[Candle] | pd.DataFrame) -> pd.DataFrame:
             "low": candle.low,
             "close": candle.close,
             "volume": candle.volume,
+            "vwap": getattr(candle, "vwap", 0.0),
+            "ema_9": getattr(candle, "ema_9", 0.0),
+            "ema_21": getattr(candle, "ema_21", 0.0),
+            "ema_50": getattr(candle, "ema_50", 0.0),
+            "ema_200": getattr(candle, "ema_200", 0.0),
+            "rsi": getattr(candle, "rsi", 50.0),
+            "macd": getattr(candle, "macd", 0.0),
+            "macd_signal": getattr(candle, "macd_signal", 0.0),
+            "macd_hist": getattr(candle, "macd_hist", 0.0),
         }
         for candle in candles
     ]
     return pd.DataFrame(rows)
-
 
 def run_demand_supply_strategy(
     candles: Sequence[Candle] | pd.DataFrame,
@@ -747,6 +777,7 @@ def run_demand_supply_strategy(
     frame = _candles_to_frame(candles)
     if frame.empty:
         return []
+    frame = _enrich_frame(normalize_ohlcv_for_supply_demand(frame))
     cfg = SupplyDemandStrategyConfig(
         capital=float(capital),
         risk_pct=float(risk_pct),
@@ -755,9 +786,12 @@ def run_demand_supply_strategy(
         strategy_name="DEMAND_SUPPLY",
     )
     trades, _rejects, _zones = generate_supply_demand_trade_candidates(frame, cfg)
+    indicator_map = {pd.Timestamp(row["timestamp"]): row for _, row in frame.iterrows()}
     signals: list[StrategySignal] = []
     for trade in trades:
-        timestamp = pd.Timestamp(trade["timestamp"]).to_pydatetime()
+        trade_ts = pd.Timestamp(trade["timestamp"])
+        indicator_row = indicator_map.get(trade_ts)
+        timestamp = trade_ts.to_pydatetime()
         signals.append(
             StrategySignal(
                 strategy_name="Demand Supply",
@@ -777,11 +811,17 @@ def run_demand_supply_strategy(
                     "validation_score": float(trade["validation_score"]),
                     "total_score": float(trade["total_score"]),
                     "rr_ratio": float(trade["rr_ratio"]),
+                    "ema_9": round(float(indicator_row["ema_9"]), 4) if indicator_row is not None else 0.0,
+                    "ema_21": round(float(indicator_row["ema_21"]), 4) if indicator_row is not None else 0.0,
+                    "ema_50": round(float(indicator_row["ema_50"]), 4) if indicator_row is not None else 0.0,
+                    "ema_200": round(float(indicator_row["ema_200"]), 4) if indicator_row is not None else 0.0,
+                    "rsi": round(float(indicator_row["rsi"]), 2) if indicator_row is not None else 50.0,
+                    "macd": round(float(indicator_row["macd"]), 4) if indicator_row is not None else 0.0,
+                    "macd_signal": round(float(indicator_row["macd_signal"]), 4) if indicator_row is not None else 0.0,
+                    "macd_hist": round(float(indicator_row["macd_hist"]), 4) if indicator_row is not None else 0.0,
+                    "vwap": round(float(indicator_row["vwap"]), 4) if indicator_row is not None and "vwap" in indicator_row else 0.0,
                 },
             )
         )
     return signals
-
-
-
 

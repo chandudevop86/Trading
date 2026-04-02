@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import time
 from math import floor
 
-from vinayak.strategies.breakout.service import Candle, add_intraday_vwap
+from vinayak.strategies.breakout.service import Candle, build_indicator_snapshot, ensure_required_indicator_candles
 from vinayak.strategies.common.base import StrategySignal
 from vinayak.strategies.indicator.service import IndicatorConfig, run_indicator_strategy
 
@@ -46,8 +46,7 @@ def run_one_trade_day_strategy(
     if not candles:
         return []
 
-    candles = sorted(candles, key=lambda c: c.timestamp)
-    add_intraday_vwap(candles)
+    candles = ensure_required_indicator_candles(candles)
     indicator_signals = run_indicator_strategy(candles=candles, symbol=symbol, config=config)
     indicator_by_time = {signal.signal_time: signal for signal in indicator_signals}
     grouped = _group_day_indices(candles)
@@ -90,6 +89,7 @@ def run_one_trade_day_strategy(
                     'quantity': quantity,
                     'entry_cutoff': entry_cutoff_hhmm,
                     'market_signal': signal.metadata.get('market_signal', ''),
+                    **build_indicator_snapshot(candle),
                 },
             )
             break

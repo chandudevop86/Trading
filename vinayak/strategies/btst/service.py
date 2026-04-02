@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from math import floor
 
-from vinayak.strategies.breakout.service import Candle, add_intraday_vwap
+from vinayak.strategies.breakout.service import Candle, build_indicator_snapshot, ensure_required_indicator_candles
 from vinayak.strategies.common.base import StrategySignal
 
 
@@ -39,8 +39,7 @@ def run_btst_strategy(
         return []
 
     cfg = config or BtstConfig()
-    candles = sorted(candles, key=lambda candle: candle.timestamp)
-    add_intraday_vwap(candles)
+    candles = ensure_required_indicator_candles(candles)
     grouped = _group_by_day(candles)
     days = sorted(grouped.keys())
     signals: list[StrategySignal] = []
@@ -54,9 +53,11 @@ def run_btst_strategy(
         last = today[-1]
         next_open = tomorrow[0]
         side = ''
-        if float(last.close) > float(last.vwap) and float(last.close) > float(last.open):
+        bullish = float(last.close) > float(last.vwap) and float(last.close) > float(last.open) and last.ema_9 >= last.ema_21 >= last.ema_50 and last.ema_50 >= last.ema_200 and last.macd >= last.macd_signal and last.rsi >= 55.0
+        bearish = float(last.close) < float(last.vwap) and float(last.close) < float(last.open) and last.ema_9 <= last.ema_21 <= last.ema_50 and last.ema_50 <= last.ema_200 and last.macd <= last.macd_signal and last.rsi <= 45.0
+        if bullish:
             side = 'BUY'
-        elif cfg.allow_stbt and float(last.close) < float(last.vwap) and float(last.close) < float(last.open):
+        elif cfg.allow_stbt and bearish:
             side = 'SELL'
         if not side:
             continue
@@ -82,7 +83,7 @@ def run_btst_strategy(
                     'exit_time': next_open.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
                     'exit_reason': 'NEXT_DAY_OPEN',
                     'next_open_price': round(float(next_open.open), 4),
-                    'vwap': round(float(last.vwap), 4),
+                    **build_indicator_snapshot(last),
                 },
             )
         )

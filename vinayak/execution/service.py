@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -162,6 +162,7 @@ class ExecutionService:
         requested_status = self._normalize_requested_status(command.status, mode)
         self._ensure_no_duplicate_execution(
             mode=mode,
+            broker=broker,
             reviewed_trade_id=command.reviewed_trade_id,
             signal_id=None,
             broker_reference=None,
@@ -197,6 +198,7 @@ class ExecutionService:
 
         self._ensure_no_duplicate_execution(
             mode=mode,
+            broker=broker,
             reviewed_trade_id=None,
             signal_id=signal_id,
             broker_reference=None,
@@ -264,6 +266,7 @@ class ExecutionService:
         self._validate_adapter_result(adapter_result)
         self._ensure_no_duplicate_execution(
             mode=mode,
+            broker=str(adapter_result.broker or broker),
             reviewed_trade_id=command.reviewed_trade_id,
             signal_id=signal_id,
             broker_reference=adapter_result.broker_reference,
@@ -359,10 +362,18 @@ class ExecutionService:
             self.session.rollback()
             increment_metric('execution_blocked_total', 1)
             increment_metric('duplicate_execution_block_total', 1)
-            self._log_blocked_execution(
-                reason='duplicate_execution_constraint',
+            duplicate_reason, duplicate_message = self._map_duplicate_integrity_error(
+                exc,
                 mode=mode,
-                broker=broker,
+                broker=str(adapter_result.broker or broker),
+                reviewed_trade_id=command.reviewed_trade_id,
+                signal_id=signal_id,
+                broker_reference=adapter_result.broker_reference,
+            )
+            self._log_blocked_execution(
+                reason=duplicate_reason,
+                mode=mode,
+                broker=str(adapter_result.broker or broker),
                 reviewed_trade_id=command.reviewed_trade_id,
                 signal_id=signal_id,
                 broker_reference=adapter_result.broker_reference,
@@ -371,9 +382,7 @@ class ExecutionService:
                 trade_id=command.trade_id,
                 message='Duplicate execution blocked by database constraint',
             )
-            raise ValueError(
-                f'Duplicate execution blocked for reviewed trade {command.reviewed_trade_id} in {mode} mode.'
-            ) from exc
+            raise ValueError(duplicate_message) from exc
         except Exception as exc:
             self.session.rollback()
             increment_metric('execution_failed_total', 1)
@@ -599,6 +608,7 @@ class ExecutionService:
         self,
         *,
         mode: str,
+        broker: str,
         reviewed_trade_id: int | None,
         signal_id: int | None,
         broker_reference: str | None,
@@ -626,8 +636,12 @@ class ExecutionService:
                 duplicate_reason = 'duplicate_signal_mode'
 
         normalized_reference = str(broker_reference or '').strip()
-        if not duplicate_reason and normalized_reference:
-            existing = self.execution_repository.get_by_broker_reference(normalized_reference)
+        normalized_broker = str(broker or '').strip().upper()
+        if not duplicate_reason and normalized_broker and normalized_reference:
+            existing = self.execution_repository.get_by_broker_reference(
+                broker=normalized_broker,
+                broker_reference=normalized_reference,
+            )
             if existing is not None:
                 duplicate_reason = 'duplicate_broker_reference'
 
@@ -637,7 +651,7 @@ class ExecutionService:
             self._log_blocked_execution(
                 reason=duplicate_reason,
                 mode=mode,
-                broker='',
+                broker=normalized_broker,
                 reviewed_trade_id=reviewed_trade_id,
                 signal_id=signal_id,
                 broker_reference=normalized_reference,
@@ -656,9 +670,35 @@ class ExecutionService:
                     f'Duplicate execution blocked for signal {signal_id} in {mode} mode.'
                 )
             raise ValueError(
-                f'Duplicate execution blocked for broker_reference {normalized_reference}.'
+                f'Duplicate execution blocked for broker {normalized_broker} broker_reference {normalized_reference}.'
             )
-
+    def _map_duplicate_integrity_error(
+        self,
+        exc: IntegrityError,
+        *,
+        mode: str,
+        broker: str,
+        reviewed_trade_id: int | None,
+        signal_id: int | None,
+        broker_reference: str | None,
+    ) -> tuple[str, str]:
+        error_text = str(getattr(exc, 'orig', exc) or exc)
+        if 'uq_execution_broker_reference' in error_text or 'executions.broker, executions.broker_reference' in error_text:
+            normalized_broker = str(broker or '').strip().upper()
+            normalized_reference = str(broker_reference or '').strip()
+            return (
+                'duplicate_broker_reference',
+                f'Duplicate execution blocked for broker {normalized_broker} broker_reference {normalized_reference}.',
+            )
+        if 'uq_execution_signal_mode' in error_text or 'executions.signal_id, executions.mode' in error_text:
+            return (
+                'duplicate_signal_mode',
+                f'Duplicate execution blocked for signal {signal_id} in {mode} mode.',
+            )
+        return (
+            'duplicate_reviewed_trade_mode',
+            f'Duplicate execution blocked for reviewed trade {reviewed_trade_id} in {mode} mode.',
+        )
     def _validate_adapter_result(self, result: AdapterResultLike | None) -> None:
         if result is None:
             raise ValueError('Execution adapter returned empty result.')
@@ -731,4 +771,7 @@ __all__ = [
     'ExecutionService',
     'ExecutionStatus',
 ]
+
+
+
 

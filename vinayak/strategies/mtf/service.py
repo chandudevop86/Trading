@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from math import floor
 
-from vinayak.strategies.breakout.service import Candle
+from vinayak.strategies.breakout.service import Candle, build_indicator_snapshot, ensure_required_indicator_candles
 from vinayak.strategies.common.base import StrategySignal
 
 
@@ -126,6 +126,7 @@ def run_mtf_strategy(
     if not candles:
         return []
 
+    candles = ensure_required_indicator_candles(candles)
     grouped = _group_by_day(sorted(candles, key=lambda c: c.timestamp))
     results: list[StrategySignal] = []
 
@@ -211,9 +212,11 @@ def run_mtf_strategy(
                         'retest_zone_low': round(zone_low, 4),
                         'retest_zone_high': round(zone_high, 4),
                         'trend_ema': round(ema_now, 4),
+                        **build_indicator_snapshot(trigger),
                     },
                 )
             )
             break
 
     return results
+

@@ -12,7 +12,7 @@ except Exception:  # pragma: no cover
 
 from vinayak.api.services.data_preparation import prepare_trading_data as canonical_prepare_trading_data
 from vinayak.api.services.strategy_workflow import Candle, StrategyContext, run_strategy_workflow
-from src.strike_selector import attach_option_strikes
+from vinayak.api.services.strike_selector import attach_option_strikes
 from vinayak.analytics.readiness import evaluate_readiness
 from vinayak.notifications.telegram.service import build_trade_summary, send_telegram_message
 from vinayak.validation.trade_evaluation import build_trade_evaluation_summary
@@ -470,6 +470,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

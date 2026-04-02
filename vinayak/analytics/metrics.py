@@ -55,7 +55,7 @@ def compute_trade_metrics(rows: Any) -> dict[str, Any]:
     risk_per_trade = pd.to_numeric(frame.get("risk_per_unit", pd.Series([0.0] * len(frame))), errors="coerce").fillna(0.0)
     quantity = pd.to_numeric(frame.get("quantity", pd.Series([0.0] * len(frame))), errors="coerce").fillna(0.0)
     risk_cash = (risk_per_trade * quantity).replace(0.0, pd.NA)
-    r_multiple = (pnl / risk_cash).fillna(0.0)
+    r_multiple = pd.to_numeric(pnl.div(risk_cash), errors="coerce").fillna(0.0)
     avg_r_multiple = float(r_multiple.mean()) if not r_multiple.empty else 0.0
 
     validation_status = frame.get("validation_status", pd.Series([""] * len(frame)))

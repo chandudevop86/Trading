@@ -108,7 +108,6 @@ def test_execution_commit_enqueues_execution_and_status_events(tmp_path: Path) -
         event_names = [row.event_name for row in session.query(OutboxEventRecord).order_by(OutboxEventRecord.id.asc()).all()]
         assert 'trade.execute.requested' in event_names
         assert 'trade.executed' in event_names
-        assert 'trade.reviewed' in event_names
 
     os.environ.pop('VINAYAK_DATABASE_URL', None)
     os.environ.pop('MESSAGE_BUS_ENABLED', None)

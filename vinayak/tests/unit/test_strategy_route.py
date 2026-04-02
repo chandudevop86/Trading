@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 from vinayak.api.main import app
+from vinayak.core.config import reset_settings_cache
 from vinayak.db.session import get_engine, reset_database_state
 
 
@@ -25,6 +26,7 @@ def _login_admin() -> None:
 
 def _reset_runtime(db_path: Path, clear_dhan: bool = False) -> None:
     os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
     if clear_dhan:
         os.environ.pop('DHAN_CLIENT_ID', None)
         os.environ.pop('DHAN_ACCESS_TOKEN', None)
@@ -182,15 +184,15 @@ def test_mtf_route_returns_success() -> None:
         assert body['signals'][0]['strategy_name'] == 'MTF 5m'
 
 
-def test_breakout_route_can_persist_signal_review_and_execution_flow() -> None:
-    db_path = Path('vinayak/data/test_vinayak_route.db').resolve()
-    if db_path.exists():
-        db_path.unlink()
+def test_breakout_route_can_persist_signal_review_and_execution_flow(tmp_path: Path) -> None:
+    db_path = (tmp_path / 'test_vinayak_route.db').resolve()
+    fresh = TestClient(app)
 
     os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
     reset_database_state()
 
-    response = client.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
+    response = fresh.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
     assert response.status_code == 200
     body = response.json()
     assert body['signal_count'] == 1
@@ -201,14 +203,14 @@ def test_breakout_route_can_persist_signal_review_and_execution_flow() -> None:
         count = conn.execute(text('select count(*) from signals')).scalar_one()
     assert count == 1
 
-    _login_admin()
-    list_response = client.get('/signals')
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    list_response = fresh.get('/signals')
     assert list_response.status_code == 200
     listed = list_response.json()
     assert listed['total'] == 1
     signal_id = listed['signals'][0]['id']
 
-    review_create = client.post('/reviewed-trades', json={
+    review_create = fresh.post('/reviewed-trades', json={
         'signal_id': signal_id,
         'quantity': 25,
         'lots': 1,
@@ -220,7 +222,7 @@ def test_breakout_route_can_persist_signal_review_and_execution_flow() -> None:
     assert reviewed_trade['quantity'] == 25
     assert reviewed_trade['status'] == 'REVIEWED'
 
-    review_patch = client.patch(f"/reviewed-trades/{reviewed_trade['id']}", json={
+    review_patch = fresh.patch(f"/reviewed-trades/{reviewed_trade['id']}", json={
         'status': 'APPROVED',
         'notes': 'Approved by desk reviewer.',
     })
@@ -228,13 +230,13 @@ def test_breakout_route_can_persist_signal_review_and_execution_flow() -> None:
     approved_trade = review_patch.json()
     assert approved_trade['status'] == 'APPROVED'
 
-    review_list = client.get('/reviewed-trades')
+    review_list = fresh.get('/reviewed-trades')
     assert review_list.status_code == 200
     review_body = review_list.json()
     assert review_body['total'] == 1
     assert review_body['reviewed_trades'][0]['status'] == 'APPROVED'
 
-    exec_create = client.post('/executions', json={
+    exec_create = fresh.post('/executions', json={
         'reviewed_trade_id': reviewed_trade['id'],
         'mode': 'PAPER',
         'broker': 'SIM',
@@ -247,11 +249,11 @@ def test_breakout_route_can_persist_signal_review_and_execution_flow() -> None:
     assert execution['status'] == 'FILLED'
     assert execution['broker_reference'].startswith('PAPER-')
 
-    review_list_after_execution = client.get('/reviewed-trades')
+    review_list_after_execution = fresh.get('/reviewed-trades')
     assert review_list_after_execution.status_code == 200
     assert review_list_after_execution.json()['reviewed_trades'][0]['status'] == 'EXECUTED'
 
-    exec_list = client.get('/executions')
+    exec_list = fresh.get('/executions')
     assert exec_list.status_code == 200
     exec_body = exec_list.json()
     assert exec_body['total'] == 1
@@ -260,21 +262,21 @@ def test_breakout_route_can_persist_signal_review_and_execution_flow() -> None:
     _reset_runtime(db_path)
 
 
-def test_signal_review_shortcut_endpoint() -> None:
-    db_path = Path('vinayak/data/test_vinayak_signal_review.db').resolve()
-    if db_path.exists():
-        db_path.unlink()
+def test_signal_review_shortcut_endpoint(tmp_path: Path) -> None:
+    db_path = (tmp_path / 'test_vinayak_signal_review.db').resolve()
+    fresh = TestClient(app)
 
     os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
     reset_database_state()
 
-    response = client.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
+    response = fresh.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
     assert response.status_code == 200
 
-    _login_admin()
-    signal_id = client.get('/signals').json()['signals'][0]['id']
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    signal_id = fresh.get('/signals').json()['signals'][0]['id']
 
-    review_create = client.post(f'/signals/{signal_id}/review', json={
+    review_create = fresh.post(f'/signals/{signal_id}/review', json={
         'quantity': 30,
         'lots': 2,
         'notes': 'Created from signal shortcut.',
@@ -287,7 +289,7 @@ def test_signal_review_shortcut_endpoint() -> None:
     assert reviewed_trade['status'] == 'REVIEWED'
     assert reviewed_trade['strategy_name'] == 'Breakout'
 
-    missing = client.post('/signals/99999/review', json={
+    missing = fresh.post('/signals/99999/review', json={
         'quantity': 1,
         'lots': 1,
     })
@@ -296,10 +298,9 @@ def test_signal_review_shortcut_endpoint() -> None:
     _reset_runtime(db_path)
 
 
-def test_execution_audit_endpoints_for_live_route() -> None:
-    db_path = Path('vinayak/data/test_vinayak_audit.db').resolve()
-    if db_path.exists():
-        db_path.unlink()
+def test_execution_audit_endpoints_for_live_route(tmp_path: Path) -> None:
+    db_path = (tmp_path / 'test_vinayak_audit.db').resolve()
+    fresh = TestClient(app)
 
     os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
     os.environ['DHAN_CLIENT_ID'] = 'demo-client'
@@ -309,13 +310,13 @@ def test_execution_audit_endpoints_for_live_route() -> None:
     os.environ['DHAN_SECURITY_MAP'] = str(security_map_path)
     reset_database_state()
 
-    response = client.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
+    response = fresh.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
     assert response.status_code == 200
 
-    _login_admin()
-    signal_id = client.get('/signals').json()['signals'][0]['id']
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    signal_id = fresh.get('/signals').json()['signals'][0]['id']
 
-    review_create = client.post('/reviewed-trades', json={
+    review_create = fresh.post('/reviewed-trades', json={
         'signal_id': signal_id,
         'quantity': 15,
         'lots': 1,
@@ -324,14 +325,14 @@ def test_execution_audit_endpoints_for_live_route() -> None:
     assert review_create.status_code == 200
     reviewed_trade = review_create.json()
 
-    review_patch = client.patch(f"/reviewed-trades/{reviewed_trade['id']}", json={
+    review_patch = fresh.patch(f"/reviewed-trades/{reviewed_trade['id']}", json={
         'status': 'APPROVED',
         'notes': 'Approved for live route.',
     })
     assert review_patch.status_code == 200
 
     with patch('vinayak.execution.broker.dhan_client.DhanClient._request', return_value={'status': 'accepted', 'orderId': 'AUDIT-ORDER-1'}):
-        exec_create = client.post('/executions', json={
+        exec_create = fresh.post('/executions', json={
             'reviewed_trade_id': reviewed_trade['id'],
             'mode': 'LIVE',
             'broker': 'DHAN',
@@ -339,7 +340,7 @@ def test_execution_audit_endpoints_for_live_route() -> None:
     assert exec_create.status_code == 200
     execution = exec_create.json()
 
-    audit_list = client.get('/executions/audit-logs')
+    audit_list = fresh.get('/executions/audit-logs')
     assert audit_list.status_code == 200
     audit_body = audit_list.json()
     assert audit_body['total'] == 1
@@ -348,14 +349,14 @@ def test_execution_audit_endpoints_for_live_route() -> None:
     assert payload['securityId'] == 'IDXNIFTY'
     assert payload['metadata']['symbol'] == '^NSEI'
 
-    execution_audit = client.get(f"/executions/{execution['id']}/audit")
+    execution_audit = fresh.get(f"/executions/{execution['id']}/audit")
     assert execution_audit.status_code == 200
     execution_audit_body = execution_audit.json()
     assert execution_audit_body['total'] == 1
     response_payload = json.loads(execution_audit_body['audit_logs'][0]['response_payload'])
     assert response_payload['status'] == 'accepted'
 
-    missing_audit = client.get('/executions/99999/audit')
+    missing_audit = fresh.get('/executions/99999/audit')
     assert missing_audit.status_code == 404
 
     os.environ.pop('DHAN_SECURITY_MAP', None)
@@ -364,10 +365,9 @@ def test_execution_audit_endpoints_for_live_route() -> None:
     _reset_runtime(db_path, clear_dhan=True)
 
 
-def test_dashboard_summary_endpoint() -> None:
-    db_path = Path('vinayak/data/test_vinayak_summary.db').resolve()
-    if db_path.exists():
-        db_path.unlink()
+def test_dashboard_summary_endpoint(tmp_path: Path) -> None:
+    db_path = (tmp_path / 'test_vinayak_summary.db').resolve()
+    fresh = TestClient(app)
 
     os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
     os.environ['DHAN_CLIENT_ID'] = 'demo-client'
@@ -375,15 +375,16 @@ def test_dashboard_summary_endpoint() -> None:
     security_map_path = Path('vinayak/data/test_dhan_security_map_audit.csv').resolve()
     _write_security_map(security_map_path)
     os.environ['DHAN_SECURITY_MAP'] = str(security_map_path)
+    reset_settings_cache()
     reset_database_state()
 
-    response = client.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
+    response = fresh.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
     assert response.status_code == 200
 
-    _login_admin()
-    signal_id = client.get('/signals').json()['signals'][0]['id']
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    signal_id = fresh.get('/signals').json()['signals'][0]['id']
 
-    review_create = client.post('/reviewed-trades', json={
+    review_create = fresh.post('/reviewed-trades', json={
         'signal_id': signal_id,
         'quantity': 15,
         'lots': 1,
@@ -391,17 +392,17 @@ def test_dashboard_summary_endpoint() -> None:
     assert review_create.status_code == 200
     reviewed_trade = review_create.json()
 
-    client.patch(f"/reviewed-trades/{reviewed_trade['id']}", json={'status': 'APPROVED'})
+    fresh.patch(f"/reviewed-trades/{reviewed_trade['id']}", json={'status': 'APPROVED'})
 
     with patch('vinayak.execution.broker.dhan_client.DhanClient._request', return_value={'status': 'accepted', 'orderId': 'AUDIT-ORDER-1'}):
-        exec_create = client.post('/executions', json={
+        exec_create = fresh.post('/executions', json={
             'reviewed_trade_id': reviewed_trade['id'],
             'mode': 'LIVE',
             'broker': 'DHAN',
         })
     assert exec_create.status_code == 200
 
-    summary_response = client.get('/dashboard/summary')
+    summary_response = fresh.get('/dashboard/summary')
     assert summary_response.status_code == 200
     summary = summary_response.json()
     assert summary['broker_ready'] is True
@@ -418,21 +419,21 @@ def test_dashboard_summary_endpoint() -> None:
     _reset_runtime(db_path, clear_dhan=True)
 
 
-def test_execution_route_blocks_unapproved_reviewed_trade() -> None:
-    db_path = Path('vinayak/data/test_vinayak_unapproved.db').resolve()
-    if db_path.exists():
-        db_path.unlink()
+def test_execution_route_blocks_unapproved_reviewed_trade(tmp_path: Path) -> None:
+    db_path = (tmp_path / 'test_vinayak_unapproved.db').resolve()
+    fresh = TestClient(app)
 
     os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
     reset_database_state()
 
-    response = client.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
+    response = fresh.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
     assert response.status_code == 200
 
-    _login_admin()
-    signal_id = client.get('/signals').json()['signals'][0]['id']
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    signal_id = fresh.get('/signals').json()['signals'][0]['id']
 
-    review_create = client.post('/reviewed-trades', json={
+    review_create = fresh.post('/reviewed-trades', json={
         'signal_id': signal_id,
         'quantity': 10,
         'lots': 1,
@@ -440,7 +441,7 @@ def test_execution_route_blocks_unapproved_reviewed_trade() -> None:
     assert review_create.status_code == 200
     reviewed_trade = review_create.json()
 
-    exec_create = client.post('/executions', json={
+    exec_create = fresh.post('/executions', json={
         'reviewed_trade_id': reviewed_trade['id'],
         'mode': 'PAPER',
         'broker': 'SIM',

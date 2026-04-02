@@ -3,15 +3,13 @@ from fastapi.testclient import TestClient
 from vinayak.api.main import app
 
 
-client = TestClient(app)
-
-
 def test_admin_console_requires_login_and_then_renders() -> None:
-    login_page = client.get('/admin')
+    fresh = TestClient(app)
+    login_page = fresh.get('/admin')
     assert login_page.status_code == 200
     assert 'Vinayak Admin Login' in login_page.text
 
-    response = client.post('/admin/login', data={
+    response = fresh.post('/admin/login', data={
         'username': 'admin',
         'password': 'vinayak123',
     })
@@ -38,17 +36,18 @@ def test_admin_console_requires_login_and_then_renders() -> None:
 
 
 def test_workspace_requires_login_and_then_renders() -> None:
-    login_page = client.get('/workspace')
+    fresh = TestClient(app)
+    login_page = fresh.get('/workspace')
     assert login_page.status_code == 200
     assert 'Vinayak Admin Login' in login_page.text
 
-    response = client.post('/admin/login', data={
+    response = fresh.post('/admin/login', data={
         'username': 'admin',
         'password': 'vinayak123',
     })
     assert response.status_code == 200
 
-    workspace = client.get('/workspace')
+    workspace = fresh.get('/workspace')
     assert workspace.status_code == 200
     assert 'Vinayak Workspace' in workspace.text
     assert '/dashboard/live-analysis' in workspace.text
@@ -63,7 +62,8 @@ def test_workspace_requires_login_and_then_renders() -> None:
 
 
 def test_admin_login_rejects_invalid_credentials() -> None:
-    response = client.post('/admin/login', data={
+    fresh = TestClient(app)
+    response = fresh.post('/admin/login', data={
         'username': 'admin',
         'password': 'wrong-password',
     })

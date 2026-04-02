@@ -3,15 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
 
-from src.amd_fvg_sd_bot import ConfluenceConfig, generate_trades as generate_amd_fvg_sd_trades
-from src.breakout_bot import Candle, BreakoutConfig, generate_trades as generate_breakout_trades
-from src.btst_bot import BtstConfig, generate_trades as generate_btst_trades
-from src.execution.contracts import normalize_candidate_contract
-from src.indicator_bot import IndicatorConfig, generate_indicator_rows
-from src.mtf_trade_bot import MtfTradeConfig, generate_trades as generate_mtf_trade_trades
-from src.one_trade_day import generate_trades as generate_one_trade_day_trades
-from src.strategy_demand_supply import DemandSupplyConfig, generate_trades as generate_demand_supply_trades
-from src.strategy_tuning import strategy_tuning_preset
+from vinayak.execution.contracts import normalize_candidate_contract
+from vinayak.strategies.amd.service import ConfluenceConfig, run_amd_strategy as run_native_amd_strategy
+from vinayak.strategies.breakout.service import Candle, run_breakout_strategy as run_native_breakout_strategy
+from vinayak.strategies.btst.service import BtstConfig, run_btst_strategy as run_native_btst_strategy
+from vinayak.strategies.common.base import StrategySignal
+from vinayak.strategies.demand_supply.service import run_demand_supply_strategy as run_native_demand_supply_strategy
+from vinayak.strategies.indicator.service import IndicatorConfig, run_indicator_strategy as run_native_indicator_strategy
+from vinayak.strategies.mtf.service import run_mtf_strategy as run_native_mtf_strategy
+from vinayak.strategies.one_trade_day.service import run_one_trade_day_strategy as run_native_one_trade_day_strategy
 
 STRATEGY_SIGNAL_CONTRACT_VERSION = 'strict_trade_candidate_v1'
 _ACTIONABLE_SIDES = {'BUY', 'SELL'}
@@ -56,13 +56,7 @@ class StrategyContext:
 
 @dataclass(slots=True)
 class StrategyDependencies:
-    breakout_generator: Callable[..., list[dict[str, object]]] = generate_breakout_trades
-    demand_supply_generator: Callable[..., list[dict[str, object]]] = generate_demand_supply_trades
-    indicator_row_generator: Callable[..., list[dict[str, object]]] = generate_indicator_rows
-    one_trade_generator: Callable[..., list[dict[str, object]]] = generate_one_trade_day_trades
-    mtf_generator: Callable[..., list[dict[str, object]]] = generate_mtf_trade_trades
-    btst_generator: Callable[..., list[dict[str, object]]] = generate_btst_trades
-    amd_generator: Callable[..., list[dict[str, object]]] = generate_amd_fvg_sd_trades
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +91,27 @@ def _coerce_trade_price(row: dict[str, object], *keys: str) -> object:
 def _coerce_trade_quantity(row: dict[str, object]) -> int:
     quantity = _safe_float(row.get('quantity', 0))
     return int(quantity) if quantity is not None else 0
+
+
+def _strategy_signal_to_row(signal: StrategySignal) -> dict[str, object]:
+    metadata = dict(signal.metadata or {})
+    quantity = int(metadata.pop('quantity', 0) or 0)
+    timestamp = signal.signal_time.strftime('%Y-%m-%d %H:%M:%S')
+    return {
+        'strategy': signal.strategy_name,
+        'strategy_name': signal.strategy_name,
+        'symbol': signal.symbol,
+        'side': signal.side,
+        'entry': signal.entry_price,
+        'entry_price': signal.entry_price,
+        'stop_loss': signal.stop_loss,
+        'target': signal.target_price,
+        'target_price': signal.target_price,
+        'timestamp': timestamp,
+        'entry_time': timestamp,
+        'quantity': quantity,
+        **metadata,
+    }
 
 
 def _canonical_strategy_name(strategy_name: str) -> str:
@@ -200,126 +215,69 @@ def enrich_actionable_rows(
 
 
 def _run_breakout_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
-    preset = strategy_tuning_preset('BREAKOUT')
-    configured_max_trades = context.max_trades_per_day if context.max_trades_per_day is not None else preset.max_trades_per_day
-    return dependencies.breakout_generator(
-        context.candles,
+    signals = run_native_breakout_strategy(
+        candles=context.candle_rows,
+        symbol=context.symbol,
         capital=float(context.capital),
         risk_pct=float(context.risk_pct) / 100.0,
         rr_ratio=float(context.rr_ratio),
-        config=BreakoutConfig(
-            trailing_sl_pct=float(context.trailing_sl_pct),
-            cost_bps=float(context.cost_bps),
-            fixed_cost_per_trade=float(context.fixed_cost_per_trade),
-            max_daily_loss=context.max_daily_loss,
-            max_trades_per_day=max(1, int(configured_max_trades or 1)),
-            duplicate_signal_cooldown_bars=max(12, int(preset.duplicate_signal_cooldown_bars)),
-            min_breakout_strength=0.22,
-            min_volume_ratio=1.30,
-            require_vwap_alignment=True,
-            require_market_structure=True,
-            allow_secondary_entries=False,
-            allow_afternoon_session=False,
-        ),
     )
+    return [_strategy_signal_to_row(signal) for signal in signals]
 
 
 def _run_demand_supply_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
-    preset = strategy_tuning_preset('DEMAND_SUPPLY')
-    configured_max_trades = context.max_trades_per_day if context.max_trades_per_day is not None else preset.max_trades_per_day
-    configured_mode = str(context.mode or 'Balanced').strip() or 'Balanced'
-    return dependencies.demand_supply_generator(
-        context.candles,
+    signals = run_native_demand_supply_strategy(
+        candles=context.candle_rows,
+        symbol=context.symbol,
         capital=float(context.capital),
         risk_pct=float(context.risk_pct) / 100.0,
         rr_ratio=float(context.rr_ratio),
-        config=DemandSupplyConfig(
-            mode=configured_mode,
-            trailing_sl_pct=float(context.trailing_sl_pct),
-            pivot_window=max(1, int(context.pivot_window)),
-            max_trades_per_day=max(1, int(configured_max_trades or 1)),
-            duplicate_signal_cooldown_bars=max(24, int(preset.duplicate_signal_cooldown_bars)),
-            require_vwap_alignment=True,
-            require_trend_bias=True,
-            require_market_structure=True,
-            max_retest_bars=4,
-            min_reaction_strength=0.75,
-            min_zone_selection_score=5.0,
-            min_confirmation_body_ratio=0.60,
-            min_rejection_wick_ratio=0.50,
-            zone_departure_buffer_pct=0.0006,
-            vwap_reclaim_buffer_pct=0.0005,
-            allow_afternoon_session=False,
-            avoid_midday=True,
-        ),
     )
+    return [_strategy_signal_to_row(signal) for signal in signals]
 
 
 def _run_indicator_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
-    raw_rows = dependencies.indicator_row_generator(context.candle_rows, config=IndicatorConfig())
-    rows: list[dict[str, object]] = []
-    for row in raw_rows:
-        signal = str(row.get('market_signal', '')).upper()
-        side = 'BUY' if signal in {'BULLISH_TREND', 'OVERSOLD', 'BUY', 'LONG'} else 'SELL' if signal in {'BEARISH_TREND', 'OVERBOUGHT', 'SELL', 'SHORT'} else ''
-        if not side:
-            continue
-        item = dict(row)
-        item['side'] = side
-        item['entry'] = item.get('close', item.get('price', 0.0))
-        item['entry_price'] = item.get('entry')
-        item['target'] = item.get('entry')
-        item['target_price'] = item.get('entry')
-        item['stop_loss'] = item.get('entry')
-        item['score'] = 0.0
-        item['reason'] = str(item.get('market_signal', 'SIGNAL'))
-        rows.append(item)
-    return rows
+    signals = run_native_indicator_strategy(context.candle_rows, symbol=context.symbol, config=IndicatorConfig())
+    return [_strategy_signal_to_row(signal) for signal in signals]
 
 
 def _run_one_trade_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
-    return dependencies.one_trade_generator(
-        context.candle_rows,
+    signals = run_native_one_trade_day_strategy(
+        candles=context.candle_rows,
+        symbol=context.symbol,
         capital=float(context.capital),
         risk_pct=float(context.risk_pct) / 100.0,
         rr_ratio=float(context.rr_ratio),
+        entry_cutoff_hhmm=str(context.entry_cutoff),
         config=IndicatorConfig(),
-        trailing_sl_pct=float(context.trailing_sl_pct),
     )
+    return [_strategy_signal_to_row(signal) for signal in signals]
 
 
 def _run_mtf_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
-    return dependencies.mtf_generator(
-        context.candle_rows,
+    signals = run_native_mtf_strategy(
+        candles=context.candle_rows,
+        symbol=context.symbol,
         capital=float(context.capital),
         risk_pct=float(context.risk_pct) / 100.0,
         rr_ratio=float(context.rr_ratio),
-        config=MtfTradeConfig(
-            trailing_sl_pct=float(context.trailing_sl_pct),
-            ema_period=int(context.mtf_ema_period),
-            setup_mode=str(context.mtf_setup_mode),
-            require_retest_strength=bool(context.mtf_retest_strength),
-            max_trades_per_day=1,
-            cost_bps=float(context.cost_bps),
-            fixed_cost_per_trade=float(context.fixed_cost_per_trade),
-            max_daily_loss=context.max_daily_loss,
-        ),
+        ema_period=int(context.mtf_ema_period),
+        setup_mode=str(context.mtf_setup_mode),
+        require_retest_strength=bool(context.mtf_retest_strength),
     )
+    return [_strategy_signal_to_row(signal) for signal in signals]
 
 
 def _run_btst_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
-    return dependencies.btst_generator(
-        context.candle_rows,
+    signals = run_native_btst_strategy(
+        candles=context.candle_rows,
+        symbol=context.symbol,
         capital=float(context.capital),
         risk_pct=float(context.risk_pct) / 100.0,
         rr_ratio=float(context.rr_ratio),
-        config=BtstConfig(
-            allow_stbt=True,
-            cost_bps=float(context.cost_bps),
-            fixed_cost_per_trade=float(context.fixed_cost_per_trade),
-            max_daily_loss=context.max_daily_loss,
-            max_trades_per_day=context.max_trades_per_day,
-        ),
+        config=BtstConfig(allow_stbt=True),
     )
+    return [_strategy_signal_to_row(signal) for signal in signals]
 
 
 def _run_amd_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
@@ -332,9 +290,7 @@ def _run_amd_strategy(context: StrategyContext, dependencies: StrategyDependenci
         distribution_lookback=preset_config.distribution_lookback,
         min_fvg_size=float(context.amd_min_fvg_size),
         min_bvg_size=float(context.amd_min_bvg_size),
-        zone_merge_tolerance=preset_config.zone_merge_tolerance,
         zone_fresh_bars=int(context.amd_zone_fresh_bars),
-        min_zone_reaction=preset_config.min_zone_reaction,
         retest_tolerance_pct=float(context.amd_retest_tolerance_pct),
         max_retest_bars=int(context.amd_max_retest_bars),
         rr_ratio=float(context.rr_ratio),
@@ -346,13 +302,15 @@ def _run_amd_strategy(context: StrategyContext, dependencies: StrategyDependenci
         allow_secondary_entries=preset_config.allow_secondary_entries,
         max_trades_per_day=preset_config.max_trades_per_day,
     )
-    return dependencies.amd_generator(
-        context.candles,
+    signals = run_native_amd_strategy(
+        data=context.candles,
+        symbol=context.symbol,
         capital=float(context.capital),
         risk_pct=float(context.risk_pct),
         rr_ratio=float(context.rr_ratio),
         config=config,
     )
+    return [_strategy_signal_to_row(signal) for signal in signals]
 
 
 STRATEGY_DEFINITIONS: dict[str, StrategyDefinition] = {

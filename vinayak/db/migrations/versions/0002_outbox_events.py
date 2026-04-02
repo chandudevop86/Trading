@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
@@ -11,6 +11,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if 'outbox_events' in inspector.get_table_names():
+        return
     op.create_table(
         'outbox_events',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
@@ -27,4 +31,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table('outbox_events')
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if 'outbox_events' in inspector.get_table_names():
+        op.drop_table('outbox_events')

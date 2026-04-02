@@ -135,10 +135,54 @@ class ReviewedTradeService:
         *,
         context: dict[str, Any] | None = None,
     ) -> list[str]:
-        _ = context
         if not trade:
             return ["missing_trade_payload"]
-        return []
+
+        reasons: list[str] = []
+        ctx = context or {}
+
+        reviewed_trade_status = str(trade.get("reviewed_trade_status") or "").upper().strip()
+        if reviewed_trade_status and reviewed_trade_status != "APPROVED":
+            reasons.append(f"reviewed_trade_status_{reviewed_trade_status.lower()}")
+
+        validation_status = str(trade.get("validation_status") or "").upper().strip()
+        if validation_status and validation_status != "PASS":
+            reasons.append(f"validation_status_{validation_status.lower()}")
+
+        execution_allowed = trade.get("execution_allowed")
+        if execution_allowed is False:
+            reasons.append("execution_gate_blocked")
+
+        duplicate_reason = str(trade.get("duplicate_reason") or "").strip()
+        if duplicate_reason:
+            reasons.append(duplicate_reason.lower())
+
+        if bool(trade.get("setup_already_used")):
+            reasons.append("setup_already_used")
+
+        max_trades_per_day = ctx.get("max_trades_per_day")
+        trades_taken_today = ctx.get("trades_taken_today", ctx.get("executed_today"))
+        try:
+            if max_trades_per_day is not None and trades_taken_today is not None:
+                if int(trades_taken_today) >= int(max_trades_per_day):
+                    reasons.append("max_trades_per_day_reached")
+        except (TypeError, ValueError):
+            pass
+
+        max_daily_loss = ctx.get("max_daily_loss")
+        realized_pnl = ctx.get("realized_pnl_today", ctx.get("daily_pnl"))
+        try:
+            if max_daily_loss is not None and realized_pnl is not None:
+                if float(realized_pnl) <= -abs(float(max_daily_loss)):
+                    reasons.append("max_daily_loss_reached")
+        except (TypeError, ValueError):
+            pass
+
+        deduped_reasons: list[str] = []
+        for reason in reasons:
+            if reason and reason not in deduped_reasons:
+                deduped_reasons.append(reason)
+        return deduped_reasons
 
     def _resolve_create_payload(
         self,
@@ -217,3 +261,4 @@ __all__ = [
     "ReviewedTradeService",
     "ReviewedTradeStatusUpdateCommand",
 ]
+

@@ -1,4 +1,4 @@
-.env
+﻿.env
 .venv/
 venv/
 __pycache__/
@@ -28,3 +28,6 @@ data/legacy_runtime.db
 # OS/editor noise
 .DS_Store
 Thumbs.db
+vinayak/data/observability/
+.edge-print-profile-*/
+

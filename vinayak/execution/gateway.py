@@ -398,6 +398,35 @@ def execute_workspace_candidates(
             continue
 
         try:
+            if mode == 'LIVE':
+                live_reasons = ['LIVE_REQUIRES_APPROVED_REVIEWED_TRADE']
+                row['execution_status'] = 'BLOCKED'
+                row['trade_status'] = 'BLOCKED'
+                row['reason'] = ', '.join(live_reasons)
+                row['blocked_reason'] = row['reason']
+                row['duplicate_reason'] = ''
+                row['reason_codes'] = list(dict.fromkeys(list(row.get('reason_codes', [])) + live_reasons))
+                result.rows.append(row)
+                result.blocked_rows.append(row)
+                result.blocked_count += 1
+                increment_metric('risk_guard_blocks_total', 1)
+                log_event(
+                    component='execution_gateway',
+                    event_name='trade_execution_requires_review',
+                    symbol=row.get('symbol', ''),
+                    strategy=row.get('strategy_name', ''),
+                    severity='WARNING',
+                    message='Live trade blocked until an approved reviewed trade exists.',
+                    context_json={
+                        'reasons': live_reasons,
+                        'trade_id': row.get('trade_id', ''),
+                        'mode': mode,
+                    },
+                )
+                rows_to_write.append(row)
+                batch_keys.add(unique_key)
+                continue
+
             reviewed_trade = reviewed_trade_service.create_reviewed_trade(
                 ReviewedTradeCreateCommand(
                     strategy_name=str(row.get('strategy_name') or strategy),
@@ -409,7 +438,7 @@ def execute_workspace_candidates(
                     quantity=max(_safe_int(row.get('quantity')), 1),
                     lots=max(_safe_int(row.get('lots', 1)), 1),
                     status='APPROVED',
-                    notes='Auto-approved by workspace execution gateway.',
+                    notes='Auto-approved paper execution candidate from workspace gateway.',
                 )
             )
             row['reviewed_trade_id'] = reviewed_trade.id
@@ -417,7 +446,7 @@ def execute_workspace_candidates(
                 mode=mode,
                 broker=broker_name,
                 reviewed_trade_id=reviewed_trade.id,
-                status='FILLED' if mode != 'LIVE' else None,
+                status='FILLED',
                 executed_price=_safe_float(row.get('entry_price')),
             )
             record = execution_service.create_execution(command)
@@ -472,6 +501,7 @@ __all__ = [
     'execute_workspace_candidates',
     'prepare_workspace_candidates',
 ]
+
 
 
 

@@ -115,6 +115,31 @@ def test_execute_workspace_candidates_creates_reviewed_trade_and_executes(tmp_pa
     finally:
         _cleanup_db_session(session)
 
+def test_execute_workspace_candidates_blocks_live_without_manual_review(tmp_path: Path) -> None:
+    session = _build_db_session(tmp_path)
+    try:
+        candidates, result = execute_workspace_candidates(
+            "DEMAND_SUPPLY",
+            "NIFTY",
+            _candles(),
+            [_candidate()],
+            execution_mode="LIVE",
+            paper_log_path=str(tmp_path / "paper.csv"),
+            live_log_path=str(tmp_path / "live.csv"),
+            capital=100000,
+            db_session=session,
+        )
+
+        assert len(candidates) == 1
+        assert result.executed_count == 0
+        assert result.blocked_count == 1
+        assert result.rows[0]["execution_status"] == "BLOCKED"
+        assert "LIVE_REQUIRES_APPROVED_REVIEWED_TRADE" in result.rows[0]["reason"]
+        assert result.rows[0].get("reviewed_trade_id") in {None, ''}
+        assert result.rows[0].get("execution_id") in {None, ''}
+    finally:
+        _cleanup_db_session(session)
+
 
 def test_execute_workspace_candidates_blocks_duplicate_trade(tmp_path: Path) -> None:
     session = _build_db_session(tmp_path)
@@ -220,4 +245,5 @@ def test_execute_workspace_candidates_caps_quantity_for_position_value(tmp_path:
         assert "CAPPED_BY_MAX_POSITION_VALUE" in result.rows[0]["allocation_adjustment_reasons"]
     finally:
         _cleanup_db_session(session)
+
 

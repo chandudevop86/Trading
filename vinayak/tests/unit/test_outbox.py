@@ -12,14 +12,17 @@ from vinayak.db.session import build_session_factory, initialize_database, reset
 from vinayak.execution.reviewed_trade_service import ReviewedTradeCreateCommand, ReviewedTradeService
 from vinayak.execution.service import ExecutionCreateCommand, ExecutionService
 from vinayak.messaging.outbox import dispatch_pending_outbox_events
+from vinayak.observability.observability_metrics import get_metric, reset_observability_state
 
 
 def test_reviewed_trade_creation_enqueues_outbox_event(tmp_path: Path) -> None:
     db_path = tmp_path / 'vinayak_outbox_reviewed_trade.db'
     os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
     os.environ['MESSAGE_BUS_ENABLED'] = 'false'
+    os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path / 'observability')
     reset_settings_cache()
     reset_database_state()
+    reset_observability_state()
     initialize_database()
 
     session_factory = build_session_factory()
@@ -47,6 +50,7 @@ def test_reviewed_trade_creation_enqueues_outbox_event(tmp_path: Path) -> None:
 
     os.environ.pop('VINAYAK_DATABASE_URL', None)
     os.environ.pop('MESSAGE_BUS_ENABLED', None)
+    os.environ.pop('VINAYAK_OBSERVABILITY_DIR', None)
     reset_settings_cache()
     reset_database_state()
 
@@ -55,8 +59,10 @@ def test_execution_commit_enqueues_execution_and_status_events(tmp_path: Path) -
     db_path = tmp_path / 'vinayak_outbox_execution.db'
     os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
     os.environ['MESSAGE_BUS_ENABLED'] = 'false'
+    os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path / 'observability')
     reset_settings_cache()
     reset_database_state()
+    reset_observability_state()
     initialize_database()
 
     session_factory = build_session_factory()
@@ -108,9 +114,12 @@ def test_execution_commit_enqueues_execution_and_status_events(tmp_path: Path) -
         event_names = [row.event_name for row in session.query(OutboxEventRecord).order_by(OutboxEventRecord.id.asc()).all()]
         assert 'trade.execute.requested' in event_names
         assert 'trade.executed' in event_names
+        assert float(get_metric('execution_attempt_total', 0)) >= 1.0
+        assert float(get_metric('execution_success_total', 0)) >= 1.0
 
     os.environ.pop('VINAYAK_DATABASE_URL', None)
     os.environ.pop('MESSAGE_BUS_ENABLED', None)
+    os.environ.pop('VINAYAK_OBSERVABILITY_DIR', None)
     reset_settings_cache()
     reset_database_state()
 
@@ -119,8 +128,10 @@ def test_dispatch_marks_outbox_failed_when_bus_disabled(tmp_path: Path) -> None:
     db_path = tmp_path / 'vinayak_outbox_dispatch.db'
     os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
     os.environ['MESSAGE_BUS_ENABLED'] = 'false'
+    os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path / 'observability')
     reset_settings_cache()
     reset_database_state()
+    reset_observability_state()
     initialize_database()
 
     session_factory = build_session_factory()
@@ -145,9 +156,58 @@ def test_dispatch_marks_outbox_failed_when_bus_disabled(tmp_path: Path) -> None:
         event = session.query(OutboxEventRecord).one()
         assert event.status == 'FAILED'
         assert event.attempt_count == 1
+        assert event.available_at > event.created_at
+        assert float(get_metric('outbox_dispatch_attempt_total', 0)) >= 1.0
+        assert float(get_metric('outbox_dispatch_failed_total', 0)) >= 1.0
 
     os.environ.pop('VINAYAK_DATABASE_URL', None)
     os.environ.pop('MESSAGE_BUS_ENABLED', None)
+    os.environ.pop('VINAYAK_OBSERVABILITY_DIR', None)
     reset_settings_cache()
     reset_database_state()
 
+
+def test_outbox_failure_backoff_increases_with_attempt_count(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_outbox_backoff.db'
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    os.environ['MESSAGE_BUS_ENABLED'] = 'false'
+    os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path / 'observability')
+    reset_settings_cache()
+    reset_database_state()
+    reset_observability_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        service = ReviewedTradeService(session)
+        service.create_reviewed_trade(
+            ReviewedTradeCreateCommand(
+                strategy_name='Breakout',
+                symbol='^NSEI',
+                side='BUY',
+                entry_price=100.0,
+                stop_loss=99.0,
+                target_price=102.0,
+            )
+        )
+
+    with session_factory() as session:
+        first = dispatch_pending_outbox_events(session)
+        assert first.failed_count == 1
+        event = session.query(OutboxEventRecord).one()
+        first_available_at = event.available_at
+        event.available_at = event.created_at
+        session.commit()
+
+        second = dispatch_pending_outbox_events(session)
+        assert second.failed_count == 1
+        session.refresh(event)
+        assert event.attempt_count == 2
+        assert event.available_at > first_available_at
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    os.environ.pop('MESSAGE_BUS_ENABLED', None)
+    os.environ.pop('VINAYAK_OBSERVABILITY_DIR', None)
+    reset_settings_cache()
+    reset_database_state()

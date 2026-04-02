@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -328,6 +328,12 @@ def run_live_trading_analysis(
     fixed_cost_per_trade: float = 0.0,
     max_daily_loss: float | None = None,
     max_trades_per_day: int | None = None,
+    max_position_value: float | None = None,
+    max_open_positions: int | None = None,
+    max_symbol_exposure_pct: float | None = None,
+    max_portfolio_exposure_pct: float | None = None,
+    max_open_risk_pct: float | None = None,
+    kill_switch_enabled: bool = False,
     fetch_option_metrics: bool = False,
     send_telegram: bool = False,
     telegram_token: str = '',
@@ -374,6 +380,12 @@ def run_live_trading_analysis(
         fixed_cost_per_trade=float(fixed_cost_per_trade),
         max_daily_loss=max_daily_loss,
         max_trades_per_day=max_trades_per_day,
+        max_position_value=max_position_value,
+        max_open_positions=max_open_positions,
+        max_symbol_exposure_pct=max_symbol_exposure_pct,
+        max_portfolio_exposure_pct=max_portfolio_exposure_pct,
+        max_open_risk_pct=max_open_risk_pct,
+        kill_switch_enabled=kill_switch_enabled,
     )
     strategy_started = time.perf_counter()
     signal_rows = run_strategy_workflow(
@@ -431,8 +443,15 @@ def run_live_trading_analysis(
             execution_mode=execution_mode,
             paper_log_path=str(paper_log_path),
             live_log_path=str(live_log_path),
+            capital=capital,
             max_trades_per_day=max_trades_per_day,
             max_daily_loss=max_daily_loss,
+            max_position_value=max_position_value,
+            max_open_positions=max_open_positions,
+            max_symbol_exposure_pct=max_symbol_exposure_pct,
+            max_portfolio_exposure_pct=max_portfolio_exposure_pct,
+            max_open_risk_pct=max_open_risk_pct,
+            kill_switch_enabled=kill_switch_enabled,
             security_map_path=str(security_map_path),
             resolve_live_kwargs=_resolve_live_execution_kwargs,
             db_session=db_session,
@@ -489,6 +508,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

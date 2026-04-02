@@ -58,11 +58,17 @@ class OutboxRepository:
         self.session.flush()
         return record
 
-    def mark_failed(self, record: OutboxEventRecord, error: str, *, retry_delay_seconds: int = 30) -> OutboxEventRecord:
+    def _next_retry_delay_seconds(self, record: OutboxEventRecord, retry_delay_seconds: int | None = None) -> int:
+        if retry_delay_seconds is not None:
+            return max(1, int(retry_delay_seconds))
+        attempt_number = int(record.attempt_count or 0) + 1
+        return min(300, 30 * (2 ** max(0, attempt_number - 1)))
+
+    def mark_failed(self, record: OutboxEventRecord, error: str, *, retry_delay_seconds: int | None = None) -> OutboxEventRecord:
         record.status = 'FAILED'
         record.attempt_count = int(record.attempt_count or 0) + 1
         record.last_error = error
-        record.available_at = datetime.now(UTC) + timedelta(seconds=max(1, retry_delay_seconds))
+        record.available_at = datetime.now(UTC) + timedelta(seconds=self._next_retry_delay_seconds(record, retry_delay_seconds))
         self.session.add(record)
         self.session.flush()
         return record

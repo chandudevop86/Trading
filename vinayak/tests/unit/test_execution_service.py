@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from vinayak.db.models.execution import ExecutionRecord
@@ -362,4 +363,280 @@ def test_live_execution_adapter_uses_real_dhan_shape_when_ready(tmp_path: Path) 
     _write_security_map(security_map_path)
     os.environ['DHAN_SECURITY_MAP'] = str(security_map_path)
     os.environ.pop('DHAN_SECURITY_MAP', None)
+    reset_database_state()
+
+def test_execution_model_exposes_execution_uniqueness_and_indexes(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_execution_duplicate_guard.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+    initialize_database()
+
+    inspector = __import__('sqlalchemy').inspect(get_engine())
+    unique_names = {item.get('name') for item in inspector.get_unique_constraints('executions')}
+    index_names = {item.get('name') for item in inspector.get_indexes('executions')}
+
+    assert 'uq_reviewed_trade_execution' in unique_names
+    assert 'idx_signal_mode' in index_names
+    assert 'idx_broker_ref' in index_names
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
+    reset_database_state()
+
+
+def test_reviewed_trade_model_exposes_signal_uniqueness_and_indexes(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_reviewed_trade_constraints.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+    initialize_database()
+
+    inspector = __import__('sqlalchemy').inspect(get_engine())
+    reviewed_unique_names = {item.get('name') for item in inspector.get_unique_constraints('reviewed_trades')}
+    reviewed_index_names = {item.get('name') for item in inspector.get_indexes('reviewed_trades')}
+    signal_index_names = {item.get('name') for item in inspector.get_indexes('signals')}
+
+    assert 'uq_reviewed_trade_signal_id' in reviewed_unique_names
+    assert 'idx_reviewed_trades_status_created' in reviewed_index_names
+    assert 'idx_reviewed_trades_signal_status' in reviewed_index_names
+    assert 'idx_signals_symbol_time' in signal_index_names
+    assert 'idx_signals_status_time' in signal_index_names
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
+    reset_database_state()
+
+
+def test_reviewed_trade_signal_constraint_blocks_duplicate_signal_review(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_reviewed_trade_duplicate_signal.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:15:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        first = ReviewedTradeRecord(
+            signal_id=signal.id,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            quantity=25,
+            lots=1,
+            status='APPROVED',
+        )
+        session.add(first)
+        session.commit()
+
+        duplicate = ReviewedTradeRecord(
+            signal_id=signal.id,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            quantity=25,
+            lots=1,
+            status='REVIEWED',
+        )
+        session.add(duplicate)
+        try:
+            session.commit()
+            raise AssertionError('expected duplicate reviewed trade signal constraint to fail')
+        except IntegrityError:
+            session.rollback()
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
+    reset_database_state()
+
+
+def test_execution_service_requires_reviewed_trade_id_for_real_execution(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_execution_requires_reviewed_trade.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:15:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        service = ExecutionService(session)
+        try:
+            service.create_execution(
+                ExecutionCreateCommand(
+                    signal_id=signal.id,
+                    mode='PAPER',
+                    broker='SIM',
+                )
+            )
+            raise AssertionError('expected reviewed trade gate to block signal-only execution')
+        except ValueError as exc:
+            assert 'reviewed_trade_id is required' in str(exc)
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
+    reset_database_state()
+
+
+def test_execution_service_rejects_non_sim_broker_for_paper_mode(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_execution_paper_broker_guard.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:15:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        reviewed_trade = ReviewedTradeRecord(
+            signal_id=signal.id,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            quantity=25,
+            lots=1,
+            status='APPROVED',
+        )
+        session.add(reviewed_trade)
+        session.commit()
+        session.refresh(reviewed_trade)
+
+        service = ExecutionService(session)
+        try:
+            service.create_execution(
+                ExecutionCreateCommand(
+                    reviewed_trade_id=reviewed_trade.id,
+                    mode='PAPER',
+                    broker='DHAN',
+                )
+            )
+            raise AssertionError('expected paper broker guard to reject DHAN')
+        except ValueError as exc:
+            assert 'Paper execution only supports broker SIM' in str(exc)
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
+    reset_database_state()
+
+
+def test_execution_service_rejects_live_status_override(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_execution_live_status_guard.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:15:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        reviewed_trade = ReviewedTradeRecord(
+            signal_id=signal.id,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            quantity=25,
+            lots=1,
+            status='APPROVED',
+        )
+        session.add(reviewed_trade)
+        session.commit()
+        session.refresh(reviewed_trade)
+
+        service = ExecutionService(session)
+        try:
+            service.create_execution(
+                ExecutionCreateCommand(
+                    reviewed_trade_id=reviewed_trade.id,
+                    mode='LIVE',
+                    broker='DHAN',
+                    status='FILLED',
+                )
+            )
+            raise AssertionError('expected live status override guard to reject manual FILLED status')
+        except ValueError as exc:
+            assert 'Live execution status override is not allowed' in str(exc)
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
     reset_database_state()

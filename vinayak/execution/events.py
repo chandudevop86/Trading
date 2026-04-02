@@ -1,11 +1,11 @@
-﻿from vinayak.messaging.topics import (
+from vinayak.messaging.events import (
     EVENT_TRADE_EXECUTED,
     EVENT_TRADE_EXECUTE_REQUESTED,
     EVENT_TRADE_REVIEWED,
 )
 
 __all__ = [
-    "EVENT_TRADE_EXECUTED",
-    "EVENT_TRADE_EXECUTE_REQUESTED",
-    "EVENT_TRADE_REVIEWED",
+    'EVENT_TRADE_EXECUTED',
+    'EVENT_TRADE_EXECUTE_REQUESTED',
+    'EVENT_TRADE_REVIEWED',
 ]

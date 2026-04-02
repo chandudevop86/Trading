@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -87,6 +87,12 @@ def post_live_analysis(request: LiveAnalysisRequest, db: Session = Depends(get_d
         fixed_cost_per_trade=request.fixed_cost_per_trade,
         max_daily_loss=request.max_daily_loss,
         max_trades_per_day=request.max_trades_per_day,
+        max_position_value=request.max_position_value,
+        max_open_positions=request.max_open_positions,
+        max_symbol_exposure_pct=request.max_symbol_exposure_pct,
+        max_portfolio_exposure_pct=request.max_portfolio_exposure_pct,
+        max_open_risk_pct=request.max_open_risk_pct,
+        kill_switch_enabled=request.kill_switch_enabled,
         db_session=db,
     )
     return LiveAnalysisResponse(
@@ -113,6 +119,7 @@ def post_live_analysis(request: LiveAnalysisRequest, db: Session = Depends(get_d
             summary_report=ReportArtifactLocation(**result['report_artifacts']['summary_report']),
         ),
     )
+
 
 
 

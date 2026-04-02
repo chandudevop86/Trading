@@ -116,6 +116,12 @@ def test_run_live_trading_analysis_forwards_recent_risk_controls(monkeypatch, tm
         fixed_cost_per_trade=15.0,
         max_daily_loss=2500.0,
         max_trades_per_day=2,
+        max_position_value=15000.0,
+        max_open_positions=3,
+        max_symbol_exposure_pct=20.0,
+        max_portfolio_exposure_pct=35.0,
+        max_open_risk_pct=5.0,
+        kill_switch_enabled=True,
         auto_execute=True,
         execution_type='PAPER',
         paper_log_path=str(tmp_path / 'paper.csv'),
@@ -132,6 +138,13 @@ def test_run_live_trading_analysis_forwards_recent_risk_controls(monkeypatch, tm
     assert captured['workspace_args']['row_count'] == 1
     assert captured['workspace_kwargs']['max_trades_per_day'] == 2
     assert captured['workspace_kwargs']['max_daily_loss'] == 2500.0
+    assert captured['workspace_kwargs']['capital'] == 100000
+    assert captured['workspace_kwargs']['max_position_value'] == 15000.0
+    assert captured['workspace_kwargs']['max_open_positions'] == 3
+    assert captured['workspace_kwargs']['max_symbol_exposure_pct'] == 20.0
+    assert captured['workspace_kwargs']['max_portfolio_exposure_pct'] == 35.0
+    assert captured['workspace_kwargs']['max_open_risk_pct'] == 5.0
+    assert captured['workspace_kwargs']['kill_switch_enabled'] is True
     assert captured['workspace_kwargs']['execution_mode'] == 'PAPER'
     assert result['execution_summary']['mode'] == 'PAPER'
     assert result['signal_count'] == 1
@@ -167,5 +180,6 @@ def test_run_live_trading_analysis_uses_workspace_gateway() -> None:
     assert 'execute_workspace_candidates(' in source
     assert 'build_execution_candidates(' not in source
     assert 'execute_paper_trades(' not in source
+
 
 

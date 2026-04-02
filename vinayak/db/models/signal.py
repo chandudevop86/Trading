@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Float, Integer, String
+from sqlalchemy import DateTime, Float, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from vinayak.db.session import Base
@@ -10,6 +10,10 @@ from vinayak.db.session import Base
 
 class SignalRecord(Base):
     __tablename__ = 'signals'
+    __table_args__ = (
+        Index('idx_signals_symbol_time', 'symbol', 'signal_time'),
+        Index('idx_signals_status_time', 'status', 'signal_time'),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     strategy_name: Mapped[str] = mapped_column(String(80), nullable=False)

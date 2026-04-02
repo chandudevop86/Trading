@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
@@ -7,7 +7,7 @@ from vinayak.execution.contracts import normalize_candidate_contract
 from vinayak.strategies.amd.service import ConfluenceConfig, run_amd_strategy as run_native_amd_strategy
 from vinayak.strategies.breakout.service import Candle, run_breakout_strategy as run_native_breakout_strategy
 from vinayak.strategies.btst.service import BtstConfig, run_btst_strategy as run_native_btst_strategy
-from vinayak.strategies.common.base import StrategySignal
+from vinayak.strategies.common.base import StrategySignal, TradeSignal
 from vinayak.strategies.demand_supply.service import run_demand_supply_strategy as run_native_demand_supply_strategy
 from vinayak.strategies.indicator.service import IndicatorConfig, run_indicator_strategy as run_native_indicator_strategy
 from vinayak.strategies.mtf.service import run_mtf_strategy as run_native_mtf_strategy
@@ -41,6 +41,12 @@ class StrategyContext:
     fixed_cost_per_trade: float = 0.0
     max_daily_loss: float | None = None
     max_trades_per_day: int | None = None
+    max_position_value: float | None = None
+    max_open_positions: int | None = None
+    max_symbol_exposure_pct: float | None = None
+    max_portfolio_exposure_pct: float | None = None
+    max_open_risk_pct: float | None = None
+    kill_switch_enabled: bool = False
     mode: str = 'Balanced'
     amd_mode: str = 'Balanced'
     amd_swing_window: int = 3
@@ -370,8 +376,10 @@ __all__ = [
     'StrategyContext',
     'StrategyDefinition',
     'StrategyDependencies',
+    'TradeSignal',
     'generate_strategy_rows',
     'get_strategy_definition',
     'run_strategy_workflow',
     'standardize_strategy_rows',
 ]
+

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 
@@ -95,7 +95,7 @@ class ExecuteTradeRequest(BaseModel):
 
 class ExecutionCreateRequest(BaseModel):
     signal_id: int | None = Field(default=None, gt=0)
-    reviewed_trade_id: int | None = Field(default=None, gt=0)
+    reviewed_trade_id: int = Field(gt=0)
     mode: str = Field(min_length=1)
     broker: str = Field(min_length=1)
     status: str | None = None
@@ -103,8 +103,8 @@ class ExecutionCreateRequest(BaseModel):
 
     @model_validator(mode='after')
     def validate_reference(self) -> 'ExecutionCreateRequest':
-        if self.signal_id is None and self.reviewed_trade_id is None:
-            raise ValueError('signal_id or reviewed_trade_id is required')
+        if self.reviewed_trade_id is None:
+            raise ValueError('reviewed_trade_id is required')
         return self
 
 
@@ -135,10 +135,18 @@ class LiveAnalysisRequest(BaseModel):
     mtf_setup_mode: str = Field(default='either')
     mtf_retest_strength: bool = Field(default=True)
     mtf_max_trades_per_day: int = Field(default=3, ge=1)
+    max_position_value: float | None = Field(default=None, ge=0)
+    max_open_positions: int | None = Field(default=None, ge=1)
+    max_symbol_exposure_pct: float | None = Field(default=None, ge=0, le=100)
+    max_portfolio_exposure_pct: float | None = Field(default=None, ge=0, le=100)
+    max_open_risk_pct: float | None = Field(default=None, ge=0, le=100)
+    kill_switch_enabled: bool = Field(default=False)
     entry_cutoff_hhmm: str = Field(default='')
     cost_bps: float = Field(default=0.0, ge=0)
     fixed_cost_per_trade: float = Field(default=0.0, ge=0)
     max_daily_loss: float | None = Field(default=None, ge=0)
     max_trades_per_day: int | None = Field(default=None, ge=1)
+
+
 
 

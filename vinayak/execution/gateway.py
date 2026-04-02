@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 from dataclasses import dataclass, field
@@ -10,20 +10,20 @@ from sqlalchemy.orm import Session
 
 import pandas as pd
 
-from vinayak.observability.observability_logger import log_event, log_exception
+from vinayak.execution.commands import ExecutionCreateCommand
+from vinayak.execution.reviewed_trade_service import ReviewedTradeCreateCommand, ReviewedTradeService
+from vinayak.execution.risk_engine import PortfolioRiskConfig, allocate_position_size
+from vinayak.execution.service import ExecutionService
+from vinayak.observability.observability_logger import log_event
 from vinayak.observability.observability_metrics import increment_metric, record_stage, set_metric
 from vinayak.validation.engine import validate_trade
-from vinayak.execution.commands import ExecutionCreateCommand
-from vinayak.execution.live_execution_adapter import LiveExecutionAdapter
-from vinayak.execution.paper_execution_adapter import PaperExecutionAdapter
-from vinayak.execution.service import ExecutionService
 
 
 _DEFAULT_SESSION_START = time(9, 15)
 _DEFAULT_SESSION_END = time(15, 30)
 _DEFAULT_COOLDOWN_MINUTES = 15
 _DEFAULT_BUCKET_MINUTES = 5
-_EXECUTED_STATUSES = {"FILLED", "EXECUTED", "SENT"}
+_EXECUTED_STATUSES = {"FILLED", "EXECUTED", "SENT", "ACCEPTED"}
 
 
 @dataclass(slots=True)
@@ -121,6 +121,7 @@ def _normalize_candidate(candidate: dict[str, Any], *, strategy: str, symbol: st
     stop_loss = _safe_float(item.get("stop_loss", item.get("stoploss", item.get("sl", 0.0))))
     target = _safe_float(item.get("target", item.get("target_price", item.get("tp", 0.0))))
     quantity = _safe_int(item.get("quantity", 0))
+    lots = _safe_int(item.get("lots", 1))
     setup_type = str(item.get("setup_type") or item.get("zone_type") or resolved_strategy).strip().upper() or resolved_strategy.upper()
     zone_id = str(item.get("zone_id") or f"{resolved_symbol}_{setup_type}_{timestamp.replace(':', '').replace(' ', '_')}").strip()
     trade_id = str(item.get("trade_id") or f"{resolved_symbol}_{setup_type}_{side}_{timestamp.replace(':', '').replace(' ', '_')}").strip()
@@ -148,6 +149,7 @@ def _normalize_candidate(candidate: dict[str, Any], *, strategy: str, symbol: st
         "target": round(target, 4),
         "target_price": round(target, 4),
         "quantity": quantity,
+        "lots": lots,
         "validation_status": validation_status,
         "validation_score": validation_score,
         "validation_reasons": validation_reasons,
@@ -189,7 +191,22 @@ def _executed_trade_times(rows: list[dict[str, Any]], signal_date: datetime) -> 
     return times
 
 
-def _guard_reasons(candidate: dict[str, Any], historical_rows: list[dict[str, Any]], batch_keys: set[str], *, max_trades_per_day: int | None, max_daily_loss: float | None, cooldown_minutes: int = _DEFAULT_COOLDOWN_MINUTES) -> tuple[list[str], str]:
+def _guard_reasons(
+    candidate: dict[str, Any],
+    historical_rows: list[dict[str, Any]],
+    batch_keys: set[str],
+    *,
+    capital: float | None,
+    max_trades_per_day: int | None,
+    max_daily_loss: float | None,
+    max_position_value: float | None,
+    max_open_positions: int | None,
+    max_symbol_exposure_pct: float | None,
+    max_portfolio_exposure_pct: float | None,
+    max_open_risk_pct: float | None,
+    kill_switch_enabled: bool,
+    cooldown_minutes: int = _DEFAULT_COOLDOWN_MINUTES,
+) -> tuple[list[str], str, dict[str, Any], dict[str, Any]]:
     reasons: list[str] = []
     signal_time = _parse_timestamp(candidate.get("signal_time") or candidate.get("timestamp"))
     if signal_time is None:
@@ -230,7 +247,27 @@ def _guard_reasons(candidate: dict[str, Any], historical_rows: list[dict[str, An
             if delta_seconds < cooldown_minutes * 60:
                 reasons.append("COOLDOWN_ACTIVE")
 
-    return reasons, unique_key
+    risk_config = PortfolioRiskConfig(
+        capital=max(_safe_float(capital, 0.0), 0.0),
+        max_position_value=max_position_value,
+        max_open_positions=max_open_positions,
+        max_symbol_exposure_pct=max_symbol_exposure_pct,
+        max_portfolio_exposure_pct=max_portfolio_exposure_pct,
+        max_open_risk_pct=max_open_risk_pct,
+        kill_switch_enabled=kill_switch_enabled,
+    )
+    allocation = allocate_position_size(candidate, historical_rows, risk_config)
+    adjusted_candidate = dict(candidate)
+    adjusted_candidate['quantity'] = int(allocation.quantity)
+    if allocation.adjustment_reasons:
+        adjusted_candidate['allocation_adjustment_reasons'] = list(allocation.adjustment_reasons)
+    reasons.extend(allocation.block_reasons)
+
+    deduped: list[str] = []
+    for reason in reasons:
+        if reason and reason not in deduped:
+            deduped.append(reason)
+    return deduped, unique_key, dict(allocation.snapshot), adjusted_candidate
 
 
 def prepare_workspace_candidates(
@@ -276,8 +313,15 @@ def execute_workspace_candidates(
     execution_mode: str,
     paper_log_path: str,
     live_log_path: str,
+    capital: float | None = None,
     max_trades_per_day: int | None = None,
     max_daily_loss: float | None = None,
+    max_position_value: float | None = None,
+    max_open_positions: int | None = None,
+    max_symbol_exposure_pct: float | None = None,
+    max_portfolio_exposure_pct: float | None = None,
+    max_open_risk_pct: float | None = None,
+    kill_switch_enabled: bool = False,
     security_map_path: str = 'data/dhan_security_map.csv',
     resolve_live_kwargs: callable | None = None,
     db_session: Session | None = None,
@@ -286,6 +330,7 @@ def execute_workspace_candidates(
     cycle_started = time.perf_counter()
     candidates = prepare_workspace_candidates(strategy, symbol, candles, signal_rows)
     set_metric('trading_app_up', 1)
+    set_metric('portfolio_kill_switch_active', 1 if kill_switch_enabled else 0)
     mode = str(execution_mode or 'NONE').upper()
     output_path = Path(str(live_log_path if mode == 'LIVE' else paper_log_path))
     historical_rows = _existing_rows(output_path)
@@ -293,25 +338,42 @@ def execute_workspace_candidates(
     result = WorkspaceExecutionResult()
     rows_to_write: list[dict[str, Any]] = []
 
-    paper_adapter = PaperExecutionAdapter()
-    live_adapter = LiveExecutionAdapter()
-    execution_service = ExecutionService(db_session) if db_session is not None else None
+    if db_session is None:
+        raise ValueError(
+            'Workspace execution requires a database-backed ExecutionService. '
+            'Pass db_session and use ExecutionService.create_execution().'
+        )
+    execution_service = ExecutionService(db_session)
+    reviewed_trade_service = ReviewedTradeService(db_session)
     live_kwargs = dict(resolve_live_kwargs(security_map_path) if resolve_live_kwargs is not None and mode == 'LIVE' else {})
-    broker_name = str(live_kwargs.get('broker_name', 'SIM' if mode != 'LIVE' else 'LIVE'))
+    broker_name = str(live_kwargs.get('broker_name', 'SIM' if mode != 'LIVE' else 'DHAN'))
 
     for candidate in candidates:
-        reasons, unique_key = _guard_reasons(
+        reasons, unique_key, risk_snapshot, adjusted_candidate = _guard_reasons(
             candidate,
             historical_rows + rows_to_write,
             batch_keys,
+            capital=capital,
             max_trades_per_day=max_trades_per_day,
             max_daily_loss=max_daily_loss,
+            max_position_value=max_position_value,
+            max_open_positions=max_open_positions,
+            max_symbol_exposure_pct=max_symbol_exposure_pct,
+            max_portfolio_exposure_pct=max_portfolio_exposure_pct,
+            max_open_risk_pct=max_open_risk_pct,
+            kill_switch_enabled=kill_switch_enabled,
         )
-        row = dict(candidate)
+        row = dict(adjusted_candidate)
         row['trade_key'] = unique_key
         row['broker_name'] = broker_name
         row['execution_mode'] = mode
         row['price'] = row.get('entry_price')
+        row['risk_snapshot'] = risk_snapshot
+        if row.get('allocation_adjustment_reasons'):
+            increment_metric('capital_allocator_adjustments_total', 1)
+        set_metric('portfolio_open_positions', int(risk_snapshot.get('open_positions', 0)))
+        set_metric('portfolio_open_exposure_value', float(risk_snapshot.get('open_notional', 0.0)))
+        set_metric('portfolio_open_risk_value', float(risk_snapshot.get('open_risk', 0.0)))
 
         if reasons:
             row['execution_status'] = 'BLOCKED'
@@ -323,7 +385,9 @@ def execute_workspace_candidates(
             increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
             if 'DUPLICATE_TRADE' in reasons:
                 increment_metric('duplicate_trade_blocks_total', 1)
-            log_event(component='execution_gateway', event_name='trade_execution_blocked', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade blocked before execution', context_json={'reasons': reasons, 'trade_id': row.get('trade_id', '')})
+            if any(reason.startswith('MAX_') or 'KILL_SWITCH' in reason for reason in reasons):
+                increment_metric('risk_guard_blocks_total', 1)
+            log_event(component='execution_gateway', event_name='trade_execution_blocked', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade blocked before execution', context_json={'reasons': reasons, 'trade_id': row.get('trade_id', ''), 'risk_snapshot': risk_snapshot})
             result.blocked_rows.append(row)
             result.blocked_count += 1
             if 'DUPLICATE_TRADE' in reasons:
@@ -332,47 +396,50 @@ def execute_workspace_candidates(
             batch_keys.add(unique_key)
             continue
 
-        command = ExecutionCreateCommand(
-            mode=mode,
-            broker=broker_name,
-            status='FILLED' if mode != 'LIVE' else None,
-            executed_price=_safe_float(row.get('entry_price')),
-        )
         try:
-            if execution_service is not None:
-                record = execution_service.create_execution(command)
-                row['execution_id'] = record.id
-                row['execution_status'] = str(record.status or 'FILLED').upper()
-                row['trade_status'] = 'EXECUTED' if row['execution_status'] in _EXECUTED_STATUSES else row['execution_status']
-                row['broker_name'] = str(record.broker)
-                row['broker_reference'] = str(record.broker_reference or '')
-                row['price'] = _safe_float(record.executed_price, _safe_float(row.get('entry_price')))
-                row['executed_at_utc'] = record.executed_at.isoformat() if record.executed_at is not None else ''
-                row['reason'] = str(record.notes or '')
-            else:
-                if mode == 'LIVE':
-                    adapter_result = live_adapter.execute(command=command, reviewed_trade=None, signal=None)
-                else:
-                    adapter_result = paper_adapter.execute(command=command, reviewed_trade=None, signal=None)
-                row['execution_status'] = str(adapter_result.status or 'FILLED').upper()
-                row['trade_status'] = 'EXECUTED' if row['execution_status'] in _EXECUTED_STATUSES else row['execution_status']
-                row['broker_name'] = adapter_result.broker
-                row['broker_reference'] = adapter_result.broker_reference
-                row['price'] = _safe_float(adapter_result.executed_price, _safe_float(row.get('entry_price')))
-                row['executed_at_utc'] = adapter_result.executed_at.isoformat() if adapter_result.executed_at is not None else ''
-                row['reason'] = str(adapter_result.notes or '')
+            reviewed_trade = reviewed_trade_service.create_reviewed_trade(
+                ReviewedTradeCreateCommand(
+                    strategy_name=str(row.get('strategy_name') or strategy),
+                    symbol=str(row.get('symbol') or symbol),
+                    side=str(row.get('side') or ''),
+                    entry_price=_safe_float(row.get('entry_price')),
+                    stop_loss=_safe_float(row.get('stop_loss')),
+                    target_price=_safe_float(row.get('target_price')),
+                    quantity=max(_safe_int(row.get('quantity')), 1),
+                    lots=max(_safe_int(row.get('lots', 1)), 1),
+                    status='APPROVED',
+                    notes='Auto-approved by workspace execution gateway.',
+                )
+            )
+            row['reviewed_trade_id'] = reviewed_trade.id
+            command = ExecutionCreateCommand(
+                mode=mode,
+                broker=broker_name,
+                reviewed_trade_id=reviewed_trade.id,
+                status='FILLED' if mode != 'LIVE' else None,
+                executed_price=_safe_float(row.get('entry_price')),
+            )
+            record = execution_service.create_execution(command)
+            row['execution_id'] = record.id
+            row['execution_status'] = str(record.status or 'FILLED').upper()
+            row['trade_status'] = 'EXECUTED' if row['execution_status'] in _EXECUTED_STATUSES else row['execution_status']
+            row['broker_name'] = str(record.broker)
+            row['broker_reference'] = str(record.broker_reference or '')
+            row['price'] = _safe_float(record.executed_price, _safe_float(row.get('entry_price')))
+            row['executed_at_utc'] = record.executed_at.isoformat() if record.executed_at is not None else ''
+            row['reason'] = str(record.notes or '')
             row['duplicate_reason'] = ''
             if row['execution_status'] in _EXECUTED_STATUSES:
                 result.executed_rows.append(row)
                 result.executed_count += 1
                 increment_metric('paper_trades_executed_total', 1 if mode == 'PAPER' else 0)
                 set_metric('executed_paper_trades_today', result.executed_count if mode == 'PAPER' else 0)
-                log_event(component='execution_gateway', event_name='trade_execution_success', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='INFO', message='Trade executed', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', '')})
+                log_event(component='execution_gateway', event_name='trade_execution_success', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='INFO', message='Trade executed', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', ''), 'reviewed_trade_id': reviewed_trade.id})
             else:
                 result.blocked_rows.append(row)
                 result.blocked_count += 1
                 increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
-                log_event(component='execution_gateway', event_name='trade_execution_nonfill', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade did not reach executed state', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', '')})
+                log_event(component='execution_gateway', event_name='trade_execution_nonfill', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade did not reach executed state', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', ''), 'reviewed_trade_id': reviewed_trade.id})
             result.rows.append(row)
             rows_to_write.append(row)
             batch_keys.add(unique_key)
@@ -383,9 +450,7 @@ def execute_workspace_candidates(
             row['duplicate_reason'] = ''
             result.rows.append(row)
             increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
-            if 'DUPLICATE_TRADE' in reasons:
-                increment_metric('duplicate_trade_blocks_total', 1)
-            log_event(component='execution_gateway', event_name='trade_execution_blocked', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade blocked before execution', context_json={'reasons': reasons, 'trade_id': row.get('trade_id', '')})
+            log_event(component='execution_gateway', event_name='trade_execution_error', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='ERROR', message='Trade execution failed', context_json={'trade_id': row.get('trade_id', ''), 'error': str(exc)})
             result.error_rows.append(row)
             result.error_count += 1
             rows_to_write.append(row)
@@ -404,12 +469,5 @@ __all__ = [
     'execute_workspace_candidates',
     'prepare_workspace_candidates',
 ]
-
-
-
-
-
-
-
 
 

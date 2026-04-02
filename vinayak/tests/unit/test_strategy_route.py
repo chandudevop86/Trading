@@ -1,4 +1,4 @@
-import os
+﻿import os
 import gc
 import time
 import json
@@ -445,7 +445,7 @@ def test_execution_route_blocks_unapproved_reviewed_trade(tmp_path: Path) -> Non
         'mode': 'PAPER',
         'broker': 'SIM',
     })
-    assert exec_create.status_code == 404
+    assert exec_create.status_code == 400
     assert 'must be APPROVED before execution' in exec_create.json()['detail']
 
     _reset_runtime(db_path)
@@ -460,6 +460,34 @@ def test_execution_route_validates_missing_reference() -> None:
     assert response.status_code == 422
 
 
+
+
+def test_execution_route_rejects_invalid_paper_broker(tmp_path: Path) -> None:
+    db_path = (tmp_path / 'test_vinayak_invalid_paper_broker.db').resolve()
+    fresh = TestClient(app)
+
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+
+    response = fresh.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
+    assert response.status_code == 200
+
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    signal_id = fresh.get('/signals').json()['signals'][0]['id']
+    review_create = fresh.post('/reviewed-trades', json={'signal_id': signal_id, 'quantity': 10, 'lots': 1})
+    reviewed_trade = review_create.json()
+    fresh.patch(f"/reviewed-trades/{reviewed_trade['id']}", json={'status': 'APPROVED'})
+
+    exec_create = fresh.post('/executions', json={
+        'reviewed_trade_id': reviewed_trade['id'],
+        'mode': 'PAPER',
+        'broker': 'DHAN',
+    })
+    assert exec_create.status_code == 400
+    assert 'Paper execution only supports broker SIM' in exec_create.json()['detail']
+
+    _reset_runtime(db_path)
 def test_breakout_route_validates_payload() -> None:
     response = client.post('/strategies/breakout/run', json={'symbol': '^NSEI'})
     assert response.status_code == 422
@@ -473,6 +501,8 @@ def test_admin_protected_routes_require_login() -> None:
     assert fresh.get('/executions').status_code == 401
     assert fresh.get('/executions/audit-logs').status_code == 401
     assert fresh.get('/dashboard/summary').status_code == 401
+
+
 
 
 

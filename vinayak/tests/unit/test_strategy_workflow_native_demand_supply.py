@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from vinayak.api.services.strategy_workflow import StrategyContext, run_strategy_workflow
 from vinayak.strategies.breakout.service import Candle
@@ -48,3 +48,4 @@ def test_strategy_workflow_uses_native_demand_supply_service() -> None:
     assert signals[0]['side'] == 'BUY'
     assert float(signals[0]['entry_price']) > 0
     assert float(signals[0]['validation_score']) > 0
+

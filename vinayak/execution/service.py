@@ -15,7 +15,7 @@ from vinayak.db.repositories.execution_repository import ExecutionRepository
 from vinayak.db.repositories.reviewed_trade_repository import ReviewedTradeRepository
 from vinayak.db.repositories.signal_repository import SignalRepository
 from vinayak.execution.commands import ExecutionCreateCommand
-from vinayak.execution.events import (
+from vinayak.messaging.events import (
     EVENT_TRADE_EXECUTED,
     EVENT_TRADE_EXECUTE_REQUESTED,
 )
@@ -23,11 +23,9 @@ from vinayak.execution.outbox_service import OutboxService
 from vinayak.execution.paper_execution_adapter import PaperExecutionAdapter
 from vinayak.execution.reviewed_trade_service import ReviewedTradeService
 from vinayak.execution.live_execution_adapter import LiveExecutionAdapter
+from vinayak.observability.observability_logger import log_event, log_exception
+from vinayak.observability.observability_metrics import increment_metric
 
-
-# ============================================================
-# STATUS
-# ============================================================
 
 class ExecutionStatus(StrEnum):
     PENDING = "PENDING"
@@ -37,10 +35,6 @@ class ExecutionStatus(StrEnum):
     REJECTED = "REJECTED"
     FAILED = "FAILED"
 
-
-# ============================================================
-# BATCH DTOs
-# ============================================================
 
 @dataclass(slots=True)
 class ExecutionBatchItem:
@@ -114,10 +108,6 @@ class ExecutionBatchResult:
         return sum(1 for d in self.decisions if d.status == ExecutionStatus.FAILED)
 
 
-# ============================================================
-# ADAPTER CONTRACT
-# ============================================================
-
 class AdapterResultLike(Protocol):
     broker: str
     status: str
@@ -128,10 +118,6 @@ class AdapterResultLike(Protocol):
     audit_request_payload: dict[str, Any] | None
     audit_response_payload: dict[str, Any] | None
 
-
-# ============================================================
-# SERVICE
-# ============================================================
 
 class ExecutionService:
     def __init__(
@@ -166,13 +152,33 @@ class ExecutionService:
 
     def create_execution(self, command: ExecutionCreateCommand) -> ExecutionRecord:
         mode = self._normalize_mode(command.mode)
+        broker = self._normalize_broker(command.broker, mode)
+        requested_status = self._normalize_requested_status(command.status, mode)
         reviewed_trade, signal_id, signal = self._resolve_execution_dependencies(command)
+        trade_symbol = str(getattr(reviewed_trade, 'symbol', '') or getattr(signal, 'symbol', '') or '')
+        trade_strategy = str(getattr(reviewed_trade, 'strategy_name', '') or getattr(signal, 'strategy_name', '') or '')
+
+        increment_metric('execution_attempt_total', 1)
+        log_event(
+            component='execution_service',
+            event_name='execution_attempt',
+            symbol=trade_symbol,
+            strategy=trade_strategy,
+            severity='INFO',
+            message='Execution attempt started',
+            context_json={
+                'mode': mode,
+                'broker': broker,
+                'reviewed_trade_id': command.reviewed_trade_id,
+                'signal_id': signal_id,
+            },
+        )
 
         self.outbox.enqueue(
             event_name=EVENT_TRADE_EXECUTE_REQUESTED,
             payload={
                 "mode": mode,
-                "broker": command.broker,
+                "broker": broker,
                 "signal_id": signal_id,
                 "reviewed_trade_id": command.reviewed_trade_id,
             },
@@ -183,10 +189,10 @@ class ExecutionService:
         adapter_result = adapter.execute(
             command=ExecutionCreateCommand(
                 mode=mode,
-                broker=command.broker,
+                broker=broker,
                 signal_id=signal_id,
                 reviewed_trade_id=command.reviewed_trade_id,
-                status=command.status,
+                status=requested_status,
                 executed_price=command.executed_price,
             ),
             reviewed_trade=reviewed_trade,
@@ -242,12 +248,59 @@ class ExecutionService:
                 source="execution_service",
             )
 
+            status_upper = str(record.status or '').upper()
+            if status_upper in {'FILLED', 'EXECUTED', 'ACCEPTED', 'SENT'}:
+                increment_metric('execution_success_total', 1)
+                severity = 'INFO'
+                message = 'Execution recorded successfully'
+            elif status_upper in {'BLOCKED', 'REJECTED', 'SKIPPED'}:
+                increment_metric('execution_blocked_total', 1)
+                severity = 'WARNING'
+                message = 'Execution recorded in blocked/non-fill state'
+            else:
+                increment_metric('execution_failed_total', 1)
+                severity = 'ERROR'
+                message = 'Execution recorded in failed state'
+
+            log_event(
+                component='execution_service',
+                event_name='execution_result',
+                symbol=trade_symbol,
+                strategy=trade_strategy,
+                severity=severity,
+                message=message,
+                context_json={
+                    'execution_id': record.id,
+                    'mode': record.mode,
+                    'broker': record.broker,
+                    'status': record.status,
+                    'reviewed_trade_id': record.reviewed_trade_id,
+                    'signal_id': record.signal_id,
+                    'broker_reference': record.broker_reference,
+                },
+            )
+
             self.session.commit()
             self.session.refresh(record)
             return record
 
-        except Exception:
+        except Exception as exc:
             self.session.rollback()
+            increment_metric('execution_failed_total', 1)
+            log_exception(
+                component='execution_service',
+                event_name='execution_persist_failed',
+                exc=exc,
+                symbol=trade_symbol,
+                strategy=trade_strategy,
+                message='Execution persistence failed',
+                context_json={
+                    'mode': mode,
+                    'broker': broker,
+                    'reviewed_trade_id': command.reviewed_trade_id,
+                    'signal_id': signal_id,
+                },
+            )
             raise
 
     def execute_batch(
@@ -370,31 +423,62 @@ class ExecutionService:
             raise ValueError(f"Unsupported execution mode: {mode}")
         return normalized
 
+    def _normalize_broker(self, broker: str, mode: str) -> str:
+        normalized = str(broker or "").upper().strip()
+        if mode == "PAPER":
+            if normalized in {"SIM", "PAPER"}:
+                return "SIM"
+            raise ValueError(
+                f"Paper execution only supports broker SIM. Received broker: {broker}."
+            )
+        if normalized != "DHAN":
+            raise ValueError(
+                f"Live execution only supports broker DHAN. Received broker: {broker}."
+            )
+        return normalized
+
+    def _normalize_requested_status(self, status: str | None, mode: str) -> str | None:
+        normalized = str(status or "").upper().strip()
+        if mode == "PAPER":
+            if normalized in {"", "FILLED", "EXECUTED"}:
+                return "FILLED"
+            raise ValueError(
+                f"Paper execution status override must be FILLED/EXECUTED or empty. Received status: {status}."
+            )
+        if normalized:
+            raise ValueError("Live execution status override is not allowed. Broker response must determine status.")
+        return None
+
     def _get_adapter(self, mode: str) -> PaperExecutionAdapter | LiveExecutionAdapter:
         return self.live_adapter if mode == "LIVE" else self.paper_adapter
 
     def _resolve_execution_dependencies(
         self,
         command: ExecutionCreateCommand,
-    ) -> tuple[ReviewedTradeRecord | None, int | None, Any | None]:
-        reviewed_trade: ReviewedTradeRecord | None = None
-        if command.reviewed_trade_id is not None:
-            reviewed_trade = self.reviewed_trade_repository.get_reviewed_trade(
-                command.reviewed_trade_id
+    ) -> tuple[ReviewedTradeRecord, int | None, Any | None]:
+        if command.reviewed_trade_id is None:
+            raise ValueError(
+                'reviewed_trade_id is required. Real execution must come from an approved reviewed trade.'
             )
-            if reviewed_trade is None:
-                raise ValueError(
-                    f"Reviewed trade {command.reviewed_trade_id} was not found."
-                )
-            if str(reviewed_trade.status).upper() != "APPROVED":
-                raise ValueError(
-                    f"Reviewed trade {command.reviewed_trade_id} must be APPROVED before execution. "
-                    f"Current status: {reviewed_trade.status}."
-                )
 
-        signal_id = command.signal_id
-        if signal_id is None and reviewed_trade is not None:
-            signal_id = reviewed_trade.signal_id
+        reviewed_trade = self.reviewed_trade_repository.get_reviewed_trade(
+            command.reviewed_trade_id
+        )
+        if reviewed_trade is None:
+            raise ValueError(
+                f"Reviewed trade {command.reviewed_trade_id} was not found."
+            )
+        if str(reviewed_trade.status).upper() != "APPROVED":
+            raise ValueError(
+                f"Reviewed trade {command.reviewed_trade_id} must be APPROVED before execution. "
+                f"Current status: {reviewed_trade.status}."
+            )
+
+        signal_id = reviewed_trade.signal_id
+        if command.signal_id is not None and signal_id is not None and int(command.signal_id) != int(signal_id):
+            raise ValueError(
+                f"Execution signal_id {command.signal_id} does not match reviewed trade signal_id {signal_id}."
+            )
 
         signal = None
         if signal_id is not None:

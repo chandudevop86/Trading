@@ -1,4 +1,4 @@
-from fastapi.testclient import TestClient
+﻿from fastapi.testclient import TestClient
 
 from vinayak.api.main import app
 from vinayak.api.routes import dashboard as dashboard_route
@@ -146,6 +146,12 @@ def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> N
         'fixed_cost_per_trade': 15,
         'max_daily_loss': 2500,
         'max_trades_per_day': 2,
+        'max_position_value': 15000,
+        'max_open_positions': 3,
+        'max_symbol_exposure_pct': 20,
+        'max_portfolio_exposure_pct': 35,
+        'max_open_risk_pct': 5,
+        'kill_switch_enabled': True,
     })
 
     assert response.status_code == 200
@@ -162,4 +168,11 @@ def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> N
     assert captured['fixed_cost_per_trade'] == 15
     assert captured['max_daily_loss'] == 2500
     assert captured['max_trades_per_day'] == 2
+    assert captured['max_position_value'] == 15000
+    assert captured['max_open_positions'] == 3
+    assert captured['max_symbol_exposure_pct'] == 20
+    assert captured['max_portfolio_exposure_pct'] == 35
+    assert captured['max_open_risk_pct'] == 5
+    assert captured['kill_switch_enabled'] is True
+
 

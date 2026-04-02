@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from vinayak.db.session import Base
@@ -10,6 +10,11 @@ from vinayak.db.session import Base
 
 class ReviewedTradeRecord(Base):
     __tablename__ = 'reviewed_trades'
+    __table_args__ = (
+        UniqueConstraint('signal_id', name='uq_reviewed_trade_signal_id'),
+        Index('idx_reviewed_trades_status_created', 'status', 'created_at'),
+        Index('idx_reviewed_trades_signal_status', 'signal_id', 'status'),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     signal_id: Mapped[int | None] = mapped_column(Integer, ForeignKey('signals.id'), nullable=True)

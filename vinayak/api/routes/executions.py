@@ -9,7 +9,6 @@ from vinayak.api.schemas.signal import ExecutionAuditLogListResponse, ExecutionA
 from vinayak.api.schemas.strategy import ExecutionCreateRequest
 from vinayak.db.repositories.execution_audit_log_repository import ExecutionAuditLogRepository
 from vinayak.execution.service import ExecutionCreateCommand, ExecutionService
-from vinayak.execution.events import  EVENT_TRADE_EXECUTED,EVENT_TRADE_EXECUTE_REQUESTED
 
 
 router = APIRouter(prefix='/executions', tags=['executions'], dependencies=[Depends(require_admin_session)])
@@ -92,7 +91,9 @@ def create_execution(request: ExecutionCreateRequest, db: Session = Depends(get_
             )
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        detail = str(exc)
+        status_code = 404 if 'was not found' in detail else 400
+        raise HTTPException(status_code=status_code, detail=detail) from exc
 
     return ExecutionResponse(
         id=record.id,

@@ -1,8 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from vinayak.db.session import Base
@@ -10,6 +10,11 @@ from vinayak.db.session import Base
 
 class ExecutionRecord(Base):
     __tablename__ = 'executions'
+    __table_args__ = (
+        UniqueConstraint('reviewed_trade_id', 'mode', name='uq_reviewed_trade_execution'),
+        Index('idx_signal_mode', 'signal_id', 'mode'),
+        Index('idx_broker_ref', 'broker_reference'),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     signal_id: Mapped[int | None] = mapped_column(Integer, ForeignKey('signals.id'), nullable=True)

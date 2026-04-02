@@ -1,4 +1,4 @@
-﻿from vinayak.messaging.topics import (
+from vinayak.messaging.events import (
     EVENT_ANALYSIS_COMPLETED as ANALYSIS_COMPLETED,
     EVENT_NOTIFICATION_REQUESTED as NOTIFICATION_REQUESTED,
     EVENT_SIGNAL_GENERATED as SIGNAL_GENERATED,

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
@@ -93,6 +93,7 @@ class DashboardSummaryResponse(BaseModel):
     audit_status_counts: dict[str, int]
     recent_audit_failures: int
     validation_summary: dict[str, Any] = Field(default_factory=dict)
+    system_status: str = 'NOT_READY'
 
 
 class LiveOhlcvRowResponse(BaseModel):

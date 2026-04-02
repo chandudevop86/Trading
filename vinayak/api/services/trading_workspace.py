@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -11,8 +11,10 @@ except Exception:  # pragma: no cover
     pd = None  # type: ignore
 
 from src.breakout_bot import Candle
+from src.preprocessing import prepare_trading_data as canonical_prepare_trading_data
 from src.strategy_service import StrategyContext, run_strategy_workflow
 from src.strike_selector import attach_option_strikes
+from src.analytics.readiness_api import evaluate_readiness
 from src.telegram_notifier import build_trade_summary, send_telegram_message
 from src.trade_validation_service import build_trade_evaluation_summary
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
@@ -270,6 +272,7 @@ def _validation_summary_from_rows(rows: list[dict[str, Any]], strategy: str) -> 
     if not rows:
         return {}
     summary = build_trade_evaluation_summary(rows, strategy_name=str(strategy or 'VINAYAK'))
+    readiness = evaluate_readiness(rows, rows)
     return {
         'clean_trades': summary.get('clean_trades', summary.get('closed_trades', 0)),
         'expectancy_per_trade': summary.get('expectancy_per_trade', 0.0),
@@ -285,6 +288,21 @@ def _validation_summary_from_rows(rows: list[dict[str, Any]], strategy: str) -> 
         'promotion_status': summary.get('promotion_status', 'RESEARCH_ONLY'),
         'warnings': summary.get('warnings', []),
         'pass_fail_reasons': summary.get('pass_fail_reasons', []),
+        'system_status': readiness.get('verdict', 'NOT_READY'),
+        'readiness_reasons': readiness.get('reasons', []),
+        'validation_pass_rate': readiness.get('validation_pass_rate', 0.0),
+        'top_rejection_reasons': readiness.get('top_rejection_reasons', {}),
+    }
+
+
+def _data_status(candles: pd.DataFrame) -> dict[str, Any]:
+    report = dict(getattr(candles, 'attrs', {}).get('cleaning_report', {}) or {})
+    return {
+        'status': 'VALID' if not candles.empty else 'INVALID',
+        'rows': int(len(candles)),
+        'latest_timestamp': report.get('latest_timestamp', str(candles.iloc[-1]['timestamp']) if not candles.empty else ''),
+        'duplicates_removed': int(report.get('duplicates_removed', 0) or 0),
+        'columns': list(report.get('columns', list(candles.columns))),
     }
 
 def run_live_trading_analysis(

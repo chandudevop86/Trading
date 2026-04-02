@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -99,6 +99,8 @@ def post_live_analysis(request: LiveAnalysisRequest) -> LiveAnalysisResponse:
         execution_summary=LiveAnalysisExecutionSummary(**result['execution_summary']),
         execution_rows=[LiveAnalysisExecutionRow(**row) for row in result['execution_rows']],
         validation_summary=result.get('validation_summary', {}),
+        data_status=result.get('data_status', {}),
+        system_status=result.get('system_status', 'NOT_READY'),
         report_artifacts=LiveAnalysisReportArtifacts(
             json_report=ReportArtifactLocation(**result['report_artifacts']['json_report']),
             summary_report=ReportArtifactLocation(**result['report_artifacts']['summary_report']),

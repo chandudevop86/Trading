@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import os
@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from src.trade_validation_service import build_trade_evaluation_summary
+from src.analytics.readiness_api import evaluate_readiness
 from vinayak.db.repositories.execution_audit_log_repository import ExecutionAuditLogRepository
 from vinayak.db.repositories.execution_repository import ExecutionRepository
 from vinayak.db.repositories.reviewed_trade_repository import ReviewedTradeRepository
@@ -32,6 +33,7 @@ def _validation_snapshot(path: Path) -> dict[str, object]:
     if not rows:
         return {}
     summary = build_trade_evaluation_summary(rows, strategy_name='VINAYAK_PAPER')
+    readiness = evaluate_readiness(rows, rows)
     return {
         'clean_trades': summary.get('clean_trades', summary.get('closed_trades', 0)),
         'expectancy_per_trade': summary.get('expectancy_per_trade', 0.0),
@@ -46,6 +48,10 @@ def _validation_snapshot(path: Path) -> dict[str, object]:
         'promotion_status': summary.get('promotion_status', 'RESEARCH_ONLY'),
         'warnings': summary.get('warnings', []),
         'pass_fail_reasons': summary.get('pass_fail_reasons', []),
+        'system_status': readiness.get('verdict', 'NOT_READY'),
+        'readiness_reasons': readiness.get('reasons', []),
+        'validation_pass_rate': readiness.get('validation_pass_rate', 0.0),
+        'top_rejection_reasons': readiness.get('top_rejection_reasons', {}),
     }
 
 

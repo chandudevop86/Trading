@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import html
 import json
@@ -161,6 +161,7 @@ def render_user_home_page(payload: dict[str, Any]) -> str:
       </tbody></table></section>
       <section class=\"card\"><h2>Live Summary</h2><table><tbody>
         <tr><th>Trade History Rows</th><td>{html.escape(str(payload.get('history_count', 0)))}</td></tr>
+        <tr><th>Position Sizing</th><td>Quantity is executable units. Lots are shown separately when available.</td></tr>
         <tr><th>Last Trade Time</th><td>{html.escape(str(payload.get('last_trade_time', '-')))}</td></tr>
       </tbody></table></section>
     </div>
@@ -197,19 +198,19 @@ def render_trade_history_page(history_payload: dict[str, Any]) -> str:
     rows = list(history_payload.get('history', []) or [])
     if rows:
         row_html = ''.join(
-            f"<tr><td>{html.escape(str(row.get('symbol', '-')))}</td><td>{html.escape(str(row.get('side', '-')))}</td><td>{html.escape(str(row.get('entry_price', row.get('price', '-'))))}</td><td>{html.escape(str(row.get('stop_loss', '-')))}</td><td>{html.escape(str(row.get('target', row.get('target_price', '-'))))}</td><td>{html.escape(str(row.get('execution_status', row.get('status', '-'))))}</td><td>{html.escape(str(row.get('executed_at_utc', row.get('signal_time', '-'))))}</td></tr>"
+            f"<tr><td>{html.escape(str(row.get('symbol', '-')))}</td><td>{html.escape(str(row.get('side', '-')))}</td><td>{html.escape(str(row.get('quantity', '-')))}</td><td>{html.escape(str(row.get('lots', '-')))}</td><td>{html.escape(str(row.get('entry_price', row.get('price', '-'))))}</td><td>{html.escape(str(row.get('stop_loss', '-')))}</td><td>{html.escape(str(row.get('target', row.get('target_price', '-'))))}</td><td>{html.escape(str(row.get('execution_status', row.get('status', '-'))))}</td><td>{html.escape(str(row.get('executed_at_utc', row.get('signal_time', '-'))))}</td></tr>"
             for row in rows[:25]
         )
     else:
-        row_html = '<tr><td colspan="7">No paper trade history yet.</td></tr>'
+        row_html = '<tr><td colspan="9">No paper trade history yet.</td></tr>'
     body = f"""
     <section class=\"card\">
       <div class=\"eyebrow\">Trade History</div>
       <h1>Recent paper trading outcomes</h1>
       <p class=\"muted\">This view remains user-safe: no validation internals, debug state, or control buttons.</p>
     </section>
-    <section class=\"card\" style=\"margin-top:16px;\"><h2>Recent Trades</h2>
-      <table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Stop</th><th>Target</th><th>Status</th><th>Time</th></tr></thead><tbody>{row_html}</tbody></table>
+    <section class=\"card\" style=\"margin-top:16px;\"><h2>Recent Trades</h2><p class=\"muted\">Quantity means executable units. Lots are shown separately when available.</p>
+      <table><thead><tr><th>Symbol</th><th>Side</th><th>Quantity</th><th>Lots</th><th>Entry</th><th>Stop</th><th>Target</th><th>Status</th><th>Time</th></tr></thead><tbody>{row_html}</tbody></table>
     </section>
     """
     return render_role_page(title='Vinayak Trade History', role='User', active_path='trade-history', body=body, top_actions='<a class="button" href="/admin">Admin Login</a>')
@@ -291,9 +292,9 @@ def render_admin_execution_page(payload: dict[str, Any]) -> str:
     signal = dict(payload.get('latest_signal', {}) or {})
     rows = list(payload.get('history', []) or [])
     row_html = ''.join(
-        f"<tr><td>{html.escape(str(row.get('symbol', '-')))}</td><td>{html.escape(str(row.get('side', '-')))}</td><td>{html.escape(str(row.get('entry_price', row.get('price', '-'))))}</td><td>{html.escape(str(row.get('execution_status', row.get('status', '-'))))}</td><td>{html.escape(str(row.get('pnl', '-')))}</td><td>{html.escape(str(row.get('executed_at_utc', row.get('signal_time', '-'))))}</td></tr>"
+        f"<tr><td>{html.escape(str(row.get('symbol', '-')))}</td><td>{html.escape(str(row.get('side', '-')))}</td><td>{html.escape(str(row.get('quantity', '-')))}</td><td>{html.escape(str(row.get('lots', '-')))}</td><td>{html.escape(str(row.get('entry_price', row.get('price', '-'))))}</td><td>{html.escape(str(row.get('execution_status', row.get('status', '-'))))}</td><td>{html.escape(str(row.get('pnl', '-')))}</td><td>{html.escape(str(row.get('executed_at_utc', row.get('signal_time', '-'))))}</td></tr>"
         for row in rows[:25]
-    ) or '<tr><td colspan="6">No paper executions yet.</td></tr>'
+    ) or '<tr><td colspan="8">No paper executions yet.</td></tr>'
     body = f"""
     <section class=\"card\"><div class=\"eyebrow\">Execution</div><h1>Execution Health</h1><p class=\"muted\">Admin-only execution tracking and paper trade verification.</p></section>
     <div class=\"grid\" style=\"margin-top:16px;\">
@@ -306,7 +307,7 @@ def render_admin_execution_page(payload: dict[str, Any]) -> str:
       <section class=\"card\"><h2>Execution Summary</h2><pre>{html.escape(json.dumps(summary, indent=2))}</pre></section>
       <section class=\"card\"><h2>Latest User Signal</h2><pre>{html.escape(json.dumps(signal, indent=2))}</pre></section>
     </div>
-    <section class=\"card\"><h2>Recent Paper Trades</h2><table><thead><tr><th>Symbol</th><th>Side</th><th>Entry</th><th>Status</th><th>PnL</th><th>Time</th></tr></thead><tbody>{row_html}</tbody></table></section>
+    <section class=\"card\"><h2>Recent Paper Trades</h2><p class=\"muted\">Quantity is executable units, not lots. Lots are shown separately.</p><table><thead><tr><th>Symbol</th><th>Side</th><th>Quantity</th><th>Lots</th><th>Entry</th><th>Status</th><th>PnL</th><th>Time</th></tr></thead><tbody>{row_html}</tbody></table></section>
     """
     actions = '<a class="button" href="/workspace">Workspace</a><form method="post" action="/admin/logout" style="display:inline;"><button class="button primary" type="submit">Logout</button></form>'
     return render_role_page(title='Vinayak Admin Execution', role='Admin', active_path='execution', body=body, top_actions=actions)
@@ -387,6 +388,7 @@ __all__ = [
     'render_user_home_page',
     'render_user_signal_page',
 ]
+
 
 
 

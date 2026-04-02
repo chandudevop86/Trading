@@ -1,6 +1,6 @@
 ﻿param(
     [int]$StreamlitPort = 8501,
-    [int]$VinayakPort = 8000
+    [int]$VinayakPort = 8002
 )
 
 $ErrorActionPreference = 'Stop'

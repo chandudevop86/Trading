@@ -1,6 +1,11 @@
-﻿from datetime import datetime
+from datetime import datetime
 
 from vinayak.execution.contracts import normalize_candidate_contract
+from vinayak.messaging.events import (
+    EVENT_REVIEWED_TRADE_CREATED,
+    EVENT_REVIEWED_TRADE_STATUS_UPDATED,
+    EVENT_TRADE_REVIEWED,
+)
 from vinayak.strategies.common.base import StrategySignal
 
 
@@ -43,12 +48,17 @@ def test_strategy_signal_exposes_strict_trade_contract_fields() -> None:
         signal_time=datetime(2026, 4, 2, 9, 20),
         metadata={
             'quantity': 12,
+            'signal_id': 21,
+            'reviewed_trade_id': 7,
             'zone_id': 'ZONE-DBR-1',
             'setup_type': 'DBR',
             'validation_status': 'PASS',
+            'reviewed_trade_status': 'APPROVED',
             'validation_score': 83.5,
             'validation_reasons': [],
             'execution_allowed': True,
+            'broker': 'SIM',
+            'mode': 'PAPER',
         },
     )
 
@@ -57,13 +67,27 @@ def test_strategy_signal_exposes_strict_trade_contract_fields() -> None:
     assert signal.symbol == '^NSEI'
     assert signal.side == 'BUY'
     assert signal.quantity == 12
+    assert signal.signal_id == 21
+    assert signal.reviewed_trade_id == 7
     assert signal.setup_type == 'DBR'
     assert signal.zone_id == 'ZONE-DBR-1'
     assert signal.validation_status == 'PASS'
+    assert signal.reviewed_trade_status == 'APPROVED'
     assert signal.execution_allowed is True
     assert signal.trade_id
     assert row['trade_id'] == signal.trade_id
+    assert row['signal_id'] == 21
+    assert row['reviewed_trade_id'] == 7
     assert row['zone_id'] == 'ZONE-DBR-1'
     assert row['quantity'] == 12
     assert row['validation_score'] == 83.5
-    assert row['contract_version'] == 'strict_trade_signal_v1'
+    assert row['broker'] == 'SIM'
+    assert row['mode'] == 'PAPER'
+    assert row['contract_version'] == 'strict_trade_signal_v2'
+
+
+def test_reviewed_trade_events_have_explicit_canonical_names() -> None:
+    assert EVENT_REVIEWED_TRADE_CREATED == 'trade.reviewed'
+    assert EVENT_REVIEWED_TRADE_STATUS_UPDATED == 'reviewed_trade.status.updated'
+    assert EVENT_TRADE_REVIEWED == EVENT_REVIEWED_TRADE_CREATED
+

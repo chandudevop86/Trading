@@ -13,6 +13,8 @@ class ExecutionRecord(Base):
     __table_args__ = (
         UniqueConstraint('reviewed_trade_id', 'mode', name='uq_reviewed_trade_execution'),
         Index('idx_signal_mode', 'signal_id', 'mode'),
+        Index('idx_reviewed_trade_id', 'reviewed_trade_id'),
+        Index('idx_reviewed_trade_mode', 'reviewed_trade_id', 'mode'),
         Index('idx_broker_ref', 'broker_reference'),
     )
 

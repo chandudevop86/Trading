@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
@@ -8,8 +8,11 @@ from sqlalchemy.orm import Session
 from vinayak.db.models.reviewed_trade import ReviewedTradeRecord
 from vinayak.db.repositories.reviewed_trade_repository import ReviewedTradeRepository
 from vinayak.db.repositories.signal_repository import SignalRepository
+from vinayak.messaging.events import (
+    EVENT_REVIEWED_TRADE_CREATED,
+    EVENT_REVIEWED_TRADE_STATUS_UPDATED,
+)
 from vinayak.messaging.outbox import OutboxService
-from vinayak.messaging.topics import EVENT_TRADE_REVIEWED
 
 
 @dataclass(slots=True)
@@ -61,7 +64,7 @@ class ReviewedTradeService:
     ) -> ReviewedTradeRecord:
         payload = self._resolve_create_payload(command)
         record = self.reviewed_trade_repository.create_reviewed_trade(**payload)
-        self._enqueue_reviewed_event(record)
+        self._enqueue_reviewed_created_event(record)
         self.session.commit()
         self.session.refresh(record)
         return record
@@ -104,6 +107,7 @@ class ReviewedTradeService:
             quantity=command.quantity,
             lots=command.lots,
         )
+        self._enqueue_reviewed_status_updated_event(updated)
         self.session.commit()
         self.session.refresh(updated)
         return updated
@@ -124,6 +128,7 @@ class ReviewedTradeService:
             status="EXECUTED",
             notes=notes if notes is not None else record.notes,
         )
+        self._enqueue_reviewed_status_updated_event(updated)
         if auto_commit:
             self.session.commit()
             self.session.refresh(updated)
@@ -242,9 +247,22 @@ class ReviewedTradeService:
             "notes": command.notes,
         }
 
-    def _enqueue_reviewed_event(self, record: ReviewedTradeRecord) -> None:
+    def _enqueue_reviewed_created_event(self, record: ReviewedTradeRecord) -> None:
         self.outbox.enqueue(
-            event_name=EVENT_TRADE_REVIEWED,
+            event_name=EVENT_REVIEWED_TRADE_CREATED,
+            payload={
+                "reviewed_trade_id": record.id,
+                "signal_id": record.signal_id,
+                "strategy_name": record.strategy_name,
+                "symbol": record.symbol,
+                "status": record.status,
+            },
+            source="reviewed_trade_service",
+        )
+
+    def _enqueue_reviewed_status_updated_event(self, record: ReviewedTradeRecord) -> None:
+        self.outbox.enqueue(
+            event_name=EVENT_REVIEWED_TRADE_STATUS_UPDATED,
             payload={
                 "reviewed_trade_id": record.id,
                 "signal_id": record.signal_id,
@@ -261,4 +279,3 @@ __all__ = [
     "ReviewedTradeService",
     "ReviewedTradeStatusUpdateCommand",
 ]
-

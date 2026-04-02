@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -107,3 +107,4 @@ def create_execution(request: ExecutionCreateRequest, db: Session = Depends(get_
         broker_reference=record.broker_reference,
         notes=record.notes,
     )
+

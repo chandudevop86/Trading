@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -6,7 +6,7 @@ from typing import Any
 import uuid
 
 
-STRICT_TRADE_SIGNAL_VERSION = 'strict_trade_signal_v1'
+STRICT_TRADE_SIGNAL_VERSION = 'strict_trade_signal_v2'
 _ACTIONABLE_SIDES = {'BUY', 'SELL'}
 
 
@@ -39,13 +39,18 @@ class StrategySignal:
     signal_time: datetime
     quantity: int = 0
     trade_id: str = ''
+    signal_id: int | None = None
+    reviewed_trade_id: int | None = None
     zone_id: str = ''
     setup_type: str = ''
     timeframe: str = ''
     validation_status: str = 'PENDING'
+    reviewed_trade_status: str = 'PENDING'
     validation_score: float = 0.0
     validation_reasons: list[str] = field(default_factory=list)
     execution_allowed: bool = False
+    broker: str = ''
+    mode: str = ''
     contract_version: str = STRICT_TRADE_SIGNAL_VERSION
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -58,12 +63,21 @@ class StrategySignal:
         self.stop_loss = round(_safe_float(self.stop_loss), 4)
         self.target_price = round(_safe_float(self.target_price), 4)
         self.quantity = _safe_int(self.quantity if self.quantity else metadata.get('quantity'), 0)
+        self.signal_id = _safe_int(self.signal_id if self.signal_id is not None else metadata.get('signal_id'), 0) or None
+        self.reviewed_trade_id = _safe_int(
+            self.reviewed_trade_id if self.reviewed_trade_id is not None else metadata.get('reviewed_trade_id'),
+            0,
+        ) or None
         self.zone_id = str(self.zone_id or metadata.get('zone_id') or '').strip()
         inferred_setup = metadata.get('setup_type') or metadata.get('zone_type') or self.strategy_name
         self.setup_type = str(self.setup_type or inferred_setup or '').strip().upper().replace(' ', '_')
         self.timeframe = str(self.timeframe or metadata.get('timeframe') or metadata.get('interval') or '').strip()
         status_value = metadata.get('validation_status') if str(self.validation_status).strip().upper() == 'PENDING' and metadata.get('validation_status') else self.validation_status
         self.validation_status = str(status_value or 'PENDING').strip().upper()
+        reviewed_status_value = metadata.get('reviewed_trade_status') if str(self.reviewed_trade_status).strip().upper() == 'PENDING' and metadata.get('reviewed_trade_status') else self.reviewed_trade_status
+        self.reviewed_trade_status = str(reviewed_status_value or 'PENDING').strip().upper()
+        self.broker = str(self.broker or metadata.get('broker') or '').strip().upper()
+        self.mode = str(self.mode or metadata.get('mode') or '').strip().upper()
         self.validation_score = round(
             _safe_float(self.validation_score if self.validation_score else metadata.get('validation_score', metadata.get('score', 0.0))),
             2,
@@ -83,13 +97,18 @@ class StrategySignal:
         if not self.trade_id:
             self.trade_id = self._build_trade_id()
         metadata.setdefault('quantity', self.quantity)
+        metadata.setdefault('signal_id', self.signal_id)
+        metadata.setdefault('reviewed_trade_id', self.reviewed_trade_id)
         metadata.setdefault('setup_type', self.setup_type)
         if self.zone_id:
             metadata.setdefault('zone_id', self.zone_id)
         metadata.setdefault('validation_status', self.validation_status)
+        metadata.setdefault('reviewed_trade_status', self.reviewed_trade_status)
         metadata.setdefault('validation_score', self.validation_score)
         metadata.setdefault('validation_reasons', list(self.validation_reasons))
         metadata.setdefault('execution_allowed', self.execution_allowed)
+        metadata.setdefault('broker', self.broker)
+        metadata.setdefault('mode', self.mode)
         metadata.setdefault('trade_id', self.trade_id)
         metadata.setdefault('contract_version', self.contract_version)
         self.metadata = metadata
@@ -125,17 +144,21 @@ class StrategySignal:
             'entry_time': timestamp,
             'signal_time': timestamp,
             'quantity': self.quantity,
+            'signal_id': self.signal_id,
+            'reviewed_trade_id': self.reviewed_trade_id,
             'zone_id': self.zone_id,
             'setup_type': self.setup_type,
             'timeframe': self.timeframe,
             'validation_status': self.validation_status,
+            'reviewed_trade_status': self.reviewed_trade_status,
             'validation_score': self.validation_score,
             'validation_reasons': list(self.validation_reasons),
             'execution_allowed': self.execution_allowed,
+            'broker': self.broker,
+            'mode': self.mode,
             'contract_version': self.contract_version,
             **self.metadata,
         }
 
 
 TradeSignal = StrategySignal
-

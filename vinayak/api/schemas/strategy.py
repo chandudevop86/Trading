@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 
@@ -84,8 +84,23 @@ class ReviewedTradeStatusUpdateRequest(BaseModel):
     lots: int | None = Field(default=None, gt=0)
 
 
-class ExecuteTradeRequest(BaseModel):
-    trade_id: str
+class ExecutionContractRequest(BaseModel):
+    trade_id: str = Field(default='')
+    strategy_name: str = Field(default='')
+    symbol: str = Field(default='')
+    side: str = Field(default='')
+    entry_price: float | None = None
+    stop_loss: float | None = None
+    target_price: float | None = None
+    quantity: int | None = Field(default=None, gt=0)
+    signal_id: int | None = Field(default=None, gt=0)
+    reviewed_trade_id: int | None = Field(default=None, gt=0)
+    validation_status: str = Field(default='PENDING')
+    reviewed_trade_status: str = Field(default='PENDING')
+    broker: str = Field(default='')
+    mode: str = Field(default='')
+
+class ExecuteTradeRequest(ExecutionContractRequest):
     symbol: str
     side: str
     entry_price: float
@@ -93,8 +108,8 @@ class ExecuteTradeRequest(BaseModel):
     target_price: float
     quantity: int = Field(gt=0)
 
-class ExecutionCreateRequest(BaseModel):
-    signal_id: int | None = Field(default=None, gt=0)
+
+class ExecutionCreateRequest(ExecutionContractRequest):
     reviewed_trade_id: int = Field(gt=0)
     mode: str = Field(min_length=1)
     broker: str = Field(min_length=1)
@@ -146,7 +161,6 @@ class LiveAnalysisRequest(BaseModel):
     fixed_cost_per_trade: float = Field(default=0.0, ge=0)
     max_daily_loss: float | None = Field(default=None, ge=0)
     max_trades_per_day: int | None = Field(default=None, ge=1)
-
 
 
 

@@ -1,9 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Iterable, Protocol
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from vinayak.db.models.execution import ExecutionRecord
@@ -15,16 +16,21 @@ from vinayak.db.repositories.execution_repository import ExecutionRepository
 from vinayak.db.repositories.reviewed_trade_repository import ReviewedTradeRepository
 from vinayak.db.repositories.signal_repository import SignalRepository
 from vinayak.execution.commands import ExecutionCreateCommand
+from vinayak.execution.live_execution_adapter import LiveExecutionAdapter
+from vinayak.execution.outbox_service import OutboxService
+from vinayak.execution.paper_execution_adapter import PaperExecutionAdapter
+from vinayak.execution.reviewed_trade_service import ReviewedTradeService
 from vinayak.messaging.events import (
     EVENT_TRADE_EXECUTED,
     EVENT_TRADE_EXECUTE_REQUESTED,
 )
-from vinayak.execution.outbox_service import OutboxService
-from vinayak.execution.paper_execution_adapter import PaperExecutionAdapter
-from vinayak.execution.reviewed_trade_service import ReviewedTradeService
-from vinayak.execution.live_execution_adapter import LiveExecutionAdapter
 from vinayak.observability.observability_logger import log_event, log_exception
 from vinayak.observability.observability_metrics import increment_metric
+
+
+_SUCCESS_STATUSES = {'FILLED', 'EXECUTED', 'ACCEPTED', 'SENT'}
+_BLOCKED_STATUSES = {'BLOCKED', 'REJECTED', 'SKIPPED'}
+_FAILURE_STATUSES = {'FAILED'}
 
 
 class ExecutionStatus(StrEnum):
@@ -154,9 +160,23 @@ class ExecutionService:
         mode = self._normalize_mode(command.mode)
         broker = self._normalize_broker(command.broker, mode)
         requested_status = self._normalize_requested_status(command.status, mode)
+        self._ensure_no_duplicate_execution(
+            mode=mode,
+            reviewed_trade_id=command.reviewed_trade_id,
+            signal_id=None,
+            broker_reference=None,
+            symbol=str(command.symbol or ''),
+            strategy=str(command.strategy_name or ''),
+            trade_id=command.trade_id,
+        )
         reviewed_trade, signal_id, signal = self._resolve_execution_dependencies(command)
-        trade_symbol = str(getattr(reviewed_trade, 'symbol', '') or getattr(signal, 'symbol', '') or '')
-        trade_strategy = str(getattr(reviewed_trade, 'strategy_name', '') or getattr(signal, 'strategy_name', '') or '')
+        trade_symbol = str(getattr(reviewed_trade, 'symbol', '') or getattr(signal, 'symbol', '') or command.symbol or '')
+        trade_strategy = str(
+            getattr(reviewed_trade, 'strategy_name', '')
+            or getattr(signal, 'strategy_name', '')
+            or command.strategy_name
+            or ''
+        )
 
         increment_metric('execution_attempt_total', 1)
         log_event(
@@ -171,35 +191,86 @@ class ExecutionService:
                 'broker': broker,
                 'reviewed_trade_id': command.reviewed_trade_id,
                 'signal_id': signal_id,
+                'trade_id': command.trade_id,
             },
+        )
+
+        self._ensure_no_duplicate_execution(
+            mode=mode,
+            reviewed_trade_id=None,
+            signal_id=signal_id,
+            broker_reference=None,
+            symbol=trade_symbol,
+            strategy=trade_strategy,
+            trade_id=command.trade_id,
         )
 
         self.outbox.enqueue(
             event_name=EVENT_TRADE_EXECUTE_REQUESTED,
             payload={
-                "mode": mode,
-                "broker": broker,
-                "signal_id": signal_id,
-                "reviewed_trade_id": command.reviewed_trade_id,
+                'mode': mode,
+                'broker': broker,
+                'signal_id': signal_id,
+                'reviewed_trade_id': command.reviewed_trade_id,
+                'trade_id': command.trade_id,
             },
-            source="execution_service",
+            source='execution_service',
         )
 
         adapter = self._get_adapter(mode)
-        adapter_result = adapter.execute(
-            command=ExecutionCreateCommand(
-                mode=mode,
-                broker=broker,
-                signal_id=signal_id,
-                reviewed_trade_id=command.reviewed_trade_id,
-                status=requested_status,
-                executed_price=command.executed_price,
-            ),
-            reviewed_trade=reviewed_trade,
-            signal=signal,
-        )
+        try:
+            adapter_result = adapter.execute(
+                command=ExecutionCreateCommand(
+                    mode=mode,
+                    broker=broker,
+                    signal_id=signal_id,
+                    reviewed_trade_id=command.reviewed_trade_id,
+                    trade_id=command.trade_id,
+                    strategy_name=trade_strategy,
+                    symbol=trade_symbol,
+                    side=str(command.side or getattr(reviewed_trade, 'side', '') or '').upper(),
+                    entry_price=command.entry_price,
+                    stop_loss=command.stop_loss,
+                    target_price=command.target_price,
+                    quantity=command.quantity,
+                    validation_status=command.validation_status,
+                    reviewed_trade_status=command.reviewed_trade_status,
+                    status=requested_status,
+                    executed_price=command.executed_price,
+                    metadata=dict(command.metadata or {}),
+                ),
+                reviewed_trade=reviewed_trade,
+                signal=signal,
+            )
+        except Exception as exc:
+            increment_metric('execution_failed_total', 1)
+            log_exception(
+                component='execution_service',
+                event_name='execution_adapter_failed',
+                exc=exc,
+                symbol=trade_symbol,
+                strategy=trade_strategy,
+                message='Execution adapter failed before persistence',
+                context_json={
+                    'mode': mode,
+                    'broker': broker,
+                    'reviewed_trade_id': command.reviewed_trade_id,
+                    'signal_id': signal_id,
+                    'trade_id': command.trade_id,
+                },
+            )
+            raise
 
         self._validate_adapter_result(adapter_result)
+        self._ensure_no_duplicate_execution(
+            mode=mode,
+            reviewed_trade_id=command.reviewed_trade_id,
+            signal_id=signal_id,
+            broker_reference=adapter_result.broker_reference,
+            symbol=trade_symbol,
+            strategy=trade_strategy,
+            trade_id=command.trade_id,
+        )
 
         try:
             record = self.execution_repository.create_execution(
@@ -214,7 +285,7 @@ class ExecutionService:
                 notes=adapter_result.notes,
             )
 
-            if mode == "LIVE" and adapter_result.audit_request_payload is not None:
+            if mode == 'LIVE' and adapter_result.audit_request_payload is not None:
                 self.execution_audit_log_repository.create_audit_log(
                     execution_id=record.id,
                     broker=adapter_result.broker,
@@ -230,30 +301,30 @@ class ExecutionService:
             }:
                 self.reviewed_trade_service.mark_executed(
                     reviewed_trade.id,
-                    notes=f"Execution recorded via {mode} mode.",
+                    notes=f'Execution recorded via {mode} mode.',
                     auto_commit=False,
                 )
 
             self.outbox.enqueue(
                 event_name=EVENT_TRADE_EXECUTED,
                 payload={
-                    "execution_id": record.id,
-                    "signal_id": record.signal_id,
-                    "reviewed_trade_id": record.reviewed_trade_id,
-                    "mode": record.mode,
-                    "broker": record.broker,
-                    "status": record.status,
-                    "broker_reference": record.broker_reference,
+                    'execution_id': record.id,
+                    'signal_id': record.signal_id,
+                    'reviewed_trade_id': record.reviewed_trade_id,
+                    'mode': record.mode,
+                    'broker': record.broker,
+                    'status': record.status,
+                    'broker_reference': record.broker_reference,
                 },
-                source="execution_service",
+                source='execution_service',
             )
 
             status_upper = str(record.status or '').upper()
-            if status_upper in {'FILLED', 'EXECUTED', 'ACCEPTED', 'SENT'}:
+            if status_upper in _SUCCESS_STATUSES:
                 increment_metric('execution_success_total', 1)
                 severity = 'INFO'
                 message = 'Execution recorded successfully'
-            elif status_upper in {'BLOCKED', 'REJECTED', 'SKIPPED'}:
+            elif status_upper in _BLOCKED_STATUSES:
                 increment_metric('execution_blocked_total', 1)
                 severity = 'WARNING'
                 message = 'Execution recorded in blocked/non-fill state'
@@ -284,6 +355,25 @@ class ExecutionService:
             self.session.refresh(record)
             return record
 
+        except IntegrityError as exc:
+            self.session.rollback()
+            increment_metric('execution_blocked_total', 1)
+            increment_metric('duplicate_execution_block_total', 1)
+            self._log_blocked_execution(
+                reason='duplicate_execution_constraint',
+                mode=mode,
+                broker=broker,
+                reviewed_trade_id=command.reviewed_trade_id,
+                signal_id=signal_id,
+                broker_reference=adapter_result.broker_reference,
+                symbol=trade_symbol,
+                strategy=trade_strategy,
+                trade_id=command.trade_id,
+                message='Duplicate execution blocked by database constraint',
+            )
+            raise ValueError(
+                f'Duplicate execution blocked for reviewed trade {command.reviewed_trade_id} in {mode} mode.'
+            ) from exc
         except Exception as exc:
             self.session.rollback()
             increment_metric('execution_failed_total', 1)
@@ -299,6 +389,7 @@ class ExecutionService:
                     'broker': broker,
                     'reviewed_trade_id': command.reviewed_trade_id,
                     'signal_id': signal_id,
+                    'trade_id': command.trade_id,
                 },
             )
             raise
@@ -307,7 +398,7 @@ class ExecutionService:
         self,
         trades: Iterable[ExecutionBatchItem | dict[str, Any]],
         *,
-        mode: str = "PAPER",
+        mode: str = 'PAPER',
         context: dict[str, Any] | None = None,
         continue_on_error: bool = True,
     ) -> ExecutionBatchResult:
@@ -321,6 +412,19 @@ class ExecutionService:
             try:
                 reasons = self.reviewed_trade_service.get_block_reasons(item.payload, context=ctx)
                 if reasons:
+                    self._log_blocked_execution(
+                        reason='execution_gate_blocked',
+                        mode=normalized_mode,
+                        broker=item.broker,
+                        reviewed_trade_id=item.reviewed_trade_id,
+                        signal_id=item.signal_id,
+                        broker_reference=None,
+                        symbol=item.symbol,
+                        strategy=item.strategy_name,
+                        trade_id=item.trade_id,
+                        message='Batch execution blocked before service execution',
+                        block_reasons=reasons,
+                    )
                     result.add(
                         ExecutionDecision(
                             trade_id=item.trade_id,
@@ -339,13 +443,16 @@ class ExecutionService:
                     broker=item.broker,
                     signal_id=item.signal_id,
                     reviewed_trade_id=item.reviewed_trade_id,
+                    trade_id=item.trade_id,
+                    strategy_name=item.strategy_name,
+                    symbol=item.symbol,
                     status=item.status,
                     executed_price=item.executed_price,
+                    metadata=dict(item.payload or {}),
                 )
 
                 record = self.create_execution(command)
                 record_status = str(record.status).upper()
-
                 mapped_status = (
                     record_status
                     if record_status in {
@@ -366,7 +473,7 @@ class ExecutionService:
                         status=mapped_status,
                         mode=normalized_mode,
                         block_reasons=[],
-                        payload={**item.payload, "execution_record_id": record.id},
+                        payload={**item.payload, 'execution_record_id': record.id},
                         execution_id=record.id,
                         broker_reference=record.broker_reference,
                     )
@@ -376,9 +483,9 @@ class ExecutionService:
                 message = str(exc)
                 lowered = message.lower()
 
-                if "empty result" in lowered or "missing adapter result" in lowered:
+                if 'empty result' in lowered or 'missing adapter result' in lowered:
                     status = ExecutionStatus.SKIPPED
-                    reasons = ["gateway_returned_empty_result"]
+                    reasons = ['gateway_returned_empty_result']
                 else:
                     status = ExecutionStatus.BLOCKED
                     reasons = [message]
@@ -407,7 +514,7 @@ class ExecutionService:
                         symbol=item.symbol,
                         status=ExecutionStatus.FAILED,
                         mode=normalized_mode,
-                        block_reasons=[f"unexpected_error: {exc}"],
+                        block_reasons=[f'unexpected_error: {exc}'],
                         payload=item.payload,
                     )
                 )
@@ -418,39 +525,39 @@ class ExecutionService:
         return result
 
     def _normalize_mode(self, mode: str) -> str:
-        normalized = str(mode or "").upper().strip()
-        if normalized not in {"PAPER", "LIVE"}:
-            raise ValueError(f"Unsupported execution mode: {mode}")
+        normalized = str(mode or '').upper().strip()
+        if normalized not in {'PAPER', 'LIVE'}:
+            raise ValueError(f'Unsupported execution mode: {mode}')
         return normalized
 
     def _normalize_broker(self, broker: str, mode: str) -> str:
-        normalized = str(broker or "").upper().strip()
-        if mode == "PAPER":
-            if normalized in {"SIM", "PAPER"}:
-                return "SIM"
+        normalized = str(broker or '').upper().strip()
+        if mode == 'PAPER':
+            if normalized in {'SIM', 'PAPER'}:
+                return 'SIM'
             raise ValueError(
-                f"Paper execution only supports broker SIM. Received broker: {broker}."
+                f'Paper execution only supports broker SIM. Received broker: {broker}.'
             )
-        if normalized != "DHAN":
+        if normalized != 'DHAN':
             raise ValueError(
-                f"Live execution only supports broker DHAN. Received broker: {broker}."
+                f'Live execution only supports broker DHAN. Received broker: {broker}.'
             )
         return normalized
 
     def _normalize_requested_status(self, status: str | None, mode: str) -> str | None:
-        normalized = str(status or "").upper().strip()
-        if mode == "PAPER":
-            if normalized in {"", "FILLED", "EXECUTED"}:
-                return "FILLED"
+        normalized = str(status or '').upper().strip()
+        if mode == 'PAPER':
+            if normalized in {'', 'FILLED', 'EXECUTED'}:
+                return 'FILLED'
             raise ValueError(
-                f"Paper execution status override must be FILLED/EXECUTED or empty. Received status: {status}."
+                f'Paper execution status override must be FILLED/EXECUTED or empty. Received status: {status}.'
             )
         if normalized:
-            raise ValueError("Live execution status override is not allowed. Broker response must determine status.")
+            raise ValueError('Live execution status override is not allowed. Broker response must determine status.')
         return None
 
     def _get_adapter(self, mode: str) -> PaperExecutionAdapter | LiveExecutionAdapter:
-        return self.live_adapter if mode == "LIVE" else self.paper_adapter
+        return self.live_adapter if mode == 'LIVE' else self.paper_adapter
 
     def _resolve_execution_dependencies(
         self,
@@ -466,44 +573,162 @@ class ExecutionService:
         )
         if reviewed_trade is None:
             raise ValueError(
-                f"Reviewed trade {command.reviewed_trade_id} was not found."
+                f'Reviewed trade {command.reviewed_trade_id} was not found.'
             )
-        if str(reviewed_trade.status).upper() != "APPROVED":
+        if str(reviewed_trade.status).upper() != 'APPROVED':
             raise ValueError(
-                f"Reviewed trade {command.reviewed_trade_id} must be APPROVED before execution. "
-                f"Current status: {reviewed_trade.status}."
+                f'Reviewed trade {command.reviewed_trade_id} must be APPROVED before execution. '
+                f'Current status: {reviewed_trade.status}.'
             )
 
         signal_id = reviewed_trade.signal_id
         if command.signal_id is not None and signal_id is not None and int(command.signal_id) != int(signal_id):
             raise ValueError(
-                f"Execution signal_id {command.signal_id} does not match reviewed trade signal_id {signal_id}."
+                f'Execution signal_id {command.signal_id} does not match reviewed trade signal_id {signal_id}.'
             )
 
         signal = None
         if signal_id is not None:
             signal = self.signal_repository.get_signal(signal_id)
             if signal is None:
-                raise ValueError(f"Signal {signal_id} was not found.")
+                raise ValueError(f'Signal {signal_id} was not found.')
 
         return reviewed_trade, signal_id, signal
 
+    def _ensure_no_duplicate_execution(
+        self,
+        *,
+        mode: str,
+        reviewed_trade_id: int | None,
+        signal_id: int | None,
+        broker_reference: str | None,
+        symbol: str,
+        strategy: str,
+        trade_id: str,
+    ) -> None:
+        duplicate_reason = ''
+        existing = None
+
+        if reviewed_trade_id is not None:
+            existing = self.execution_repository.get_by_reviewed_trade_mode(
+                reviewed_trade_id=int(reviewed_trade_id),
+                mode=mode,
+            )
+            if existing is not None:
+                duplicate_reason = 'duplicate_reviewed_trade_mode'
+
+        if not duplicate_reason and signal_id is not None:
+            existing = self.execution_repository.get_by_signal_mode(
+                signal_id=int(signal_id),
+                mode=mode,
+            )
+            if existing is not None:
+                duplicate_reason = 'duplicate_signal_mode'
+
+        normalized_reference = str(broker_reference or '').strip()
+        if not duplicate_reason and normalized_reference:
+            existing = self.execution_repository.get_by_broker_reference(normalized_reference)
+            if existing is not None:
+                duplicate_reason = 'duplicate_broker_reference'
+
+        if duplicate_reason:
+            increment_metric('execution_blocked_total', 1)
+            increment_metric('duplicate_execution_block_total', 1)
+            self._log_blocked_execution(
+                reason=duplicate_reason,
+                mode=mode,
+                broker='',
+                reviewed_trade_id=reviewed_trade_id,
+                signal_id=signal_id,
+                broker_reference=normalized_reference,
+                symbol=symbol,
+                strategy=strategy,
+                trade_id=trade_id,
+                message='Duplicate execution blocked before persistence',
+                existing_execution_id=getattr(existing, 'id', None),
+            )
+            if duplicate_reason == 'duplicate_reviewed_trade_mode':
+                raise ValueError(
+                    f'Duplicate execution blocked for reviewed trade {reviewed_trade_id} in {mode} mode.'
+                )
+            if duplicate_reason == 'duplicate_signal_mode':
+                raise ValueError(
+                    f'Duplicate execution blocked for signal {signal_id} in {mode} mode.'
+                )
+            raise ValueError(
+                f'Duplicate execution blocked for broker_reference {normalized_reference}.'
+            )
+
     def _validate_adapter_result(self, result: AdapterResultLike | None) -> None:
         if result is None:
-            raise ValueError("Execution adapter returned empty result.")
+            raise ValueError('Execution adapter returned empty result.')
 
         missing_fields: list[str] = []
-
-        if not getattr(result, "broker", None):
-            missing_fields.append("broker")
-
-        if not getattr(result, "status", None):
-            missing_fields.append("status")
-
-        if getattr(result, "executed_at", None) is None:
-            missing_fields.append("executed_at")
+        if not getattr(result, 'broker', None):
+            missing_fields.append('broker')
+        if not getattr(result, 'status', None):
+            missing_fields.append('status')
+        if getattr(result, 'executed_at', None) is None:
+            missing_fields.append('executed_at')
 
         if missing_fields:
             raise ValueError(
                 f"Execution adapter returned invalid result. Missing fields: {', '.join(missing_fields)}"
             )
+
+        normalized_status = str(getattr(result, 'status', '') or '').upper().strip()
+        executed_price = getattr(result, 'executed_price', None)
+        broker_reference = str(getattr(result, 'broker_reference', '') or '').strip()
+
+        if normalized_status in {'FILLED', 'EXECUTED'}:
+            if executed_price is None or float(executed_price) <= 0:
+                raise ValueError('Execution adapter returned invalid result. Filled executions must include executed_price.')
+        if normalized_status in _SUCCESS_STATUSES and not broker_reference:
+            raise ValueError('Execution adapter returned invalid result. Successful executions must include broker_reference.')
+
+    def _log_blocked_execution(
+        self,
+        *,
+        reason: str,
+        mode: str,
+        broker: str,
+        reviewed_trade_id: int | None,
+        signal_id: int | None,
+        broker_reference: str | None,
+        symbol: str,
+        strategy: str,
+        trade_id: str,
+        message: str,
+        block_reasons: list[str] | None = None,
+        existing_execution_id: int | None = None,
+    ) -> None:
+        log_event(
+            component='execution_service',
+            event_name='execution_blocked',
+            symbol=symbol,
+            strategy=strategy,
+            severity='WARNING',
+            message=message,
+            context_json={
+                'reason': reason,
+                'block_reasons': list(block_reasons or []),
+                'mode': mode,
+                'broker': broker,
+                'reviewed_trade_id': reviewed_trade_id,
+                'signal_id': signal_id,
+                'broker_reference': broker_reference,
+                'trade_id': trade_id,
+                'existing_execution_id': existing_execution_id,
+            },
+        )
+
+
+__all__ = [
+    'ExecutionBatchItem',
+    'ExecutionBatchResult',
+    'ExecutionCreateCommand',
+    'ExecutionDecision',
+    'ExecutionService',
+    'ExecutionStatus',
+]
+

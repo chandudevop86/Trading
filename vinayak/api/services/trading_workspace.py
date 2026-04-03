@@ -392,7 +392,7 @@ def run_live_trading_analysis(
     trace_id = f"{symbol}_{strategy}_{int(time.time())}"
     started = time.perf_counter()
     fetch_started = time.perf_counter()
-    live_rows = fetch_live_ohlcv(symbol=symbol, interval=interval, period=period)
+    live_rows = fetch_live_ohlcv(symbol=symbol, interval=interval, period=period, provider='DHAN', security_map_path=security_map_path, force_refresh=True)
     record_stage('market_fetch', status='SUCCESS', duration_seconds=round(time.perf_counter() - fetch_started, 4), symbol=symbol, strategy=strategy, message='Live market rows fetched', trace_id=trace_id)
     prep_started = time.perf_counter()
     candles_df = prepare_trading_data(pd.DataFrame(live_rows))
@@ -541,7 +541,7 @@ def run_live_trading_analysis(
         'execution_summary': execution_summary,
         'execution_rows': execution_rows,
         'validation_summary': validation_summary,
-        'data_status': _data_status(candles_df),
+        'data_status': {**_data_status(candles_df), 'provider': str((live_rows[-1] if live_rows else {}).get('provider', '') or ''), 'source': str((live_rows[-1] if live_rows else {}).get('source', '') or ''), 'latest_interval': str((live_rows[-1] if live_rows else {}).get('interval', interval) or interval)},
         'system_status': validation_summary.get('system_status', 'NOT_READY'),
         'alert_notifications_sent': alert_notifications_sent,
     }
@@ -561,6 +561,8 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
+
 
 
 

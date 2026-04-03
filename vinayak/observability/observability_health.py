@@ -120,6 +120,8 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
     latest_analysis = _load_latest_analysis()
     latest_signal = dict((latest_analysis.get('signals') or [{}])[-1] if latest_analysis.get('signals') else {})
     latest_execution = dict((latest_analysis.get('execution_rows') or [{}])[-1] if latest_analysis.get('execution_rows') else {})
+    latest_candle = dict((latest_analysis.get('candles') or [{}])[-1] if latest_analysis.get('candles') else {})
+    latest_data_status = dict(latest_analysis.get('data_status', {}) or {})
 
     if latest_signal and not latest_execution:
         latest_execution = {
@@ -196,6 +198,24 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
                 {'label': 'duplicate_trade_blocks_total', 'value': _metric(snapshot, 'duplicate_trade_blocks_total', 0)},
             ],
         },
+        'latest_market_data': _build_detail_cards(
+            {
+                'provider': latest_data_status.get('provider') or latest_candle.get('provider', '-'),
+                'source': latest_data_status.get('source') or latest_candle.get('source', '-'),
+                'latest_timestamp': latest_data_status.get('latest_timestamp') or latest_candle.get('timestamp', '-'),
+                'interval': latest_data_status.get('latest_interval') or latest_candle.get('interval', '-'),
+                'symbol': latest_candle.get('symbol', latest_analysis.get('symbol', '-')),
+                'close': latest_candle.get('close', '-'),
+            },
+            [
+                ('provider', 'provider'),
+                ('source', 'source'),
+                ('latest_timestamp', 'latest_timestamp'),
+                ('interval', 'interval'),
+                ('symbol', 'symbol'),
+                ('close', 'close'),
+            ],
+        ),
         'validation_risk_health': {
             'status': risk_status,
             'color': _status_color(risk_status),
@@ -246,3 +266,6 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
 
 
 __all__ = ['build_observability_dashboard_payload']
+
+
+

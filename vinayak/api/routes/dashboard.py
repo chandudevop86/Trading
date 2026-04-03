@@ -43,7 +43,7 @@ def get_dashboard_candles(
     interval: str = Query(default='1m', min_length=1),
     period: str = Query(default='1d', min_length=1),
 ) -> LiveOhlcvResponse:
-    rows = fetch_live_ohlcv(symbol=symbol, interval=interval, period=period)
+    rows = fetch_live_ohlcv(symbol=symbol, interval=interval, period=period, provider='DHAN', force_refresh=True)
     return LiveOhlcvResponse(
         symbol=symbol,
         interval=interval,
@@ -119,6 +119,7 @@ def post_live_analysis(request: LiveAnalysisRequest, db: Session = Depends(get_d
             summary_report=ReportArtifactLocation(**result['report_artifacts']['summary_report']),
         ),
     )
+
 
 
 

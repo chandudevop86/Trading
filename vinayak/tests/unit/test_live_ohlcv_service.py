@@ -57,8 +57,9 @@ def test_fetch_live_ohlcv_reads_from_redis_before_yahoo(monkeypatch) -> None:
 
     monkeypatch.setattr(service, 'RedisCache', type('RedisCacheStub', (), {'from_env': staticmethod(lambda: cache)}))
     monkeypatch.setattr(service, 'yf', stub)
+    monkeypatch.setattr(service, 'canonical_fetch_live_ohlcv', None)
 
-    result = service.fetch_live_ohlcv('^NSEI', '1m', '1d')
+    result = service.fetch_live_ohlcv('^NSEI', '1m', '1d', provider='YAHOO')
 
     assert result == rows
     assert stub.calls == []
@@ -89,10 +90,56 @@ def test_fetch_live_ohlcv_uses_redis_latest_on_download_failure(monkeypatch) -> 
 
     monkeypatch.setattr(service, 'RedisCache', type('RedisCacheStub', (), {'from_env': staticmethod(lambda: cache)}))
     monkeypatch.setattr(service, 'yf', _StubYF(error=RuntimeError('timeout')))
+    monkeypatch.setattr(service, 'canonical_fetch_live_ohlcv', None)
 
-    result = service.fetch_live_ohlcv('^NSEI', '5m', '1d', use_cache=True)
+    result = service.fetch_live_ohlcv('^NSEI', '5m', '1d', provider='YAHOO', use_cache=True)
 
     assert result == latest_rows
+
+
+def test_fetch_live_ohlcv_uses_canonical_dhan_provider(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+    security_map_path = tmp_path / 'dhan_security_map.csv'
+    security_map_path.write_text('alias,security_id\n^NSEI,IDXNIFTY\n', encoding='utf-8')
+
+    def _fake_canonical(symbol, interval, period, **kwargs):
+        captured['symbol'] = symbol
+        captured['interval'] = interval
+        captured['period'] = period
+        captured['kwargs'] = kwargs
+        return [
+            {
+                'timestamp': '2026-04-03 09:20:00',
+                'open': 100.0,
+                'high': 101.0,
+                'low': 99.5,
+                'close': 100.8,
+                'volume': 1200,
+                'price': 100.8,
+                'interval': interval,
+                'provider': 'DHAN',
+                'symbol': symbol,
+                'source': 'DHAN_HISTORICAL',
+                'is_closed': True,
+            }
+        ]
+
+    monkeypatch.setattr(service, 'canonical_fetch_live_ohlcv', _fake_canonical)
+    monkeypatch.setattr(service, 'load_security_map', lambda path: {'mock': 'map'})
+
+    rows = service.fetch_live_ohlcv(
+        '^NSEI',
+        '5m',
+        '1d',
+        provider='DHAN',
+        security_map_path=security_map_path,
+        force_refresh=True,
+    )
+
+    assert rows[0]['provider'] == 'DHAN'
+    assert captured['kwargs']['provider'] == 'DHAN'
+    assert captured['kwargs']['force_refresh'] is True
+    assert captured['kwargs']['security_map'] == {'mock': 'map'}
 
 
 def test_write_csv_creates_output(tmp_path) -> None:

@@ -1,4 +1,4 @@
-﻿from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient
 
 from vinayak.api.main import app
 from vinayak.api.routes import dashboard as dashboard_route
@@ -17,10 +17,11 @@ def _login_admin() -> None:
 
 def test_dashboard_candles_route_returns_live_rows(monkeypatch) -> None:
     _login_admin()
+    captured: dict[str, object] = {}
     monkeypatch.setattr(
         dashboard_route,
         'fetch_live_ohlcv',
-        lambda symbol, interval, period: [
+        lambda symbol, interval, period, **kwargs: captured.update(kwargs) or [
             {
                 'timestamp': '2026-03-24 09:15:00',
                 'open': 100.0,
@@ -47,6 +48,8 @@ def test_dashboard_candles_route_returns_live_rows(monkeypatch) -> None:
     assert body['period'] == '1d'
     assert body['total'] == 1
     assert body['candles'][0]['source'] == 'YAHOO_DOWNLOAD'
+    assert captured['provider'] == 'DHAN'
+    assert captured['force_refresh'] is True
 
 
 def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> None:
@@ -174,5 +177,6 @@ def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> N
     assert captured['max_portfolio_exposure_pct'] == 35
     assert captured['max_open_risk_pct'] == 5
     assert captured['kill_switch_enabled'] is True
+
 
 

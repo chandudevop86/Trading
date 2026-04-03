@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -8,6 +8,16 @@ import os
 import re
 
 from vinayak.cache.redis_client import RedisCache, build_cache_key
+
+try:
+    from src.live_ohlcv import fetch_live_ohlcv as canonical_fetch_live_ohlcv
+except Exception:  # pragma: no cover
+    canonical_fetch_live_ohlcv = None  # type: ignore
+
+try:
+    from src.dhan_api import load_security_map
+except Exception:  # pragma: no cover
+    load_security_map = None  # type: ignore
 
 try:
     import yfinance as yf  # type: ignore
@@ -253,10 +263,39 @@ def fetch_live_ohlcv(
     period: str = '1d',
     *,
     fallback_path: str | Path | None = None,
+    provider: str | None = None,
+    security_map_path: str | Path | None = None,
     use_cache: bool = True,
     force_refresh: bool = False,
     cache_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
+    selected_provider = str(provider or os.getenv('VINAYAK_MARKET_DATA_PROVIDER', os.getenv('MARKET_DATA_PROVIDER', 'AUTO')) or 'AUTO').strip().upper()
+    if canonical_fetch_live_ohlcv is not None:
+        security_map: dict[str, Any] | None = None
+        if selected_provider in {'DHAN', 'AUTO'} and load_security_map is not None:
+            resolved_map_path = Path(str(security_map_path or os.getenv('DHAN_SECURITY_MAP', 'vinayak/data/dhan_security_map.csv')))
+            if resolved_map_path.exists():
+                try:
+                    security_map = load_security_map(resolved_map_path)
+                except Exception:
+                    security_map = None
+        if selected_provider in {'DHAN', 'AUTO', 'YAHOO'}:
+            try:
+                rows = canonical_fetch_live_ohlcv(
+                    symbol,
+                    interval,
+                    period,
+                    provider=selected_provider,
+                    security_map=security_map,
+                    use_cache=use_cache,
+                    force_refresh=force_refresh,
+                    cache_dir=cache_dir,
+                )
+                if rows:
+                    return rows
+            except Exception:
+                if selected_provider == 'DHAN':
+                    raise
     if yf is None:
         raise ModuleNotFoundError('yfinance is required for fetch_live_ohlcv (pip install yfinance)')
 
@@ -337,3 +376,5 @@ def write_csv(rows: list[dict[str, Any]], path: str | Path) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+

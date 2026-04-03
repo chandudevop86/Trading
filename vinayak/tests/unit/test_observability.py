@@ -118,7 +118,6 @@ def test_observability_alert_publishing_routes_notification_event(tmp_path) -> N
     assert 'Observability alert summary' in bus.messages[0][1]['message']
 
 
-
 def test_observability_payload_includes_latest_signal_and_execution_details(tmp_path) -> None:
     os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path / 'observability')
     os.environ['REPORTS_DIR'] = str(tmp_path / 'reports')
@@ -127,7 +126,7 @@ def test_observability_payload_includes_latest_signal_and_execution_details(tmp_
     reports_dir = tmp_path / 'reports'
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / '20260403_210000_live_analysis_result.json').write_text(
-        """
+        '''
 {
   "signals": [
     {
@@ -139,6 +138,22 @@ def test_observability_payload_includes_latest_signal_and_execution_details(tmp_
       "entry_price": 101.5,
       "stop_loss": 99.5,
       "target_price": 105.5
+    }
+  ],
+  "data_status": {
+    "provider": "DHAN",
+    "source": "DHAN_HISTORICAL",
+    "latest_timestamp": "2026-04-03 09:20:00",
+    "latest_interval": "5m"
+  },
+  "candles": [
+    {
+      "timestamp": "2026-04-03 09:20:00",
+      "close": 22250.5,
+      "interval": "5m",
+      "provider": "DHAN",
+      "symbol": "NIFTY",
+      "source": "DHAN_HISTORICAL"
     }
   ],
   "execution_rows": [
@@ -154,18 +169,22 @@ def test_observability_payload_includes_latest_signal_and_execution_details(tmp_
     }
   ]
 }
-""".strip(),
+'''.strip(),
         encoding='utf-8',
     )
 
     payload = build_observability_dashboard_payload()
     latest_signal = {item['label']: item['value'] for item in payload['latest_signal']}
     latest_execution = {item['label']: item['value'] for item in payload['latest_execution']}
+    latest_market_data = {item['label']: item['value'] for item in payload['latest_market_data']}
 
     assert latest_signal['option_strike'] == '24500CE'
     assert latest_signal['strike_price'] == 24500
     assert latest_execution['trade_id'] == 'TRADE-1'
     assert latest_execution['option_strike'] == '24500CE'
+    assert latest_market_data['provider'] == 'DHAN'
+    assert latest_market_data['source'] == 'DHAN_HISTORICAL'
+
 
 def test_dashboard_spec_outputs_are_readable() -> None:
     wireframe = build_text_wireframe()
@@ -176,4 +195,4 @@ def test_dashboard_spec_outputs_are_readable() -> None:
     assert grafana['title'] == 'Vinayak Paper Trading Observability'
     assert any(panel['title'] == 'Recent Failures' for panel in grafana['panels'])
     assert '/dashboard/observability' in html
-
+    assert 'Latest Market Data' in html

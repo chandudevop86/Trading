@@ -7,10 +7,9 @@ from vinayak.api.services import trading_workspace as service
 def test_run_live_trading_analysis_forwards_recent_risk_controls(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(
-        service,
-        'fetch_live_ohlcv',
-        lambda **kwargs: [
+    def _fake_fetch_live_ohlcv(**kwargs):
+        captured['fetch_kwargs'] = kwargs
+        return [
             {
                 'timestamp': '2026-03-24 09:15:00',
                 'open': 100.0,
@@ -25,8 +24,9 @@ def test_run_live_trading_analysis_forwards_recent_risk_controls(monkeypatch, tm
                 'source': 'YAHOO_DOWNLOAD',
                 'is_closed': True,
             }
-        ],
-    )
+        ]
+
+    monkeypatch.setattr(service, 'fetch_live_ohlcv', _fake_fetch_live_ohlcv)
     monkeypatch.setattr(service, 'attach_option_metrics', lambda rows, **kwargs: rows)
     monkeypatch.setattr(service, 'attach_lots', lambda rows, **kwargs: rows)
     monkeypatch.setattr(service, '_build_report_artifacts', lambda result: {
@@ -146,6 +146,8 @@ def test_run_live_trading_analysis_forwards_recent_risk_controls(monkeypatch, tm
     assert captured['workspace_kwargs']['max_open_risk_pct'] == 5.0
     assert captured['workspace_kwargs']['kill_switch_enabled'] is True
     assert captured['workspace_kwargs']['execution_mode'] == 'PAPER'
+    assert captured['fetch_kwargs']['provider'] == 'DHAN'
+    assert captured['fetch_kwargs']['force_refresh'] is True
     assert result['execution_summary']['mode'] == 'PAPER'
     assert result['signal_count'] == 1
 
@@ -154,10 +156,9 @@ def test_run_live_trading_analysis_forwards_recent_risk_controls(monkeypatch, tm
 def test_run_live_trading_analysis_forces_live_auto_execute_to_paper(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(
-        service,
-        'fetch_live_ohlcv',
-        lambda **kwargs: [
+    def _fake_fetch_live_ohlcv(**kwargs):
+        captured['fetch_kwargs'] = kwargs
+        return [
             {
                 'timestamp': '2026-03-24 09:15:00',
                 'open': 100.0,
@@ -172,8 +173,9 @@ def test_run_live_trading_analysis_forces_live_auto_execute_to_paper(monkeypatch
                 'source': 'YAHOO_DOWNLOAD',
                 'is_closed': True,
             }
-        ],
-    )
+        ]
+
+    monkeypatch.setattr(service, 'fetch_live_ohlcv', _fake_fetch_live_ohlcv)
     monkeypatch.setattr(service, 'attach_option_metrics', lambda rows, **kwargs: rows)
     monkeypatch.setattr(service, 'attach_lots', lambda rows, **kwargs: rows)
     monkeypatch.setattr(service, '_build_report_artifacts', lambda result: {
@@ -275,6 +277,10 @@ def test_run_live_trading_analysis_uses_workspace_gateway() -> None:
     assert 'execute_workspace_candidates(' in source
     assert 'build_execution_candidates(' not in source
     assert 'execute_paper_trades(' not in source
+
+
+
+
 
 
 

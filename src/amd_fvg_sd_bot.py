@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import floor
@@ -609,34 +609,27 @@ def _recent_imbalance_context(candles: pd.DataFrame, index: int, side: str, conf
 def score_trade_setup(context: dict[str, Any], config: ConfluenceConfig, mode: str) -> dict[str, Any]:
     has_fvg = bool(context.get('has_fvg', False))
     has_bvg = bool(context.get('has_bvg', False))
-    imbalance_ok = has_fvg or (bool(config.allow_bvg_entries) and has_bvg)
-    trend_ok = bool(context.get('trend_alignment', False)) or float(context.get('amd_confidence', 0.0) or 0.0) >= float(config.minimum_amd_confidence)
+    imbalance_ok = has_fvg or has_bvg or (bool(config.allow_bvg_entries) and has_bvg)
+    amd_confidence = float(context.get('amd_confidence', 0.0) or 0.0)
+    trend_ok = bool(context.get('trend_alignment', False)) or amd_confidence >= float(config.minimum_amd_confidence)
     sweep_ok = bool(context.get('liquidity_sweep', False))
     retest_ok = bool(context.get('retest_confirmation', False))
     vwap_ok = bool(context.get('vwap_alignment', False))
     distribution_ok = bool(context.get('distribution_detected', False))
-    accumulation_detected = bool(context.get('accumulation_detected', False))
-    manipulation_detected = bool(context.get('manipulation_detected', False))
-    overlap_with_fvg = bool(context.get('overlap_with_fvg', False))
-    touch_count = int(context.get('touch_count', 0) or 0)
-    fresh_zone = touch_count == 0
+    zone_ok = bool(context.get('zone_proximity', False))
 
-    accumulation_score = 3.0 if accumulation_detected and float(context.get('accumulation_quality', 0.0) or 0.0) >= 2.0 else 2.0 if accumulation_detected else 0.0
-    manipulation_score = 4.0 if manipulation_detected and sweep_ok and retest_ok else 2.0 if manipulation_detected else 0.0
-    distribution_score = 3.0 if distribution_ok and trend_ok and vwap_ok else 1.0 if distribution_ok else 0.0
-    amd_score = round(accumulation_score + manipulation_score + distribution_score, 2)
+    trend_score = 2.0 if trend_ok else 0.0
+    sweep_score = 1.0 if sweep_ok else 0.0
+    vwap_score = 1.0 if vwap_ok else 0.0
+    imbalance_score = 2.0 if imbalance_ok else 0.0
+    retest_score = 1.0 if retest_ok else 0.0
+    zone_score = 2.0 if zone_ok else 0.0
 
-    fvg_size_score = 1.0 if float(context.get('imbalance_size', 0.0) or 0.0) >= float(context.get('min_fvg_size', config.min_fvg_size) or config.min_fvg_size) else 0.0
-    fvg_freshness_score = 2.0 if int(context.get('imbalance_age_bars', 99) or 99) <= 1 else 1.0 if int(context.get('imbalance_age_bars', 99) or 99) <= int(config.max_retest_bars) else 0.0
-    fvg_retest_score = 2.0 if retest_ok and has_fvg else 1.0 if imbalance_ok else 0.0
-    fvg_score = round(fvg_size_score + fvg_freshness_score + fvg_retest_score, 2)
-
-    zone_freshness_score = 2.0 if fresh_zone else 1.0
-    zone_impulse_score = 1.0 if float(context.get('impulse_score', 0.0) or 0.0) >= 3.0 else 0.0
-    zone_overlap_score = 2.0 if overlap_with_fvg else 0.0
-    sd_score = round(zone_freshness_score + zone_impulse_score + zone_overlap_score, 2)
-
+    amd_score = round(trend_score + sweep_score + vwap_score, 2)
+    fvg_score = round(imbalance_score + retest_score, 2)
+    sd_score = round(zone_score, 2)
     total_score = round(amd_score + fvg_score + sd_score, 2)
+    threshold = _score_threshold(config, mode)
     score_interpretation = _score_interpretation(total_score)
 
     blockers: list[str] = []
@@ -646,45 +639,39 @@ def score_trade_setup(context: dict[str, Any], config: ConfluenceConfig, mode: s
         blockers.append('missing_required_fvg')
     if bool(config.require_distribution_phase) and not distribution_ok:
         blockers.append('missing_distribution_phase')
-    if float(context.get('amd_confidence', 0.0) or 0.0) < float(config.minimum_amd_confidence):
+    if amd_confidence < float(config.minimum_amd_confidence):
         blockers.append(f'amd_confidence_below_{float(config.minimum_amd_confidence):.2f}')
-    if amd_score < 7.0:
-        blockers.append('amd_score_below_7.00')
-    if fvg_score < 3.0:
-        blockers.append('fvg_score_below_3.00')
-    if sd_score < 3.0:
-        blockers.append('sd_score_below_3.00')
-    if total_score < float(config.minimum_take_score):
-        blockers.append(f'total_score_below_{float(config.minimum_take_score):.2f}')
-    if not retest_ok:
-        blockers.append('missing_retest_confirmation')
-    if not imbalance_ok:
-        blockers.append('missing_imbalance_alignment')
+    if not trend_ok:
+        blockers.append('missing_trend')
+    if not has_fvg:
+        blockers.append('missing_fvg')
+    if total_score < float(threshold):
+        blockers.append(f'score_below_{float(threshold):.2f}')
 
     accepted = not blockers
     return {
         'accepted': accepted,
-        'threshold': float(config.minimum_take_score),
+        'threshold': float(threshold),
         'amd_score': amd_score,
         'fvg_score': fvg_score,
         'sd_score': sd_score,
-        'zone_score': sd_score,
-        'imbalance_score': fvg_score,
-        'sweep_score': round(manipulation_score, 2),
-        'trend_score': round(2.0 if trend_ok else 0.0, 2),
-        'retest_score': round(2.0 if retest_ok else 0.0, 2),
+        'zone_score': round(zone_score, 2),
+        'imbalance_score': round(imbalance_score, 2),
+        'sweep_score': round(sweep_score, 2),
+        'trend_score': round(trend_score, 2),
+        'retest_score': round(retest_score, 2),
         'total_score': total_score,
         'score_interpretation': score_interpretation,
         'rejection_reason': '' if accepted else ','.join(blockers),
-        'accumulation_score': round(accumulation_score, 2),
-        'manipulation_score': round(manipulation_score, 2),
-        'distribution_score': round(distribution_score, 2),
-        'fvg_size_score': round(fvg_size_score, 2),
-        'fvg_freshness_score': round(fvg_freshness_score, 2),
-        'fvg_retest_score': round(fvg_retest_score, 2),
-        'zone_freshness_score': round(zone_freshness_score, 2),
-        'zone_impulse_score': round(zone_impulse_score, 2),
-        'zone_overlap_score': round(zone_overlap_score, 2),
+        'accumulation_score': 0.0,
+        'manipulation_score': round(sweep_score, 2),
+        'distribution_score': round(vwap_score, 2),
+        'fvg_size_score': round(imbalance_score, 2),
+        'fvg_freshness_score': 0.0,
+        'fvg_retest_score': round(retest_score, 2),
+        'zone_freshness_score': round(zone_score, 2),
+        'zone_impulse_score': 0.0,
+        'zone_overlap_score': 0.0,
     }
 
 

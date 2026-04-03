@@ -6,7 +6,7 @@ from typing import Any, Callable, Literal
 from src.amd_fvg_sd_bot import ConfluenceConfig, generate_trades as generate_amd_fvg_sd_trades
 from src.breakout_bot import BreakoutConfig, Candle, generate_trades as generate_breakout_trades
 from src.btst_bot import BtstConfig, generate_trades as generate_btst_trades
-from src.strategy_demand_supply import DemandSupplyConfig, generate_trades as generate_demand_supply_trades
+from src.demand_supply_bot import DemandSupplyConfig, generate_trades as generate_demand_supply_trades
 from src.indicator_bot import IndicatorConfig, generate_indicator_rows, generate_trades as generate_indicator_trades
 from src.mtf_trade_bot import MtfTradeConfig, generate_trades as generate_mtf_trade_trades
 from src.one_trade_day import generate_trades as generate_one_trade_day_trades
@@ -224,12 +224,12 @@ def _run_breakout_strategy(context: StrategyContext, dependencies: StrategyDepen
             fixed_cost_per_trade=float(context.fixed_cost_per_trade),
             max_daily_loss=context.max_daily_loss,
             max_trades_per_day=max(1, int(configured_max_trades or 1)),
-            duplicate_signal_cooldown_bars=max(12, int(preset.duplicate_signal_cooldown_bars)),
+            duplicate_signal_cooldown_bars=int(preset.duplicate_signal_cooldown_bars),
             min_breakout_strength=0.22,
             min_volume_ratio=1.30,
             require_vwap_alignment=True,
             require_market_structure=True,
-            allow_secondary_entries=False,
+            allow_secondary_entries=True,
             allow_afternoon_session=False,
         ),
     )
@@ -249,7 +249,7 @@ def _run_demand_supply_strategy(context: StrategyContext, dependencies: Strategy
             trailing_sl_pct=float(context.trailing_sl_pct),
             pivot_window=max(1, int(context.pivot_window)),
             max_trades_per_day=max(1, int(configured_max_trades or 1)),
-            duplicate_signal_cooldown_bars=max(24, int(preset.duplicate_signal_cooldown_bars)),
+            duplicate_signal_cooldown_bars=int(preset.duplicate_signal_cooldown_bars),
             require_vwap_alignment=True,
             require_trend_bias=True,
             require_market_structure=True,
@@ -449,6 +449,10 @@ def run_strategy_workflow(
         attach_option_strikes_fn=attach_option_strikes_fn,
         attach_option_metrics_fn=attach_option_metrics_fn,
     )
+
+
+
+
 
 
 

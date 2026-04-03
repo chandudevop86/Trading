@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import time
@@ -30,7 +30,7 @@ class MtfTradeConfig:
     cost_bps: float = 0.0
     fixed_cost_per_trade: float = 0.0
     max_daily_loss: float | None = None
-    min_score_5m: int = 8
+    min_score_5m: int = 7
     min_score_15m: int = 4
     min_score_1h: int = 2
     min_mtf_score: int = 14
@@ -189,10 +189,15 @@ def _zone_alignment_15m(side: str) -> str:
 
 def _score_5m(day_candles: list[Candle], trigger_idx: int, *, zone_low: float, zone_high: float, side: str, rr_ratio: float, retest_ok: bool) -> tuple[int, dict[str, object]]:
     trigger = day_candles[trigger_idx]
-    zone_width = max(zone_high - zone_low, 0.0001)
+    raw_zone_width = max(zone_high - zone_low, 0.0)
+    zone_width = max(raw_zone_width, 0.0001)
     entry_reference = zone_high if side == 'BUY' else zone_low
-    entry_to_zone_distance = abs(float(trigger.close) - entry_reference)
-    zone_quality = 3 if entry_to_zone_distance <= zone_width * 0.25 else 2 if entry_to_zone_distance <= zone_width * 0.75 else 1 if entry_to_zone_distance <= zone_width * 1.25 else 0
+    touch_reference = float(trigger.low) if side == 'BUY' else float(trigger.high)
+    entry_to_zone_distance = abs(touch_reference - entry_reference)
+    if retest_ok:
+        zone_quality = 3
+    else:
+        zone_quality = 3 if entry_to_zone_distance <= zone_width * 0.25 else 2 if entry_to_zone_distance <= zone_width * 0.75 else 1 if entry_to_zone_distance <= zone_width * 1.25 else 0
     retest_score = 2 if retest_ok else 0
     candle_range = _bar_range(trigger)
     body = abs(float(trigger.close) - float(trigger.open))
@@ -204,7 +209,7 @@ def _score_5m(day_candles: list[Candle], trigger_idx: int, *, zone_low: float, z
     volume_score = 1 if volume_spike else 0
     vwap_ok = (float(trigger.close) >= float(trigger.vwap)) if side == 'BUY' else (float(trigger.close) <= float(trigger.vwap))
     vwap_score = 1 if vwap_ok else 0
-    rr_ok = float(rr_ratio) >= 1.8
+    rr_ok = float(rr_ratio) >= 1.0
     rr_score = 1 if rr_ok else 0
     score = zone_quality + retest_score + impulse_score + volume_score + vwap_score + rr_score
     return score, {
@@ -263,10 +268,10 @@ def _score_1h(latest_1h: AggCandle, *, ema_now: float, ema_prev: float, side: st
     distance_to_supply = round(max((nearest_supply - entry), 0.0), 4) if nearest_supply is not None else None
     distance_to_demand = round(max((entry - nearest_demand), 0.0), 4) if nearest_demand is not None else None
     conflict = False
-    if side == 'BUY' and distance_to_supply is not None:
-        conflict = distance_to_supply <= max(zone_width * 2.0, 5.0)
-    if side == 'SELL' and distance_to_demand is not None:
-        conflict = distance_to_demand <= max(zone_width * 2.0, 5.0)
+    if side == 'BUY' and nearest_supply is not None and float(nearest_supply) > float(entry):
+        conflict = distance_to_supply is not None and distance_to_supply <= max(zone_width * 2.0, 1.0)
+    if side == 'SELL' and nearest_demand is not None and float(nearest_demand) < float(entry):
+        conflict = distance_to_demand is not None and distance_to_demand <= max(zone_width * 2.0, 1.0)
     zone_score = 0 if conflict else 2
     score = trend_score + zone_score
     return score, {
@@ -579,5 +584,10 @@ def generate_trades(
             search_start = exit_idx + 1
 
     return trades
+
+
+
+
+
 
 

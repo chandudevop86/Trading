@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any
 
@@ -70,13 +70,13 @@ def rank_strategy_summaries(summary_rows: list[dict[str, Any]]) -> list[dict[str
         key=lambda row: (
             0 if str(row.get('validation_status', 'FAIL')).upper() == 'PASS' else 1,
             0 if str(row.get('drawdown_proven_normalized', 'NO')).upper() == 'YES' else 1,
-            -_safe_float(row.get('real_backtest_score')),
+            -_safe_float(row.get('expectancy_per_trade')),
             -float(row.get('profit_factor_normalized', 0.0)),
+            _safe_float(row.get('drawdown_pct_normalized')),
+            -_safe_float(row.get('real_backtest_score')),
             -_safe_float(row.get('second_half_expectancy_per_trade')),
             _safe_float(row.get('expectancy_stability_gap_ratio_normalized')),
             -_safe_float(row.get('total_pnl_normalized')),
-            _safe_float(row.get('drawdown_pct_normalized')),
-            -_safe_float(row.get('expectancy_per_trade')),
             -_safe_float(row.get('vwap_pass_pct_normalized')),
             -_safe_float(row.get('session_pass_pct_normalized')),
             -_safe_float(row.get('retest_only_trade_pct_normalized')),

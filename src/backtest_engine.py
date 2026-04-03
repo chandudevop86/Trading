@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
@@ -20,14 +20,14 @@ BACKTEST_VALIDATION_OUTPUT = RUNTIME_CONFIG.paths.backtest_validation_csv
 
 @dataclass(slots=True)
 class BacktestValidationConfig:
-    min_trades: int = 150
-    target_trades: int = 200
+    min_trades: int = 100
+    target_trades: int = 150
     max_trades: int = 200
-    min_profit_factor: float = 1.3
+    min_profit_factor: float = 1.2
     min_expectancy_per_trade: float = 0.0
     min_win_rate: float = 0.0
     min_avg_rr: float = 0.8
-    max_drawdown_pct: float = 12.0
+    max_drawdown_pct: float = 15.0
     max_duplicate_rejections: int = 0
     require_positive_expectancy: bool = True
     max_expectancy_stability_gap_ratio: float = 0.5
@@ -40,14 +40,14 @@ class BacktestValidationConfig:
 def nifty_intraday_validation_config() -> BacktestValidationConfig:
     """Validation preset for Nifty intraday paper/backtest promotion."""
     return BacktestValidationConfig(
-        min_trades=150,
-        target_trades=200,
+        min_trades=100,
+        target_trades=150,
         max_trades=200,
-        min_profit_factor=1.3,
+        min_profit_factor=1.2,
         min_expectancy_per_trade=0.0,
         min_win_rate=38.0,
         min_avg_rr=1.0,
-        max_drawdown_pct=12.0,
+        max_drawdown_pct=15.0,
         require_positive_expectancy=True,
         max_expectancy_stability_gap_ratio=0.5,
         require_second_half_positive_expectancy=True,

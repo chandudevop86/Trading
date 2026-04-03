@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -219,8 +219,8 @@ def _retest_holds(side: str, trigger: float, confirmation: Candle) -> bool:
 def _secondary_breakout_holds(side: str, trigger: float, breakout: Candle, confirmation: Candle, atr_value: float) -> bool:
     cushion = max(atr_value * 0.1, abs(trigger) * 0.0007, 0.05)
     if side == 'BUY':
-        return breakout.close > trigger and confirmation.close >= breakout.close - cushion
-    return breakout.close < trigger and confirmation.close <= breakout.close + cushion
+        return breakout.close > trigger and confirmation.close > trigger and confirmation.low >= trigger - cushion
+    return breakout.close < trigger and confirmation.close < trigger and confirmation.high <= trigger + cushion
 
 
 def _entry_with_slippage(side: str, trigger: float, atr_value: float) -> float:
@@ -431,7 +431,7 @@ def _score_candidate(side: str, breakout_candle: Candle, confirmation_candle: Ca
     breakout_score = strength_score + body_score + volume_score + structure_score + retest_score + time_score + distance_score + trend_score
     if config.require_vwap_alignment and not vwap_ok:
         return None
-    if config.require_market_structure and not structure_ok:
+    if config.require_market_structure and not structure_ok and structure_label != 'INSUFFICIENT':
         return None
     if not broke_level or not clean_break:
         return None
@@ -751,6 +751,9 @@ def run(
     if telegram_token and telegram_chat_id:
         send_telegram_message(telegram_token, telegram_chat_id, build_trade_summary(trades))
     return trades
+
+
+
 
 
 

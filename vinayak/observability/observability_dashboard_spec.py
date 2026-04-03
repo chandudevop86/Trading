@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 
@@ -163,3 +163,4 @@ def build_observability_dashboard_html() -> str:
 
 
 __all__ = ['build_grafana_dashboard_spec', 'build_observability_dashboard_html', 'build_text_wireframe']
+

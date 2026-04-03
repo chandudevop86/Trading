@@ -1,8 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+import json
+import os
 
+from vinayak.cache.redis_client import RedisCache
 from vinayak.observability.alerting import build_active_alerts
 from vinayak.observability.observability_logger import tail_events
 from vinayak.observability.observability_metrics import get_observability_snapshot
@@ -44,6 +48,36 @@ def _metric(snapshot: dict[str, Any], name: str, default: Any = 0) -> Any:
     return snapshot.get('metrics', {}).get(name, {}).get('value', default)
 
 
+def _reports_dir() -> Path:
+    return Path(os.getenv('REPORTS_DIR', 'vinayak/data/reports'))
+
+
+def _load_latest_analysis() -> dict[str, Any]:
+    cache = RedisCache.from_env()
+    cached = cache.get_json('vinayak:artifact:latest_live_analysis') if cache.is_configured() else None
+    if isinstance(cached, dict) and cached:
+        return cached
+    report_files = sorted(_reports_dir().glob('*live_analysis_result.json'), key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in report_files:
+        try:
+            payload = json.loads(path.read_text(encoding='utf-8'))
+        except Exception:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return {}
+
+
+def _build_detail_cards(row: dict[str, Any], fields: list[tuple[str, str]]) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    for label, key in fields:
+        value = row.get(key, '-')
+        if value in (None, ''):
+            value = '-'
+        cards.append({'label': label, 'value': value})
+    return cards
+
+
 def build_observability_dashboard_payload() -> dict[str, Any]:
     snapshot = get_observability_snapshot()
     metrics = snapshot.get('metrics', {})
@@ -57,7 +91,6 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
     total_signals = int(_safe_float(_metric(snapshot, 'total_signals_today', _metric(snapshot, 'trade_candidates_total', 0))))
     valid_signals = int(_safe_float(_metric(snapshot, 'valid_signals_today', _metric(snapshot, 'zones_accepted_total', 0))))
     executed_trades = int(_safe_float(_metric(snapshot, 'executed_paper_trades_today', _metric(snapshot, 'paper_trades_executed_total', 0))))
-    rejected_trades = int(_safe_float(_metric(snapshot, 'rejected_trades_today', _metric(snapshot, 'paper_trade_rejections_total', 0))))
     telegram_failures = int(_safe_float(_metric(snapshot, 'telegram_send_failures_total', 0)))
     telegram_last = _metric(snapshot, 'telegram_last_delivery_timestamp', '')
     pnl_today = round(_safe_float(_metric(snapshot, 'pnl_today', 0.0)), 2)
@@ -84,6 +117,20 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
 
     recent_failures = tail_events(12, severities={'WARNING', 'ERROR', 'CRITICAL'})
     stages = snapshot.get('stages', {})
+    latest_analysis = _load_latest_analysis()
+    latest_signal = dict((latest_analysis.get('signals') or [{}])[-1] if latest_analysis.get('signals') else {})
+    latest_execution = dict((latest_analysis.get('execution_rows') or [{}])[-1] if latest_analysis.get('execution_rows') else {})
+
+    if latest_signal and not latest_execution:
+        latest_execution = {
+            'trade_id': latest_signal.get('trade_id', '-'),
+            'side': latest_signal.get('side', '-'),
+            'execution_status': latest_analysis.get('execution_summary', {}).get('mode', '-'),
+            'option_strike': latest_signal.get('option_strike', '-'),
+            'strike_price': latest_signal.get('strike_price', '-'),
+            'price': latest_signal.get('entry_price', latest_signal.get('entry', '-')),
+            'reason': latest_analysis.get('execution_note', '-'),
+        }
 
     kpis = [
         {'name': 'app_status', 'value': app_status, 'color': _status_color(app_status)},
@@ -162,6 +209,32 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
                 {'label': 'portfolio_max_trades_per_day', 'value': max_trades_per_day},
             ],
         },
+        'latest_signal': _build_detail_cards(
+            latest_signal,
+            [
+                ('symbol', 'symbol'),
+                ('side', 'side'),
+                ('option_strike', 'option_strike'),
+                ('strike_price', 'strike_price'),
+                ('option_type', 'option_type'),
+                ('entry_price', 'entry_price'),
+                ('stop_loss', 'stop_loss'),
+                ('target_price', 'target_price'),
+            ],
+        ),
+        'latest_execution': _build_detail_cards(
+            latest_execution,
+            [
+                ('trade_id', 'trade_id'),
+                ('side', 'side'),
+                ('execution_status', 'execution_status'),
+                ('broker_name', 'broker_name'),
+                ('option_strike', 'option_strike'),
+                ('strike_price', 'strike_price'),
+                ('price', 'price'),
+                ('reason', 'reason'),
+            ],
+        ),
         'alerts_and_recent_failures': {
             'alerts': active_alerts[:12],
             'recent_failures': recent_failures,

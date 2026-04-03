@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 
@@ -118,6 +118,55 @@ def test_observability_alert_publishing_routes_notification_event(tmp_path) -> N
     assert 'Observability alert summary' in bus.messages[0][1]['message']
 
 
+
+def test_observability_payload_includes_latest_signal_and_execution_details(tmp_path) -> None:
+    os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path / 'observability')
+    os.environ['REPORTS_DIR'] = str(tmp_path / 'reports')
+    reset_observability_state()
+
+    reports_dir = tmp_path / 'reports'
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / '20260403_210000_live_analysis_result.json').write_text(
+        """
+{
+  "signals": [
+    {
+      "symbol": "NIFTY",
+      "side": "BUY",
+      "option_strike": "24500CE",
+      "strike_price": 24500,
+      "option_type": "CE",
+      "entry_price": 101.5,
+      "stop_loss": 99.5,
+      "target_price": 105.5
+    }
+  ],
+  "execution_rows": [
+    {
+      "trade_id": "TRADE-1",
+      "side": "BUY",
+      "execution_status": "FILLED",
+      "broker_name": "PAPER",
+      "option_strike": "24500CE",
+      "strike_price": 24500,
+      "price": 101.5,
+      "reason": "-"
+    }
+  ]
+}
+""".strip(),
+        encoding='utf-8',
+    )
+
+    payload = build_observability_dashboard_payload()
+    latest_signal = {item['label']: item['value'] for item in payload['latest_signal']}
+    latest_execution = {item['label']: item['value'] for item in payload['latest_execution']}
+
+    assert latest_signal['option_strike'] == '24500CE'
+    assert latest_signal['strike_price'] == 24500
+    assert latest_execution['trade_id'] == 'TRADE-1'
+    assert latest_execution['option_strike'] == '24500CE'
+
 def test_dashboard_spec_outputs_are_readable() -> None:
     wireframe = build_text_wireframe()
     grafana = build_grafana_dashboard_spec()
@@ -127,3 +176,4 @@ def test_dashboard_spec_outputs_are_readable() -> None:
     assert grafana['title'] == 'Vinayak Paper Trading Observability'
     assert any(panel['title'] == 'Recent Failures' for panel in grafana['panels'])
     assert '/dashboard/observability' in html
+

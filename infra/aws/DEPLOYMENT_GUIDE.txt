@@ -1,0 +1,27 @@
+# Deployment Scripts + PDFs
+
+## Deploy
+- Ubuntu: `infra/aws/deploy.sh`
+- Amazon Linux 2023: `infra/aws/deploy-amzn-linux-2023.sh`
+
+## Undeploy / Rollback
+- Ubuntu: `infra/aws/undeploy.sh`
+- Amazon Linux 2023: `infra/aws/undeploy-amzn-linux-2023.sh`
+
+## Nginx
+- `infra/aws/chandudevopai.shop.nginx.conf`
+
+## Service
+- `infra/aws/intratrade.service`
+
+## Streamlit Config
+- `web/streamlit/config.toml`
+
+## IAM Policy
+- `infra/aws/iam-policy-s3.json`
+
+## Notes
+1. Update placeholders in deploy scripts before running.
+2. Test nginx before reload: `sudo nginx -t`.
+3. Use certbot for TLS certs.
+

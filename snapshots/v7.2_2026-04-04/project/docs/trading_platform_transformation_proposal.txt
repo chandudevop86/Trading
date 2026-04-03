@@ -1,0 +1,261 @@
+TRADING PLATFORM TRANSFORMATION PROPOSAL
+
+Date: 2026-03-26
+Scope: Current monolithic trading platform under F:\Trading\src, target
+microservices direction, and migration roadmap
+
+EXECUTIVE SUMMARY
+
+The current trading platform is a capable monolithic application with
+meaningful real-world functionality already in place. It supports
+market-data ingestion, multiple strategies, backtesting, paper execution,
+optional live Dhan execution, operator workflows, and reporting.
+
+Its main limitation is not feature coverage. Its main limitation is
+structural concentration. The current platform depends heavily on one
+application runtime, shared local file state, and CSV-led operational
+records. That creates risk around maintainability, auditability, recovery,
+and safe production scaling.
+
+The recommended direction is a staged transformation from the current
+monolith into a bounded microservices platform. This should not be executed
+as a big-bang rewrite. It should be done through a controlled migration that
+first stabilizes the monolith, moves critical state into durable
+persistence, and then extracts services in a risk-aware order.
+
+CURRENT-STATE OVERVIEW
+
+The current src/ platform already provides:
+- a Streamlit-based operator console
+- multiple strategy execution paths
+- market-data retrieval and normalization
+- historical backtesting and strategy comparison
+- paper trading execution
+- optional live Dhan trading flow
+- Telegram notification support
+- automation scripts and deployment assets
+
+Strengths
+- strong feature breadth for a single application
+- practical trading workflow support
+- meaningful execution safeguards already exist
+- good legacy test coverage
+- usable operator-facing workflow
+
+Weaknesses
+- too much responsibility is centralized in one runtime path
+- local CSV files behave like the practical system of record
+- UI, orchestration, reporting, and execution concerns are closely coupled
+- production-style deployment ambition exceeds runtime maturity
+- audit and recovery controls are not yet strong enough for a more serious
+  live-trading posture
+
+AS-IS ASSESSMENT
+
+1. Product runtime
+   As-is state: Monolithic application
+   Business impact: Faster early delivery, but harder long-term change
+   control
+
+2. UI layer
+   As-is state: Streamlit UI also orchestrates workflows
+   Business impact: User-facing changes can affect core behavior
+
+3. Persistence
+   As-is state: Heavy CSV and file-state usage
+   Business impact: Weak durability and auditability
+
+4. Strategy layer
+   As-is state: Multiple strategies available
+   Business impact: Strong feature value, but growing coupling
+
+5. Execution layer
+   As-is state: Paper and live logic exist
+   Business impact: Valuable capability, but operationally sensitive
+
+6. Reporting
+   As-is state: Outputs and summaries exist
+   Business impact: Useful, but fragmented
+
+7. Notifications
+   As-is state: Telegram support exists
+   Business impact: Helpful, but tightly coupled
+
+8. Deployment
+   As-is state: Docker and cloud assets exist
+   Business impact: Signals ambition, but not full production readiness
+
+9. Testing
+   As-is state: Strong legacy suite
+   Business impact: Good base, but baseline should be fully green
+
+TO-BE TARGET STATE
+
+The target platform should become a service-oriented trading system where:
+- each domain has a clear responsibility boundary
+- core trading state is persisted in a durable store
+- execution and risk policy are isolated from presentation logic
+- data, strategy, execution, reporting, and notifications can evolve
+  independently
+- asynchronous workloads are moved out of the request path
+- production operations rely on structured audit, observability, and
+  recovery
+
+Target domains
+- Gateway or Web Layer
+- Auth or Access Control
+- Market Data Service
+- Strategy Service
+- Backtest Service
+- Risk Service
+- Execution Service
+- Broker Adapter Service
+- Notification Service
+- Reporting Service
+- Scheduler or Worker Service
+- Audit or Event Layer
+- PostgreSQL
+- Redis
+- Message Bus
+- Object Storage
+
+REQUIREMENT AND GAP SUMMARY
+
+Architecture
+- Current state: Monolithic
+- Target state: Bounded services
+- Gap level: Large
+- Priority: High
+
+Persistence
+- Current state: CSV and local files
+- Target state: Transactional DB-backed model
+- Gap level: Large
+- Priority: High
+
+Execution safety
+- Current state: Present but runtime-coupled
+- Target state: Isolated auditable execution service
+- Gap level: Large
+- Priority: High
+
+Risk controls
+- Current state: Present but file-history dependent
+- Target state: Durable policy enforcement service
+- Gap level: Large
+- Priority: High
+
+Scalability
+- Current state: Limited by local-state assumptions
+- Target state: Selective service-scale capability
+- Gap level: Large
+- Priority: High
+
+Recovery
+- Current state: Partial and local-file based
+- Target state: Durable resumable workflows
+- Gap level: Large
+- Priority: High
+
+Auditability
+- Current state: Partial through logs and CSVs
+- Target state: Structured immutable event trail
+- Gap level: Large
+- Priority: High
+
+Maintainability
+- Current state: Centralized code ownership
+- Target state: Clear domain ownership
+- Gap level: Large
+- Priority: High
+
+BOTTLENECKS
+
+1. CSV as operational state
+2. Orchestration inside the UI runtime
+3. Shared filesystem assumptions
+4. Execution coupling
+5. Mixed codebase generations
+
+TRANSFORMATION STRATEGY
+
+Phase 0: Stabilize the current monolith
+- keep the old app functional
+- define official legacy entrypoints
+- fix the current failing baseline issue
+- document current schemas and outputs
+
+Phase 1: Introduce durable persistence
+- move signals, executions, orders, reports, and audit history into a
+  database
+- stop treating CSV as the source of truth
+- retain CSV only as export output
+
+Phase 2: Extract strategy and backtest domains
+- standardize strategy contracts
+- run strategies outside the UI runtime
+- separate historical backtesting from live execution paths
+
+Phase 3: Extract risk and execution domains
+- isolate trade lifecycle management
+- make risk policy checks durable and auditable
+- contain live broker activity within a controlled boundary
+
+Phase 4: Extract reporting, notification, and jobs
+- move report generation out of critical request paths
+- shift Telegram and similar actions to async workflows
+- isolate schedulers and worker logic
+
+Phase 5: Add gateway and access control
+- route all interactions through a clear front door
+- introduce authentication and role-aware action control
+- expose only supported internal APIs
+
+RECOMMENDED IMPLEMENTATION ROADMAP
+
+1. Freeze legacy entrypoints and unsupported surfaces
+2. Fix the remaining failing legacy test
+3. Define canonical data models for trading records
+4. Introduce PostgreSQL as the system of record
+5. Keep CSV outputs only for export and reporting
+6. Extract strategy interfaces out of the UI code
+7. Stand up a strategy service boundary
+8. Separate backtesting into its own service path
+9. Add a dedicated risk evaluation boundary
+10. Extract the execution engine into a service
+11. Encapsulate Dhan in a broker adapter boundary
+12. Move notifications to event-driven workflows
+13. Move reporting to structured artifact handling
+14. Add Redis and message bus support
+15. Add gateway and auth controls
+16. Decommission monolith responsibilities gradually
+
+RISKS AND MITIGATIONS
+
+- migration drift
+  Mitigation: preserve contract tests and golden data
+- dual-write errors
+  Mitigation: make DB primary as early as possible
+- live-trading instability
+  Mitigation: roll out in tightly gated stages
+- too many services too early
+  Mitigation: start with only high-value boundaries
+- weak observability during split
+  Mitigation: add structured logging and IDs from the start
+
+FINAL RECOMMENDATION
+
+The current monolithic platform should be treated as a valuable working
+asset, not discarded. It should become the source system for a controlled
+extraction program.
+
+The correct transformation order is:
+1. stabilize
+2. persist durably
+3. extract bounded domains
+4. isolate live execution
+5. add async and operational controls
+6. complete service-based routing and governance
+
+This approach reduces delivery risk while preserving the real trading
+functionality that already exists.

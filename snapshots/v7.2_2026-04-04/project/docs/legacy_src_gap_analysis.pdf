@@ -1,0 +1,271 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 3185 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (LEGACY SRC MONOLITH REQUIREMENT AND GAP ANALYSIS) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Date: 2026-03-26) Tj
+1 0 0 1 50 758 Tm (Scope: Old monolithic trading project under F:\\Trading\\src) Tj
+1 0 0 1 50 744 Tm (Excluded: F:\\Trading\\vinayak rewrite) Tj
+1 0 0 1 50 730 Tm () Tj
+1 0 0 1 50 716 Tm (EXECUTIVE SUMMARY) Tj
+1 0 0 1 50 702 Tm () Tj
+1 0 0 1 50 688 Tm (The legacy trading project under src/ is functionally strong. It already) Tj
+1 0 0 1 50 674 Tm (supports market-data ingestion, multiple strategies, backtesting, paper) Tj
+1 0 0 1 50 660 Tm (trading, optional live Dhan execution, reporting, and a Streamlit operator) Tj
+1 0 0 1 50 646 Tm (console.) Tj
+1 0 0 1 50 632 Tm () Tj
+1 0 0 1 50 618 Tm (The main issue is not missing features. The main issue is architectural) Tj
+1 0 0 1 50 604 Tm (concentration: too many responsibilities sit inside one monolithic runtime,) Tj
+1 0 0 1 50 590 Tm (with critical operational state still stored in CSV files.) Tj
+1 0 0 1 50 576 Tm () Tj
+1 0 0 1 50 562 Tm (In its current form, the legacy app is suitable for local or operator-led) Tj
+1 0 0 1 50 548 Tm (use, but it is not yet aligned with a production-grade architecture. The) Tj
+1 0 0 1 50 534 Tm (highest-risk gaps are persistence, auditability, recovery, maintainability,) Tj
+1 0 0 1 50 520 Tm (and safe live-execution governance.) Tj
+1 0 0 1 50 506 Tm () Tj
+1 0 0 1 50 492 Tm (ASSESSMENT BASIS) Tj
+1 0 0 1 50 478 Tm () Tj
+1 0 0 1 50 464 Tm (This review is based on the current legacy implementation and supporting) Tj
+1 0 0 1 50 450 Tm (assets, including README.md, src/Trading.py, src/strategy_service.py,) Tj
+1 0 0 1 50 436 Tm (src/execution_engine.py, src/auto_run.py, and tests/.) Tj
+1 0 0 1 50 422 Tm () Tj
+1 0 0 1 50 408 Tm (Legacy test baseline observed during review:) Tj
+1 0 0 1 50 394 Tm (- 122 tests executed in the legacy tests/ suite) Tj
+1 0 0 1 50 380 Tm (- 121 passed) Tj
+1 0 0 1 50 366 Tm (- 1 failed in F:\\Trading\\tests\\test_breakout_bot.py) Tj
+1 0 0 1 50 352 Tm () Tj
+1 0 0 1 50 338 Tm (CURRENT-STATE SUMMARY) Tj
+1 0 0 1 50 324 Tm () Tj
+1 0 0 1 50 310 Tm (Strengths) Tj
+1 0 0 1 50 296 Tm (- Broad strategy coverage exists in the monolith.) Tj
+1 0 0 1 50 282 Tm (- Backtesting and execution workflows are both implemented.) Tj
+1 0 0 1 50 268 Tm (- Risk controls are present in execution logic.) Tj
+1 0 0 1 50 254 Tm (- Operator workflow is accessible through a single Streamlit console.) Tj
+1 0 0 1 50 240 Tm (- Automated test coverage is substantial for the legacy code path.) Tj
+1 0 0 1 50 226 Tm () Tj
+1 0 0 1 50 212 Tm (Weaknesses) Tj
+1 0 0 1 50 198 Tm (- UI and orchestration are tightly coupled.) Tj
+1 0 0 1 50 184 Tm (- CSV files are heavily used as operational records.) Tj
+1 0 0 1 50 170 Tm (- Production deployment ambitions exceed runtime hardening maturity.) Tj
+1 0 0 1 50 156 Tm (- Recovery and auditability are weaker than required for a stronger profile.) Tj
+1 0 0 1 50 142 Tm (- The repository mixes active legacy code with parallel and archived assets.) Tj
+1 0 0 1 50 128 Tm () Tj
+1 0 0 1 50 114 Tm (REQUIREMENT AND GAP HIGHLIGHTS) Tj
+1 0 0 1 50 100 Tm () Tj
+1 0 0 1 50 86 Tm (High priority gaps) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 3385 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (- UI and orchestration are centralized in src/Trading.py) Tj
+1 0 0 1 50 786 Tm (- CSV files in data/ act as the practical system of record) Tj
+1 0 0 1 50 772 Tm (- Live and paper execution depend on local file-state assumptions) Tj
+1 0 0 1 50 758 Tm (- Production deployment guidance exceeds runtime hardening maturity) Tj
+1 0 0 1 50 744 Tm (- The legacy suite is close to stable, but not fully green) Tj
+1 0 0 1 50 730 Tm () Tj
+1 0 0 1 50 716 Tm (Medium priority gaps) Tj
+1 0 0 1 50 702 Tm (- Configuration is spread across env vars, code defaults, docs, and paths) Tj
+1 0 0 1 50 688 Tm (- Reporting and notifications are useful but operationally fragmented) Tj
+1 0 0 1 50 674 Tm (- Repo hygiene increases accidental-target risk) Tj
+1 0 0 1 50 660 Tm (- Monitoring and observability are mostly local and file-based) Tj
+1 0 0 1 50 646 Tm () Tj
+1 0 0 1 50 632 Tm (Representative gap table) Tj
+1 0 0 1 50 618 Tm () Tj
+1 0 0 1 50 604 Tm (1. Area: Product Scope) Tj
+1 0 0 1 50 590 Tm (   Requirement: One clear legacy product boundary) Tj
+1 0 0 1 50 576 Tm (   Current Implementation: Repo also contains vinayak, snapshots, archives,) Tj
+1 0 0 1 50 562 Tm (   and duplicate assets) Tj
+1 0 0 1 50 548 Tm (   Gap: Ownership boundary is blurred) Tj
+1 0 0 1 50 534 Tm (   Priority: High) Tj
+1 0 0 1 50 520 Tm (   Recommendation: Declare src/ as legacy-maintenance scope and document) Tj
+1 0 0 1 50 506 Tm (   official entrypoints only) Tj
+1 0 0 1 50 492 Tm () Tj
+1 0 0 1 50 478 Tm (2. Area: UI Entry) Tj
+1 0 0 1 50 464 Tm (   Requirement: Single operator console for trading actions) Tj
+1 0 0 1 50 450 Tm (   Current Implementation: Streamlit UI in src/Trading.py handles run,) Tj
+1 0 0 1 50 436 Tm (   backtest, and execution) Tj
+1 0 0 1 50 422 Tm (   Gap: UI is also orchestration layer) Tj
+1 0 0 1 50 408 Tm (   Priority: High) Tj
+1 0 0 1 50 394 Tm (   Recommendation: Keep UI thin and move orchestration into service modules) Tj
+1 0 0 1 50 380 Tm () Tj
+1 0 0 1 50 366 Tm (3. Area: Strategy Routing) Tj
+1 0 0 1 50 352 Tm (   Requirement: Unified strategy execution contract) Tj
+1 0 0 1 50 338 Tm (   Current Implementation: Multiple strategies run through shared workflow) Tj
+1 0 0 1 50 324 Tm (   Gap: Strategy integration depends on centralized routing and UI knowledge) Tj
+1 0 0 1 50 310 Tm (   Priority: High) Tj
+1 0 0 1 50 296 Tm (   Recommendation: Standardize input and output contracts for all strategies) Tj
+1 0 0 1 50 282 Tm () Tj
+1 0 0 1 50 268 Tm (4. Area: Persistence) Tj
+1 0 0 1 50 254 Tm (   Requirement: Durable system of record) Tj
+1 0 0 1 50 240 Tm (   Current Implementation: CSV files in data/ are heavily used) Tj
+1 0 0 1 50 226 Tm (   Gap: CSV is weak for concurrency, audit, rollback, and multi-instance use) Tj
+1 0 0 1 50 212 Tm (   Priority: High) Tj
+1 0 0 1 50 198 Tm (   Recommendation: Introduce DB-backed persistence for signals, executions,) Tj
+1 0 0 1 50 184 Tm (   orders, and summaries) Tj
+1 0 0 1 50 170 Tm () Tj
+1 0 0 1 50 156 Tm (5. Area: Paper Trading) Tj
+1 0 0 1 50 142 Tm (   Requirement: Default safe execution mode) Tj
+1 0 0 1 50 128 Tm (   Current Implementation: Implemented in src/execution_engine.py) Tj
+1 0 0 1 50 114 Tm (   Gap: Uses file ledger as source of truth) Tj
+1 0 0 1 50 100 Tm (   Priority: High) Tj
+1 0 0 1 50 86 Tm (   Recommendation: Move paper-trade ledger to DB and keep CSV only as export) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 3288 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm () Tj
+1 0 0 1 50 786 Tm (6. Area: Live Trading) Tj
+1 0 0 1 50 772 Tm (   Requirement: Controlled live broker execution) Tj
+1 0 0 1 50 758 Tm (   Current Implementation: Dhan live flow exists with gating and checks) Tj
+1 0 0 1 50 744 Tm (   Gap: Shares monolith runtime and file-state assumptions) Tj
+1 0 0 1 50 730 Tm (   Priority: High) Tj
+1 0 0 1 50 716 Tm (   Recommendation: Isolate live execution service and strengthen audit trail) Tj
+1 0 0 1 50 702 Tm () Tj
+1 0 0 1 50 688 Tm (7. Area: Risk Controls) Tj
+1 0 0 1 50 674 Tm (   Requirement: Daily loss, duplicate blocking, and open trade limits) Tj
+1 0 0 1 50 660 Tm (   Current Implementation: Present in execution flow) Tj
+1 0 0 1 50 646 Tm (   Gap: Controls depend on file history integrity) Tj
+1 0 0 1 50 632 Tm (   Priority: High) Tj
+1 0 0 1 50 618 Tm (   Recommendation: Store risk-control state in durable transactional storage) Tj
+1 0 0 1 50 604 Tm () Tj
+1 0 0 1 50 590 Tm (8. Area: Deployment) Tj
+1 0 0 1 50 576 Tm (   Requirement: Support local plus production deployment) Tj
+1 0 0 1 50 562 Tm (   Current Implementation: Docker, K8s, and AWS docs/assets exist) Tj
+1 0 0 1 50 548 Tm (   Gap: Deployment story is ahead of runtime architecture maturity) Tj
+1 0 0 1 50 534 Tm (   Priority: High) Tj
+1 0 0 1 50 520 Tm (   Recommendation: Reframe docs so local use is supported now and production) Tj
+1 0 0 1 50 506 Tm (   remains aspirational until persistence is hardened) Tj
+1 0 0 1 50 492 Tm () Tj
+1 0 0 1 50 478 Tm (9. Area: Test Coverage) Tj
+1 0 0 1 50 464 Tm (   Requirement: Automated regression protection) Tj
+1 0 0 1 50 450 Tm (   Current Implementation: Legacy suite is strong and 122 tests ran) Tj
+1 0 0 1 50 436 Tm (   Gap: Suite is not fully green) Tj
+1 0 0 1 50 422 Tm (   Priority: High) Tj
+1 0 0 1 50 408 Tm (   Recommendation: Fix the failing test in tests/test_breakout_bot.py first) Tj
+1 0 0 1 50 394 Tm () Tj
+1 0 0 1 50 380 Tm (10. Area: Code Organization) Tj
+1 0 0 1 50 366 Tm (    Requirement: Clear separation of concerns) Tj
+1 0 0 1 50 352 Tm (    Current Implementation: Many capabilities exist in one codebase) Tj
+1 0 0 1 50 338 Tm (    Gap: UI, workflows, file IO, and execution are tightly coupled) Tj
+1 0 0 1 50 324 Tm (    Priority: High) Tj
+1 0 0 1 50 310 Tm (    Recommendation: Refactor by domain: data, strategies, execution,) Tj
+1 0 0 1 50 296 Tm (    reporting, UI) Tj
+1 0 0 1 50 282 Tm () Tj
+1 0 0 1 50 268 Tm (11. Area: Repo Hygiene) Tj
+1 0 0 1 50 254 Tm (    Requirement: Low confusion in active code surface) Tj
+1 0 0 1 50 240 Tm (    Current Implementation: Repo contains archived, experimental, and snapshot) Tj
+1 0 0 1 50 226 Tm (    files) Tj
+1 0 0 1 50 212 Tm (    Gap: Risk of using wrong file or deploying wrong target) Tj
+1 0 0 1 50 198 Tm (    Priority: Medium) Tj
+1 0 0 1 50 184 Tm (    Recommendation: Mark archives clearly and remove non-active files from) Tj
+1 0 0 1 50 170 Tm (    active docs) Tj
+1 0 0 1 50 156 Tm () Tj
+1 0 0 1 50 142 Tm (12. Area: Documentation) Tj
+1 0 0 1 50 128 Tm (    Requirement: Accurate current-state guidance) Tj
+1 0 0 1 50 114 Tm (    Current Implementation: README is detailed) Tj
+1 0 0 1 50 100 Tm (    Gap: Docs mix local workflow, broker flow, deployment, and production) Tj
+1 0 0 1 50 86 Tm (    claims) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 2611 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (    Priority: Medium) Tj
+1 0 0 1 50 786 Tm (    Recommendation: Split docs into Legacy Local Ops, Legacy Deployment) Tj
+1 0 0 1 50 772 Tm (    Limits, and Migration Notes) Tj
+1 0 0 1 50 758 Tm () Tj
+1 0 0 1 50 744 Tm (ROADMAP) Tj
+1 0 0 1 50 730 Tm () Tj
+1 0 0 1 50 716 Tm (Phase 1: Stabilize) Tj
+1 0 0 1 50 702 Tm (- Fix the failing legacy test in tests/test_breakout_bot.py) Tj
+1 0 0 1 50 688 Tm (- Define official legacy entrypoints in README.md) Tj
+1 0 0 1 50 674 Tm (- Mark non-production or archived files as inactive) Tj
+1 0 0 1 50 660 Tm (- Freeze current CSV schemas so behavior is explicit) Tj
+1 0 0 1 50 646 Tm () Tj
+1 0 0 1 50 632 Tm (Phase 2: Harden) Tj
+1 0 0 1 50 618 Tm (- Introduce DB-backed persistence for signals, executions, order history,) Tj
+1 0 0 1 50 604 Tm (  and summaries) Tj
+1 0 0 1 50 590 Tm (- Keep CSV generation only for export and reporting) Tj
+1 0 0 1 50 576 Tm (- Separate execution-state handling from Streamlit UI code) Tj
+1 0 0 1 50 562 Tm (- Strengthen live-trading approval and audit flow) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm (Phase 3: Refactor) Tj
+1 0 0 1 50 520 Tm (- Break orchestration out of src/Trading.py) Tj
+1 0 0 1 50 506 Tm (- Standardize strategy input and output contracts) Tj
+1 0 0 1 50 492 Tm (- Separate domains into data, strategy, execution, reporting, and UI layers) Tj
+1 0 0 1 50 478 Tm (- Decouple Telegram and reporting from core trade workflows) Tj
+1 0 0 1 50 464 Tm () Tj
+1 0 0 1 50 450 Tm (Phase 4: Operationalize) Tj
+1 0 0 1 50 436 Tm (- Split local operator app docs from production deployment docs) Tj
+1 0 0 1 50 422 Tm (- Add structured logs and clearer recovery procedures) Tj
+1 0 0 1 50 408 Tm (- Define a supportable production profile only after persistence and audit) Tj
+1 0 0 1 50 394 Tm (  gaps are closed) Tj
+1 0 0 1 50 380 Tm (- Treat horizontal scaling as out of scope until local-file state is removed) Tj
+1 0 0 1 50 366 Tm (  from the core path) Tj
+1 0 0 1 50 352 Tm () Tj
+1 0 0 1 50 338 Tm (FINAL CONCLUSION) Tj
+1 0 0 1 50 324 Tm () Tj
+1 0 0 1 50 310 Tm (The legacy src/ project is a capable trading application with substantial) Tj
+1 0 0 1 50 296 Tm (real functionality already in place. Its biggest gaps are architectural and) Tj
+1 0 0 1 50 282 Tm (operational, not feature-related.) Tj
+1 0 0 1 50 268 Tm () Tj
+1 0 0 1 50 254 Tm (The right next move is not adding more strategy breadth. The right next move) Tj
+1 0 0 1 50 240 Tm (is hardening the system of record, separating concerns, and re-establishing) Tj
+1 0 0 1 50 226 Tm (a fully green baseline for the monolithic code path.) Tj
+ET
+endstream
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000134 00000 n 
+0000000204 00000 n 
+0000000330 00000 n 
+0000003567 00000 n 
+0000003693 00000 n 
+0000007130 00000 n 
+0000007256 00000 n 
+0000010596 00000 n 
+0000010724 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+13388
+%%EOF

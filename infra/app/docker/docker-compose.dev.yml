@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  vinayak-api:
+    build:
+      context: ../..
+      dockerfile: infra/app/docker/Dockerfile
+    container_name: vinayak-api-dev
+    env_file:
+      - ../env/dev.env.example
+    environment:
+      APP_ENV: development
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      VINAYAK_DATABASE_URL: sqlite:////app/app/vinayak/data/vinayak.db
+      MESSAGE_BUS_ENABLED: "false"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../../app/vinayak/data:/app/app/vinayak/data
+      - ../../data:/app/data
+    restart: unless-stopped
+
+  vinayak-redis:
+    image: redis:7-alpine
+    container_name: vinayak-redis-dev
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+

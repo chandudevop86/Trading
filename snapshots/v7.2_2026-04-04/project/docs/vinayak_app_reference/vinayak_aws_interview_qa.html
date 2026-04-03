@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vinayak AWS Interview Q and A</title>
+  <style>
+    @page { size: A4; margin: 18mm; }
+    body { font-family: Arial, sans-serif; color: #102033; line-height: 1.5; }
+    h1, h2 { margin: 0 0 8px 0; color: #0f2742; }
+    h1 { font-size: 28px; }
+    h2 { font-size: 18px; margin-top: 22px; border-bottom: 2px solid #d9e4f2; padding-bottom: 6px; }
+    p { margin: 6px 0; }
+    .hero { padding: 18px 20px; border-radius: 18px; background: linear-gradient(135deg, #0e233b, #173b63); color: #fff; margin-bottom: 16px; }
+    .hero p { color: #d9e8f7; }
+    .qa { border: 1px solid #d8e2ee; border-radius: 14px; padding: 14px; margin: 12px 0; background: #fbfdff; }
+    .q { font-weight: 700; color: #10345a; margin-bottom: 6px; }
+    .a { font-size: 13px; }
+    .page-break { page-break-before: always; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Vinayak AWS Interview Questions and Answers</h1>
+    <p>Project-based AWS interview preparation using your trading platform as the reference architecture.</p>
+  </div>
+
+  <h2>Part 1: Foundation</h2>
+
+  <div class="qa"><div class="q">1. What is the current architecture of your project?</div><div class="a">Right now the project is primarily a Python trading application with a Streamlit-based web UI and strategy logic in the same app layer. It already has deployment guidance for Nginx, Docker, and Kubernetes, so I describe it as a monolith that is ready to evolve into a proper multi-tier system.</div></div>
+  <div class="qa"><div class="q">2. How would you move this project to AWS?</div><div class="a">I would start with EC2 and Nginx because that gives the fastest path to production. Then I would introduce RDS for persistence, Redis for caching, S3 for exports, and finally separate the app logic into a service layer that can later move to ECS or EKS.</div></div>
+  <div class="qa"><div class="q">3. Why use Nginx in front of the application?</div><div class="a">Nginx gives me reverse proxying, TLS termination, cleaner public routing, and the ability to hide the internal app port. It also helps me separate the public web tier from the private app tier, which is an important security and architecture principle.</div></div>
+  <div class="qa"><div class="q">4. Why should the app tier not be directly exposed to the internet?</div><div class="a">Because the app tier handles business logic, broker interactions, and potentially sensitive operations. The best practice is to expose only the web tier publicly and keep the app and data tiers private inside the VPC with tightly scoped security-group rules.</div></div>
+  <div class="qa"><div class="q">5. What AWS services map to the web, app, and DB tiers?</div><div class="a">For the web tier I would use Route 53, ACM, ALB, and optionally Nginx on EC2 or ECS. For the app tier I would use EC2, ECS, or EKS. For the DB tier I would use RDS PostgreSQL, with ElastiCache Redis as a supporting cache tier.</div></div>
+  <div class="qa"><div class="q">6. Why is this project good for AWS interviews?</div><div class="a">Because it naturally covers compute, networking, storage, security, scaling, observability, and system design. It gives me a concrete story of taking a real Python app and designing a production-ready AWS architecture around it.</div></div>
+  <div class="qa"><div class="q">7. How would you store reports and exports?</div><div class="a">I would store reports, CSV exports, backup artifacts, and deployment outputs in Amazon S3. That is better than keeping them on instance storage because S3 is durable, cheap, and easy to integrate with lifecycle policies.</div></div>
+  <div class="qa"><div class="q">8. Why choose RDS PostgreSQL for this project?</div><div class="a">The project has relational entities such as signals, reviewed trades, executions, settings, and audit logs. PostgreSQL fits that structured data model well, and RDS reduces operational burden compared to self-managing the database.</div></div>
+  <div class="qa"><div class="q">9. Where would Redis help here?</div><div class="a">Redis would help cache option-chain data, recent OHLCV snapshots, reviewed queue state, and other hot reads that do not need to hit the main database every time. It improves response time and reduces repeated external fetches.</div></div>
+  <div class="qa"><div class="q">10. Why might you add a queue service?</div><div class="a">A queue helps when I want signal generation, execution requests, or Telegram notifications to run asynchronously. That improves reliability and keeps the user-facing request path short and non-blocking.</div></div>
+
+  <div class="page-break"></div>
+
+  <h2>Part 2: Architecture and Tradeoffs</h2>
+
+  <div class="qa"><div class="q">11. EC2 or ECS for the first AWS deployment?</div><div class="a">For the first deployment I would choose EC2 because it is easier to set up, easier to debug, and simple to explain in an interview. Once the services are separated more clearly, I would move to ECS for easier scaling and operations.</div></div>
+  <div class="qa"><div class="q">12. ECS or EKS later?</div><div class="a">I would choose ECS first because it gives managed container orchestration with less operational complexity. I would choose EKS only if I specifically needed Kubernetes features, team standardization, or multi-service platform maturity.</div></div>
+  <div class="qa"><div class="q">13. ALB vs Nginx: do you need both?</div><div class="a">Not always. ALB can handle public load balancing and path routing, while Nginx can provide reverse proxying and web-tier controls. In a simple design I might use only ALB plus the app service. In another design I could keep Nginx if I want fine-grained reverse-proxy behavior.</div></div>
+  <div class="qa"><div class="q">14. RDS vs DynamoDB for this project?</div><div class="a">I would choose RDS because the project has strongly relational workflows, transaction-like updates, and reporting needs. DynamoDB is powerful, but for this application the access patterns and table relationships make PostgreSQL the cleaner first choice.</div></div>
+  <div class="qa"><div class="q">15. How would you secure Dhan and Telegram credentials?</div><div class="a">I would avoid storing them directly in code or long-lived environment files in production. On AWS I would use Secrets Manager or SSM Parameter Store, then attach IAM roles so the compute service can read those secrets securely at runtime.</div></div>
+  <div class="qa"><div class="q">16. How would you handle monitoring?</div><div class="a">I would send app logs to CloudWatch Logs, publish metrics for latency and error counts, and create alarms for failed execution flows, API failures, and unhealthy instances. I would also keep application-level audit logs for trade review and broker payload history.</div></div>
+  <div class="qa"><div class="q">17. How would you make this highly available?</div><div class="a">I would place compute across multiple availability zones behind an ALB, use Multi-AZ RDS, use managed Redis if needed, and keep stateless app services so scaling and recovery are easier. S3 also helps because reports and exports are not tied to a single instance.</div></div>
+  <div class="qa"><div class="q">18. What would be in private subnets?</div><div class="a">The app tier, RDS database, Redis cache, and any internal workers should be in private subnets. Only the public entry components like ALB or Nginx should be directly internet-facing.</div></div>
+  <div class="qa"><div class="q">19. How would you explain this project on your resume?</div><div class="a">I would describe it as a trading platform that started as a Python monolith and was designed toward a cloud-ready AWS multi-tier architecture. I would mention strategy automation, broker integration, deployment readiness, and the migration path to managed AWS services.</div></div>
+  <div class="qa"><div class="q">20. If an interviewer asks for your next AWS step, what would you say?</div><div class="a">My next step would be to deploy the current stable version on EC2 behind Nginx and Route 53, then introduce PostgreSQL on RDS and Redis for cache. After that I would extract the service layer into the Vinayak architecture and move toward ECS-based deployment.</div></div>
+</body>
+</html>

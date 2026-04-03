@@ -1,0 +1,213 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2608 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Vinayak AWS Implementation Guide 3) Tj
+1 0 0 1 50 786 Tm (GitHub Actions Pipeline For ECR And ECS) Tj
+1 0 0 1 50 772 Tm () Tj
+1 0 0 1 50 758 Tm (Goal) Tj
+1 0 0 1 50 744 Tm (Create a CI CD pipeline that builds the Vinayak image, pushes it to ECR, and deploys it to ECS.) Tj
+1 0 0 1 50 730 Tm () Tj
+1 0 0 1 50 716 Tm (Scope) Tj
+1 0 0 1 50 702 Tm (1. GitHub Actions workflow) Tj
+1 0 0 1 50 688 Tm (2. AWS authentication) Tj
+1 0 0 1 50 674 Tm (3. Docker build and tag) Tj
+1 0 0 1 50 660 Tm (4. ECR push) Tj
+1 0 0 1 50 646 Tm (5. ECS task definition render) Tj
+1 0 0 1 50 632 Tm (6. ECS service deploy) Tj
+1 0 0 1 50 618 Tm (7. Optional migration step) Tj
+1 0 0 1 50 604 Tm () Tj
+1 0 0 1 50 590 Tm (Recommended repository files) Tj
+1 0 0 1 50 576 Tm (.github/workflows/deploy-vinayak.yml) Tj
+1 0 0 1 50 562 Tm (vinayak/deploy/aws/ecs-task-definition.json) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm (Step 1) Tj
+1 0 0 1 50 520 Tm (Prepare AWS side first.) Tj
+1 0 0 1 50 506 Tm (Create ECR repository vinayak-api.) Tj
+1 0 0 1 50 492 Tm (Create ECS cluster and service.) Tj
+1 0 0 1 50 478 Tm (Create task definition family vinayak-api.) Tj
+1 0 0 1 50 464 Tm (Create IAM permissions for GitHub deployment.) Tj
+1 0 0 1 50 450 Tm () Tj
+1 0 0 1 50 436 Tm (Step 2) Tj
+1 0 0 1 50 422 Tm (Choose authentication method.) Tj
+1 0 0 1 50 408 Tm (Preferred:) Tj
+1 0 0 1 50 394 Tm (GitHub OIDC to AWS IAM role.) Tj
+1 0 0 1 50 380 Tm (Avoid long-lived AWS keys if possible.) Tj
+1 0 0 1 50 366 Tm (Create an IAM role trusted by GitHub for your repo and branch.) Tj
+1 0 0 1 50 352 Tm (Grant it ECR push and ECS deploy permissions.) Tj
+1 0 0 1 50 338 Tm () Tj
+1 0 0 1 50 324 Tm (Step 3) Tj
+1 0 0 1 50 310 Tm (Store GitHub secrets or variables.) Tj
+1 0 0 1 50 296 Tm (If using OIDC, keep secrets minimal.) Tj
+1 0 0 1 50 282 Tm (Use variables for AWS region, ECR repo name, ECS cluster, ECS service, and task definition path.) Tj
+1 0 0 1 50 268 Tm (If not using OIDC, store AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY as encrypted secrets.) Tj
+1 0 0 1 50 254 Tm () Tj
+1 0 0 1 50 240 Tm (Step 4) Tj
+1 0 0 1 50 226 Tm (Create workflow triggers.) Tj
+1 0 0 1 50 212 Tm (Typical trigger:) Tj
+1 0 0 1 50 198 Tm (on push to main.) Tj
+1 0 0 1 50 184 Tm (Optional manual trigger with workflow_dispatch.) Tj
+1 0 0 1 50 170 Tm (Optional separate deploy-dev and deploy-prod workflows.) Tj
+1 0 0 1 50 156 Tm () Tj
+1 0 0 1 50 142 Tm (Step 5) Tj
+1 0 0 1 50 128 Tm (Build stage.) Tj
+1 0 0 1 50 114 Tm (Checkout repo.) Tj
+1 0 0 1 50 100 Tm (Set up Docker buildx.) Tj
+1 0 0 1 50 86 Tm (Configure AWS credentials.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2617 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Login to ECR.) Tj
+1 0 0 1 50 786 Tm (Build image from vinayak Dockerfile.) Tj
+1 0 0 1 50 772 Tm (Tag with commit SHA and latest.) Tj
+1 0 0 1 50 758 Tm (Push both tags to ECR.) Tj
+1 0 0 1 50 744 Tm () Tj
+1 0 0 1 50 730 Tm (Step 6) Tj
+1 0 0 1 50 716 Tm (Render ECS task definition.) Tj
+1 0 0 1 50 702 Tm (Use the latest image URI.) Tj
+1 0 0 1 50 688 Tm (Either:) Tj
+1 0 0 1 50 674 Tm (1. template the task definition JSON inside the workflow, or) Tj
+1 0 0 1 50 660 Tm (2. keep a base JSON in the repo and replace only the image field.) Tj
+1 0 0 1 50 646 Tm (Update environment or secret refs only if needed.) Tj
+1 0 0 1 50 632 Tm () Tj
+1 0 0 1 50 618 Tm (Step 7) Tj
+1 0 0 1 50 604 Tm (Deploy to ECS.) Tj
+1 0 0 1 50 590 Tm (Register the new task definition revision.) Tj
+1 0 0 1 50 576 Tm (Update the ECS service to use that revision.) Tj
+1 0 0 1 50 562 Tm (Wait for the service to stabilize.) Tj
+1 0 0 1 50 548 Tm (Fail the workflow if deployment stabilization fails.) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (Step 8) Tj
+1 0 0 1 50 506 Tm (Add database migration step.) Tj
+1 0 0 1 50 492 Tm (Preferred approach:) Tj
+1 0 0 1 50 478 Tm (run alembic migration as a one-off ECS task before switching traffic.) Tj
+1 0 0 1 50 464 Tm (Alternative:) Tj
+1 0 0 1 50 450 Tm (run migration from a GitHub runner only if RDS network access allows it.) Tj
+1 0 0 1 50 436 Tm (Safer production pattern is one-off task inside the VPC.) Tj
+1 0 0 1 50 422 Tm () Tj
+1 0 0 1 50 408 Tm (Step 9) Tj
+1 0 0 1 50 394 Tm (Add health verification.) Tj
+1 0 0 1 50 380 Tm (After deploy, hit /health/live.) Tj
+1 0 0 1 50 366 Tm (Then hit /health/ready.) Tj
+1 0 0 1 50 352 Tm (Optionally check /workspace with a smoke test if auth/session handling is available.) Tj
+1 0 0 1 50 338 Tm () Tj
+1 0 0 1 50 324 Tm (Step 10) Tj
+1 0 0 1 50 310 Tm (Suggested workflow stages.) Tj
+1 0 0 1 50 296 Tm (1. lint or syntax checks.) Tj
+1 0 0 1 50 282 Tm (2. build image.) Tj
+1 0 0 1 50 268 Tm (3. push image to ECR.) Tj
+1 0 0 1 50 254 Tm (4. render task definition.) Tj
+1 0 0 1 50 240 Tm (5. deploy to ECS.) Tj
+1 0 0 1 50 226 Tm (6. wait for service stability.) Tj
+1 0 0 1 50 212 Tm (7. smoke test.) Tj
+1 0 0 1 50 198 Tm () Tj
+1 0 0 1 50 184 Tm (Step 11) Tj
+1 0 0 1 50 170 Tm (Suggested GitHub Actions actions.) Tj
+1 0 0 1 50 156 Tm (aws-actions/configure-aws-credentials) Tj
+1 0 0 1 50 142 Tm (aws-actions/amazon-ecr-login) Tj
+1 0 0 1 50 128 Tm (aws-actions/amazon-ecs-render-task-definition) Tj
+1 0 0 1 50 114 Tm (aws-actions/amazon-ecs-deploy-task-definition) Tj
+1 0 0 1 50 100 Tm (actions/checkout) Tj
+1 0 0 1 50 86 Tm () Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2572 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (actions/setup-python if you want Python checks first.) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Step 12) Tj
+1 0 0 1 50 758 Tm (Permissions the deployment role needs.) Tj
+1 0 0 1 50 744 Tm (ECR:) Tj
+1 0 0 1 50 730 Tm (GetAuthorizationToken.) Tj
+1 0 0 1 50 716 Tm (BatchCheckLayerAvailability.) Tj
+1 0 0 1 50 702 Tm (PutImage.) Tj
+1 0 0 1 50 688 Tm (InitiateLayerUpload.) Tj
+1 0 0 1 50 674 Tm (UploadLayerPart.) Tj
+1 0 0 1 50 660 Tm (CompleteLayerUpload.) Tj
+1 0 0 1 50 646 Tm () Tj
+1 0 0 1 50 632 Tm (ECS:) Tj
+1 0 0 1 50 618 Tm (DescribeServices.) Tj
+1 0 0 1 50 604 Tm (DescribeTaskDefinition.) Tj
+1 0 0 1 50 590 Tm (RegisterTaskDefinition.) Tj
+1 0 0 1 50 576 Tm (UpdateService.) Tj
+1 0 0 1 50 562 Tm (ListTasks.) Tj
+1 0 0 1 50 548 Tm (DescribeTasks.) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (IAM pass role permission for the ECS execution and task roles used by the task definition.) Tj
+1 0 0 1 50 506 Tm (CloudWatch read permissions are useful for debugging.) Tj
+1 0 0 1 50 492 Tm () Tj
+1 0 0 1 50 478 Tm (Step 13) Tj
+1 0 0 1 50 464 Tm (Branch strategy.) Tj
+1 0 0 1 50 450 Tm (Use main for production deploys.) Tj
+1 0 0 1 50 436 Tm (Use develop for a staging ECS service if needed.) Tj
+1 0 0 1 50 422 Tm (Keep environment specific variables separate.) Tj
+1 0 0 1 50 408 Tm (Protect the production environment with manual approval in GitHub environments.) Tj
+1 0 0 1 50 394 Tm () Tj
+1 0 0 1 50 380 Tm (Step 14) Tj
+1 0 0 1 50 366 Tm (Failure handling.) Tj
+1 0 0 1 50 352 Tm (If deployment fails, do not overwrite the old stable image tag manually.) Tj
+1 0 0 1 50 338 Tm (Let ECS keep the previous healthy task definition revision available.) Tj
+1 0 0 1 50 324 Tm (Record the failing revision and inspect CloudWatch logs.) Tj
+1 0 0 1 50 310 Tm () Tj
+1 0 0 1 50 296 Tm (Step 15) Tj
+1 0 0 1 50 282 Tm (Later upgrades.) Tj
+1 0 0 1 50 268 Tm (Add Terraform plan checks before deploy if you also use Terraform.) Tj
+1 0 0 1 50 254 Tm (Add image vulnerability scanning gates.) Tj
+1 0 0 1 50 240 Tm (Add migration approval step for production.) Tj
+1 0 0 1 50 226 Tm (Add Slack or Telegram deploy notifications.) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (What you should implement later in code and ops) Tj
+1 0 0 1 50 184 Tm (1. Add a proper Docker image tag strategy.) Tj
+1 0 0 1 50 170 Tm (2. Run tests before build.) Tj
+1 0 0 1 50 156 Tm (3. Add one-off migration tasks.) Tj
+1 0 0 1 50 142 Tm (4. Add separate staging and production ECS services.) Tj
+1 0 0 1 50 128 Tm (5. Add manual approval for production GitHub environment.) Tj
+ET
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000127 00000 n 
+0000000197 00000 n 
+0000000323 00000 n 
+0000002983 00000 n 
+0000003109 00000 n 
+0000005778 00000 n 
+0000005904 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+8528
+%%EOF

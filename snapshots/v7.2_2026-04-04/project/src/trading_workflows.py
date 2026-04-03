@@ -1,0 +1,154 @@
+﻿from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from src.execution.guards import execute_candidates
+from src.execution.pipeline import prepare_candidates_for_execution
+
+
+@dataclass(slots=True)
+class WorkflowResult:
+    output_rows: list[dict[str, object]]
+    execution_candidates: list[dict[str, object]]
+    execution_result: Any = None
+    execution_type: str = 'NONE'
+    log_path: str = ''
+
+
+def build_backtest_workflow(output_rows: list[dict[str, object]], strategy_label: str, symbol: str) -> WorkflowResult:
+    candidates = [dict(row) for row in output_rows]
+    return WorkflowResult(
+        output_rows=output_rows,
+        execution_candidates=candidates,
+        execution_type='BACKTEST',
+    )
+
+
+def run_paper_workflow(
+    output_rows: list[dict[str, object]],
+    strategy_label: str,
+    symbol: str,
+    *,
+    candles: Any | None = None,
+    output_path: Path,
+    deduplicate: bool = True,
+    max_trades_per_day: int | None = None,
+    max_daily_loss: float | None = None,
+    max_open_trades: int | None = None,
+) -> WorkflowResult:
+    candidates = prepare_candidates_for_execution(strategy_label, symbol, candles if candles is not None else __import__('pandas').DataFrame(output_rows), output_rows)
+    result = execute_candidates(
+        candidates,
+        output_path,
+        deduplicate=deduplicate,
+        execution_mode='PAPER',
+        max_trades_per_day=max_trades_per_day,
+        max_daily_loss=max_daily_loss,
+        max_open_trades=max_open_trades,
+    )
+    return WorkflowResult(
+        output_rows=output_rows,
+        execution_candidates=candidates,
+        execution_result=result,
+        execution_type='PAPER',
+        log_path=str(output_path),
+    )
+
+
+def run_live_workflow(
+    output_rows: list[dict[str, object]],
+    strategy_label: str,
+    symbol: str,
+    *,
+    candles: Any | None = None,
+    output_path: Path,
+    deduplicate: bool = True,
+    broker_client: object | None = None,
+    broker_name: str | None = None,
+    security_map: dict[str, dict[str, str]] | None = None,
+    max_trades_per_day: int | None = None,
+    max_daily_loss: float | None = None,
+    max_open_trades: int | None = None,
+) -> WorkflowResult:
+    candidates = prepare_candidates_for_execution(strategy_label, symbol, candles if candles is not None else __import__('pandas').DataFrame(output_rows), output_rows)
+    result = execute_candidates(
+        candidates,
+        output_path,
+        deduplicate=deduplicate,
+        execution_mode='LIVE',
+        broker_client=broker_client,
+        broker_name=broker_name,
+        security_map=security_map,
+        max_trades_per_day=max_trades_per_day,
+        max_daily_loss=max_daily_loss,
+        max_open_trades=max_open_trades,
+    )
+    return WorkflowResult(
+        output_rows=output_rows,
+        execution_candidates=candidates,
+        execution_result=result,
+        execution_type='LIVE',
+        log_path=str(output_path),
+    )
+
+
+def run_paper_candidates(
+    candidates: list[dict[str, object]],
+    *,
+    output_path: Path,
+    deduplicate: bool = True,
+    max_trades_per_day: int | None = None,
+    max_daily_loss: float | None = None,
+    max_open_trades: int | None = None,
+) -> WorkflowResult:
+    result = execute_candidates(
+        candidates,
+        output_path,
+        deduplicate=deduplicate,
+        execution_mode='PAPER',
+        max_trades_per_day=max_trades_per_day,
+        max_daily_loss=max_daily_loss,
+        max_open_trades=max_open_trades,
+    )
+    return WorkflowResult(
+        output_rows=[],
+        execution_candidates=candidates,
+        execution_result=result,
+        execution_type='PAPER',
+        log_path=str(output_path),
+    )
+
+
+def run_live_candidates(
+    candidates: list[dict[str, object]],
+    *,
+    output_path: Path,
+    deduplicate: bool = True,
+    broker_client: object | None = None,
+    broker_name: str | None = None,
+    security_map: dict[str, dict[str, str]] | None = None,
+    max_trades_per_day: int | None = None,
+    max_daily_loss: float | None = None,
+    max_open_trades: int | None = None,
+) -> WorkflowResult:
+    result = execute_candidates(
+        candidates,
+        output_path,
+        deduplicate=deduplicate,
+        execution_mode='LIVE',
+        broker_client=broker_client,
+        broker_name=broker_name,
+        security_map=security_map,
+        max_trades_per_day=max_trades_per_day,
+        max_daily_loss=max_daily_loss,
+        max_open_trades=max_open_trades,
+    )
+    return WorkflowResult(
+        output_rows=[],
+        execution_candidates=candidates,
+        execution_result=result,
+        execution_type='LIVE',
+        log_path=str(output_path),
+    )

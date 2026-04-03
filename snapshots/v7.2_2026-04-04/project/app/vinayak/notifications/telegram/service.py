@@ -1,0 +1,179 @@
+﻿from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+
+from vinayak.notifications.telegram.notifier import send_text_notification
+from vinayak.observability.observability_logger import log_event, log_exception
+from vinayak.observability.observability_metrics import increment_metric, record_stage, set_metric
+
+
+def build_trade_summary(trades: list[dict[str, object]]) -> str:
+    try:
+        if not trades:
+            message = 'Intratrade: no trades generated for this run.'
+            log_event(
+                component='telegram',
+                event_name='build_trade_summary',
+                severity='INFO',
+                message='Generated empty trade summary',
+                context_json={'rows': 0, 'payload_size': len(message)},
+            )
+            return message
+
+        if not all(isinstance(trade, dict) for trade in trades):
+            message = f"Intratrade: unsupported rows type: {type(trades[0]).__name__}"
+            log_event(
+                component='telegram',
+                event_name='build_trade_summary',
+                severity='WARNING',
+                message='Unsupported trade summary row type',
+                context_json={'rows': len(trades), 'payload_size': len(message)},
+            )
+            return message
+
+        def _first_value(row: dict[str, object], keys: list[str]) -> object:
+            for key in keys:
+                if key in row and row.get(key) not in (None, ''):
+                    return row.get(key)
+            return 'N/A'
+
+        def _trace_line(row: dict[str, object]) -> str:
+            trade_id = str(row.get('trade_id', '') or '').strip() or 'N/A'
+            zone_id = str(row.get('zone_id', '') or '').strip() or 'N/A'
+            return f"Trade ID: {trade_id}\nZone ID: {zone_id}"
+
+        def _is_indicator_row(row: dict[str, object]) -> bool:
+            return 'market_signal' in row
+
+        def _is_exec_candidate(row: dict[str, object]) -> bool:
+            return 'signal_time' in row and 'side' in row
+
+        def _is_trade_signal(row: dict[str, object]) -> bool:
+            has_entry = any(key in row for key in ('entry_price', 'entry', 'price'))
+            has_risk = any(key in row for key in ('stop_loss', 'sl', 'stop'))
+            has_target = any(key in row for key in ('target_price', 'target', 'tp'))
+            has_exit_or_pnl = any(key in row for key in ('pnl', 'exit_time', 'exit_reason'))
+            return (has_entry or has_risk or has_target) and (not has_exit_or_pnl)
+
+        has_pnl = any('pnl' in trade for trade in trades)
+        has_exit = any(('exit_time' in trade) or ('exit_reason' in trade) for trade in trades)
+
+        if any(_is_indicator_row(trade) for trade in trades) and (not has_pnl) and (not has_exit):
+            last = trades[-1]
+            message = (
+                'Indicator alert\n'
+                f"Rows: {len(trades)}\n"
+                f"Last time: {_first_value(last, ['timestamp', 'time', 'date'])}\n"
+                f"Last signal: {_first_value(last, ['market_signal'])}\n"
+                f"{_trace_line(last)}"
+            )
+        elif any(_is_exec_candidate(trade) for trade in trades) and (not has_pnl) and (not has_exit):
+            last = trades[-1]
+            message = (
+                'Signal alert\n'
+                f"Signals: {len(trades)}\n"
+                f"Last time: {_first_value(last, ['signal_time', 'timestamp'])}\n"
+                f"Last side: {_first_value(last, ['side'])}\n"
+                f"Last price: {_first_value(last, ['price', 'entry_price', 'entry'])}\n"
+                f"Option: {_first_value(last, ['option_strike', 'option_type'])}\n"
+                f"{_trace_line(last)}"
+            )
+        else:
+            closed = [
+                trade
+                for trade in trades
+                if ('pnl' in trade) and (('exit_time' in trade) or ('exit_reason' in trade))
+            ]
+            if closed:
+                total_pnl = sum(float(trade.get('pnl', 0) or 0) for trade in closed)
+                wins = sum(1 for trade in closed if float(trade.get('pnl', 0) or 0) > 0)
+                win_rate = (wins / len(closed)) * 100.0
+                last_trade = closed[-1]
+                message = (
+                    'Intratrade alert\n'
+                    f"Trades: {len(closed)}\n"
+                    f"Win rate: {win_rate:.2f}%\n"
+                    f"Total PnL: {total_pnl:.2f}\n"
+                    f"Last exit: {_first_value(last_trade, ['exit_time', 'timestamp', 'signal_time'])}\n"
+                    f"Last reason: {_first_value(last_trade, ['exit_reason', 'reason'])}\n"
+                    f"{_trace_line(last_trade)}"
+                )
+            else:
+                last = trades[-1]
+                if any(_is_trade_signal(trade) for trade in trades):
+                    message = (
+                        'Signal alert\n'
+                        f"Signals: {len(trades)}\n"
+                        f"Last time: {_first_value(last, ['timestamp', 'signal_time', 'time', 'date'])}\n"
+                        f"Last side: {_first_value(last, ['side', 'direction', 'trade_type'])}\n"
+                        f"Entry: {_first_value(last, ['entry_price', 'entry', 'price'])}\n"
+                        f"SL: {_first_value(last, ['stop_loss', 'sl', 'stop'])}\n"
+                        f"Target: {_first_value(last, ['target_price', 'target', 'tp'])}\n"
+                        f"{_trace_line(last)}"
+                    )
+                else:
+                    message = (
+                        'Intratrade alert\n'
+                        f"Rows: {len(trades)}\n"
+                        f"Last time: {_first_value(last, ['exit_time', 'timestamp', 'signal_time', 'time', 'date'])}\n"
+                        f"{_trace_line(last)}"
+                    )
+
+        log_event(
+            component='telegram',
+            event_name='build_trade_summary',
+            severity='INFO',
+            message='Generated trade summary',
+            context_json={'rows': len(trades), 'payload_size': len(message)},
+        )
+        return message
+    except Exception as exc:
+        log_exception(
+            component='telegram',
+            event_name='build_trade_summary_failed',
+            exc=exc,
+            message='Failed generating trade summary',
+        )
+        raise
+
+
+def send_telegram_message(token: str, chat_id: str, text: str) -> dict[str, Any]:
+    token = str(token or '').strip()
+    chat_id = str(chat_id or '').strip()
+    message = str(text or '').strip()
+    if not token:
+        raise ValueError('Telegram token is required')
+    if not chat_id:
+        raise ValueError('Telegram chat id is required')
+    if not message:
+        raise ValueError('Telegram message text is required')
+
+    try:
+        payload = send_text_notification(token=token, chat_id=chat_id, message=message)
+        set_metric('telegram_last_delivery_timestamp', datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ'))
+        set_metric('telegram_status', 'OK')
+        record_stage('notify', status='SUCCESS', message='Telegram sent')
+        log_event(
+            component='telegram',
+            event_name='telegram_send',
+            severity='INFO',
+            message='Telegram message sent',
+            context_json={'payload_size': len(message), 'chat_id': chat_id},
+        )
+        return payload if isinstance(payload, dict) else {'ok': True}
+    except Exception as exc:
+        increment_metric('telegram_send_failures_total', 1)
+        set_metric('telegram_status', 'FAIL')
+        record_stage('notify', status='FAIL', message=str(exc))
+        log_exception(
+            component='telegram',
+            event_name='telegram_send_failed',
+            exc=exc,
+            message='Telegram message failed',
+            context_json={'payload_size': len(message), 'chat_id': chat_id},
+        )
+        raise
+
+
+__all__ = ['build_trade_summary', 'send_telegram_message']

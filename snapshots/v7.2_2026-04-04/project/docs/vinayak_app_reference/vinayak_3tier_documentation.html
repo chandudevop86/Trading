@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vinayak 3-Tier Documentation</title>
+  <style>
+    @page { size: A4; margin: 16mm; }
+    body { font-family: Arial, sans-serif; color: #183047; line-height: 1.55; margin: 0; background: #f4f8fc; }
+    .page { max-width: 980px; margin: 0 auto; background: #fff; padding: 30px 38px 40px; }
+    .hero { background: linear-gradient(135deg, #0f2842, #1f5b8f); color: #fff; padding: 26px 28px; border-radius: 18px; }
+    .hero p { color: #dceaf7; }
+    h1, h2, h3 { color: #15314c; }
+    h1 { margin: 0 0 8px; font-size: 32px; }
+    h2 { margin-top: 28px; padding-bottom: 6px; border-bottom: 2px solid #d9e5f2; }
+    p, li { font-size: 15px; }
+    .card { border: 1px solid #dce7f1; border-radius: 16px; padding: 18px 20px; margin-top: 18px; background: #fbfdff; }
+    .image-card { margin-top: 22px; border: 1px solid #dce7f1; border-radius: 16px; padding: 16px; background: #fff; }
+    img { width: 100%; height: auto; }
+    .status { background: #eff8ef; border-left: 4px solid #4b9f52; padding: 12px 14px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <h1>Vinayak 3-Tier Documentation</h1>
+      <p>Communication flow, dependency split, and production-aligned explanation for the Vinayak trading platform.</p>
+    </div>
+
+    <p>Below is the communication between Vinayak components and their dependency flow. These dependencies come from the application design and current migration work. The infrastructure team can deploy them separately, but the functional dependency order stays the same.</p>
+
+    <div class="image-card">
+      <img src="vinayak_3tier_architecture.svg" alt="Vinayak 3 Tier Architecture" />
+    </div>
+
+    <div class="card">
+      <h2>Web Tier</h2>
+      <p>The web tier handles browser-facing pages and public entry traffic. In Vinayak, this includes the admin and workspace pages, plus reverse-proxy or ALB ingress.</p>
+      <ul>
+        <li>User entry through <code>/admin</code> and <code>/workspace</code></li>
+        <li>Nginx or ALB acts as the frontend gateway</li>
+        <li>Traffic is forwarded only to the app tier</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>App Tier</h2>
+      <p>The app tier contains the FastAPI layer, strategy processing, execution logic, live OHLCV services, Telegram flow, and report generation.</p>
+      <ul>
+        <li>Dashboard APIs for candles and live analysis</li>
+        <li>Trading workflow orchestration</li>
+        <li>Execution and notification integrations</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Data Tier</h2>
+      <p>The data tier stores persistent data, cached market state, and generated artifacts.</p>
+      <ul>
+        <li>Relational data through the DB layer</li>
+        <li>Redis for hot cache and latest analysis artifacts</li>
+        <li>S3 or local report storage for summaries and exports</li>
+      </ul>
+    </div>
+
+    <div class="status">
+      Vinayak now satisfies the 3-tier logic in structure. The remaining work is environment validation on AWS and full production deployment verification.
+    </div>
+  </div>
+</body>
+</html>

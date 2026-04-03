@@ -1,0 +1,366 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R 12 0 R 14 0 R] /Count 6 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2451 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (VINAYAK AWS DEPLOYMENT BOOK) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Date: 2026-04-04) Tj
+1 0 0 1 50 758 Tm (Project: Vinayak) Tj
+1 0 0 1 50 744 Tm (Format: Consolidated architecture, operations, and rollout dossier) Tj
+1 0 0 1 50 730 Tm () Tj
+1 0 0 1 50 716 Tm (TITLE PAGE) Tj
+1 0 0 1 50 702 Tm () Tj
+1 0 0 1 50 688 Tm (Vinayak AWS Deployment Book) Tj
+1 0 0 1 50 674 Tm () Tj
+1 0 0 1 50 660 Tm (Prepared for:) Tj
+1 0 0 1 50 646 Tm (- Vinayak production separation planning) Tj
+1 0 0 1 50 632 Tm (- AWS deployment readiness) Tj
+1 0 0 1 50 618 Tm (- staged live-validation rollout) Tj
+1 0 0 1 50 604 Tm () Tj
+1 0 0 1 50 590 Tm (This book combines the recommended AWS architecture, operational) Tj
+1 0 0 1 50 576 Tm (runbook, and rollout/cost planning into one document.) Tj
+1 0 0 1 50 562 Tm () Tj
+1 0 0 1 50 548 Tm (TABLE OF CONTENTS) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (1. Executive Summary) Tj
+1 0 0 1 50 506 Tm (2. Chapter 1: AWS 3-Tier Architecture) Tj
+1 0 0 1 50 492 Tm (3. Chapter 2: Security Groups and Network Layout) Tj
+1 0 0 1 50 478 Tm (4. Chapter 3: EC2 and Application Setup) Tj
+1 0 0 1 50 464 Tm (5. Chapter 4: PostgreSQL and Data Layer) Tj
+1 0 0 1 50 450 Tm (6. Chapter 5: Nginx and Systemd) Tj
+1 0 0 1 50 436 Tm (7. Chapter 6: Verification and Operations) Tj
+1 0 0 1 50 422 Tm (8. Chapter 7: Sizing and Cost Planning) Tj
+1 0 0 1 50 408 Tm (9. Chapter 8: Rollout Phases) Tj
+1 0 0 1 50 394 Tm (10. Final Recommendation) Tj
+1 0 0 1 50 380 Tm () Tj
+1 0 0 1 50 366 Tm (EXECUTIVE SUMMARY) Tj
+1 0 0 1 50 352 Tm () Tj
+1 0 0 1 50 338 Tm (Vinayak should run as a clean AWS three-tier deployment:) Tj
+1 0 0 1 50 324 Tm (1. Web tier) Tj
+1 0 0 1 50 310 Tm (2. Application tier) Tj
+1 0 0 1 50 296 Tm (3. Data tier) Tj
+1 0 0 1 50 282 Tm () Tj
+1 0 0 1 50 268 Tm (This separation improves reliability, security, and production readiness) Tj
+1 0 0 1 50 254 Tm (for controlled live validation.) Tj
+1 0 0 1 50 240 Tm () Tj
+1 0 0 1 50 226 Tm (CHAPTER 1: AWS 3-TIER ARCHITECTURE) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (Web tier) Tj
+1 0 0 1 50 184 Tm (- EC2 with Nginx behind an ALB) Tj
+1 0 0 1 50 170 Tm (- public traffic entry) Tj
+1 0 0 1 50 156 Tm (- reverse proxy only) Tj
+1 0 0 1 50 142 Tm () Tj
+1 0 0 1 50 128 Tm (Application tier) Tj
+1 0 0 1 50 114 Tm (- private EC2 running vinayak.api.main:app) Tj
+1 0 0 1 50 100 Tm (- FastAPI, strategies, execution, observability) Tj
+1 0 0 1 50 86 Tm () Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 1982 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Data tier) Tj
+1 0 0 1 50 786 Tm (- Amazon RDS PostgreSQL) Tj
+1 0 0 1 50 772 Tm (- reviewed trades, executions, audit logs, state) Tj
+1 0 0 1 50 758 Tm () Tj
+1 0 0 1 50 744 Tm (Optional cache tier) Tj
+1 0 0 1 50 730 Tm (- ElastiCache Redis) Tj
+1 0 0 1 50 716 Tm () Tj
+1 0 0 1 50 702 Tm (CHAPTER 2: SECURITY GROUPS AND NETWORK LAYOUT) Tj
+1 0 0 1 50 688 Tm () Tj
+1 0 0 1 50 674 Tm (Use:) Tj
+1 0 0 1 50 660 Tm (- 2 public subnets) Tj
+1 0 0 1 50 646 Tm (- 2 private app subnets) Tj
+1 0 0 1 50 632 Tm (- 2 private data subnets) Tj
+1 0 0 1 50 618 Tm () Tj
+1 0 0 1 50 604 Tm (Public:) Tj
+1 0 0 1 50 590 Tm (- ALB) Tj
+1 0 0 1 50 576 Tm (- optional web EC2) Tj
+1 0 0 1 50 562 Tm () Tj
+1 0 0 1 50 548 Tm (Private app:) Tj
+1 0 0 1 50 534 Tm (- app EC2 hosts) Tj
+1 0 0 1 50 520 Tm () Tj
+1 0 0 1 50 506 Tm (Private data:) Tj
+1 0 0 1 50 492 Tm (- RDS PostgreSQL) Tj
+1 0 0 1 50 478 Tm (- Redis) Tj
+1 0 0 1 50 464 Tm () Tj
+1 0 0 1 50 450 Tm (Security groups) Tj
+1 0 0 1 50 436 Tm () Tj
+1 0 0 1 50 422 Tm (sg-alb) Tj
+1 0 0 1 50 408 Tm (- inbound 80/443 from internet) Tj
+1 0 0 1 50 394 Tm () Tj
+1 0 0 1 50 380 Tm (sg-web) Tj
+1 0 0 1 50 366 Tm (- inbound web traffic only from sg-alb) Tj
+1 0 0 1 50 352 Tm (- SSH only from your IP) Tj
+1 0 0 1 50 338 Tm () Tj
+1 0 0 1 50 324 Tm (sg-app) Tj
+1 0 0 1 50 310 Tm (- inbound 8000 only from sg-web or sg-alb) Tj
+1 0 0 1 50 296 Tm (- SSH only from bastion or your IP) Tj
+1 0 0 1 50 282 Tm () Tj
+1 0 0 1 50 268 Tm (sg-db) Tj
+1 0 0 1 50 254 Tm (- inbound 5432 only from sg-app) Tj
+1 0 0 1 50 240 Tm () Tj
+1 0 0 1 50 226 Tm (sg-redis) Tj
+1 0 0 1 50 212 Tm (- inbound 6379 only from sg-app) Tj
+1 0 0 1 50 198 Tm () Tj
+1 0 0 1 50 184 Tm (Important:) Tj
+1 0 0 1 50 170 Tm (- database and Redis must not be public) Tj
+1 0 0 1 50 156 Tm () Tj
+1 0 0 1 50 142 Tm (CHAPTER 3: EC2 AND APPLICATION SETUP) Tj
+1 0 0 1 50 128 Tm () Tj
+1 0 0 1 50 114 Tm (Web host) Tj
+1 0 0 1 50 100 Tm (- recommended size: t3.micro) Tj
+1 0 0 1 50 86 Tm () Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2365 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (App host) Tj
+1 0 0 1 50 786 Tm (- minimum: t3.small) Tj
+1 0 0 1 50 772 Tm (- preferred: t3.medium) Tj
+1 0 0 1 50 758 Tm (- do not use t3.micro for real live-validation workloads) Tj
+1 0 0 1 50 744 Tm () Tj
+1 0 0 1 50 730 Tm (Ubuntu setup commands) Tj
+1 0 0 1 50 716 Tm () Tj
+1 0 0 1 50 702 Tm (sudo apt update) Tj
+1 0 0 1 50 688 Tm (sudo apt install -y python3 python3-venv python3-pip nginx git curl) Tj
+1 0 0 1 50 674 Tm (cd /opt) Tj
+1 0 0 1 50 660 Tm (sudo git clone <your-repo-url> Trading) Tj
+1 0 0 1 50 646 Tm (sudo chown -R $USER:$USER /opt/Trading) Tj
+1 0 0 1 50 632 Tm (cd /opt/Trading) Tj
+1 0 0 1 50 618 Tm (python3 -m venv venv) Tj
+1 0 0 1 50 604 Tm (source venv/bin/activate) Tj
+1 0 0 1 50 590 Tm (pip install --upgrade pip) Tj
+1 0 0 1 50 576 Tm (pip install -r requirements.txt) Tj
+1 0 0 1 50 562 Tm (pip install fastapi "uvicorn[standard]" python-multipart) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm (Recommended swap) Tj
+1 0 0 1 50 520 Tm () Tj
+1 0 0 1 50 506 Tm (sudo fallocate -l 2G /swapfile) Tj
+1 0 0 1 50 492 Tm (sudo chmod 600 /swapfile) Tj
+1 0 0 1 50 478 Tm (sudo mkswap /swapfile) Tj
+1 0 0 1 50 464 Tm (sudo swapon /swapfile) Tj
+1 0 0 1 50 450 Tm (free -h) Tj
+1 0 0 1 50 436 Tm () Tj
+1 0 0 1 50 422 Tm (Persist:) Tj
+1 0 0 1 50 408 Tm (echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab) Tj
+1 0 0 1 50 394 Tm () Tj
+1 0 0 1 50 380 Tm (CHAPTER 4: POSTGRESQL AND DATA LAYER) Tj
+1 0 0 1 50 366 Tm () Tj
+1 0 0 1 50 352 Tm (Recommended database) Tj
+1 0 0 1 50 338 Tm (- Amazon RDS PostgreSQL 16) Tj
+1 0 0 1 50 324 Tm () Tj
+1 0 0 1 50 310 Tm (Baseline settings) Tj
+1 0 0 1 50 296 Tm (- db.t3.small minimum) Tj
+1 0 0 1 50 282 Tm (- private subnets only) Tj
+1 0 0 1 50 268 Tm (- public access disabled) Tj
+1 0 0 1 50 254 Tm (- Multi-AZ for production) Tj
+1 0 0 1 50 240 Tm (- automated backups enabled) Tj
+1 0 0 1 50 226 Tm () Tj
+1 0 0 1 50 212 Tm (Why PostgreSQL) Tj
+1 0 0 1 50 198 Tm (- durable execution records) Tj
+1 0 0 1 50 184 Tm (- better concurrency than SQLite) Tj
+1 0 0 1 50 170 Tm (- stronger audit trail) Tj
+1 0 0 1 50 156 Tm (- easier scaling) Tj
+1 0 0 1 50 142 Tm () Tj
+1 0 0 1 50 128 Tm (Example connection string) Tj
+1 0 0 1 50 114 Tm (postgresql+psycopg2://vinayak_app:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/vinayak) Tj
+1 0 0 1 50 100 Tm () Tj
+1 0 0 1 50 86 Tm (Example environment file) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 2468 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm () Tj
+1 0 0 1 50 786 Tm (DATABASE_URL=postgresql+psycopg2://vinayak_app:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/vinayak) Tj
+1 0 0 1 50 772 Tm (REDIS_URL=redis://YOUR_REDIS_ENDPOINT:6379/0) Tj
+1 0 0 1 50 758 Tm (DHAN_CLIENT_ID=your_dhan_client_id) Tj
+1 0 0 1 50 744 Tm (DHAN_ACCESS_TOKEN=your_dhan_access_token) Tj
+1 0 0 1 50 730 Tm (TELEGRAM_TOKEN=your_telegram_token) Tj
+1 0 0 1 50 716 Tm (TELEGRAM_CHAT_ID=your_telegram_chat_id) Tj
+1 0 0 1 50 702 Tm (LIVE_TRADING_ENABLED=false) Tj
+1 0 0 1 50 688 Tm (TRADING_BROKER_MODE=PAPER) Tj
+1 0 0 1 50 674 Tm () Tj
+1 0 0 1 50 660 Tm (CHAPTER 5: NGINX AND SYSTEMD) Tj
+1 0 0 1 50 646 Tm () Tj
+1 0 0 1 50 632 Tm (Nginx example) Tj
+1 0 0 1 50 618 Tm () Tj
+1 0 0 1 50 604 Tm (server {) Tj
+1 0 0 1 50 590 Tm (    listen 80;) Tj
+1 0 0 1 50 576 Tm (    server_name vinayak.yourdomain.com;) Tj
+1 0 0 1 50 562 Tm () Tj
+1 0 0 1 50 548 Tm (    location / {) Tj
+1 0 0 1 50 534 Tm (        proxy_pass http://127.0.0.1:8000;) Tj
+1 0 0 1 50 520 Tm (        proxy_set_header Host $host;) Tj
+1 0 0 1 50 506 Tm (        proxy_set_header X-Real-IP $remote_addr;) Tj
+1 0 0 1 50 492 Tm (        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;) Tj
+1 0 0 1 50 478 Tm (        proxy_set_header X-Forwarded-Proto $scheme;) Tj
+1 0 0 1 50 464 Tm (    }) Tj
+1 0 0 1 50 450 Tm (}) Tj
+1 0 0 1 50 436 Tm () Tj
+1 0 0 1 50 422 Tm (Systemd example) Tj
+1 0 0 1 50 408 Tm () Tj
+1 0 0 1 50 394 Tm ([Unit]) Tj
+1 0 0 1 50 380 Tm (Description=Vinayak FastAPI) Tj
+1 0 0 1 50 366 Tm (After=network.target) Tj
+1 0 0 1 50 352 Tm () Tj
+1 0 0 1 50 338 Tm ([Service]) Tj
+1 0 0 1 50 324 Tm (User=ubuntu) Tj
+1 0 0 1 50 310 Tm (WorkingDirectory=/opt/Trading) Tj
+1 0 0 1 50 296 Tm (EnvironmentFile=/etc/vinayak/vinayak.env) Tj
+1 0 0 1 50 282 Tm (ExecStart=/opt/Trading/venv/bin/python -m uvicorn vinayak.api.main:app --host 0.0.0.0 --port 8000) Tj
+1 0 0 1 50 268 Tm (Restart=always) Tj
+1 0 0 1 50 254 Tm (RestartSec=5) Tj
+1 0 0 1 50 240 Tm () Tj
+1 0 0 1 50 226 Tm ([Install]) Tj
+1 0 0 1 50 212 Tm (WantedBy=multi-user.target) Tj
+1 0 0 1 50 198 Tm () Tj
+1 0 0 1 50 184 Tm (CHAPTER 6: VERIFICATION AND OPERATIONS) Tj
+1 0 0 1 50 170 Tm () Tj
+1 0 0 1 50 156 Tm (Health checks) Tj
+1 0 0 1 50 142 Tm (curl http://127.0.0.1:8000/health) Tj
+1 0 0 1 50 128 Tm (ss -tulpn | grep 8000) Tj
+1 0 0 1 50 114 Tm (sudo journalctl -u vinayak -n 100 --no-pager) Tj
+1 0 0 1 50 100 Tm (sudo journalctl -u nginx -n 100 --no-pager) Tj
+1 0 0 1 50 86 Tm () Tj
+ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 2212 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Deployment order) Tj
+1 0 0 1 50 786 Tm (1. Create RDS) Tj
+1 0 0 1 50 772 Tm (2. Create Redis if needed) Tj
+1 0 0 1 50 758 Tm (3. Launch app EC2) Tj
+1 0 0 1 50 744 Tm (4. Install dependencies) Tj
+1 0 0 1 50 730 Tm (5. Configure env file) Tj
+1 0 0 1 50 716 Tm (6. Create systemd service) Tj
+1 0 0 1 50 702 Tm (7. Verify 127.0.0.1:8000) Tj
+1 0 0 1 50 688 Tm (8. Configure Nginx) Tj
+1 0 0 1 50 674 Tm (9. Connect ALB) Tj
+1 0 0 1 50 660 Tm (10. Point Route 53) Tj
+1 0 0 1 50 646 Tm () Tj
+1 0 0 1 50 632 Tm (CHAPTER 7: SIZING AND COST PLANNING) Tj
+1 0 0 1 50 618 Tm () Tj
+1 0 0 1 50 604 Tm (Lean validation stack) Tj
+1 0 0 1 50 590 Tm (- web t3.micro) Tj
+1 0 0 1 50 576 Tm (- app t3.small) Tj
+1 0 0 1 50 562 Tm (- db db.t3.small) Tj
+1 0 0 1 50 548 Tm (- approximate monthly range: USD 45 to 90) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (Stronger validation stack) Tj
+1 0 0 1 50 506 Tm (- web t3.micro) Tj
+1 0 0 1 50 492 Tm (- app t3.medium) Tj
+1 0 0 1 50 478 Tm (- db db.t3.small) Tj
+1 0 0 1 50 464 Tm (- optional Redis) Tj
+1 0 0 1 50 450 Tm (- approximate monthly range: USD 80 to 160) Tj
+1 0 0 1 50 436 Tm () Tj
+1 0 0 1 50 422 Tm (Production-oriented baseline) Tj
+1 0 0 1 50 408 Tm (- ALB) Tj
+1 0 0 1 50 394 Tm (- separate web and app) Tj
+1 0 0 1 50 380 Tm (- Multi-AZ RDS) Tj
+1 0 0 1 50 366 Tm (- Redis) Tj
+1 0 0 1 50 352 Tm (- CloudWatch) Tj
+1 0 0 1 50 338 Tm (- approximate monthly range: USD 180 to 400 plus transfer and storage) Tj
+1 0 0 1 50 324 Tm () Tj
+1 0 0 1 50 310 Tm (CHAPTER 8: ROLLOUT PHASES) Tj
+1 0 0 1 50 296 Tm () Tj
+1 0 0 1 50 282 Tm (Phase 1: Controlled paper validation) Tj
+1 0 0 1 50 268 Tm (- separated tiers) Tj
+1 0 0 1 50 254 Tm (- paper-only unattended execution) Tj
+1 0 0 1 50 240 Tm (- clean deployment behavior) Tj
+1 0 0 1 50 226 Tm () Tj
+1 0 0 1 50 212 Tm (Phase 2: Small live validation) Tj
+1 0 0 1 50 198 Tm (- minimum capital) Tj
+1 0 0 1 50 184 Tm (- one strategy) Tj
+1 0 0 1 50 170 Tm (- one symbol group) Tj
+1 0 0 1 50 156 Tm (- strict risk caps) Tj
+1 0 0 1 50 142 Tm () Tj
+1 0 0 1 50 128 Tm (Phase 3: Hardened pre-production) Tj
+1 0 0 1 50 114 Tm (- Redis) Tj
+1 0 0 1 50 100 Tm (- Secrets Manager) Tj
+1 0 0 1 50 86 Tm (- CloudWatch alarms) Tj
+ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 15 0 R >>
+endobj
+15 0 obj
+<< /Length 1085 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (- reconciliation automation) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Phase 4: Stronger production posture) Tj
+1 0 0 1 50 758 Tm (- ALB) Tj
+1 0 0 1 50 744 Tm (- Multi-AZ database) Tj
+1 0 0 1 50 730 Tm (- better backups) Tj
+1 0 0 1 50 716 Tm (- optional second app node) Tj
+1 0 0 1 50 702 Tm () Tj
+1 0 0 1 50 688 Tm (FINAL RECOMMENDATION) Tj
+1 0 0 1 50 674 Tm () Tj
+1 0 0 1 50 660 Tm (For Vinayak, the best near-term AWS production shape is:) Tj
+1 0 0 1 50 646 Tm (- separate web page tier) Tj
+1 0 0 1 50 632 Tm (- separate private application tier) Tj
+1 0 0 1 50 618 Tm (- separate private PostgreSQL database) Tj
+1 0 0 1 50 604 Tm (- optional Redis) Tj
+1 0 0 1 50 590 Tm (- CloudWatch and Secrets Manager) Tj
+1 0 0 1 50 576 Tm (- phased rollout from paper to tiny live validation) Tj
+1 0 0 1 50 562 Tm () Tj
+1 0 0 1 50 548 Tm (This is the right structure for Vinayak if you want it to look and) Tj
+1 0 0 1 50 534 Tm (behave like a serious trading platform rather than a single-host) Tj
+1 0 0 1 50 520 Tm (experiment.) Tj
+1 0 0 1 50 506 Tm () Tj
+ET
+endstream
+endobj
+xref
+0 16
+0000000000 65535 f 
+0000000009 00000 n `n0000000058 00000 n `n0000000148 00000 n `n0000000218 00000 n `n0000000344 00000 n `n0000002847 00000 n `n0000002973 00000 n `n0000005007 00000 n `n0000005133 00000 n `n0000007550 00000 n `n0000007678 00000 n `n0000010199 00000 n `n0000010327 00000 n `n0000012592 00000 n `n0000012720 00000 n `ntrailer
+<< /Size 16 /Root 1 0 R >>
+startxref
+13858
+%%EOF

@@ -1,0 +1,240 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2369 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (VINAYAK AWS COST AND ROLLOUT PLAN) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Date: 2026-04-04) Tj
+1 0 0 1 50 758 Tm (Project: Vinayak) Tj
+1 0 0 1 50 744 Tm (Purpose: Provide a practical AWS sizing guide, cost estimate ranges,) Tj
+1 0 0 1 50 730 Tm (and phased rollout plan for Vinayak.) Tj
+1 0 0 1 50 716 Tm () Tj
+1 0 0 1 50 702 Tm (SCOPE) Tj
+1 0 0 1 50 688 Tm () Tj
+1 0 0 1 50 674 Tm (This document covers:) Tj
+1 0 0 1 50 660 Tm (1. Instance sizing guidance) Tj
+1 0 0 1 50 646 Tm (2. Estimated AWS monthly cost bands) Tj
+1 0 0 1 50 632 Tm (3. Rollout phases from paper validation to stronger production posture) Tj
+1 0 0 1 50 618 Tm () Tj
+1 0 0 1 50 604 Tm (SIZING RECOMMENDATIONS) Tj
+1 0 0 1 50 590 Tm () Tj
+1 0 0 1 50 576 Tm (Web tier) Tj
+1 0 0 1 50 562 Tm (- recommended: t3.micro) Tj
+1 0 0 1 50 548 Tm (- use case: Nginx reverse proxy, light operator traffic) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (Application tier) Tj
+1 0 0 1 50 506 Tm (- minimum: t3.small) Tj
+1 0 0 1 50 492 Tm (- preferred: t3.medium) Tj
+1 0 0 1 50 478 Tm (- reason: Vinayak performs market-data processing, pandas work, API) Tj
+1 0 0 1 50 464 Tm (  serving, and observability updates) Tj
+1 0 0 1 50 450 Tm (- t3.micro is too fragile for stable live validation) Tj
+1 0 0 1 50 436 Tm () Tj
+1 0 0 1 50 422 Tm (Database tier) Tj
+1 0 0 1 50 408 Tm (- minimum: db.t3.small) Tj
+1 0 0 1 50 394 Tm (- preferred: db.t3.medium) Tj
+1 0 0 1 50 380 Tm () Tj
+1 0 0 1 50 366 Tm (Redis tier) Tj
+1 0 0 1 50 352 Tm (- recommended: cache.t3.micro) Tj
+1 0 0 1 50 338 Tm () Tj
+1 0 0 1 50 324 Tm (RECOMMENDED STARTING STACK) Tj
+1 0 0 1 50 310 Tm () Tj
+1 0 0 1 50 296 Tm (For controlled live validation:) Tj
+1 0 0 1 50 282 Tm (- web: t3.micro) Tj
+1 0 0 1 50 268 Tm (- app: t3.small minimum, t3.medium preferred) Tj
+1 0 0 1 50 254 Tm (- db: db.t3.small) Tj
+1 0 0 1 50 240 Tm (- redis: optional cache.t3.micro) Tj
+1 0 0 1 50 226 Tm () Tj
+1 0 0 1 50 212 Tm (ESTIMATED MONTHLY COST BANDS) Tj
+1 0 0 1 50 198 Tm () Tj
+1 0 0 1 50 184 Tm (These are rough planning bands, not billing quotes.) Tj
+1 0 0 1 50 170 Tm () Tj
+1 0 0 1 50 156 Tm (Lean validation stack) Tj
+1 0 0 1 50 142 Tm (- web EC2 t3.micro) Tj
+1 0 0 1 50 128 Tm (- app EC2 t3.small) Tj
+1 0 0 1 50 114 Tm (- RDS PostgreSQL db.t3.small) Tj
+1 0 0 1 50 100 Tm (- small EBS volumes) Tj
+1 0 0 1 50 86 Tm (- low traffic) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2200 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (- estimated monthly range: about USD 45 to 90) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Stronger validation stack) Tj
+1 0 0 1 50 758 Tm (- web EC2 t3.micro) Tj
+1 0 0 1 50 744 Tm (- app EC2 t3.medium) Tj
+1 0 0 1 50 730 Tm (- RDS PostgreSQL db.t3.small) Tj
+1 0 0 1 50 716 Tm (- optional Redis cache.t3.micro) Tj
+1 0 0 1 50 702 Tm (- modest monitoring and logs) Tj
+1 0 0 1 50 688 Tm (- estimated monthly range: about USD 80 to 160) Tj
+1 0 0 1 50 674 Tm () Tj
+1 0 0 1 50 660 Tm (Production-oriented baseline) Tj
+1 0 0 1 50 646 Tm (- ALB) Tj
+1 0 0 1 50 632 Tm (- web tier) Tj
+1 0 0 1 50 618 Tm (- app tier t3.medium or better) Tj
+1 0 0 1 50 604 Tm (- Multi-AZ RDS) Tj
+1 0 0 1 50 590 Tm (- Redis) Tj
+1 0 0 1 50 576 Tm (- CloudWatch alarms and logs) Tj
+1 0 0 1 50 562 Tm (- estimated monthly range: about USD 180 to 400 plus transfer and) Tj
+1 0 0 1 50 548 Tm (  storage growth) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (COST DRIVERS) Tj
+1 0 0 1 50 506 Tm () Tj
+1 0 0 1 50 492 Tm (Main AWS cost drivers:) Tj
+1 0 0 1 50 478 Tm (1. RDS) Tj
+1 0 0 1 50 464 Tm (2. Multi-AZ replication) Tj
+1 0 0 1 50 450 Tm (3. ALB) Tj
+1 0 0 1 50 436 Tm (4. CloudWatch logs and retention) Tj
+1 0 0 1 50 422 Tm (5. EC2 instance size) Tj
+1 0 0 1 50 408 Tm (6. EBS storage) Tj
+1 0 0 1 50 394 Tm (7. NAT gateway if used) Tj
+1 0 0 1 50 380 Tm () Tj
+1 0 0 1 50 366 Tm (ROLLOUT PHASES) Tj
+1 0 0 1 50 352 Tm () Tj
+1 0 0 1 50 338 Tm (Phase 1: Controlled paper validation) Tj
+1 0 0 1 50 324 Tm (Goal:) Tj
+1 0 0 1 50 310 Tm (- separate tiers) Tj
+1 0 0 1 50 296 Tm (- validate deployment stability) Tj
+1 0 0 1 50 282 Tm (- keep unattended execution in paper mode) Tj
+1 0 0 1 50 268 Tm () Tj
+1 0 0 1 50 254 Tm (Stack:) Tj
+1 0 0 1 50 240 Tm (- web EC2) Tj
+1 0 0 1 50 226 Tm (- app EC2) Tj
+1 0 0 1 50 212 Tm (- RDS PostgreSQL) Tj
+1 0 0 1 50 198 Tm () Tj
+1 0 0 1 50 184 Tm (Success criteria:) Tj
+1 0 0 1 50 170 Tm (- clean app uptime) Tj
+1 0 0 1 50 156 Tm (- no duplicate execution records) Tj
+1 0 0 1 50 142 Tm (- no stale metrics after manual runs) Tj
+1 0 0 1 50 128 Tm () Tj
+1 0 0 1 50 114 Tm (Phase 2: Small live validation) Tj
+1 0 0 1 50 100 Tm (Goal:) Tj
+1 0 0 1 50 86 Tm (- minimal capital) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2223 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (- validate broker execution with strict risk limits) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Requirements:) Tj
+1 0 0 1 50 758 Tm (- tiny capital allocation) Tj
+1 0 0 1 50 744 Tm (- kill switch enabled) Tj
+1 0 0 1 50 730 Tm (- one strategy only) Tj
+1 0 0 1 50 716 Tm (- one symbol group only) Tj
+1 0 0 1 50 702 Tm (- hard max trades per day) Tj
+1 0 0 1 50 688 Tm (- daily loss cap) Tj
+1 0 0 1 50 674 Tm () Tj
+1 0 0 1 50 660 Tm (Success criteria:) Tj
+1 0 0 1 50 646 Tm (- no wrong symbol, side, or quantity) Tj
+1 0 0 1 50 632 Tm (- no duplicate orders) Tj
+1 0 0 1 50 618 Tm (- clean broker reconciliation) Tj
+1 0 0 1 50 604 Tm (- reliable alerting) Tj
+1 0 0 1 50 590 Tm () Tj
+1 0 0 1 50 576 Tm (Phase 3: Hardened pre-production) Tj
+1 0 0 1 50 562 Tm (Goal:) Tj
+1 0 0 1 50 548 Tm (- improve reliability and observability) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (Add:) Tj
+1 0 0 1 50 506 Tm (- Redis) Tj
+1 0 0 1 50 492 Tm (- Secrets Manager) Tj
+1 0 0 1 50 478 Tm (- CloudWatch alarms) Tj
+1 0 0 1 50 464 Tm (- better runbooks) Tj
+1 0 0 1 50 450 Tm (- automated reconciliation and summaries) Tj
+1 0 0 1 50 436 Tm () Tj
+1 0 0 1 50 422 Tm (Success criteria:) Tj
+1 0 0 1 50 408 Tm (- stable weekly operation) Tj
+1 0 0 1 50 394 Tm (- no unexplained execution failures) Tj
+1 0 0 1 50 380 Tm (- clear operational alert routing) Tj
+1 0 0 1 50 366 Tm () Tj
+1 0 0 1 50 352 Tm (Phase 4: Stronger production posture) Tj
+1 0 0 1 50 338 Tm (Goal:) Tj
+1 0 0 1 50 324 Tm (- improve resilience and failure isolation) Tj
+1 0 0 1 50 310 Tm () Tj
+1 0 0 1 50 296 Tm (Add:) Tj
+1 0 0 1 50 282 Tm (- ALB) Tj
+1 0 0 1 50 268 Tm (- Multi-AZ RDS) Tj
+1 0 0 1 50 254 Tm (- improved backup strategy) Tj
+1 0 0 1 50 240 Tm (- optional second app node) Tj
+1 0 0 1 50 226 Tm (- tighter IAM) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (Success criteria:) Tj
+1 0 0 1 50 184 Tm (- service survives app restarts cleanly) Tj
+1 0 0 1 50 170 Tm (- data tier remains protected) Tj
+1 0 0 1 50 156 Tm (- observability and DB are durable) Tj
+1 0 0 1 50 142 Tm () Tj
+1 0 0 1 50 128 Tm (PRACTICAL RECOMMENDATION FOR VINAYAK) Tj
+1 0 0 1 50 114 Tm () Tj
+1 0 0 1 50 100 Tm (Use this order:) Tj
+1 0 0 1 50 86 Tm (1. t3.micro web) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 1141 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (2. t3.small or t3.medium app) Tj
+1 0 0 1 50 786 Tm (3. db.t3.small PostgreSQL) Tj
+1 0 0 1 50 772 Tm (4. no live scale-out yet) Tj
+1 0 0 1 50 758 Tm (5. add Redis later if needed) Tj
+1 0 0 1 50 744 Tm () Tj
+1 0 0 1 50 730 Tm (If staying cost-conscious:) Tj
+1 0 0 1 50 716 Tm (- reduce web complexity before reducing app capacity) Tj
+1 0 0 1 50 702 Tm (- do not reduce app tier below t3.small) Tj
+1 0 0 1 50 688 Tm (- do not validate serious live trading on t3.micro) Tj
+1 0 0 1 50 674 Tm () Tj
+1 0 0 1 50 660 Tm (FINAL RECOMMENDATION) Tj
+1 0 0 1 50 646 Tm () Tj
+1 0 0 1 50 632 Tm (For Vinayak, the best near-term AWS posture is:) Tj
+1 0 0 1 50 618 Tm (- separate web and app) Tj
+1 0 0 1 50 604 Tm (- separate PostgreSQL database) Tj
+1 0 0 1 50 590 Tm (- t3.small or t3.medium app host) Tj
+1 0 0 1 50 576 Tm (- RDS PostgreSQL baseline) Tj
+1 0 0 1 50 562 Tm (- gradual rollout from paper to tiny live validation) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm (This keeps the system affordable while respecting the operational reality) Tj
+1 0 0 1 50 520 Tm (of a trading application.) Tj
+1 0 0 1 50 506 Tm () Tj
+ET
+endstream
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n `n0000000058 00000 n `n0000000134 00000 n `n0000000204 00000 n `n0000000330 00000 n `n0000002751 00000 n `n0000002877 00000 n `n0000005129 00000 n `n0000005255 00000 n `n0000007530 00000 n `n0000007658 00000 n `ntrailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+8852
+%%EOF

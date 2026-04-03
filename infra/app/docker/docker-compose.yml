@@ -1,0 +1,131 @@
+version: "3.9"
+
+services:
+  vinayak-api:
+    build:
+      context: ../..
+      dockerfile: infra/app/docker/Dockerfile
+    container_name: vinayak-api
+    env_file:
+      - ../../.env
+    environment:
+      APP_ENV: docker
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      VINAYAK_DATABASE_URL: postgresql+psycopg2://postgres:postgres@vinayak-postgres:5432/vinayak
+      POSTGRES_URL: postgresql://postgres:postgres@vinayak-postgres:5432/vinayak
+      MONGODB_URL: mongodb://vinayak-mongodb:27017
+      MONGODB_DATABASE: vinayak
+      MONGODB_PRODUCT_COLLECTION: product_catalog
+      REDIS_URL: redis://vinayak-redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@vinayak-rabbitmq:5672/
+      MESSAGE_BUS_ENABLED: "true"
+      MESSAGE_BUS_BACKEND: rabbitmq
+      MESSAGE_BUS_URL: amqp://guest:guest@vinayak-rabbitmq:5672/
+      MESSAGE_BUS_TOPIC_PREFIX: vinayak
+    ports:
+      - "8000:8000"
+    depends_on:
+      - vinayak-postgres
+      - vinayak-mongodb
+      - vinayak-redis
+      - vinayak-rabbitmq
+    volumes:
+      - ../../data:/app/data
+      - ../../app/vinayak/data:/app/app/vinayak/data
+    restart: unless-stopped
+
+  vinayak-queue-worker:
+    build:
+      context: ../..
+      dockerfile: infra/app/docker/Dockerfile
+    container_name: vinayak-queue-worker
+    env_file:
+      - ../../.env
+    environment:
+      APP_ENV: docker
+      VINAYAK_DATABASE_URL: postgresql+psycopg2://postgres:postgres@vinayak-postgres:5432/vinayak
+      MONGODB_URL: mongodb://vinayak-mongodb:27017
+      MONGODB_DATABASE: vinayak
+      REDIS_URL: redis://vinayak-redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@vinayak-rabbitmq:5672/
+      MESSAGE_BUS_ENABLED: "true"
+      MESSAGE_BUS_BACKEND: rabbitmq
+      MESSAGE_BUS_URL: amqp://guest:guest@vinayak-rabbitmq:5672/
+      MESSAGE_BUS_TOPIC_PREFIX: vinayak
+    command: ["python", "-m", "vinayak.workers.event_worker"]
+    depends_on:
+      - vinayak-rabbitmq
+      - vinayak-mongodb
+      - vinayak-redis
+    restart: unless-stopped
+
+  vinayak-outbox-worker:
+    build:
+      context: ../..
+      dockerfile: infra/app/docker/Dockerfile
+    container_name: vinayak-outbox-worker
+    env_file:
+      - ../../.env
+    environment:
+      APP_ENV: docker
+      VINAYAK_DATABASE_URL: postgresql+psycopg2://postgres:postgres@vinayak-postgres:5432/vinayak
+      REDIS_URL: redis://vinayak-redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@vinayak-rabbitmq:5672/
+      MESSAGE_BUS_ENABLED: "true"
+      MESSAGE_BUS_BACKEND: rabbitmq
+      MESSAGE_BUS_URL: amqp://guest:guest@vinayak-rabbitmq:5672/
+      MESSAGE_BUS_TOPIC_PREFIX: vinayak
+    command: ["python", "-m", "vinayak.workers.outbox_worker"]
+    depends_on:
+      - vinayak-postgres
+      - vinayak-rabbitmq
+    restart: unless-stopped
+
+  vinayak-postgres:
+    image: postgres:16-alpine
+    container_name: vinayak-postgres
+    environment:
+      POSTGRES_DB: vinayak
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - vinayak_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  vinayak-mongodb:
+    image: mongo:7
+    container_name: vinayak-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - vinayak_mongodb_data:/data/db
+    restart: unless-stopped
+
+  vinayak-redis:
+    image: redis:7-alpine
+    container_name: vinayak-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - vinayak_redis_data:/data
+    restart: unless-stopped
+
+  vinayak-rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: vinayak-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - vinayak_rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+
+volumes:
+  vinayak_postgres_data:
+  vinayak_mongodb_data:
+  vinayak_redis_data:
+  vinayak_rabbitmq_data:
+

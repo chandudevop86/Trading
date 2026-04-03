@@ -1,0 +1,17 @@
+[Unit]
+Description=Trading Execution Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/trading
+EnvironmentFile=/etc/trading/trading.env
+ExecStart=/opt/trading/.venv/bin/python -m src.operational_daemon --env-file /etc/trading/trading.env
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/trading/daemon.log
+StandardError=append:/var/log/trading/daemon-error.log
+
+[Install]
+WantedBy=multi-user.target

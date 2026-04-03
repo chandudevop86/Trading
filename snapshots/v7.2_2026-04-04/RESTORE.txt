@@ -1,0 +1,4 @@
+﻿Snapshot: v7.2_2026-04-04
+Created from: F:\Trading (restructured workspace root)
+Purpose: pre-audit checkpoint before Vinayak audit
+Restore: copy contents of the project directory back into the workspace root.

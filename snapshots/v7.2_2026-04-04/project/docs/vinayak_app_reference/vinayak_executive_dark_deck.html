@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vinayak Executive Deck</title>
+  <style>
+    @page { size: A4 landscape; margin: 10mm; }
+    body { margin: 0; font-family: Arial, sans-serif; background: #09131d; color: #e8f1f8; }
+    .page { width: 100%; min-height: 100vh; padding: 24px 28px; box-sizing: border-box; background: radial-gradient(circle at top right, rgba(31,111,120,0.35), transparent 28%), linear-gradient(135deg, #081018, #122433 55%, #0d1823); }
+    .hero { border: 1px solid rgba(255,255,255,0.08); border-radius: 24px; padding: 28px 30px; background: rgba(255,255,255,0.04); }
+    .brand { letter-spacing: 4px; font-size: 13px; color: #f4d8a6; font-weight: 700; }
+    h1 { font-size: 40px; margin: 12px 0 10px; color: white; }
+    .sub { color: #b8cfdd; max-width: 880px; line-height: 1.6; }
+    .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; margin-top: 20px; }
+    .card { border: 1px solid rgba(255,255,255,0.08); border-radius: 22px; padding: 18px 20px; background: rgba(255,255,255,0.04); }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .stat { border-radius: 18px; padding: 18px; background: linear-gradient(135deg, rgba(244,216,166,0.18), rgba(31,111,120,0.18)); }
+    .num { font-size: 28px; font-weight: 700; color: #f4d8a6; }
+    img { width: 100%; height: auto; border-radius: 18px; border: 1px solid rgba(255,255,255,0.08); background: white; }
+    ul { margin-top: 10px; }
+    li { margin: 8px 0; line-height: 1.5; color: #d8e7f1; }
+    h2 { color: #ffffff; margin: 0 0 10px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <div class="brand">KRSH SOLUTIONS</div>
+      <h1>Vinayak Executive Architecture Deck</h1>
+      <div class="sub">Executive summary view of the Vinayak trading platform showing how the system behaves as a 3-tier AWS-ready product with live analysis, execution support, cache, and artifact storage.</div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Platform Snapshot</h2>
+        <img src="vinayak_krsh_branded_architecture.svg" alt="Executive architecture" />
+      </div>
+      <div class="card">
+        <h2>Key Points</h2>
+        <div class="stats">
+          <div class="stat"><div class="num">3</div><div>Tiers aligned: Web, App, Data</div></div>
+          <div class="stat"><div class="num">4+</div><div>External integrations: Yahoo, NSE, Dhan, Telegram</div></div>
+          <div class="stat"><div class="num">2</div><div>Artifact modes: Local and S3</div></div>
+          <div class="stat"><div class="num">1</div><div>Unified workspace for analysis flow</div></div>
+        </div>
+        <ul>
+          <li>Web tier controls browser-facing access and routing.</li>
+          <li>App tier runs strategy workflows, paper or live execution, and notifications.</li>
+          <li>Data tier handles state, Redis hot-cache, and report artifacts.</li>
+          <li>Target production path is ALB plus ECS plus RDS plus ElastiCache plus S3.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

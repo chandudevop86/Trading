@@ -1,0 +1,164 @@
+﻿Vinayak AWS Implementation Guide 2
+CloudFormation Stack
+
+Goal
+Build the same target architecture using native AWS CloudFormation.
+
+Scope
+1. Networking stack
+2. Security stack
+3. Data stack
+4. App stack
+5. DNS and certificate stack
+
+Recommended stack split
+1. vinayak-network
+2. vinayak-security
+3. vinayak-data
+4. vinayak-app
+5. vinayak-dns
+
+Step 1
+Create the network template.
+Resources:
+VPC.
+Public subnets.
+Private app subnets.
+Private data subnets.
+Internet gateway.
+NAT gateway.
+Route tables.
+Subnet associations.
+Outputs should export subnet IDs and VPC ID.
+
+Step 2
+Create the security template.
+Resources:
+ALB security group.
+ECS task security group.
+RDS security group.
+Redis security group.
+Use Fn::ImportValue from the network stack as needed.
+Keep ingress minimal.
+
+Step 3
+Create the data template.
+Resources:
+RDS subnet group.
+RDS instance or cluster.
+ElastiCache subnet group.
+Redis replication group or cache cluster.
+S3 bucket for reports.
+Secrets Manager secrets for DB URL and third-party credentials.
+Outputs should export DB endpoint, Redis endpoint, and bucket name.
+
+Step 4
+Create the app template.
+Resources:
+ECR repository.
+CloudWatch log group.
+ECS cluster.
+IAM execution role.
+IAM task role.
+Task definition.
+Target group.
+ALB listeners.
+ECS service.
+Pass secret ARNs into the task definition.
+Pass bucket and Redis URL as environment values.
+Use awslogs driver.
+
+Step 5
+Create the DNS template.
+Resources:
+ACM certificate.
+Route 53 alias record pointing domain to ALB.
+Listener 443 should use the certificate ARN.
+
+Step 6
+Write templates with parameters.
+Examples:
+Environment name.
+Domain name.
+Desired count.
+Container image URI.
+DB instance class.
+Bucket name.
+
+Step 7
+Use outputs and exports cleanly.
+Export VPC ID from network.
+Export subnet IDs.
+Export ALB DNS and ARN.
+Export security group IDs.
+Import those values in dependent stacks.
+
+Step 8
+Deployment order.
+Deploy network.
+Deploy security.
+Deploy data.
+Deploy app.
+Deploy DNS.
+Push image to ECR.
+Update app stack with the latest image URI if needed.
+Run DB migrations.
+Test health endpoints.
+
+Step 9
+Recommended template files
+cloudformation/
+  network.yml
+  security.yml
+  data.yml
+  app.yml
+  dns.yml
+  parameters/
+    dev.json
+    prod.json
+
+Step 10
+App template details.
+ALB target group should use /health/live.
+ECS service should run in private subnets.
+ALB should run in public subnets.
+Container port should be 8000.
+Task role needs access to S3, CloudWatch, and Secrets Manager.
+
+Step 11
+Data template details.
+RDS should be private and encrypted.
+Redis should be private only.
+S3 bucket should have public access blocked and server-side encryption enabled.
+Use lifecycle rules for report archives if needed.
+
+Step 12
+Operations.
+Use stack outputs to collect endpoints.
+Use change sets before updating prod.
+Tag every stack and resource with Environment, Project, and Owner.
+Store parameter JSON files separately for dev and prod.
+
+Step 13
+Post deployment validation.
+Check ECS service healthy count.
+Check ALB target health.
+Check RDS accessibility from the app.
+Check Redis from the app.
+Check S3 uploads.
+Check Secrets Manager secret injection.
+Check /admin and /workspace.
+Run a live-analysis request.
+
+Step 14
+Hardening.
+Add alarms in the app stack.
+Add WAF later in front of the ALB if required.
+Add blue green or canary deployment later.
+Add an optional worker stack if background jobs expand.
+
+What you should implement later in code
+1. Move local artifacts to S3.
+2. Replace config-file secrets with secret lookups.
+3. Make Redis a first-class cache path.
+4. Add worker containers if execution reconciliation becomes async.

@@ -1,0 +1,237 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2229 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Vinayak AWS Implementation Guide 2) Tj
+1 0 0 1 50 786 Tm (CloudFormation Stack) Tj
+1 0 0 1 50 772 Tm () Tj
+1 0 0 1 50 758 Tm (Goal) Tj
+1 0 0 1 50 744 Tm (Build the same target architecture using native AWS CloudFormation.) Tj
+1 0 0 1 50 730 Tm () Tj
+1 0 0 1 50 716 Tm (Scope) Tj
+1 0 0 1 50 702 Tm (1. Networking stack) Tj
+1 0 0 1 50 688 Tm (2. Security stack) Tj
+1 0 0 1 50 674 Tm (3. Data stack) Tj
+1 0 0 1 50 660 Tm (4. App stack) Tj
+1 0 0 1 50 646 Tm (5. DNS and certificate stack) Tj
+1 0 0 1 50 632 Tm () Tj
+1 0 0 1 50 618 Tm (Recommended stack split) Tj
+1 0 0 1 50 604 Tm (1. vinayak-network) Tj
+1 0 0 1 50 590 Tm (2. vinayak-security) Tj
+1 0 0 1 50 576 Tm (3. vinayak-data) Tj
+1 0 0 1 50 562 Tm (4. vinayak-app) Tj
+1 0 0 1 50 548 Tm (5. vinayak-dns) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (Step 1) Tj
+1 0 0 1 50 506 Tm (Create the network template.) Tj
+1 0 0 1 50 492 Tm (Resources:) Tj
+1 0 0 1 50 478 Tm (VPC.) Tj
+1 0 0 1 50 464 Tm (Public subnets.) Tj
+1 0 0 1 50 450 Tm (Private app subnets.) Tj
+1 0 0 1 50 436 Tm (Private data subnets.) Tj
+1 0 0 1 50 422 Tm (Internet gateway.) Tj
+1 0 0 1 50 408 Tm (NAT gateway.) Tj
+1 0 0 1 50 394 Tm (Route tables.) Tj
+1 0 0 1 50 380 Tm (Subnet associations.) Tj
+1 0 0 1 50 366 Tm (Outputs should export subnet IDs and VPC ID.) Tj
+1 0 0 1 50 352 Tm () Tj
+1 0 0 1 50 338 Tm (Step 2) Tj
+1 0 0 1 50 324 Tm (Create the security template.) Tj
+1 0 0 1 50 310 Tm (Resources:) Tj
+1 0 0 1 50 296 Tm (ALB security group.) Tj
+1 0 0 1 50 282 Tm (ECS task security group.) Tj
+1 0 0 1 50 268 Tm (RDS security group.) Tj
+1 0 0 1 50 254 Tm (Redis security group.) Tj
+1 0 0 1 50 240 Tm (Use Fn::ImportValue from the network stack as needed.) Tj
+1 0 0 1 50 226 Tm (Keep ingress minimal.) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (Step 3) Tj
+1 0 0 1 50 184 Tm (Create the data template.) Tj
+1 0 0 1 50 170 Tm (Resources:) Tj
+1 0 0 1 50 156 Tm (RDS subnet group.) Tj
+1 0 0 1 50 142 Tm (RDS instance or cluster.) Tj
+1 0 0 1 50 128 Tm (ElastiCache subnet group.) Tj
+1 0 0 1 50 114 Tm (Redis replication group or cache cluster.) Tj
+1 0 0 1 50 100 Tm (S3 bucket for reports.) Tj
+1 0 0 1 50 86 Tm (Secrets Manager secrets for DB URL and third-party credentials.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2230 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Outputs should export DB endpoint, Redis endpoint, and bucket name.) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Step 4) Tj
+1 0 0 1 50 758 Tm (Create the app template.) Tj
+1 0 0 1 50 744 Tm (Resources:) Tj
+1 0 0 1 50 730 Tm (ECR repository.) Tj
+1 0 0 1 50 716 Tm (CloudWatch log group.) Tj
+1 0 0 1 50 702 Tm (ECS cluster.) Tj
+1 0 0 1 50 688 Tm (IAM execution role.) Tj
+1 0 0 1 50 674 Tm (IAM task role.) Tj
+1 0 0 1 50 660 Tm (Task definition.) Tj
+1 0 0 1 50 646 Tm (Target group.) Tj
+1 0 0 1 50 632 Tm (ALB listeners.) Tj
+1 0 0 1 50 618 Tm (ECS service.) Tj
+1 0 0 1 50 604 Tm (Pass secret ARNs into the task definition.) Tj
+1 0 0 1 50 590 Tm (Pass bucket and Redis URL as environment values.) Tj
+1 0 0 1 50 576 Tm (Use awslogs driver.) Tj
+1 0 0 1 50 562 Tm () Tj
+1 0 0 1 50 548 Tm (Step 5) Tj
+1 0 0 1 50 534 Tm (Create the DNS template.) Tj
+1 0 0 1 50 520 Tm (Resources:) Tj
+1 0 0 1 50 506 Tm (ACM certificate.) Tj
+1 0 0 1 50 492 Tm (Route 53 alias record pointing domain to ALB.) Tj
+1 0 0 1 50 478 Tm (Listener 443 should use the certificate ARN.) Tj
+1 0 0 1 50 464 Tm () Tj
+1 0 0 1 50 450 Tm (Step 6) Tj
+1 0 0 1 50 436 Tm (Write templates with parameters.) Tj
+1 0 0 1 50 422 Tm (Examples:) Tj
+1 0 0 1 50 408 Tm (Environment name.) Tj
+1 0 0 1 50 394 Tm (Domain name.) Tj
+1 0 0 1 50 380 Tm (Desired count.) Tj
+1 0 0 1 50 366 Tm (Container image URI.) Tj
+1 0 0 1 50 352 Tm (DB instance class.) Tj
+1 0 0 1 50 338 Tm (Bucket name.) Tj
+1 0 0 1 50 324 Tm () Tj
+1 0 0 1 50 310 Tm (Step 7) Tj
+1 0 0 1 50 296 Tm (Use outputs and exports cleanly.) Tj
+1 0 0 1 50 282 Tm (Export VPC ID from network.) Tj
+1 0 0 1 50 268 Tm (Export subnet IDs.) Tj
+1 0 0 1 50 254 Tm (Export ALB DNS and ARN.) Tj
+1 0 0 1 50 240 Tm (Export security group IDs.) Tj
+1 0 0 1 50 226 Tm (Import those values in dependent stacks.) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (Step 8) Tj
+1 0 0 1 50 184 Tm (Deployment order.) Tj
+1 0 0 1 50 170 Tm (Deploy network.) Tj
+1 0 0 1 50 156 Tm (Deploy security.) Tj
+1 0 0 1 50 142 Tm (Deploy data.) Tj
+1 0 0 1 50 128 Tm (Deploy app.) Tj
+1 0 0 1 50 114 Tm (Deploy DNS.) Tj
+1 0 0 1 50 100 Tm (Push image to ECR.) Tj
+1 0 0 1 50 86 Tm (Update app stack with the latest image URI if needed.) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2471 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Run DB migrations.) Tj
+1 0 0 1 50 786 Tm (Test health endpoints.) Tj
+1 0 0 1 50 772 Tm () Tj
+1 0 0 1 50 758 Tm (Step 9) Tj
+1 0 0 1 50 744 Tm (Recommended template files) Tj
+1 0 0 1 50 730 Tm (cloudformation/) Tj
+1 0 0 1 50 716 Tm (  network.yml) Tj
+1 0 0 1 50 702 Tm (  security.yml) Tj
+1 0 0 1 50 688 Tm (  data.yml) Tj
+1 0 0 1 50 674 Tm (  app.yml) Tj
+1 0 0 1 50 660 Tm (  dns.yml) Tj
+1 0 0 1 50 646 Tm (  parameters/) Tj
+1 0 0 1 50 632 Tm (    dev.json) Tj
+1 0 0 1 50 618 Tm (    prod.json) Tj
+1 0 0 1 50 604 Tm () Tj
+1 0 0 1 50 590 Tm (Step 10) Tj
+1 0 0 1 50 576 Tm (App template details.) Tj
+1 0 0 1 50 562 Tm (ALB target group should use /health/live.) Tj
+1 0 0 1 50 548 Tm (ECS service should run in private subnets.) Tj
+1 0 0 1 50 534 Tm (ALB should run in public subnets.) Tj
+1 0 0 1 50 520 Tm (Container port should be 8000.) Tj
+1 0 0 1 50 506 Tm (Task role needs access to S3, CloudWatch, and Secrets Manager.) Tj
+1 0 0 1 50 492 Tm () Tj
+1 0 0 1 50 478 Tm (Step 11) Tj
+1 0 0 1 50 464 Tm (Data template details.) Tj
+1 0 0 1 50 450 Tm (RDS should be private and encrypted.) Tj
+1 0 0 1 50 436 Tm (Redis should be private only.) Tj
+1 0 0 1 50 422 Tm (S3 bucket should have public access blocked and server-side encryption enabled.) Tj
+1 0 0 1 50 408 Tm (Use lifecycle rules for report archives if needed.) Tj
+1 0 0 1 50 394 Tm () Tj
+1 0 0 1 50 380 Tm (Step 12) Tj
+1 0 0 1 50 366 Tm (Operations.) Tj
+1 0 0 1 50 352 Tm (Use stack outputs to collect endpoints.) Tj
+1 0 0 1 50 338 Tm (Use change sets before updating prod.) Tj
+1 0 0 1 50 324 Tm (Tag every stack and resource with Environment, Project, and Owner.) Tj
+1 0 0 1 50 310 Tm (Store parameter JSON files separately for dev and prod.) Tj
+1 0 0 1 50 296 Tm () Tj
+1 0 0 1 50 282 Tm (Step 13) Tj
+1 0 0 1 50 268 Tm (Post deployment validation.) Tj
+1 0 0 1 50 254 Tm (Check ECS service healthy count.) Tj
+1 0 0 1 50 240 Tm (Check ALB target health.) Tj
+1 0 0 1 50 226 Tm (Check RDS accessibility from the app.) Tj
+1 0 0 1 50 212 Tm (Check Redis from the app.) Tj
+1 0 0 1 50 198 Tm (Check S3 uploads.) Tj
+1 0 0 1 50 184 Tm (Check Secrets Manager secret injection.) Tj
+1 0 0 1 50 170 Tm (Check /admin and /workspace.) Tj
+1 0 0 1 50 156 Tm (Run a live-analysis request.) Tj
+1 0 0 1 50 142 Tm () Tj
+1 0 0 1 50 128 Tm (Step 14) Tj
+1 0 0 1 50 114 Tm (Hardening.) Tj
+1 0 0 1 50 100 Tm (Add alarms in the app stack.) Tj
+1 0 0 1 50 86 Tm (Add WAF later in front of the ALB if required.) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 530 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (Add blue green or canary deployment later.) Tj
+1 0 0 1 50 786 Tm (Add an optional worker stack if background jobs expand.) Tj
+1 0 0 1 50 772 Tm () Tj
+1 0 0 1 50 758 Tm (What you should implement later in code) Tj
+1 0 0 1 50 744 Tm (1. Move local artifacts to S3.) Tj
+1 0 0 1 50 730 Tm (2. Replace config-file secrets with secret lookups.) Tj
+1 0 0 1 50 716 Tm (3. Make Redis a first-class cache path.) Tj
+1 0 0 1 50 702 Tm (4. Add worker containers if execution reconciliation becomes async.) Tj
+ET
+endstream
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000134 00000 n 
+0000000204 00000 n 
+0000000330 00000 n 
+0000002611 00000 n 
+0000002737 00000 n 
+0000005019 00000 n 
+0000005145 00000 n 
+0000007668 00000 n 
+0000007796 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+8378
+%%EOF

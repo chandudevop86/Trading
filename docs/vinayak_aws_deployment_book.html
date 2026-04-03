@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vinayak AWS Deployment Book</title>
+  <style>
+    :root {
+      --ink: #142033;
+      --muted: #5d6b82;
+      --line: #d7dee8;
+      --paper: #ffffff;
+      --wash: #f4f7fb;
+      --accent: #1f4f8f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background: var(--wash);
+      line-height: 1.55;
+    }
+    .book {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--paper);
+      padding: 64px 72px;
+      box-shadow: 0 18px 60px rgba(20, 32, 51, 0.08);
+    }
+    .title-page {
+      min-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 40px;
+      padding-bottom: 40px;
+    }
+    h1, h2, h3 {
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: #102542;
+      line-height: 1.2;
+      margin: 0 0 16px;
+    }
+    h1 { font-size: 40px; letter-spacing: -0.02em; }
+    h2 {
+      font-size: 28px;
+      margin-top: 44px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+    h3 { font-size: 20px; margin-top: 28px; }
+    p { margin: 0 0 14px; }
+    ul, ol { margin: 0 0 16px 22px; }
+    li { margin: 0 0 8px; }
+    .meta {
+      color: var(--muted);
+      font-family: "Segoe UI", Arial, sans-serif;
+      margin-bottom: 22px;
+    }
+    .toc {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 22px 24px;
+    }
+    .code {
+      background: #0f172a;
+      color: #e5eefc;
+      border-radius: 12px;
+      padding: 16px 18px;
+      font-family: Consolas, "Courier New", monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 14px 0 20px;
+      font-size: 13px;
+    }
+    .note {
+      border-left: 4px solid var(--accent);
+      padding: 12px 16px;
+      background: #f5f9ff;
+      margin: 16px 0 18px;
+    }
+    @page {
+      size: A4;
+      margin: 18mm;
+    }
+    @media print {
+      body { background: #fff; }
+      .book {
+        box-shadow: none;
+        max-width: none;
+        margin: 0;
+        padding: 0;
+      }
+      h2 { break-before: page; }
+      .title-page { min-height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="book">
+    <section class="title-page">
+      <div class="meta">Date: 2026-04-04</div>
+      <div class="meta">Project: Vinayak</div>
+      <h1>Vinayak AWS Deployment Book</h1>
+      <p>Consolidated architecture, operations, and rollout dossier for a separated Vinayak deployment on AWS.</p>
+      <div class="note">
+        Prepared for:
+        <ul>
+          <li>Vinayak production separation planning</li>
+          <li>AWS deployment readiness</li>
+          <li>Staged live-validation rollout</li>
+        </ul>
+      </div>
+    </section>
+
+    <h2>Table Of Contents</h2>
+    <div class="toc">
+      <ol>
+        <li>Executive Summary</li>
+        <li>Chapter 1: AWS 3-Tier Architecture</li>
+        <li>Chapter 2: Security Groups and Network Layout</li>
+        <li>Chapter 3: EC2 and Application Setup</li>
+        <li>Chapter 4: PostgreSQL and Data Layer</li>
+        <li>Chapter 5: Nginx and Systemd</li>
+        <li>Chapter 6: Verification and Operations</li>
+        <li>Chapter 7: Sizing and Cost Planning</li>
+        <li>Chapter 8: Rollout Phases</li>
+        <li>Final Recommendation</li>
+      </ol>
+    </div>
+
+    <h2>Executive Summary</h2>
+    <p>Vinayak should run as a clean AWS three-tier deployment:</p>
+    <ol>
+      <li>Web tier: public-facing entry point and reverse proxy</li>
+      <li>Application tier: FastAPI, trading orchestration, execution, and observability</li>
+      <li>Data tier: PostgreSQL as the durable system of record</li>
+    </ol>
+    <p>This separation improves reliability, security, and production readiness for controlled live validation.</p>
+
+    <h2>Chapter 1: AWS 3-Tier Architecture</h2>
+    <h3>Web Tier</h3>
+    <p>Recommended: EC2 with Nginx behind an Application Load Balancer.</p>
+    <p>Responsibilities:</p>
+    <ul>
+      <li>receive public traffic</li>
+      <li>reverse proxy to the app tier</li>
+      <li>avoid storing broker or DB credentials</li>
+    </ul>
+
+    <h3>Application Tier</h3>
+    <p>Recommended: private EC2 running <code>vinayak.api.main:app</code>.</p>
+    <p>Responsibilities:</p>
+    <ul>
+      <li>FastAPI</li>
+      <li>strategy evaluation</li>
+      <li>broker integration</li>
+      <li>observability APIs</li>
+      <li>operator actions</li>
+    </ul>
+
+    <h3>Data Tier</h3>
+    <p>Recommended: Amazon RDS PostgreSQL.</p>
+    <p>Responsibilities:</p>
+    <ul>
+      <li>reviewed trades</li>
+      <li>executions</li>
+      <li>audit logs</li>
+      <li>application state</li>
+    </ul>
+
+    <h3>Optional Cache Tier</h3>
+    <p>Recommended: Amazon ElastiCache Redis.</p>
+
+    <h2>Chapter 2: Security Groups and Network Layout</h2>
+    <p>Use:</p>
+    <ul>
+      <li>2 public subnets</li>
+      <li>2 private app subnets</li>
+      <li>2 private data subnets</li>
+    </ul>
+    <p>Security groups:</p>
+    <ul>
+      <li><strong>sg-alb</strong>: inbound 80/443 from internet</li>
+      <li><strong>sg-web</strong>: inbound only from sg-alb, SSH only from your IP</li>
+      <li><strong>sg-app</strong>: inbound 8000 only from sg-web or sg-alb</li>
+      <li><strong>sg-db</strong>: inbound 5432 only from sg-app</li>
+      <li><strong>sg-redis</strong>: inbound 6379 only from sg-app</li>
+    </ul>
+    <div class="note">Important: database and Redis must never be public.</div>
+
+    <h2>Chapter 3: EC2 and Application Setup</h2>
+    <p>Web host: <code>t3.micro</code></p>
+    <p>App host: minimum <code>t3.small</code>, preferred <code>t3.medium</code></p>
+    <div class="note">Do not use <code>t3.micro</code> for serious live-validation workloads.</div>
+    <div class="code">sudo apt update
+sudo apt install -y python3 python3-venv python3-pip nginx git curl
+cd /opt
+sudo git clone &lt;your-repo-url&gt; Trading
+sudo chown -R $USER:$USER /opt/Trading
+cd /opt/Trading
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+pip install fastapi "uvicorn[standard]" python-multipart</div>
+
+    <p>Recommended swap:</p>
+    <div class="code">sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+free -h
+
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab</div>
+
+    <h2>Chapter 4: PostgreSQL and Data Layer</h2>
+    <p>Recommended database: Amazon RDS PostgreSQL 16.</p>
+    <ul>
+      <li><code>db.t3.small</code> minimum</li>
+      <li>private subnets only</li>
+      <li>public access disabled</li>
+      <li>Multi-AZ for production</li>
+      <li>automated backups enabled</li>
+    </ul>
+    <p>Example connection string:</p>
+    <div class="code">postgresql+psycopg2://vinayak_app:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/vinayak</div>
+    <p>Example environment file:</p>
+    <div class="code">DATABASE_URL=postgresql+psycopg2://vinayak_app:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/vinayak
+REDIS_URL=redis://YOUR_REDIS_ENDPOINT:6379/0
+DHAN_CLIENT_ID=your_dhan_client_id
+DHAN_ACCESS_TOKEN=your_dhan_access_token
+TELEGRAM_TOKEN=your_telegram_token
+TELEGRAM_CHAT_ID=your_telegram_chat_id
+LIVE_TRADING_ENABLED=false
+TRADING_BROKER_MODE=PAPER</div>
+
+    <h2>Chapter 5: Nginx and Systemd</h2>
+    <p>Nginx example:</p>
+    <div class="code">server {
+    listen 80;
+    server_name vinayak.yourdomain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}</div>
+    <p>Systemd example:</p>
+    <div class="code">[Unit]
+Description=Vinayak FastAPI
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/Trading
+EnvironmentFile=/etc/vinayak/vinayak.env
+ExecStart=/opt/Trading/venv/bin/python -m uvicorn vinayak.api.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target</div>
+
+    <h2>Chapter 6: Verification and Operations</h2>
+    <div class="code">curl http://127.0.0.1:8000/health
+ss -tulpn | grep 8000
+sudo journalctl -u vinayak -n 100 --no-pager
+sudo journalctl -u nginx -n 100 --no-pager</div>
+    <p>Deployment order:</p>
+    <ol>
+      <li>Create RDS</li>
+      <li>Create Redis if needed</li>
+      <li>Launch app EC2</li>
+      <li>Install dependencies</li>
+      <li>Configure env file</li>
+      <li>Create systemd service</li>
+      <li>Verify 127.0.0.1:8000</li>
+      <li>Configure Nginx</li>
+      <li>Connect ALB</li>
+      <li>Point Route 53</li>
+    </ol>
+
+    <h2>Chapter 7: Sizing and Cost Planning</h2>
+    <ul>
+      <li>Lean validation stack: about USD 45 to 90 per month</li>
+      <li>Stronger validation stack: about USD 80 to 160 per month</li>
+      <li>Production-oriented baseline: about USD 180 to 400 per month plus transfer and storage growth</li>
+    </ul>
+
+    <h2>Chapter 8: Rollout Phases</h2>
+    <ol>
+      <li>Controlled paper validation</li>
+      <li>Small live validation</li>
+      <li>Hardened pre-production</li>
+      <li>Stronger production posture</li>
+    </ol>
+
+    <h2>Final Recommendation</h2>
+    <p>For Vinayak, the best near-term AWS production shape is:</p>
+    <ul>
+      <li>separate web page tier</li>
+      <li>separate private application tier</li>
+      <li>separate private PostgreSQL database</li>
+      <li>optional Redis</li>
+      <li>CloudWatch and Secrets Manager</li>
+      <li>phased rollout from paper to tiny live validation</li>
+    </ul>
+    <p>This is the right structure for Vinayak if you want it to behave like a serious trading platform rather than a single-host experiment.</p>
+  </main>
+</body>
+</html>

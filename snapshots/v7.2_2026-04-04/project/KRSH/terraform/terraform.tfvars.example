@@ -1,0 +1,11 @@
+﻿kubeconfig_path   = "~/.kube/config"
+kube_context      = ""
+namespace         = "krsh"
+app_name          = "krsh-app"
+image             = "your-registry/krsh-trading:latest"
+replicas          = 1
+host              = "krsh.example.com"
+telegram_token    = ""
+telegram_chat_id  = ""
+dhan_client_id    = ""
+dhan_access_token = ""

@@ -1,0 +1,285 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R 12 0 R] /Count 5 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2179 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (VINAYAK AWS OPS RUNBOOK) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Date: 2026-04-04) Tj
+1 0 0 1 50 758 Tm (Project: Vinayak) Tj
+1 0 0 1 50 744 Tm (Purpose: Practical deployment companion for AWS security groups, EC2) Tj
+1 0 0 1 50 730 Tm (setup commands, and PostgreSQL connection configuration.) Tj
+1 0 0 1 50 716 Tm () Tj
+1 0 0 1 50 702 Tm (SCOPE) Tj
+1 0 0 1 50 688 Tm () Tj
+1 0 0 1 50 674 Tm (This runbook is the operational companion to the Vinayak AWS 3-tier) Tj
+1 0 0 1 50 660 Tm (separation guide.) Tj
+1 0 0 1 50 646 Tm () Tj
+1 0 0 1 50 632 Tm (It covers:) Tj
+1 0 0 1 50 618 Tm (1. Security group rules) Tj
+1 0 0 1 50 604 Tm (2. EC2 setup commands) Tj
+1 0 0 1 50 590 Tm (3. PostgreSQL setup notes) Tj
+1 0 0 1 50 576 Tm (4. Vinayak environment configuration) Tj
+1 0 0 1 50 562 Tm (5. Startup and verification steps) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm (SECURITY GROUP RULES) Tj
+1 0 0 1 50 520 Tm () Tj
+1 0 0 1 50 506 Tm (sg-alb) Tj
+1 0 0 1 50 492 Tm (Inbound:) Tj
+1 0 0 1 50 478 Tm (- 80/tcp from internet) Tj
+1 0 0 1 50 464 Tm (- 443/tcp from internet) Tj
+1 0 0 1 50 450 Tm () Tj
+1 0 0 1 50 436 Tm (sg-web) Tj
+1 0 0 1 50 422 Tm (Inbound:) Tj
+1 0 0 1 50 408 Tm (- 80/tcp from sg-alb) Tj
+1 0 0 1 50 394 Tm (- 443/tcp from sg-alb if TLS is terminated on web EC2) Tj
+1 0 0 1 50 380 Tm (- 22/tcp from your IP only) Tj
+1 0 0 1 50 366 Tm () Tj
+1 0 0 1 50 352 Tm (Outbound:) Tj
+1 0 0 1 50 338 Tm (- 8000/tcp to sg-app) Tj
+1 0 0 1 50 324 Tm () Tj
+1 0 0 1 50 310 Tm (sg-app) Tj
+1 0 0 1 50 296 Tm (Inbound:) Tj
+1 0 0 1 50 282 Tm (- 8000/tcp from sg-web or sg-alb) Tj
+1 0 0 1 50 268 Tm (- 22/tcp from bastion or your IP only) Tj
+1 0 0 1 50 254 Tm () Tj
+1 0 0 1 50 240 Tm (Outbound:) Tj
+1 0 0 1 50 226 Tm (- 5432/tcp to sg-db) Tj
+1 0 0 1 50 212 Tm (- 6379/tcp to sg-redis) Tj
+1 0 0 1 50 198 Tm (- 443/tcp for Dhan, Telegram, AWS APIs, and package installation) Tj
+1 0 0 1 50 184 Tm () Tj
+1 0 0 1 50 170 Tm (sg-db) Tj
+1 0 0 1 50 156 Tm (Inbound:) Tj
+1 0 0 1 50 142 Tm (- 5432/tcp only from sg-app) Tj
+1 0 0 1 50 128 Tm () Tj
+1 0 0 1 50 114 Tm (sg-redis) Tj
+1 0 0 1 50 100 Tm (Inbound:) Tj
+1 0 0 1 50 86 Tm (- 6379/tcp only from sg-app) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2335 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm () Tj
+1 0 0 1 50 786 Tm (UBUNTU EC2 SETUP COMMANDS) Tj
+1 0 0 1 50 772 Tm () Tj
+1 0 0 1 50 758 Tm (Run these on the app EC2 host:) Tj
+1 0 0 1 50 744 Tm () Tj
+1 0 0 1 50 730 Tm (sudo apt update) Tj
+1 0 0 1 50 716 Tm (sudo apt install -y python3 python3-venv python3-pip nginx git curl) Tj
+1 0 0 1 50 702 Tm (cd /opt) Tj
+1 0 0 1 50 688 Tm (sudo git clone <your-repo-url> Trading) Tj
+1 0 0 1 50 674 Tm (sudo chown -R $USER:$USER /opt/Trading) Tj
+1 0 0 1 50 660 Tm (cd /opt/Trading) Tj
+1 0 0 1 50 646 Tm (python3 -m venv venv) Tj
+1 0 0 1 50 632 Tm (source venv/bin/activate) Tj
+1 0 0 1 50 618 Tm (pip install --upgrade pip) Tj
+1 0 0 1 50 604 Tm (pip install -r requirements.txt) Tj
+1 0 0 1 50 590 Tm (pip install fastapi "uvicorn[standard]" python-multipart) Tj
+1 0 0 1 50 576 Tm () Tj
+1 0 0 1 50 562 Tm (RECOMMENDED SWAP SETUP) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm (sudo fallocate -l 2G /swapfile) Tj
+1 0 0 1 50 520 Tm (sudo chmod 600 /swapfile) Tj
+1 0 0 1 50 506 Tm (sudo mkswap /swapfile) Tj
+1 0 0 1 50 492 Tm (sudo swapon /swapfile) Tj
+1 0 0 1 50 478 Tm (free -h) Tj
+1 0 0 1 50 464 Tm () Tj
+1 0 0 1 50 450 Tm (Persist swap:) Tj
+1 0 0 1 50 436 Tm (echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab) Tj
+1 0 0 1 50 422 Tm () Tj
+1 0 0 1 50 408 Tm (POSTGRESQL DATABASE SETUP) Tj
+1 0 0 1 50 394 Tm () Tj
+1 0 0 1 50 380 Tm (Use Amazon RDS PostgreSQL.) Tj
+1 0 0 1 50 366 Tm () Tj
+1 0 0 1 50 352 Tm (Recommended baseline:) Tj
+1 0 0 1 50 338 Tm (- engine: PostgreSQL 16) Tj
+1 0 0 1 50 324 Tm (- instance: db.t3.small minimum) Tj
+1 0 0 1 50 310 Tm (- storage: gp3) Tj
+1 0 0 1 50 296 Tm (- public access: disabled) Tj
+1 0 0 1 50 282 Tm (- Multi-AZ: enabled for production) Tj
+1 0 0 1 50 268 Tm () Tj
+1 0 0 1 50 254 Tm (Create:) Tj
+1 0 0 1 50 240 Tm (- database name: vinayak) Tj
+1 0 0 1 50 226 Tm (- user: vinayak_app) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (POSTGRESQL CONNECTION STRING) Tj
+1 0 0 1 50 184 Tm () Tj
+1 0 0 1 50 170 Tm (SQLAlchemy style:) Tj
+1 0 0 1 50 156 Tm (postgresql+psycopg2://vinayak_app:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/vinayak) Tj
+1 0 0 1 50 142 Tm () Tj
+1 0 0 1 50 128 Tm (Direct psycopg style:) Tj
+1 0 0 1 50 114 Tm (postgresql://vinayak_app:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/vinayak) Tj
+1 0 0 1 50 100 Tm () Tj
+1 0 0 1 50 86 Tm (ENVIRONMENT FILE EXAMPLE) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2373 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm () Tj
+1 0 0 1 50 786 Tm (Create:) Tj
+1 0 0 1 50 772 Tm (sudo mkdir -p /etc/vinayak) Tj
+1 0 0 1 50 758 Tm (sudo nano /etc/vinayak/vinayak.env) Tj
+1 0 0 1 50 744 Tm () Tj
+1 0 0 1 50 730 Tm (Example:) Tj
+1 0 0 1 50 716 Tm (DATABASE_URL=postgresql+psycopg2://vinayak_app:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/vinayak) Tj
+1 0 0 1 50 702 Tm (REDIS_URL=redis://YOUR_REDIS_ENDPOINT:6379/0) Tj
+1 0 0 1 50 688 Tm (DHAN_CLIENT_ID=your_dhan_client_id) Tj
+1 0 0 1 50 674 Tm (DHAN_ACCESS_TOKEN=your_dhan_access_token) Tj
+1 0 0 1 50 660 Tm (TELEGRAM_TOKEN=your_telegram_token) Tj
+1 0 0 1 50 646 Tm (TELEGRAM_CHAT_ID=your_telegram_chat_id) Tj
+1 0 0 1 50 632 Tm (LIVE_TRADING_ENABLED=false) Tj
+1 0 0 1 50 618 Tm (TRADING_BROKER_MODE=PAPER) Tj
+1 0 0 1 50 604 Tm () Tj
+1 0 0 1 50 590 Tm (Lock the file:) Tj
+1 0 0 1 50 576 Tm (sudo chmod 600 /etc/vinayak/vinayak.env) Tj
+1 0 0 1 50 562 Tm () Tj
+1 0 0 1 50 548 Tm (NGINX REVERSE PROXY) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (Example /etc/nginx/sites-available/vinayak:) Tj
+1 0 0 1 50 506 Tm () Tj
+1 0 0 1 50 492 Tm (server {) Tj
+1 0 0 1 50 478 Tm (    listen 80;) Tj
+1 0 0 1 50 464 Tm (    server_name vinayak.yourdomain.com;) Tj
+1 0 0 1 50 450 Tm () Tj
+1 0 0 1 50 436 Tm (    location / {) Tj
+1 0 0 1 50 422 Tm (        proxy_pass http://127.0.0.1:8000;) Tj
+1 0 0 1 50 408 Tm (        proxy_set_header Host $host;) Tj
+1 0 0 1 50 394 Tm (        proxy_set_header X-Real-IP $remote_addr;) Tj
+1 0 0 1 50 380 Tm (        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;) Tj
+1 0 0 1 50 366 Tm (        proxy_set_header X-Forwarded-Proto $scheme;) Tj
+1 0 0 1 50 352 Tm (    }) Tj
+1 0 0 1 50 338 Tm (}) Tj
+1 0 0 1 50 324 Tm () Tj
+1 0 0 1 50 310 Tm (Enable it:) Tj
+1 0 0 1 50 296 Tm (sudo ln -s /etc/nginx/sites-available/vinayak /etc/nginx/sites-enabled/vinayak) Tj
+1 0 0 1 50 282 Tm (sudo nginx -t) Tj
+1 0 0 1 50 268 Tm (sudo systemctl restart nginx) Tj
+1 0 0 1 50 254 Tm () Tj
+1 0 0 1 50 240 Tm (SYSTEMD SERVICE) Tj
+1 0 0 1 50 226 Tm () Tj
+1 0 0 1 50 212 Tm (Create:) Tj
+1 0 0 1 50 198 Tm (sudo nano /etc/systemd/system/vinayak.service) Tj
+1 0 0 1 50 184 Tm () Tj
+1 0 0 1 50 170 Tm (Use:) Tj
+1 0 0 1 50 156 Tm () Tj
+1 0 0 1 50 142 Tm ([Unit]) Tj
+1 0 0 1 50 128 Tm (Description=Vinayak FastAPI) Tj
+1 0 0 1 50 114 Tm (After=network.target) Tj
+1 0 0 1 50 100 Tm () Tj
+1 0 0 1 50 86 Tm ([Service]) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 2395 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (User=ubuntu) Tj
+1 0 0 1 50 786 Tm (WorkingDirectory=/opt/Trading) Tj
+1 0 0 1 50 772 Tm (EnvironmentFile=/etc/vinayak/vinayak.env) Tj
+1 0 0 1 50 758 Tm (ExecStart=/opt/Trading/venv/bin/python -m uvicorn vinayak.api.main:app --host 0.0.0.0 --port 8000) Tj
+1 0 0 1 50 744 Tm (Restart=always) Tj
+1 0 0 1 50 730 Tm (RestartSec=5) Tj
+1 0 0 1 50 716 Tm () Tj
+1 0 0 1 50 702 Tm ([Install]) Tj
+1 0 0 1 50 688 Tm (WantedBy=multi-user.target) Tj
+1 0 0 1 50 674 Tm () Tj
+1 0 0 1 50 660 Tm (Enable and start:) Tj
+1 0 0 1 50 646 Tm (sudo systemctl daemon-reload) Tj
+1 0 0 1 50 632 Tm (sudo systemctl enable vinayak) Tj
+1 0 0 1 50 618 Tm (sudo systemctl start vinayak) Tj
+1 0 0 1 50 604 Tm (sudo systemctl status vinayak) Tj
+1 0 0 1 50 590 Tm () Tj
+1 0 0 1 50 576 Tm (VERIFICATION COMMANDS) Tj
+1 0 0 1 50 562 Tm () Tj
+1 0 0 1 50 548 Tm (App health:) Tj
+1 0 0 1 50 534 Tm (curl http://127.0.0.1:8000/health) Tj
+1 0 0 1 50 520 Tm () Tj
+1 0 0 1 50 506 Tm (Port check:) Tj
+1 0 0 1 50 492 Tm (ss -tulpn | grep 8000) Tj
+1 0 0 1 50 478 Tm () Tj
+1 0 0 1 50 464 Tm (Service logs:) Tj
+1 0 0 1 50 450 Tm (sudo journalctl -u vinayak -n 100 --no-pager) Tj
+1 0 0 1 50 436 Tm () Tj
+1 0 0 1 50 422 Tm (Nginx logs:) Tj
+1 0 0 1 50 408 Tm (sudo journalctl -u nginx -n 100 --no-pager) Tj
+1 0 0 1 50 394 Tm () Tj
+1 0 0 1 50 380 Tm (DEPLOYMENT ORDER) Tj
+1 0 0 1 50 366 Tm () Tj
+1 0 0 1 50 352 Tm (1. Create RDS PostgreSQL) Tj
+1 0 0 1 50 338 Tm (2. Create Redis if needed) Tj
+1 0 0 1 50 324 Tm (3. Launch app EC2) Tj
+1 0 0 1 50 310 Tm (4. Install Python and dependencies) Tj
+1 0 0 1 50 296 Tm (5. Configure /etc/vinayak/vinayak.env) Tj
+1 0 0 1 50 282 Tm (6. Create systemd service) Tj
+1 0 0 1 50 268 Tm (7. Verify app on 127.0.0.1:8000) Tj
+1 0 0 1 50 254 Tm (8. Configure Nginx) Tj
+1 0 0 1 50 240 Tm (9. Place ALB in front if using public entry) Tj
+1 0 0 1 50 226 Tm (10. Point Route 53 record to ALB) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (FINAL NOTES) Tj
+1 0 0 1 50 184 Tm () Tj
+1 0 0 1 50 170 Tm (For Vinayak, this operational baseline is the minimum clean AWS setup:) Tj
+1 0 0 1 50 156 Tm (- separate web layer) Tj
+1 0 0 1 50 142 Tm (- separate app layer) Tj
+1 0 0 1 50 128 Tm (- separate PostgreSQL database) Tj
+1 0 0 1 50 114 Tm (- private database access only) Tj
+1 0 0 1 50 100 Tm (- broker credentials only on app tier) Tj
+1 0 0 1 50 86 Tm (- swap enabled or larger app instance) Tj
+ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 196 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm () Tj
+1 0 0 1 50 786 Tm (This is the right path for controlled live validation and future) Tj
+1 0 0 1 50 772 Tm (production hardening.) Tj
+1 0 0 1 50 758 Tm () Tj
+ET
+endstream
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000009 00000 n `n0000000058 00000 n `n0000000141 00000 n `n0000000211 00000 n `n0000000337 00000 n `n0000002568 00000 n `n0000002694 00000 n `n0000005081 00000 n `n0000005207 00000 n `n0000007632 00000 n `n0000007760 00000 n `n0000010208 00000 n `n0000010336 00000 n `ntrailer
+<< /Size 14 /Root 1 0 R >>
+startxref
+10584
+%%EOF

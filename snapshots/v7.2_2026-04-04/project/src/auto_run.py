@@ -1,0 +1,286 @@
+from __future__ import annotations
+
+import argparse
+from collections import Counter
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from src import auto_backtest
+from src.csv_io import read_csv_rows
+from src.execution_engine import live_trading_unlock_status
+from src.telegram_notifier import build_trade_summary, send_telegram_document, send_telegram_message
+
+
+def _escape_pdf_text(text: str) -> str:
+    return (
+        text.replace('\\', r'\\\\')
+        .replace('(', r'\\(')
+        .replace(')', r'\\)')
+        .replace('\r', ' ')
+        .replace('\n', ' ')
+    )
+
+
+def write_text_pdf(path: Path, title: str, lines: list[str]) -> None:
+    # Minimal PDF generator (no external dependencies).
+    y = 770
+    content_lines: list[str] = [
+        'BT',
+        '/F1 12 Tf',
+        f'72 {y} Td',
+        f'({_escape_pdf_text(title)}) Tj',
+    ]
+    y -= 20
+    for line in lines:
+        if y < 60:
+            break
+        content_lines.append(f'0 -14 Td ({_escape_pdf_text(line)}) Tj')
+        y -= 14
+    content_lines.append('ET')
+    stream = '\n'.join(content_lines).encode('latin-1', errors='replace')
+
+    objects: list[bytes] = []
+    objects.append(b'1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n')
+    objects.append(b'2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n')
+    objects.append(
+        b'3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] '
+        b'/Resources<< /Font<< /F1 4 0 R >> >> /Contents 5 0 R >>endobj\n'
+    )
+    objects.append(b'4 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n')
+    objects.append(
+        b'5 0 obj<< /Length ' + str(len(stream)).encode() + b' >>stream\n' + stream + b'\nendstream\nendobj\n'
+    )
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('wb') as f:
+        f.write(b'%PDF-1.4\n')
+        xref: list[int] = [0]
+        for obj in objects:
+            xref.append(f.tell())
+            f.write(obj)
+        xref_start = f.tell()
+        f.write(b'xref\n0 ' + str(len(xref)).encode() + b'\n')
+        f.write(b'0000000000 65535 f \n')
+        for off in xref[1:]:
+            f.write(f'{off:010d} 00000 n \n'.encode())
+        f.write(b'trailer<< /Size ' + str(len(xref)).encode() + b' /Root 1 0 R >>\n')
+        f.write(b'startxref\n' + str(xref_start).encode() + b'\n%%EOF\n')
+
+
+def write_html_report(path: Path, title: str, summary_rows: list[dict[str, Any]], extra_lines: list[str]) -> None:
+    rows_html = ''.join(
+        (
+            '<tr>'
+            f"<td>{r.get('strategy', '')}</td>"
+            f"<td>{r.get('trades', '')}</td>"
+            f"<td>{r.get('wins', '')}</td>"
+            f"<td>{r.get('losses', '')}</td>"
+            f"<td>{r.get('win_rate_pct', '')}</td>"
+            f"<td>{r.get('avg_win', '')}</td>"
+            f"<td>{r.get('avg_loss', '')}</td>"
+            f"<td>{r.get('profit_factor', '')}</td>"
+            f"<td>{r.get('max_drawdown', '')}</td>"
+            f"<td>{r.get('max_drawdown_pct', '')}</td>"
+            f"<td>{r.get('ending_equity', '')}</td>"
+            f"<td>{r.get('total_pnl', '')}</td>"
+            '</tr>'
+        )
+        for r in summary_rows
+    )
+    extras = ''.join(f"<li>{line}</li>" for line in extra_lines)
+    html = f"""<!doctype html>
+<html><head><meta charset='utf-8'/><title>{title}</title>
+<style>body{{font-family:Arial,sans-serif;margin:24px}} table{{border-collapse:collapse}} td,th{{border:1px solid #ddd;padding:6px 10px}}</style>
+</head><body>
+<h1>{title}</h1>
+<h2>Backtest Summary</h2>
+<table>
+<tr><th>Strategy</th><th>Trades</th><th>Wins</th><th>Losses</th><th>Win %</th><th>Avg Win</th><th>Avg Loss</th><th>Profit Factor</th><th>Max DD</th><th>Max DD %</th><th>Ending Equity</th><th>Total PnL</th></tr>
+{rows_html}
+</table>
+<h2>Notes</h2>
+<ul>{extras}</ul>
+</body></html>"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(html, encoding='utf-8')
+
+
+def _top_validation_reasons(summary_rows: list[dict[str, Any]], *, limit: int = 5) -> list[tuple[str, int]]:
+    reason_counter: Counter[str] = Counter()
+    for row in summary_rows:
+        raw = str(row.get('validation_reasons', '') or '').strip()
+        if not raw:
+            continue
+        for reason in raw.split('|'):
+            normalized = reason.strip()
+            if normalized:
+                reason_counter[normalized] += 1
+    return reason_counter.most_common(limit)
+
+
+def _build_console_summary(out: dict[str, Any]) -> list[str]:
+    summary_rows = list(out.get('summary_rows') or [])
+    pass_count = sum(1 for row in summary_rows if str(row.get('validation_status', 'FAIL')).upper() == 'PASS')
+    fail_count = max(0, len(summary_rows) - pass_count)
+    executed_count = int(out.get('executed_rows_count') or 0)
+    top_reasons = _top_validation_reasons(summary_rows)
+
+    lines = [
+        '[RUN SUMMARY]',
+        f"Strategies evaluated: {len(summary_rows)}",
+        f"Validation passed: {pass_count}",
+        f"Validation failed: {fail_count}",
+        f"Paper trades executed: {executed_count}",
+    ]
+    if top_reasons:
+        formatted = ', '.join(f'{reason} ({count})' for reason, count in top_reasons)
+        lines.append(f'Top rejection reasons: {formatted}')
+    else:
+        lines.append('Top rejection reasons: none')
+    lines.append(f"Execution log: {out.get('executed_log_path')}")
+    return lines
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description='Auto-run: fetch data, backtest, execute, report, telegram')
+    p.add_argument('--symbol', default='^NSEI')
+    p.add_argument('--interval', default='5m')
+    p.add_argument('--period', default='1d')
+    p.add_argument('--capital', type=float, default=100000.0)
+    p.add_argument('--risk-pct', type=float, default=1.0)
+    p.add_argument('--rr-ratio', type=float, default=2.0)
+    p.add_argument('--trailing-sl-pct', type=float, default=1.0)
+    p.add_argument('--execution-symbol', default='NIFTY')
+    p.add_argument('--execution-type', default='PAPER', choices=['PAPER', 'LIVE', 'NONE'])
+    p.add_argument('--allow-paper-on-fail', action='store_true')
+    p.add_argument('--paper-log-output', type=Path, default=Path('data/paper_trading_logs_all.csv'))
+    p.add_argument('--live-log-output', type=Path, default=Path('data/live_trading_logs_all.csv'))
+    p.add_argument('--live-broker', default='DHAN', choices=['DHAN', 'NONE'])
+    p.add_argument('--security-map', type=Path, default=Path('data/dhan_security_map.csv'))
+    p.add_argument('--min-paper-days', type=int, default=30)
+    p.add_argument('--report-dir', type=Path, default=Path('reports'))
+    p.add_argument('--send-telegram', action='store_true')
+    p.add_argument('--send-telegram-pdf', action='store_true')
+    p.add_argument('--telegram-token', default='')
+    p.add_argument('--telegram-chat-id', default='')
+    return p.parse_args()
+
+
+def resolve_auto_run_execution_type(requested_execution: str) -> tuple[str, str]:
+    requested = str(requested_execution or 'PAPER').strip().upper()
+    if requested == 'NONE':
+        return 'NONE', 'Execution disabled for auto-run.'
+    if requested == 'LIVE':
+        return 'PAPER', 'Auto-run forced to PAPER mode. Live entry and exit are disabled for this entrypoint.'
+    return 'PAPER', 'Auto-run is operating in PAPER mode for entry and exit handling.'
+
+
+def main() -> None:
+    args = parse_args()
+
+    requested_execution = str(args.execution_type or 'PAPER').strip().upper()
+    execution_type, execution_note = resolve_auto_run_execution_type(requested_execution)
+
+    backtest_args = argparse.Namespace(
+        symbol=args.symbol,
+        interval=args.interval,
+        period=args.period,
+        capital=args.capital,
+        risk_pct=float(args.risk_pct) / 100.0,
+        rr_ratio=args.rr_ratio,
+        trailing_sl_pct=float(args.trailing_sl_pct) / 100.0,
+        pivot_window=2,
+        entry_cutoff='11:30',
+        cost_bps=0.0,
+        fixed_cost_per_trade=0.0,
+        max_daily_loss=0.0,
+        max_trades_per_day=1,
+        execution_symbol=args.execution_symbol,
+        allow_paper_on_fail=bool(getattr(args, 'allow_paper_on_fail', False)),
+        data_output=Path('data/live_ohlcv.csv'),
+        summary_output=Path('data/backtest_results_all.csv'),
+        summary_history_output=Path('data/backtest_results_history.csv'),
+        ranking_output=Path('data/strategy_expectancy_report.csv'),
+        optimizer_output=Path('data/strategy_optimizer_report.csv'),
+        validation_output=Path('data/backtest_validation.csv'),
+        validation_report_output=Path('data/backtest_validation_report.csv'),
+        deployable_summary_output=Path('data/deployable_summary.csv'),
+        go_live_output_json=Path('data/go_live_validation_summary.json'),
+        go_live_checklist_output=Path('data/go_live_validation_checklist.csv'),
+        crisis_output_json=Path('data/crisis_risk_summary.json'),
+        equity_curve_output=Path('data/backtest_equity_curves.csv'),
+        paper_log_output=args.paper_log_output,
+        execution_type=execution_type,
+        live_log_output=args.live_log_output,
+        live_broker=args.live_broker,
+        security_map=args.security_map,
+    )
+
+    out = auto_backtest.run(backtest_args)
+
+    run_at = datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S UTC')
+    title = f"Intratrade Auto Run - {out['timeframe']}"
+
+    executed_log_path = Path(str(out.get('executed_log_path') or args.paper_log_output))
+    recent: list[dict[str, Any]] = []
+    if executed_log_path.exists():
+        recent = list(read_csv_rows(executed_log_path))[-20:]
+
+    signal_summary = build_trade_summary(recent) if recent else 'No recent rows in execution log.'
+
+    summary_lines = [
+        (
+            f"{r.get('strategy')}: trades={r.get('trades')} pnl={r.get('total_pnl')} "
+            f"win%={r.get('win_rate_pct')} pf={r.get('profit_factor')} "
+            f"max_dd={r.get('max_drawdown')} ({r.get('max_drawdown_pct')}%)"
+        )
+        for r in (out.get('summary_rows') or [])
+    ]
+
+    extra_lines = [
+        f"Run at: {run_at}",
+        f"Data points: {out.get('data_points')}",
+        f"Data range: {out.get('data_start')} -> {out.get('data_end')}",
+        f"Execution requested: {requested_execution}",
+        f"Execution used: {out.get('execution_type')}",
+        f"Executed rows: {out.get('executed_rows_count')}",
+        f"Log: {out.get('executed_log_path')}",
+        f"Equity curves: {out.get('equity_curve_output')}",
+    ]
+
+    if execution_note:
+        extra_lines.append(execution_note)
+
+    extra_lines.append(signal_summary.replace('\n', ' | '))
+    extra_lines.extend(summary_lines)
+
+    ts = datetime.now(UTC).strftime('%Y%m%d_%H%M%S')
+    html_path = args.report_dir / f"auto_run_{ts}.html"
+    pdf_path = args.report_dir / f"auto_run_{ts}.pdf"
+
+    write_html_report(html_path, title=title, summary_rows=out['summary_rows'], extra_lines=extra_lines)
+    write_text_pdf(pdf_path, title=title, lines=extra_lines)
+
+    if args.send_telegram or args.send_telegram_pdf:
+        token = (args.telegram_token or '').strip()
+        chat = (args.telegram_chat_id or '').strip()
+        if not token or not chat:
+            raise SystemExit('Telegram token/chat id required when --send-telegram or --send-telegram-pdf is set')
+
+        if args.send_telegram:
+            msg = title + "\n\n" + "\n".join(extra_lines[:20])
+            send_telegram_message(token, chat, msg)
+
+        if args.send_telegram_pdf:
+            send_telegram_document(token, chat, str(pdf_path), caption=title)
+
+    for line in _build_console_summary(out):
+        print(line)
+    print(f"Wrote report: {html_path}")
+    print(f"Wrote report: {pdf_path}")
+
+
+if __name__ == '__main__':
+    main()
+

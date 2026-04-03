@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vinayak AWS Master Guide</title>
+  <style>
+    @page { size: A4; margin: 18mm; }
+    body { font-family: Arial, sans-serif; color: #102033; line-height: 1.5; }
+    h1, h2, h3 { margin: 0 0 8px 0; color: #0f2742; }
+    h1 { font-size: 30px; }
+    h2 { font-size: 20px; margin-top: 22px; border-bottom: 2px solid #d9e4f2; padding-bottom: 6px; }
+    h3 { font-size: 15px; margin-top: 14px; }
+    p { margin: 6px 0; }
+    ul, ol { margin: 8px 0 8px 20px; }
+    li { margin: 4px 0; }
+    .hero { padding: 20px 22px; border-radius: 18px; background: linear-gradient(135deg, #0e233b, #173b63); color: #fff; margin-bottom: 18px; }
+    .hero p { color: #d9e8f7; }
+    .section { margin-bottom: 24px; }
+    .card { border: 1px solid #d8e2ee; border-radius: 14px; padding: 14px; margin: 12px 0; background: #fbfdff; }
+    .note { background: #eef6ff; border-left: 4px solid #2f80ed; padding: 10px 12px; border-radius: 8px; }
+    .page-break { page-break-before: always; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .badge-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+    .badge { background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 6px 10px; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #d8e2ee; padding: 8px 10px; text-align: left; vertical-align: top; font-size: 13px; }
+    th { background: #eef4fb; }
+    svg text { font-family: Arial, sans-serif; fill: #0f2742; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>Vinayak AWS Master Guide</h1>
+    <p>Combined architecture, interview, deployment, and resume guide for your Vinayak Trading Platform project.</p>
+    <div class="badge-row">
+      <div class="badge">Architecture</div>
+      <div class="badge">Interview Q&A</div>
+      <div class="badge">Deployment Roadmap</div>
+      <div class="badge">Resume Project Guide</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Part 1: AWS Architecture</h2>
+    <p>This section explains the target AWS design for Vinayak and how your current trading project evolves into a cloud-ready multi-tier platform.</p>
+    <div class="card">
+      <h3>Current Starting Point</h3>
+      <ul>
+        <li>Python trading application with Streamlit UI</li>
+        <li>Strategy logic and execution flow in the same application layer</li>
+        <li>Dhan broker integration and Telegram notifications</li>
+        <li>Existing deployment guidance for Nginx, Docker, and Kubernetes</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Target AWS Architecture</h3>
+      <svg width="100%" height="520" viewBox="0 0 980 520">
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#4a6f96"></path>
+          </marker>
+        </defs>
+        <rect x="24" y="18" width="932" height="480" rx="18" fill="#f7fbff" stroke="#d9e7f5" />
+        <rect x="56" y="44" width="170" height="64" rx="14" fill="#fff7e8" stroke="#f3c26b" />
+        <text x="141" y="70" text-anchor="middle" font-size="18" font-weight="700">Users / Browser</text>
+        <text x="141" y="91" text-anchor="middle" font-size="12">Traders and reviewers</text>
+        <rect x="278" y="44" width="170" height="64" rx="14" fill="#eef6ff" stroke="#7fb0ea" />
+        <text x="363" y="70" text-anchor="middle" font-size="18" font-weight="700">Route 53 + ACM</text>
+        <text x="363" y="91" text-anchor="middle" font-size="12">DNS and TLS</text>
+        <rect x="500" y="44" width="170" height="64" rx="14" fill="#eef6ff" stroke="#7fb0ea" />
+        <text x="585" y="70" text-anchor="middle" font-size="18" font-weight="700">ALB / Nginx</text>
+        <text x="585" y="91" text-anchor="middle" font-size="12">Public web tier</text>
+        <rect x="722" y="44" width="188" height="64" rx="14" fill="#eef6ff" stroke="#7fb0ea" />
+        <text x="816" y="70" text-anchor="middle" font-size="18" font-weight="700">Web UI</text>
+        <text x="816" y="91" text-anchor="middle" font-size="12">Streamlit now, React later</text>
+        <rect x="110" y="174" width="320" height="108" rx="16" fill="#edf9f0" stroke="#7ec08f" />
+        <text x="270" y="202" text-anchor="middle" font-size="20" font-weight="700">App Tier</text>
+        <text x="270" y="226" text-anchor="middle" font-size="13">FastAPI / Python services</text>
+        <text x="270" y="246" text-anchor="middle" font-size="13">Strategies, signal review, execution, broker adapters</text>
+        <text x="270" y="266" text-anchor="middle" font-size="13">Telegram notifications and health endpoints</text>
+        <rect x="500" y="174" width="188" height="108" rx="16" fill="#f4efff" stroke="#a48ce8" />
+        <text x="594" y="202" text-anchor="middle" font-size="20" font-weight="700">Redis</text>
+        <text x="594" y="226" text-anchor="middle" font-size="13">Option-chain cache</text>
+        <text x="594" y="246" text-anchor="middle" font-size="13">Live state and hot reads</text>
+        <text x="594" y="266" text-anchor="middle" font-size="13">Fast signal context</text>
+        <rect x="722" y="174" width="188" height="108" rx="16" fill="#f4efff" stroke="#a48ce8" />
+        <text x="816" y="202" text-anchor="middle" font-size="20" font-weight="700">RabbitMQ / SQS</text>
+        <text x="816" y="226" text-anchor="middle" font-size="13">Async alerts</text>
+        <text x="816" y="246" text-anchor="middle" font-size="13">Trade execution requests</text>
+        <text x="816" y="266" text-anchor="middle" font-size="13">Background processing</text>
+        <rect x="110" y="334" width="320" height="108" rx="16" fill="#fff1f2" stroke="#e5929d" />
+        <text x="270" y="362" text-anchor="middle" font-size="20" font-weight="700">RDS PostgreSQL</text>
+        <text x="270" y="386" text-anchor="middle" font-size="13">Signals, trades, executions</text>
+        <text x="270" y="406" text-anchor="middle" font-size="13">Payload logs, settings, audit trail</text>
+        <text x="270" y="426" text-anchor="middle" font-size="13">Primary system of record</text>
+        <rect x="500" y="334" width="188" height="108" rx="16" fill="#fff7e8" stroke="#f3c26b" />
+        <text x="594" y="362" text-anchor="middle" font-size="20" font-weight="700">S3</text>
+        <text x="594" y="386" text-anchor="middle" font-size="13">Exports and reports</text>
+        <text x="594" y="406" text-anchor="middle" font-size="13">Backups and snapshots</text>
+        <text x="594" y="426" text-anchor="middle" font-size="13">Static artifacts</text>
+        <rect x="722" y="334" width="188" height="108" rx="16" fill="#eef6ff" stroke="#7fb0ea" />
+        <text x="816" y="362" text-anchor="middle" font-size="20" font-weight="700">External Integrations</text>
+        <text x="816" y="386" text-anchor="middle" font-size="13">Dhan Broker</text>
+        <text x="816" y="406" text-anchor="middle" font-size="13">NSE / yfinance feeds</text>
+        <text x="816" y="426" text-anchor="middle" font-size="13">Telegram bot</text>
+        <line x1="226" y1="76" x2="278" y2="76" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+        <line x1="448" y1="76" x2="500" y2="76" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+        <line x1="670" y1="76" x2="722" y2="76" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+        <line x1="816" y1="108" x2="816" y2="144" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+        <line x1="430" y1="228" x2="500" y2="228" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+        <line x1="430" y1="252" x2="722" y2="252" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+        <line x1="270" y1="282" x2="270" y2="334" stroke="#4a6f96" stroke-width="3" marker-end="url(#arrow)" />
+      </svg>
+    </div>
+    <div class="note">Only the web tier should be internet-facing. The app tier, cache, and database tiers should remain private inside the VPC.</div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <div class="section">
+    <h2>Part 2: AWS Interview Questions and Answers</h2>
+    <div class="card"><strong>1. What is the current architecture of your project?</strong><p>The current project is mainly a Python trading application with a Streamlit-based UI and business logic in the same layer. It already includes broker integration, notifications, and deployment guidance, making it a good candidate for AWS modernization.</p></div>
+    <div class="card"><strong>2. How would you move this project to AWS?</strong><p>I would start with EC2 and Nginx for a simple first deployment, then add RDS, Redis, S3, and queue-based processing. After that I would move toward a cleaner service separation using the Vinayak architecture.</p></div>
+    <div class="card"><strong>3. Why should the app tier not be public?</strong><p>Because it contains business logic, broker integration, and sensitive operations. Best practice is to expose only the web tier publicly and keep internal services private behind security groups and subnet controls.</p></div>
+    <div class="card"><strong>4. Why use RDS PostgreSQL here?</strong><p>The platform has relational entities like signals, trades, executions, settings, and logs. PostgreSQL fits that model well and RDS reduces database operational work.</p></div>
+    <div class="card"><strong>5. Where does Redis help?</strong><p>Redis helps cache option-chain data, hot market snapshots, and short-lived live state to reduce repeated external fetches and improve response speed.</p></div>
+    <div class="card"><strong>6. EC2 or ECS first?</strong><p>I would use EC2 first because it is easier to deploy and explain. Once the service boundaries are cleaner, I would move to ECS for easier scaling and operations.</p></div>
+    <div class="card"><strong>7. How would you secure secrets?</strong><p>I would use Secrets Manager or SSM Parameter Store and attach IAM roles to the compute tier instead of hardcoding secrets in code or permanent env files.</p></div>
+    <div class="card"><strong>8. Why add SQS or MQ?</strong><p>To move notifications and slow trade-processing workflows off the request path, which improves responsiveness and reliability.</p></div>
+    <div class="card"><strong>9. How would you monitor the platform?</strong><p>I would use CloudWatch for logs, metrics, and alarms, and keep app-level audit logging for reviewed trades, executions, and broker payloads.</p></div>
+    <div class="card"><strong>10. How would you summarize this project in an interview?</strong><p>I would describe it as a Python trading platform evolving from a monolith into a cloud-ready AWS multi-tier architecture with clear web, app, database, cache, and messaging responsibilities.</p></div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <div class="section">
+    <h2>Part 3: AWS Deployment Roadmap</h2>
+    <div class="card"><strong>Stage 1: Single-Server Deployment</strong><p>Deploy the stable app on EC2, put Nginx in front, attach Route 53, and enable HTTPS.</p></div>
+    <div class="card"><strong>Stage 2: Persistence</strong><p>Introduce RDS PostgreSQL and move important state from local files and session state into the database. Use S3 for exports and reports.</p></div>
+    <div class="card"><strong>Stage 3: Cache</strong><p>Add ElastiCache Redis for option-chain cache, hot OHLCV data, and live reviewed state.</p></div>
+    <div class="card"><strong>Stage 4: Async Workflows</strong><p>Use SQS or Amazon MQ for alerts, background processing, and execution requests.</p></div>
+    <div class="card"><strong>Stage 5: Containerization</strong><p>Package Vinayak into Docker images and move to ECS when the modules are stable and clearly separated.</p></div>
+    <div class="note">Recommended order: protect v3, deploy on EC2, add Route 53 and HTTPS, move data to RDS, add S3, then Redis, then queues, then ECS.</div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <div class="section">
+    <h2>Part 4: Resume Project Explanation</h2>
+    <div class="card">
+      <h3>Resume Title</h3>
+      <p><strong>Vinayak Trading Platform</strong></p>
+      <p>Cloud-ready trading workspace for market monitoring, signal generation, reviewed execution, broker integration, and AWS multi-tier deployment planning.</p>
+    </div>
+    <div class="card">
+      <h3>Resume Summary</h3>
+      <p>Built a Python-based trading platform with live chart review, multiple strategy modules, reviewed trade execution flow, Dhan broker integration, Telegram alerting, and a target AWS multi-tier architecture using web, app, database, cache, and messaging tiers.</p>
+    </div>
+    <div class="card">
+      <h3>Strong Resume Bullets</h3>
+      <ul>
+        <li>Designed a trading workspace for live market review, strategy-based signal generation, and controlled trade execution.</li>
+        <li>Integrated breakout, demand-supply, indicator, one-trade-day, and multi-timeframe strategy logic.</li>
+        <li>Built Dhan-ready execution workflows and Telegram alerting for reviewed trades.</li>
+        <li>Prepared the platform for AWS using EC2, Nginx, RDS, Redis, S3, and queue-oriented design.</li>
+        <li>Created the Vinayak architecture base to evolve the application from monolith to multi-tier platform.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>One-Minute Interview Answer</h3>
+      <p>I built a Python-based trading platform that combines market monitoring, strategy execution workflows, broker integration, and deployment planning. The current version supports multiple strategies, reviewed trade routing, Dhan integration, Telegram alerts, and chart-based monitoring. I then designed a follow-up architecture called Vinayak to move the system toward a proper AWS multi-tier platform using Nginx, RDS, Redis, S3, and queue-based processing.</p>
+    </div>
+  </div>
+</body>
+</html>

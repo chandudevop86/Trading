@@ -1,0 +1,309 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R 12 0 R] /Count 5 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 2766 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (VINAYAK AWS 3-TIER SEPARATION GUIDE) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (Date: 2026-04-04) Tj
+1 0 0 1 50 758 Tm (Project: Vinayak) Tj
+1 0 0 1 50 744 Tm (Goal: Separate the web page, application runtime, and database into clean) Tj
+1 0 0 1 50 730 Tm (AWS tiers suitable for controlled production growth.) Tj
+1 0 0 1 50 716 Tm () Tj
+1 0 0 1 50 702 Tm (EXECUTIVE SUMMARY) Tj
+1 0 0 1 50 688 Tm () Tj
+1 0 0 1 50 674 Tm (Vinayak should run as a three-tier AWS architecture:) Tj
+1 0 0 1 50 660 Tm () Tj
+1 0 0 1 50 646 Tm (1. Web tier) Tj
+1 0 0 1 50 632 Tm (   Hosts the public-facing web entry point and reverse proxy.) Tj
+1 0 0 1 50 618 Tm () Tj
+1 0 0 1 50 604 Tm (2. Application tier) Tj
+1 0 0 1 50 590 Tm (   Hosts FastAPI, trading orchestration, broker integrations,) Tj
+1 0 0 1 50 576 Tm (   observability APIs, and execution logic.) Tj
+1 0 0 1 50 562 Tm () Tj
+1 0 0 1 50 548 Tm (3. Data tier) Tj
+1 0 0 1 50 534 Tm (   Hosts PostgreSQL as the durable system of record for executions,) Tj
+1 0 0 1 50 520 Tm (   reviewed trades, audit logs, and application state.) Tj
+1 0 0 1 50 506 Tm () Tj
+1 0 0 1 50 492 Tm (This separation reduces blast radius, improves security, and creates a) Tj
+1 0 0 1 50 478 Tm (better path toward stable live validation and production hardening.) Tj
+1 0 0 1 50 464 Tm () Tj
+1 0 0 1 50 450 Tm (RECOMMENDED AWS TOPOLOGY) Tj
+1 0 0 1 50 436 Tm () Tj
+1 0 0 1 50 422 Tm (Tier 1: Web) Tj
+1 0 0 1 50 408 Tm (- Service: EC2 running Nginx behind an Application Load Balancer) Tj
+1 0 0 1 50 394 Tm (- Purpose: public entry point, reverse proxy, no broker or DB secrets) Tj
+1 0 0 1 50 380 Tm () Tj
+1 0 0 1 50 366 Tm (Tier 2: Application) Tj
+1 0 0 1 50 352 Tm (- Service: private EC2 running uvicorn or gunicorn plus uvicorn workers) Tj
+1 0 0 1 50 338 Tm (- Purpose: run vinayak.api.main:app, trading logic, observability APIs,) Tj
+1 0 0 1 50 324 Tm (  broker integrations, operator actions) Tj
+1 0 0 1 50 310 Tm () Tj
+1 0 0 1 50 296 Tm (Tier 3: Database) Tj
+1 0 0 1 50 282 Tm (- Service: Amazon RDS for PostgreSQL in private subnets) Tj
+1 0 0 1 50 268 Tm (- Purpose: reviewed trades, executions, audit logs, durable application) Tj
+1 0 0 1 50 254 Tm (  state) Tj
+1 0 0 1 50 240 Tm () Tj
+1 0 0 1 50 226 Tm (Optional Tier: Cache and Coordination) Tj
+1 0 0 1 50 212 Tm (- Service: Amazon ElastiCache for Redis) Tj
+1 0 0 1 50 198 Tm (- Purpose: cache, freshness snapshots, event buffering, lightweight) Tj
+1 0 0 1 50 184 Tm (  coordination) Tj
+1 0 0 1 50 170 Tm () Tj
+1 0 0 1 50 156 Tm (NETWORK DESIGN) Tj
+1 0 0 1 50 142 Tm () Tj
+1 0 0 1 50 128 Tm (Use one VPC with:) Tj
+1 0 0 1 50 114 Tm (- 2 public subnets) Tj
+1 0 0 1 50 100 Tm (- 2 private application subnets) Tj
+1 0 0 1 50 86 Tm (- 2 private data subnets) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 2131 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm () Tj
+1 0 0 1 50 786 Tm (Public subnets) Tj
+1 0 0 1 50 772 Tm (- ALB) Tj
+1 0 0 1 50 758 Tm (- optional web EC2) Tj
+1 0 0 1 50 744 Tm () Tj
+1 0 0 1 50 730 Tm (Private app subnets) Tj
+1 0 0 1 50 716 Tm (- vinayak-app-1) Tj
+1 0 0 1 50 702 Tm (- vinayak-app-2 later if needed) Tj
+1 0 0 1 50 688 Tm () Tj
+1 0 0 1 50 674 Tm (Private data subnets) Tj
+1 0 0 1 50 660 Tm (- RDS PostgreSQL) Tj
+1 0 0 1 50 646 Tm (- ElastiCache Redis) Tj
+1 0 0 1 50 632 Tm () Tj
+1 0 0 1 50 618 Tm (SECURITY GROUPS) Tj
+1 0 0 1 50 604 Tm () Tj
+1 0 0 1 50 590 Tm (sg-alb) Tj
+1 0 0 1 50 576 Tm (- allow 80/tcp from internet) Tj
+1 0 0 1 50 562 Tm (- allow 443/tcp from internet) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm (sg-web) Tj
+1 0 0 1 50 520 Tm (- allow web traffic only from sg-alb) Tj
+1 0 0 1 50 506 Tm (- allow SSH only from your IP) Tj
+1 0 0 1 50 492 Tm () Tj
+1 0 0 1 50 478 Tm (sg-app) Tj
+1 0 0 1 50 464 Tm (- allow 8000/tcp only from sg-web or sg-alb) Tj
+1 0 0 1 50 450 Tm (- allow SSH only from bastion or your IP) Tj
+1 0 0 1 50 436 Tm () Tj
+1 0 0 1 50 422 Tm (sg-db) Tj
+1 0 0 1 50 408 Tm (- allow 5432/tcp only from sg-app) Tj
+1 0 0 1 50 394 Tm () Tj
+1 0 0 1 50 380 Tm (sg-redis) Tj
+1 0 0 1 50 366 Tm (- allow 6379/tcp only from sg-app) Tj
+1 0 0 1 50 352 Tm () Tj
+1 0 0 1 50 338 Tm (Important:) Tj
+1 0 0 1 50 324 Tm (- RDS and Redis must not be public) Tj
+1 0 0 1 50 310 Tm () Tj
+1 0 0 1 50 296 Tm (DNS AND TRAFFIC FLOW) Tj
+1 0 0 1 50 282 Tm () Tj
+1 0 0 1 50 268 Tm (1. User opens vinayak.yourdomain.com) Tj
+1 0 0 1 50 254 Tm (2. Route 53 sends traffic to the ALB) Tj
+1 0 0 1 50 240 Tm (3. ALB forwards to Nginx web tier or directly to the app tier) Tj
+1 0 0 1 50 226 Tm (4. App tier connects privately to RDS and Redis) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (EC2 LAYOUT) Tj
+1 0 0 1 50 184 Tm () Tj
+1 0 0 1 50 170 Tm (Web instance) Tj
+1 0 0 1 50 156 Tm (- Name: vinayak-web) Tj
+1 0 0 1 50 142 Tm (- Size: t3.micro) Tj
+1 0 0 1 50 128 Tm (- Responsibility: Nginx, static assets if needed, reverse proxy) Tj
+1 0 0 1 50 114 Tm () Tj
+1 0 0 1 50 100 Tm (App instance) Tj
+1 0 0 1 50 86 Tm (- Name: vinayak-app) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 2353 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (- Size: minimum t3.small, preferred t3.medium) Tj
+1 0 0 1 50 786 Tm (- Responsibility: FastAPI, trading logic, broker integration,) Tj
+1 0 0 1 50 772 Tm (  observability APIs) Tj
+1 0 0 1 50 758 Tm () Tj
+1 0 0 1 50 744 Tm (Important:) Tj
+1 0 0 1 50 730 Tm (- do not use t3.micro for serious live validation) Tj
+1 0 0 1 50 716 Tm (- add swap if staying on a small instance) Tj
+1 0 0 1 50 702 Tm () Tj
+1 0 0 1 50 688 Tm (DATABASE DESIGN) Tj
+1 0 0 1 50 674 Tm () Tj
+1 0 0 1 50 660 Tm (Recommended engine) Tj
+1 0 0 1 50 646 Tm (- Amazon RDS PostgreSQL 16) Tj
+1 0 0 1 50 632 Tm () Tj
+1 0 0 1 50 618 Tm (Recommended settings) Tj
+1 0 0 1 50 604 Tm (- Multi-AZ enabled) Tj
+1 0 0 1 50 590 Tm (- automated backups enabled) Tj
+1 0 0 1 50 576 Tm (- gp3 storage) Tj
+1 0 0 1 50 562 Tm (- private subnets only) Tj
+1 0 0 1 50 548 Tm (- public access disabled) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (Why PostgreSQL) Tj
+1 0 0 1 50 506 Tm (- stronger transactional safety) Tj
+1 0 0 1 50 492 Tm (- durable execution records) Tj
+1 0 0 1 50 478 Tm (- better concurrency handling than SQLite) Tj
+1 0 0 1 50 464 Tm (- easier audit and reporting) Tj
+1 0 0 1 50 450 Tm () Tj
+1 0 0 1 50 436 Tm (SECRETS AND CREDENTIALS) Tj
+1 0 0 1 50 422 Tm () Tj
+1 0 0 1 50 408 Tm (Use:) Tj
+1 0 0 1 50 394 Tm (- AWS Secrets Manager or Parameter Store) Tj
+1 0 0 1 50 380 Tm () Tj
+1 0 0 1 50 366 Tm (Store:) Tj
+1 0 0 1 50 352 Tm (- Dhan credentials) Tj
+1 0 0 1 50 338 Tm (- Telegram token and chat ID) Tj
+1 0 0 1 50 324 Tm (- database URL) Tj
+1 0 0 1 50 310 Tm (- Redis URL) Tj
+1 0 0 1 50 296 Tm (- production environment toggles) Tj
+1 0 0 1 50 282 Tm () Tj
+1 0 0 1 50 268 Tm (Do not store these on the web tier.) Tj
+1 0 0 1 50 254 Tm () Tj
+1 0 0 1 50 240 Tm (DEPLOYMENT FLOW) Tj
+1 0 0 1 50 226 Tm () Tj
+1 0 0 1 50 212 Tm (1. Create VPC and subnet layout) Tj
+1 0 0 1 50 198 Tm (2. Create RDS PostgreSQL) Tj
+1 0 0 1 50 184 Tm (3. Create Redis if needed) Tj
+1 0 0 1 50 170 Tm (4. Launch app EC2 in private subnet) Tj
+1 0 0 1 50 156 Tm (5. Launch web EC2 or ALB-linked reverse proxy) Tj
+1 0 0 1 50 142 Tm (6. Configure security groups) Tj
+1 0 0 1 50 128 Tm (7. Configure environment variables and secrets) Tj
+1 0 0 1 50 114 Tm (8. Start vinayak.api.main:app) Tj
+1 0 0 1 50 100 Tm (9. Verify /health) Tj
+1 0 0 1 50 86 Tm (10. Verify /dashboard/observability) Tj
+ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 2330 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm (11. Run one manual live-analysis cycle in paper mode) Tj
+1 0 0 1 50 786 Tm () Tj
+1 0 0 1 50 772 Tm (NGINX REVERSE PROXY EXAMPLE) Tj
+1 0 0 1 50 758 Tm () Tj
+1 0 0 1 50 744 Tm (server {) Tj
+1 0 0 1 50 730 Tm (    listen 80;) Tj
+1 0 0 1 50 716 Tm (    server_name vinayak.yourdomain.com;) Tj
+1 0 0 1 50 702 Tm () Tj
+1 0 0 1 50 688 Tm (    location / {) Tj
+1 0 0 1 50 674 Tm (        proxy_pass http://APP_PRIVATE_IP:8000;) Tj
+1 0 0 1 50 660 Tm (        proxy_set_header Host $host;) Tj
+1 0 0 1 50 646 Tm (        proxy_set_header X-Real-IP $remote_addr;) Tj
+1 0 0 1 50 632 Tm (        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;) Tj
+1 0 0 1 50 618 Tm (        proxy_set_header X-Forwarded-Proto $scheme;) Tj
+1 0 0 1 50 604 Tm (    }) Tj
+1 0 0 1 50 590 Tm (}) Tj
+1 0 0 1 50 576 Tm () Tj
+1 0 0 1 50 562 Tm (SYSTEMD APPLICATION SERVICE EXAMPLE) Tj
+1 0 0 1 50 548 Tm () Tj
+1 0 0 1 50 534 Tm ([Unit]) Tj
+1 0 0 1 50 520 Tm (Description=Vinayak FastAPI) Tj
+1 0 0 1 50 506 Tm (After=network.target) Tj
+1 0 0 1 50 492 Tm () Tj
+1 0 0 1 50 478 Tm ([Service]) Tj
+1 0 0 1 50 464 Tm (User=ubuntu) Tj
+1 0 0 1 50 450 Tm (WorkingDirectory=/opt/Trading) Tj
+1 0 0 1 50 436 Tm (EnvironmentFile=/etc/vinayak/vinayak.env) Tj
+1 0 0 1 50 422 Tm (ExecStart=/opt/Trading/venv/bin/python -m uvicorn vinayak.api.main:app --host 0.0.0.0 --port 8000) Tj
+1 0 0 1 50 408 Tm (Restart=always) Tj
+1 0 0 1 50 394 Tm (RestartSec=5) Tj
+1 0 0 1 50 380 Tm () Tj
+1 0 0 1 50 366 Tm ([Install]) Tj
+1 0 0 1 50 352 Tm (WantedBy=multi-user.target) Tj
+1 0 0 1 50 338 Tm () Tj
+1 0 0 1 50 324 Tm (OBSERVABILITY RECOMMENDATIONS) Tj
+1 0 0 1 50 310 Tm () Tj
+1 0 0 1 50 296 Tm (Use:) Tj
+1 0 0 1 50 282 Tm (- CloudWatch logs) Tj
+1 0 0 1 50 268 Tm (- CloudWatch alarms) Tj
+1 0 0 1 50 254 Tm (- application health endpoint) Tj
+1 0 0 1 50 240 Tm (- database metrics) Tj
+1 0 0 1 50 226 Tm (- instance memory and CPU alerts) Tj
+1 0 0 1 50 212 Tm () Tj
+1 0 0 1 50 198 Tm (Track at minimum:) Tj
+1 0 0 1 50 184 Tm (- execution attempts) Tj
+1 0 0 1 50 170 Tm (- execution success and failures) Tj
+1 0 0 1 50 156 Tm (- execution blocked counts) Tj
+1 0 0 1 50 142 Tm (- daily PnL) Tj
+1 0 0 1 50 128 Tm (- kill-switch state) Tj
+1 0 0 1 50 114 Tm (- market-data freshness) Tj
+1 0 0 1 50 100 Tm () Tj
+1 0 0 1 50 86 Tm (PRODUCTION READINESS NOTES) Tj
+ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> >> /Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 1333 >>
+stream
+BT
+/F1 10 Tf
+1 0 0 1 50 800 Tm () Tj
+1 0 0 1 50 786 Tm (For Vinayak, the correct progression is:) Tj
+1 0 0 1 50 772 Tm () Tj
+1 0 0 1 50 758 Tm (1. Separate the tiers) Tj
+1 0 0 1 50 744 Tm (2. Move to PostgreSQL) Tj
+1 0 0 1 50 730 Tm (3. Keep auto execution in paper mode for unattended flows) Tj
+1 0 0 1 50 716 Tm (4. Use very small capital for live validation) Tj
+1 0 0 1 50 702 Tm (5. Harden alerts and reconciliation) Tj
+1 0 0 1 50 688 Tm () Tj
+1 0 0 1 50 674 Tm (FINAL RECOMMENDATION) Tj
+1 0 0 1 50 660 Tm () Tj
+1 0 0 1 50 646 Tm (The best practical AWS architecture for Vinayak is:) Tj
+1 0 0 1 50 632 Tm (- ALB) Tj
+1 0 0 1 50 618 Tm (- separate web tier) Tj
+1 0 0 1 50 604 Tm (- separate private app tier) Tj
+1 0 0 1 50 590 Tm (- separate private RDS PostgreSQL database) Tj
+1 0 0 1 50 576 Tm (- optional Redis) Tj
+1 0 0 1 50 562 Tm (- Secrets Manager) Tj
+1 0 0 1 50 548 Tm (- CloudWatch) Tj
+1 0 0 1 50 534 Tm () Tj
+1 0 0 1 50 520 Tm (This gives you the separation you asked for:) Tj
+1 0 0 1 50 506 Tm (- web page separate) Tj
+1 0 0 1 50 492 Tm (- application separate) Tj
+1 0 0 1 50 478 Tm (- database separate) Tj
+1 0 0 1 50 464 Tm () Tj
+1 0 0 1 50 450 Tm (It is the right structure for moving Vinayak from a single-host deployment) Tj
+1 0 0 1 50 436 Tm (toward controlled production validation.) Tj
+1 0 0 1 50 422 Tm () Tj
+ET
+endstream
+endobj
+xref
+0 14
+0000000000 65535 f 
+0000000009 00000 n `n0000000058 00000 n `n0000000141 00000 n `n0000000211 00000 n `n0000000337 00000 n `n0000003155 00000 n `n0000003281 00000 n `n0000005464 00000 n `n0000005590 00000 n `n0000007995 00000 n `n0000008123 00000 n `n0000010506 00000 n `n0000010634 00000 n `ntrailer
+<< /Size 14 /Root 1 0 R >>
+startxref
+12020
+%%EOF

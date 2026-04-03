@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vinayak 3-Tier Codebase Restructure Book</title>
+  <style>
+    :root {
+      --ink: #162235;
+      --muted: #5f6c82;
+      --line: #d9e1ea;
+      --paper: #ffffff;
+      --wash: #f4f7fb;
+      --accent: #1f4f8f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background: var(--wash);
+      line-height: 1.58;
+    }
+    .book {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--paper);
+      padding: 64px 72px;
+      box-shadow: 0 20px 64px rgba(22, 34, 53, 0.08);
+    }
+    .title-page {
+      min-height: 78vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 40px;
+      padding-bottom: 40px;
+    }
+    h1, h2, h3 {
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: #102542;
+      line-height: 1.2;
+      margin: 0 0 16px;
+    }
+    h1 { font-size: 40px; letter-spacing: -0.02em; }
+    h2 {
+      font-size: 28px;
+      margin-top: 44px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+    }
+    h3 { font-size: 20px; margin-top: 28px; }
+    p { margin: 0 0 14px; }
+    ul, ol { margin: 0 0 16px 22px; }
+    li { margin: 0 0 8px; }
+    .meta {
+      color: var(--muted);
+      font-family: "Segoe UI", Arial, sans-serif;
+      margin-bottom: 22px;
+    }
+    .toc {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 22px 24px;
+    }
+    .code {
+      background: #0f172a;
+      color: #e5eefc;
+      border-radius: 12px;
+      padding: 16px 18px;
+      font-family: Consolas, "Courier New", monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 14px 0 20px;
+      font-size: 13px;
+    }
+    .note {
+      border-left: 4px solid var(--accent);
+      padding: 12px 16px;
+      background: #f5f9ff;
+      margin: 16px 0 18px;
+    }
+    @page {
+      size: A4;
+      margin: 18mm;
+    }
+    @media print {
+      body { background: #fff; }
+      .book {
+        box-shadow: none;
+        max-width: none;
+        margin: 0;
+        padding: 0;
+      }
+      h2 { break-before: page; }
+      .title-page { min-height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <main class="book">
+    <section class="title-page">
+      <div class="meta">Date: 2026-04-04</div>
+      <div class="meta">Project: Vinayak</div>
+      <h1>Vinayak 3-Tier Codebase Restructure Book</h1>
+      <p>A repository restructuring blueprint that aligns Vinayak’s source layout with a serious 3-tier architecture.</p>
+      <div class="note">
+        Prepared for:
+        <ul>
+          <li>repository cleanup</li>
+          <li>production architecture alignment</li>
+          <li>long-term maintainability</li>
+          <li>deployment isolation</li>
+        </ul>
+      </div>
+    </section>
+
+    <h2>Table Of Contents</h2>
+    <div class="toc">
+      <ol>
+        <li>Executive Summary</li>
+        <li>Why Repo Separation Matters</li>
+        <li>Target Repository Shape</li>
+        <li>Tier Responsibilities</li>
+        <li>Current-To-Target Migration Map</li>
+        <li>Proposed Directory Tree</li>
+        <li>Migration Phases</li>
+        <li>Naming and Ownership Rules</li>
+        <li>Final Recommendation</li>
+      </ol>
+    </div>
+
+    <h2>Executive Summary</h2>
+    <p>Vinayak should not only be deployed as a 3-tier platform. It should also be organized as one in the repository.</p>
+    <p>That means separating:</p>
+    <ol>
+      <li>Web concerns</li>
+      <li>Application and domain logic</li>
+      <li>Infrastructure and deployment assets</li>
+    </ol>
+    <p>If the AWS deployment is separated but the repository is still mixed together, the system continues to behave like a monolith in practice.</p>
+
+    <h2>Why Repo Separation Matters</h2>
+    <ul>
+      <li>changes become harder to reason about</li>
+      <li>deployment boundaries remain blurry</li>
+      <li>infra and application concerns remain mixed</li>
+      <li>testing boundaries stay unclear</li>
+      <li>ownership is weaker than it should be</li>
+    </ul>
+    <div class="note">A serious 3-tier platform should be separated both in runtime deployment and in repository structure.</div>
+
+    <h2>Target Repository Shape</h2>
+    <div class="code">vinayak-platform/
+  web/
+  app/
+  infra/
+  docs/
+  tests/
+  data/
+  snapshots/</div>
+    <p>This creates clean top-level separation:</p>
+    <ul>
+      <li><code>web/</code> for public-facing UI and reverse-proxy assets</li>
+      <li><code>app/</code> for application logic and domain modules</li>
+      <li><code>infra/</code> for deployment and environment assets</li>
+      <li><code>docs/</code> for architecture and operations guidance</li>
+      <li><code>tests/</code> for organized testing layers</li>
+    </ul>
+
+    <h2>Tier Responsibilities</h2>
+    <h3>web/</h3>
+    <ul>
+      <li>Nginx config</li>
+      <li>static assets</li>
+      <li>templates</li>
+      <li>simple frontend helpers</li>
+    </ul>
+    <p>Must not contain trading logic, DB models, or broker code.</p>
+
+    <h3>app/</h3>
+    <ul>
+      <li>FastAPI app</li>
+      <li>execution logic</li>
+      <li>risk logic</li>
+      <li>observability</li>
+      <li>messaging</li>
+      <li>workers</li>
+      <li>DB access layer</li>
+      <li>broker adapters</li>
+    </ul>
+
+    <h3>infra/</h3>
+    <ul>
+      <li>AWS infrastructure code</li>
+      <li>Terraform or CloudFormation</li>
+      <li>systemd units</li>
+      <li>nginx deployment config</li>
+      <li>Docker and Compose assets</li>
+      <li>deployment scripts</li>
+    </ul>
+
+    <h3>docs/ and tests/</h3>
+    <p><code>docs/</code> owns architecture and runbooks. <code>tests/</code> owns unit, integration, and end-to-end verification.</p>
+
+    <h2>Current-To-Target Migration Map</h2>
+    <ul>
+      <li><code>vinayak/api</code> → <code>app/vinayak/api</code></li>
+      <li><code>vinayak/execution</code> → <code>app/vinayak/execution</code></li>
+      <li><code>vinayak/observability</code> → <code>app/vinayak/observability</code></li>
+      <li><code>vinayak/messaging</code> → <code>app/vinayak/messaging</code></li>
+      <li><code>vinayak/analytics</code> → <code>app/vinayak/analytics</code></li>
+      <li><code>vinayak/metrics</code> → <code>app/vinayak/metrics</code></li>
+      <li><code>vinayak/notifications</code> → <code>app/vinayak/notifications</code></li>
+      <li><code>deploy/</code> → <code>infra/</code></li>
+      <li><code>vinayak/tests</code> → <code>tests/unit</code>, <code>tests/integration</code>, <code>tests/e2e</code></li>
+    </ul>
+
+    <h2>Proposed Directory Tree</h2>
+    <div class="code">F:/Trading
+  web/
+    nginx/
+    static/
+    templates/
+    README.md
+
+  app/
+    vinayak/
+      api/
+      analytics/
+      core/
+      db/
+      execution/
+      messaging/
+      metrics/
+      notifications/
+      observability/
+      validation/
+      workers/
+      __init__.py
+    requirements.txt
+    alembic.ini
+    README.md
+
+  infra/
+    aws/
+    docker/
+    nginx/
+    scripts/
+    systemd/
+    README.md
+
+  docs/
+    architecture/
+    aws/
+    runbooks/
+    validation/
+
+  tests/
+    unit/
+    integration/
+    e2e/
+
+  data/
+  snapshots/</div>
+
+    <h2>Migration Phases</h2>
+    <ol>
+      <li>Documentation-first separation</li>
+      <li>Infra extraction</li>
+      <li>App namespace consolidation</li>
+      <li>Test reorganization</li>
+      <li>Web extraction</li>
+    </ol>
+    <p>This keeps the restructuring controlled instead of turning it into a risky big-bang rewrite.</p>
+
+    <h2>Naming And Ownership Rules</h2>
+    <ol>
+      <li><code>web/</code> owns presentation and proxy assets only</li>
+      <li><code>app/</code> owns business logic and runtime logic only</li>
+      <li><code>infra/</code> owns environment and deployment assets only</li>
+      <li><code>docs/</code> owns architecture and runbook material only</li>
+      <li><code>tests/</code> mirrors behavior verification, not deployment concerns</li>
+    </ol>
+    <div class="note">If a file mixes concerns, split it before moving it.</div>
+
+    <h2>Final Recommendation</h2>
+    <p>If Vinayak should look and behave like a serious 3-tier platform, the repository must reflect that separation clearly.</p>
+    <p>The correct target is:</p>
+    <ul>
+      <li>separate <code>web/</code></li>
+      <li>separate <code>app/</code></li>
+      <li>separate <code>infra/</code></li>
+      <li>structured <code>docs/</code></li>
+      <li>structured <code>tests/</code></li>
+    </ul>
+    <p>This improves maintainability, ownership, deployment discipline, and long-term production safety.</p>
+  </main>
+</body>
+</html>

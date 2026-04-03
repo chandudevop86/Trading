@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vinayak Monolith To Microservices Roadmap</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --paper: #fffdf8;
+      --ink: #1f1f1f;
+      --muted: #665f57;
+      --accent: #8a4b2a;
+      --rule: #d9ccb8;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 18px/1.65 Georgia, "Times New Roman", serif;
+    }
+    .book {
+      max-width: 900px;
+      margin: 32px auto;
+      background: var(--paper);
+      padding: 56px 72px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.08);
+      border: 1px solid var(--rule);
+    }
+    h1, h2, h3 {
+      color: var(--accent);
+      font-weight: 700;
+      line-height: 1.2;
+    }
+    h1 { font-size: 2.2rem; margin-top: 0; }
+    h2 { font-size: 1.5rem; margin-top: 2.2rem; padding-top: .5rem; border-top: 1px solid var(--rule); }
+    h3 { font-size: 1.15rem; margin-top: 1.4rem; }
+    p, li { margin: .55rem 0; }
+    ul, ol { padding-left: 1.4rem; }
+    code {
+      background: #f3e9db;
+      padding: .1rem .35rem;
+      border-radius: 4px;
+      font-size: .95em;
+    }
+    .lead {
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+    @media print {
+      body { background: white; }
+      .book {
+        box-shadow: none;
+        border: none;
+        margin: 0;
+        max-width: none;
+        padding: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="book">
+    <h1>Vinayak Monolith To Microservices Roadmap</h1>
+    <p class="lead">A practical path for evolving Vinayak from a modular monolith into selective microservices without destabilizing trading operations.</p>
+
+    <h2>Purpose</h2>
+    <p>This roadmap explains how Vinayak should evolve from its current modular monolith into a selective microservices architecture. The recommended near-term position is to keep the platform modular, deploy it cleanly in a 3-tier AWS shape, and extract only the services that produce clear operational value.</p>
+
+    <h2>Current State</h2>
+    <p>Vinayak is not a microservices platform today. It is a modular monolith because the backend still runs as one deployable application, most domains communicate in-process, and data ownership remains mostly centralized.</p>
+    <ul>
+      <li><code>app/vinayak/api</code></li>
+      <li><code>app/vinayak/execution</code></li>
+      <li><code>app/vinayak/observability</code></li>
+      <li><code>app/vinayak/strategies</code></li>
+      <li><code>app/vinayak/db</code></li>
+      <li><code>app/vinayak/notifications</code></li>
+      <li><code>app/vinayak/workers</code></li>
+    </ul>
+
+    <h2>Why Not Split Everything Now</h2>
+    <p>Premature microservices would add complexity in deployments, monitoring, retries, networking, security, and incident debugging. For Vinayak, those costs are not justified until the operational boundaries are proven to matter.</p>
+
+    <h2>Best Near-Term Architecture</h2>
+    <ul>
+      <li>separate web tier</li>
+      <li>separate private app tier</li>
+      <li>separate private PostgreSQL database</li>
+      <li>optional Redis</li>
+      <li>CloudWatch and Secrets Manager</li>
+      <li>modular monolith application</li>
+    </ul>
+
+    <h2>Service Extraction Principles</h2>
+    <p>A Vinayak module should become a service only if it needs independent scaling, a different reliability profile, a distinct deployment cadence, a clear business boundary, or it causes repeated operational friction inside the monolith.</p>
+
+    <h2>Good Service Candidates</h2>
+    <h3>Observability Service</h3>
+    <p>A strong first candidate because it has lower business risk than execution and has a clean separation from core trade execution. It should own metrics aggregation, alerts, health summaries, and dashboard payloads.</p>
+
+    <h3>Notification Service</h3>
+    <p>An excellent early extraction because it is naturally asynchronous, easy to model as events, and has limited data ownership. It should own Telegram delivery and operational notifications.</p>
+
+    <h3>Execution Service</h3>
+    <p>A later candidate, not an early one. It is highly sensitive and should only be extracted after paper-mode stability, tiny live validation, idempotency, audit logs, and kill-switch behavior are fully proven.</p>
+
+    <h3>Strategy Runtime Service</h3>
+    <p>A late-stage candidate for cases where strategy workloads need distinct scaling or independent rollout cadence. It should not be extracted before the platform proves that separation is necessary.</p>
+
+    <h2>Areas To Keep Central Longer</h2>
+    <ul>
+      <li>authentication</li>
+      <li>database core ownership</li>
+      <li>configuration and secrets management</li>
+    </ul>
+
+    <h2>Recommended Extraction Order</h2>
+    <h3>Phase 0. Stabilize The Modular Monolith</h3>
+    <p>Finish structure cleanup, keep runtime stable, validate paper workflows, and verify observability freshness.</p>
+
+    <h3>Phase 1. Add Clear Internal Boundaries</h3>
+    <p>Define typed interfaces and reduce cross-module leakage so the monolith behaves like future services internally.</p>
+
+    <h3>Phase 2. Introduce Event Boundaries</h3>
+    <p>Publish internal events and move non-critical side effects out of synchronous request paths.</p>
+
+    <h3>Phase 3. Extract Notification Service</h3>
+    <p>The safest first extraction. Low risk, small blast radius, and immediate value.</p>
+
+    <h3>Phase 4. Extract Observability Service</h3>
+    <p>The next best extraction. It improves operations without directly endangering broker execution.</p>
+
+    <h3>Phase 5. Harden Execution Boundaries</h3>
+    <p>Paper and tiny live validation must be stable before considering execution extraction.</p>
+
+    <h3>Phase 6. Extract Execution Service</h3>
+    <p>Only after dedicated credentials, idempotency, replay protection, and alerting are dependable.</p>
+
+    <h3>Phase 7. Evaluate Strategy Runtime Extraction</h3>
+    <p>Do this only if research and production workloads genuinely need separate scaling or deployment speed.</p>
+
+    <h2>Example Future Service Shape</h2>
+    <ul>
+      <li><code>vinayak-web</code></li>
+      <li><code>vinayak-app-core</code></li>
+      <li><code>vinayak-notifications</code></li>
+      <li><code>vinayak-observability</code></li>
+      <li><code>vinayak-db</code></li>
+      <li><code>vinayak-redis</code> optional</li>
+    </ul>
+    <p>Later-only services:</p>
+    <ul>
+      <li><code>vinayak-execution</code></li>
+      <li><code>vinayak-strategy-runtime</code></li>
+    </ul>
+
+    <h2>Folder To Future Service Mapping</h2>
+    <p>Keep these in the core app longer:</p>
+    <ul>
+      <li><code>app/vinayak/api</code></li>
+      <li><code>app/vinayak/db</code></li>
+      <li><code>app/vinayak/core</code></li>
+      <li><code>app/vinayak/catalog</code></li>
+      <li><code>app/vinayak/auth</code></li>
+    </ul>
+    <p>Early extraction candidates:</p>
+    <ul>
+      <li><code>app/vinayak/notifications</code></li>
+      <li><code>app/vinayak/observability</code></li>
+    </ul>
+    <p>Later extraction candidates:</p>
+    <ul>
+      <li><code>app/vinayak/execution</code></li>
+      <li><code>app/vinayak/strategies</code></li>
+    </ul>
+
+    <h2>Practical Recommendation</h2>
+    <ol>
+      <li>Keep the modular monolith now.</li>
+      <li>Finish the 3-tier AWS deployment.</li>
+      <li>Validate paper mode thoroughly.</li>
+      <li>Validate tiny live mode cautiously.</li>
+      <li>Introduce event boundaries.</li>
+      <li>Extract notifications first.</li>
+      <li>Extract observability second.</li>
+      <li>Reassess execution extraction only after live stability.</li>
+    </ol>
+
+    <h2>Final Position</h2>
+    <p>Vinayak should not become microservices everywhere. It should become a clean modular monolith first, then a selectively extracted platform later, with reliability-first trading behavior at every step.</p>
+  </main>
+</body>
+</html>

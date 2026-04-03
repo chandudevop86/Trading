@@ -1,0 +1,9 @@
+PyYAML==6.0.2
+streamlit
+boto3
+yfinance
+pandas
+altair
+plotly
+python-dateutil
+streamlit-autorefresh

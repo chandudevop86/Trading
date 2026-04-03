@@ -1,0 +1,235 @@
+VINAYAK AWS 3-TIER SEPARATION GUIDE
+
+Date: 2026-04-04
+Project: Vinayak
+Goal: Separate the web page, application runtime, and database into clean
+AWS tiers suitable for controlled production growth.
+
+EXECUTIVE SUMMARY
+
+Vinayak should run as a three-tier AWS architecture:
+
+1. Web tier
+   Hosts the public-facing web entry point and reverse proxy.
+
+2. Application tier
+   Hosts FastAPI, trading orchestration, broker integrations,
+   observability APIs, and execution logic.
+
+3. Data tier
+   Hosts PostgreSQL as the durable system of record for executions,
+   reviewed trades, audit logs, and application state.
+
+This separation reduces blast radius, improves security, and creates a
+better path toward stable live validation and production hardening.
+
+RECOMMENDED AWS TOPOLOGY
+
+Tier 1: Web
+- Service: EC2 running Nginx behind an Application Load Balancer
+- Purpose: public entry point, reverse proxy, no broker or DB secrets
+
+Tier 2: Application
+- Service: private EC2 running uvicorn or gunicorn plus uvicorn workers
+- Purpose: run vinayak.api.main:app, trading logic, observability APIs,
+  broker integrations, operator actions
+
+Tier 3: Database
+- Service: Amazon RDS for PostgreSQL in private subnets
+- Purpose: reviewed trades, executions, audit logs, durable application
+  state
+
+Optional Tier: Cache and Coordination
+- Service: Amazon ElastiCache for Redis
+- Purpose: cache, freshness snapshots, event buffering, lightweight
+  coordination
+
+NETWORK DESIGN
+
+Use one VPC with:
+- 2 public subnets
+- 2 private application subnets
+- 2 private data subnets
+
+Public subnets
+- ALB
+- optional web EC2
+
+Private app subnets
+- vinayak-app-1
+- vinayak-app-2 later if needed
+
+Private data subnets
+- RDS PostgreSQL
+- ElastiCache Redis
+
+SECURITY GROUPS
+
+sg-alb
+- allow 80/tcp from internet
+- allow 443/tcp from internet
+
+sg-web
+- allow web traffic only from sg-alb
+- allow SSH only from your IP
+
+sg-app
+- allow 8000/tcp only from sg-web or sg-alb
+- allow SSH only from bastion or your IP
+
+sg-db
+- allow 5432/tcp only from sg-app
+
+sg-redis
+- allow 6379/tcp only from sg-app
+
+Important:
+- RDS and Redis must not be public
+
+DNS AND TRAFFIC FLOW
+
+1. User opens vinayak.yourdomain.com
+2. Route 53 sends traffic to the ALB
+3. ALB forwards to Nginx web tier or directly to the app tier
+4. App tier connects privately to RDS and Redis
+
+EC2 LAYOUT
+
+Web instance
+- Name: vinayak-web
+- Size: t3.micro
+- Responsibility: Nginx, static assets if needed, reverse proxy
+
+App instance
+- Name: vinayak-app
+- Size: minimum t3.small, preferred t3.medium
+- Responsibility: FastAPI, trading logic, broker integration,
+  observability APIs
+
+Important:
+- do not use t3.micro for serious live validation
+- add swap if staying on a small instance
+
+DATABASE DESIGN
+
+Recommended engine
+- Amazon RDS PostgreSQL 16
+
+Recommended settings
+- Multi-AZ enabled
+- automated backups enabled
+- gp3 storage
+- private subnets only
+- public access disabled
+
+Why PostgreSQL
+- stronger transactional safety
+- durable execution records
+- better concurrency handling than SQLite
+- easier audit and reporting
+
+SECRETS AND CREDENTIALS
+
+Use:
+- AWS Secrets Manager or Parameter Store
+
+Store:
+- Dhan credentials
+- Telegram token and chat ID
+- database URL
+- Redis URL
+- production environment toggles
+
+Do not store these on the web tier.
+
+DEPLOYMENT FLOW
+
+1. Create VPC and subnet layout
+2. Create RDS PostgreSQL
+3. Create Redis if needed
+4. Launch app EC2 in private subnet
+5. Launch web EC2 or ALB-linked reverse proxy
+6. Configure security groups
+7. Configure environment variables and secrets
+8. Start vinayak.api.main:app
+9. Verify /health
+10. Verify /dashboard/observability
+11. Run one manual live-analysis cycle in paper mode
+
+NGINX REVERSE PROXY EXAMPLE
+
+server {
+    listen 80;
+    server_name vinayak.yourdomain.com;
+
+    location / {
+        proxy_pass http://APP_PRIVATE_IP:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+SYSTEMD APPLICATION SERVICE EXAMPLE
+
+[Unit]
+Description=Vinayak FastAPI
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/Trading
+EnvironmentFile=/etc/vinayak/vinayak.env
+ExecStart=/opt/Trading/venv/bin/python -m uvicorn vinayak.api.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
+OBSERVABILITY RECOMMENDATIONS
+
+Use:
+- CloudWatch logs
+- CloudWatch alarms
+- application health endpoint
+- database metrics
+- instance memory and CPU alerts
+
+Track at minimum:
+- execution attempts
+- execution success and failures
+- execution blocked counts
+- daily PnL
+- kill-switch state
+- market-data freshness
+
+PRODUCTION READINESS NOTES
+
+For Vinayak, the correct progression is:
+
+1. Separate the tiers
+2. Move to PostgreSQL
+3. Keep auto execution in paper mode for unattended flows
+4. Use very small capital for live validation
+5. Harden alerts and reconciliation
+
+FINAL RECOMMENDATION
+
+The best practical AWS architecture for Vinayak is:
+- ALB
+- separate web tier
+- separate private app tier
+- separate private RDS PostgreSQL database
+- optional Redis
+- Secrets Manager
+- CloudWatch
+
+This gives you the separation you asked for:
+- web page separate
+- application separate
+- database separate
+
+It is the right structure for moving Vinayak from a single-host deployment
+toward controlled production validation.

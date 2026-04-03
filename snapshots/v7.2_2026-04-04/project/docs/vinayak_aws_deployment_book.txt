@@ -1,0 +1,281 @@
+VINAYAK AWS DEPLOYMENT BOOK
+
+Date: 2026-04-04
+Project: Vinayak
+Format: Consolidated architecture, operations, and rollout dossier
+
+TITLE PAGE
+
+Vinayak AWS Deployment Book
+
+Prepared for:
+- Vinayak production separation planning
+- AWS deployment readiness
+- staged live-validation rollout
+
+This book combines the recommended AWS architecture, operational
+runbook, and rollout/cost planning into one document.
+
+TABLE OF CONTENTS
+
+1. Executive Summary
+2. Chapter 1: AWS 3-Tier Architecture
+3. Chapter 2: Security Groups and Network Layout
+4. Chapter 3: EC2 and Application Setup
+5. Chapter 4: PostgreSQL and Data Layer
+6. Chapter 5: Nginx and Systemd
+7. Chapter 6: Verification and Operations
+8. Chapter 7: Sizing and Cost Planning
+9. Chapter 8: Rollout Phases
+10. Final Recommendation
+
+EXECUTIVE SUMMARY
+
+Vinayak should run as a clean AWS three-tier deployment:
+1. Web tier
+2. Application tier
+3. Data tier
+
+This separation improves reliability, security, and production readiness
+for controlled live validation.
+
+CHAPTER 1: AWS 3-TIER ARCHITECTURE
+
+Web tier
+- EC2 with Nginx behind an ALB
+- public traffic entry
+- reverse proxy only
+
+Application tier
+- private EC2 running vinayak.api.main:app
+- FastAPI, strategies, execution, observability
+
+Data tier
+- Amazon RDS PostgreSQL
+- reviewed trades, executions, audit logs, state
+
+Optional cache tier
+- ElastiCache Redis
+
+CHAPTER 2: SECURITY GROUPS AND NETWORK LAYOUT
+
+Use:
+- 2 public subnets
+- 2 private app subnets
+- 2 private data subnets
+
+Public:
+- ALB
+- optional web EC2
+
+Private app:
+- app EC2 hosts
+
+Private data:
+- RDS PostgreSQL
+- Redis
+
+Security groups
+
+sg-alb
+- inbound 80/443 from internet
+
+sg-web
+- inbound web traffic only from sg-alb
+- SSH only from your IP
+
+sg-app
+- inbound 8000 only from sg-web or sg-alb
+- SSH only from bastion or your IP
+
+sg-db
+- inbound 5432 only from sg-app
+
+sg-redis
+- inbound 6379 only from sg-app
+
+Important:
+- database and Redis must not be public
+
+CHAPTER 3: EC2 AND APPLICATION SETUP
+
+Web host
+- recommended size: t3.micro
+
+App host
+- minimum: t3.small
+- preferred: t3.medium
+- do not use t3.micro for real live-validation workloads
+
+Ubuntu setup commands
+
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip nginx git curl
+cd /opt
+sudo git clone <your-repo-url> Trading
+sudo chown -R $USER:$USER /opt/Trading
+cd /opt/Trading
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+pip install fastapi "uvicorn[standard]" python-multipart
+
+Recommended swap
+
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+free -h
+
+Persist:
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
+CHAPTER 4: POSTGRESQL AND DATA LAYER
+
+Recommended database
+- Amazon RDS PostgreSQL 16
+
+Baseline settings
+- db.t3.small minimum
+- private subnets only
+- public access disabled
+- Multi-AZ for production
+- automated backups enabled
+
+Why PostgreSQL
+- durable execution records
+- better concurrency than SQLite
+- stronger audit trail
+- easier scaling
+
+Example connection string
+postgresql+psycopg2://vinayak_app:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/vinayak
+
+Example environment file
+
+DATABASE_URL=postgresql+psycopg2://vinayak_app:YOUR_PASSWORD@YOUR_RDS_ENDPOINT:5432/vinayak
+REDIS_URL=redis://YOUR_REDIS_ENDPOINT:6379/0
+DHAN_CLIENT_ID=your_dhan_client_id
+DHAN_ACCESS_TOKEN=your_dhan_access_token
+TELEGRAM_TOKEN=your_telegram_token
+TELEGRAM_CHAT_ID=your_telegram_chat_id
+LIVE_TRADING_ENABLED=false
+TRADING_BROKER_MODE=PAPER
+
+CHAPTER 5: NGINX AND SYSTEMD
+
+Nginx example
+
+server {
+    listen 80;
+    server_name vinayak.yourdomain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+Systemd example
+
+[Unit]
+Description=Vinayak FastAPI
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/Trading
+EnvironmentFile=/etc/vinayak/vinayak.env
+ExecStart=/opt/Trading/venv/bin/python -m uvicorn vinayak.api.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
+CHAPTER 6: VERIFICATION AND OPERATIONS
+
+Health checks
+curl http://127.0.0.1:8000/health
+ss -tulpn | grep 8000
+sudo journalctl -u vinayak -n 100 --no-pager
+sudo journalctl -u nginx -n 100 --no-pager
+
+Deployment order
+1. Create RDS
+2. Create Redis if needed
+3. Launch app EC2
+4. Install dependencies
+5. Configure env file
+6. Create systemd service
+7. Verify 127.0.0.1:8000
+8. Configure Nginx
+9. Connect ALB
+10. Point Route 53
+
+CHAPTER 7: SIZING AND COST PLANNING
+
+Lean validation stack
+- web t3.micro
+- app t3.small
+- db db.t3.small
+- approximate monthly range: USD 45 to 90
+
+Stronger validation stack
+- web t3.micro
+- app t3.medium
+- db db.t3.small
+- optional Redis
+- approximate monthly range: USD 80 to 160
+
+Production-oriented baseline
+- ALB
+- separate web and app
+- Multi-AZ RDS
+- Redis
+- CloudWatch
+- approximate monthly range: USD 180 to 400 plus transfer and storage
+
+CHAPTER 8: ROLLOUT PHASES
+
+Phase 1: Controlled paper validation
+- separated tiers
+- paper-only unattended execution
+- clean deployment behavior
+
+Phase 2: Small live validation
+- minimum capital
+- one strategy
+- one symbol group
+- strict risk caps
+
+Phase 3: Hardened pre-production
+- Redis
+- Secrets Manager
+- CloudWatch alarms
+- reconciliation automation
+
+Phase 4: Stronger production posture
+- ALB
+- Multi-AZ database
+- better backups
+- optional second app node
+
+FINAL RECOMMENDATION
+
+For Vinayak, the best near-term AWS production shape is:
+- separate web page tier
+- separate private application tier
+- separate private PostgreSQL database
+- optional Redis
+- CloudWatch and Secrets Manager
+- phased rollout from paper to tiny live validation
+
+This is the right structure for Vinayak if you want it to look and
+behave like a serious trading platform rather than a single-host
+experiment.

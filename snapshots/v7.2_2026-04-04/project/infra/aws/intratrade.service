@@ -1,0 +1,15 @@
+[Unit]
+Description=Intratrade Streamlit App
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/trading
+Environment="PATH=/opt/trading/.venv/bin"
+ExecStart=/opt/trading/.venv/bin/streamlit run src/Trading.py --server.port 8501 --server.address 0.0.0.0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

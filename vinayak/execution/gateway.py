@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 from dataclasses import dataclass, field
@@ -197,6 +197,7 @@ def _guard_reasons(
     batch_keys: set[str],
     *,
     capital: float | None,
+    per_trade_risk_pct: float | None,
     max_trades_per_day: int | None,
     max_daily_loss: float | None,
     max_position_value: float | None,
@@ -249,6 +250,7 @@ def _guard_reasons(
 
     risk_config = PortfolioRiskConfig(
         capital=max(_safe_float(capital, 0.0), 0.0),
+        per_trade_risk_pct=per_trade_risk_pct,
         max_position_value=max_position_value,
         max_open_positions=max_open_positions,
         max_symbol_exposure_pct=max_symbol_exposure_pct,
@@ -314,6 +316,7 @@ def execute_workspace_candidates(
     paper_log_path: str,
     live_log_path: str,
     capital: float | None = None,
+    per_trade_risk_pct: float | None = None,
     max_trades_per_day: int | None = None,
     max_daily_loss: float | None = None,
     max_position_value: float | None = None,
@@ -354,6 +357,7 @@ def execute_workspace_candidates(
             historical_rows + rows_to_write,
             batch_keys,
             capital=capital,
+            per_trade_risk_pct=per_trade_risk_pct,
             max_trades_per_day=max_trades_per_day,
             max_daily_loss=max_daily_loss,
             max_position_value=max_position_value,
@@ -374,6 +378,10 @@ def execute_workspace_candidates(
         set_metric('portfolio_open_positions', int(risk_snapshot.get('open_positions', 0)))
         set_metric('portfolio_open_exposure_value', float(risk_snapshot.get('open_notional', 0.0)))
         set_metric('portfolio_open_risk_value', float(risk_snapshot.get('open_risk', 0.0)))
+        set_metric('portfolio_kill_switch_active', 1 if kill_switch_enabled else 0)
+        set_metric('portfolio_daily_loss_limit', float(abs(max_daily_loss)) if max_daily_loss else 0.0)
+        set_metric('portfolio_max_trades_per_day', int(max_trades_per_day or 0))
+        set_metric('portfolio_per_trade_risk_pct', float(per_trade_risk_pct or 0.0))
 
         if reasons:
             row['execution_status'] = 'BLOCKED'

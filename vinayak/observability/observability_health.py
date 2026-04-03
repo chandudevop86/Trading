@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from vinayak.observability.alerting import build_active_alerts
 from vinayak.observability.observability_logger import tail_events
 from vinayak.observability.observability_metrics import get_observability_snapshot
 
@@ -34,6 +35,8 @@ def _status_color(status: str) -> str:
         return 'green'
     if normalized in {'WARN', 'WARNING', 'STALE', 'DEGRADED', 'PAPER_ONLY'}:
         return 'yellow'
+    if normalized in {'BLUE', 'INFO'}:
+        return 'blue'
     return 'red'
 
 
@@ -60,50 +63,41 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
     pnl_today = round(_safe_float(_metric(snapshot, 'pnl_today', 0.0)), 2)
     win_rate = round(_safe_float(_metric(snapshot, 'rolling_win_rate', 0.0)), 2)
     expectancy = round(_safe_float(_metric(snapshot, 'rolling_expectancy', 0.0)), 2)
+    execution_attempts = int(_safe_float(_metric(snapshot, 'execution_attempt_total', 0)))
+    execution_success = int(_safe_float(_metric(snapshot, 'execution_success_total', 0)))
+    execution_failed = int(_safe_float(_metric(snapshot, 'execution_failed_total', 0)))
+    execution_blocked = int(_safe_float(_metric(snapshot, 'execution_blocked_total', 0)))
+    duplicate_execution_blocks = int(_safe_float(_metric(snapshot, 'duplicate_execution_block_total', 0)))
+    kill_switch_active = bool(_safe_float(_metric(snapshot, 'portfolio_kill_switch_active', 0)))
+    daily_loss_limit = round(abs(_safe_float(_metric(snapshot, 'portfolio_daily_loss_limit', 0.0))), 2)
+    per_trade_risk_pct = round(_safe_float(_metric(snapshot, 'portfolio_per_trade_risk_pct', 0.0)), 4)
+    max_trades_per_day = int(_safe_float(_metric(snapshot, 'portfolio_max_trades_per_day', 0)))
+    alert_notifications = int(_safe_float(_metric(snapshot, 'observability_alert_notifications_total', 0)))
+    active_alerts = build_active_alerts(snapshot)
 
     app_status = 'UP' if trading_app_up and cycle_failures == 0 else 'DEGRADED' if trading_app_up else 'DOWN'
     market_status = 'FRESH' if latest_dt is not None and data_delay <= 180 else 'STALE'
     signal_status = 'PASS' if total_signals == 0 or valid_signals >= max(1, total_signals // 2) else 'WARN'
-    execution_status = 'OK' if rejected_trades == 0 else 'WARN' if executed_trades >= rejected_trades else 'FAIL'
+    execution_status = 'OK' if execution_failed == 0 and execution_blocked == 0 else 'WARN' if execution_success > 0 else 'FAIL'
     telegram_status = 'OK' if telegram_last and telegram_failures == 0 else 'WARN' if telegram_failures > 0 else 'IDLE'
+    risk_status = 'FAIL' if kill_switch_active or (daily_loss_limit > 0 and pnl_today <= -daily_loss_limit) else 'WARN' if per_trade_risk_pct > 0 or max_trades_per_day > 0 else 'OK'
 
     recent_failures = tail_events(12, severities={'WARNING', 'ERROR', 'CRITICAL'})
     stages = snapshot.get('stages', {})
 
-    alerts: list[dict[str, Any]] = []
-    if data_delay > 180:
-        alerts.append({'name': 'market_data_delay_seconds too high', 'severity': 'red', 'value': data_delay})
-    if int(_safe_float(_metric(snapshot, 'schema_validation_failures_total', 0))) > 0:
-        alerts.append({'name': 'schema_validation_failures_total increased', 'severity': 'red', 'value': _metric(snapshot, 'schema_validation_failures_total', 0)})
-    if cycle_failures > 0:
-        alerts.append({'name': 'trading_cycle_failures_total increased', 'severity': 'red', 'value': cycle_failures})
-    if int(_safe_float(_metric(snapshot, 'paper_trade_rejections_total', 0))) > 0:
-        alerts.append({'name': 'paper_trade_rejections_total spike', 'severity': 'yellow', 'value': _metric(snapshot, 'paper_trade_rejections_total', 0)})
-    if int(_safe_float(_metric(snapshot, 'duplicate_trade_blocks_total', 0))) > 0:
-        alerts.append({'name': 'duplicate_trade_blocks_total sudden increase', 'severity': 'yellow', 'value': _metric(snapshot, 'duplicate_trade_blocks_total', 0)})
-    if telegram_failures > 0:
-        alerts.append({'name': 'telegram_send_failures_total increased', 'severity': 'yellow', 'value': telegram_failures})
-    if expectancy < 0:
-        alerts.append({'name': 'rolling_expectancy below threshold', 'severity': 'red', 'value': expectancy})
-    if win_rate < 45 and total_signals > 0:
-        alerts.append({'name': 'rolling_win_rate below threshold', 'severity': 'yellow', 'value': win_rate})
-    if latest_dt is None:
-        alerts.append({'name': 'latest_data_timestamp stale', 'severity': 'red', 'value': latest_ts})
-    if int(_safe_float(_metric(snapshot, 'csv_write_failures_total', 0))) > 0:
-        alerts.append({'name': 'csv save failure or no recent execution log', 'severity': 'red', 'value': _metric(snapshot, 'csv_write_failures_total', 0)})
-
     kpis = [
         {'name': 'app_status', 'value': app_status, 'color': _status_color(app_status)},
         {'name': 'market_data_status', 'value': market_status, 'color': _status_color(market_status)},
-        {'name': 'latest_data_timestamp', 'value': latest_ts or '-','color': _status_color(market_status)},
+        {'name': 'latest_data_timestamp', 'value': latest_ts or '-', 'color': _status_color(market_status)},
         {'name': 'total_signals_today', 'value': total_signals, 'color': 'green' if total_signals else 'yellow'},
         {'name': 'valid_signals_today', 'value': valid_signals, 'color': _status_color(signal_status)},
         {'name': 'executed_paper_trades_today', 'value': executed_trades, 'color': _status_color(execution_status)},
-        {'name': 'rejected_trades_today', 'value': rejected_trades, 'color': 'red' if rejected_trades else 'green'},
+        {'name': 'execution_failed_total', 'value': execution_failed, 'color': 'red' if execution_failed else 'green'},
+        {'name': 'execution_blocked_total', 'value': execution_blocked, 'color': 'yellow' if execution_blocked else 'green'},
         {'name': 'telegram_status', 'value': telegram_status, 'color': _status_color(telegram_status)},
         {'name': 'pnl_today', 'value': pnl_today, 'color': 'green' if pnl_today >= 0 else 'red'},
-        {'name': 'win_rate_rolling', 'value': win_rate, 'color': 'green' if win_rate >= 55 else 'yellow' if win_rate >= 45 else 'red'},
-        {'name': 'expectancy_rolling', 'value': expectancy, 'color': 'green' if expectancy > 0 else 'red'},
+        {'name': 'kill_switch_active', 'value': kill_switch_active, 'color': 'red' if kill_switch_active else 'green'},
+        {'name': 'active_alerts_total', 'value': len(active_alerts), 'color': 'red' if active_alerts else 'green'},
     ]
 
     return {
@@ -116,6 +110,7 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
                 {'label': 'trading_app_up', 'value': trading_app_up},
                 {'label': 'trading_cycle_duration_seconds', 'value': _metric(snapshot, 'trading_cycle_duration_seconds', 0.0)},
                 {'label': 'trading_cycle_failures_total', 'value': cycle_failures},
+                {'label': 'active_alerts_total', 'value': len(active_alerts)},
             ],
         },
         'data_health': {
@@ -144,24 +139,33 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
             'status': execution_status,
             'color': _status_color(execution_status),
             'cards': [
+                {'label': 'execution_attempt_total', 'value': execution_attempts},
+                {'label': 'execution_success_total', 'value': execution_success},
+                {'label': 'execution_failed_total', 'value': execution_failed},
+                {'label': 'execution_blocked_total', 'value': execution_blocked},
+                {'label': 'duplicate_execution_block_total', 'value': duplicate_execution_blocks},
                 {'label': 'paper_trades_executed_total', 'value': _metric(snapshot, 'paper_trades_executed_total', 0)},
                 {'label': 'paper_trade_rejections_total', 'value': _metric(snapshot, 'paper_trade_rejections_total', 0)},
                 {'label': 'duplicate_trade_blocks_total', 'value': _metric(snapshot, 'duplicate_trade_blocks_total', 0)},
-                {'label': 'pnl_today', 'value': pnl_today},
             ],
         },
         'validation_risk_health': {
-            'status': 'OK' if int(_safe_float(_metric(snapshot, 'trade_validation_failures_total', 0))) == 0 else 'WARN',
-            'color': _status_color('OK' if int(_safe_float(_metric(snapshot, 'trade_validation_failures_total', 0))) == 0 else 'WARN'),
+            'status': risk_status,
+            'color': _status_color(risk_status),
             'cards': [
                 {'label': 'trade_validation_failures_total', 'value': _metric(snapshot, 'trade_validation_failures_total', 0)},
                 {'label': 'rolling_win_rate', 'value': win_rate},
                 {'label': 'rolling_expectancy', 'value': expectancy},
+                {'label': 'portfolio_kill_switch_active', 'value': kill_switch_active},
+                {'label': 'portfolio_daily_loss_limit', 'value': daily_loss_limit},
+                {'label': 'portfolio_per_trade_risk_pct', 'value': per_trade_risk_pct},
+                {'label': 'portfolio_max_trades_per_day', 'value': max_trades_per_day},
             ],
         },
         'alerts_and_recent_failures': {
-            'alerts': alerts[:10],
+            'alerts': active_alerts[:12],
             'recent_failures': recent_failures,
+            'notification_count': alert_notifications,
         },
         'stages': stages,
         'metrics': metrics,
@@ -169,4 +173,3 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
 
 
 __all__ = ['build_observability_dashboard_payload']
-

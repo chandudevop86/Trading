@@ -1,6 +1,7 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Iterable, Protocol
 
@@ -160,16 +161,6 @@ class ExecutionService:
         mode = self._normalize_mode(command.mode)
         broker = self._normalize_broker(command.broker, mode)
         requested_status = self._normalize_requested_status(command.status, mode)
-        self._ensure_no_duplicate_execution(
-            mode=mode,
-            broker=broker,
-            reviewed_trade_id=command.reviewed_trade_id,
-            signal_id=None,
-            broker_reference=None,
-            symbol=str(command.symbol or ''),
-            strategy=str(command.strategy_name or ''),
-            trade_id=command.trade_id,
-        )
         reviewed_trade, signal_id, signal = self._resolve_execution_dependencies(command)
         trade_symbol = str(getattr(reviewed_trade, 'symbol', '') or getattr(signal, 'symbol', '') or command.symbol or '')
         trade_strategy = str(
@@ -195,18 +186,6 @@ class ExecutionService:
                 'trade_id': command.trade_id,
             },
         )
-
-        self._ensure_no_duplicate_execution(
-            mode=mode,
-            broker=broker,
-            reviewed_trade_id=None,
-            signal_id=signal_id,
-            broker_reference=None,
-            symbol=trade_symbol,
-            strategy=trade_strategy,
-            trade_id=command.trade_id,
-        )
-
         self.outbox.enqueue(
             event_name=EVENT_TRADE_EXECUTE_REQUESTED,
             payload={
@@ -218,6 +197,44 @@ class ExecutionService:
             },
             source='execution_service',
         )
+
+        try:
+            record = self.execution_repository.create_execution(
+                signal_id=signal_id,
+                reviewed_trade_id=command.reviewed_trade_id,
+                mode=mode,
+                broker=broker,
+                status=ExecutionStatus.PENDING,
+                executed_price=None,
+                executed_at=None,
+                broker_reference=None,
+                notes='Execution claim reserved before adapter dispatch.',
+            )
+        except IntegrityError as exc:
+            self.session.rollback()
+            increment_metric('execution_blocked_total', 1)
+            increment_metric('duplicate_execution_block_total', 1)
+            duplicate_reason, duplicate_message = self._map_duplicate_integrity_error(
+                exc,
+                mode=mode,
+                broker=broker,
+                reviewed_trade_id=command.reviewed_trade_id,
+                signal_id=signal_id,
+                broker_reference=None,
+            )
+            self._log_blocked_execution(
+                reason=duplicate_reason,
+                mode=mode,
+                broker=broker,
+                reviewed_trade_id=command.reviewed_trade_id,
+                signal_id=signal_id,
+                broker_reference=None,
+                symbol=trade_symbol,
+                strategy=trade_strategy,
+                trade_id=command.trade_id,
+                message='Duplicate execution blocked while reserving execution claim',
+            )
+            raise ValueError(duplicate_message) from exc
 
         adapter = self._get_adapter(mode)
         try:
@@ -246,40 +263,40 @@ class ExecutionService:
             )
         except Exception as exc:
             increment_metric('execution_failed_total', 1)
+            self.execution_repository.update_execution(
+                record,
+                broker=broker,
+                status=ExecutionStatus.FAILED,
+                executed_price=None,
+                executed_at=datetime.now(UTC),
+                broker_reference=None,
+                notes=f'Adapter failure before execution persistence: {exc}',
+            )
+            self.session.commit()
+            self.session.refresh(record)
             log_exception(
                 component='execution_service',
                 event_name='execution_adapter_failed',
                 exc=exc,
                 symbol=trade_symbol,
                 strategy=trade_strategy,
-                message='Execution adapter failed before persistence',
+                message='Execution adapter failed after claim reservation',
                 context_json={
                     'mode': mode,
                     'broker': broker,
                     'reviewed_trade_id': command.reviewed_trade_id,
                     'signal_id': signal_id,
                     'trade_id': command.trade_id,
+                    'execution_id': record.id,
                 },
             )
             raise
 
         self._validate_adapter_result(adapter_result)
-        self._ensure_no_duplicate_execution(
-            mode=mode,
-            broker=str(adapter_result.broker or broker),
-            reviewed_trade_id=command.reviewed_trade_id,
-            signal_id=signal_id,
-            broker_reference=adapter_result.broker_reference,
-            symbol=trade_symbol,
-            strategy=trade_strategy,
-            trade_id=command.trade_id,
-        )
 
         try:
-            record = self.execution_repository.create_execution(
-                signal_id=signal_id,
-                reviewed_trade_id=command.reviewed_trade_id,
-                mode=mode,
+            record = self.execution_repository.update_execution(
+                record,
                 broker=adapter_result.broker,
                 status=adapter_result.status,
                 executed_price=adapter_result.executed_price,

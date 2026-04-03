@@ -38,6 +38,29 @@ class ExecutionRepository:
         self.session.flush()
         return record
 
+    def update_execution(
+        self,
+        execution: ExecutionRecord,
+        *,
+        broker: str | None = None,
+        status: str | None = None,
+        executed_price: float | None = None,
+        executed_at: datetime | None = None,
+        broker_reference: str | None = None,
+        notes: str | None = None,
+    ) -> ExecutionRecord:
+        if broker is not None:
+            execution.broker = broker
+        if status is not None:
+            execution.status = status
+        execution.executed_price = executed_price
+        execution.executed_at = executed_at
+        execution.broker_reference = broker_reference
+        execution.notes = notes
+        self.session.add(execution)
+        self.session.flush()
+        return execution
+
     def get_by_reviewed_trade_mode(
         self,
         *,

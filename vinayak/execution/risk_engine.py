@@ -15,6 +15,7 @@ _CLOSED_STATUSES = {'CLOSED', 'EXITED', 'CANCELLED', 'REJECTED'}
 @dataclass(slots=True)
 class PortfolioRiskConfig:
     capital: float
+    per_trade_risk_pct: float | None = None
     max_position_value: float | None = None
     max_open_positions: int | None = None
     max_symbol_exposure_pct: float | None = None
@@ -138,6 +139,15 @@ def allocate_position_size(
 
     quantity_cap = requested_quantity
 
+    per_trade_risk_pct = _safe_float(config.per_trade_risk_pct, 0.0)
+    if capital > 0 and per_trade_risk_pct > 0 and risk_per_unit > 0:
+        per_trade_risk_value = capital * (per_trade_risk_pct / 100.0)
+        snapshot['per_trade_risk_value'] = round(per_trade_risk_value, 4)
+        cap_qty = _qty_limit(per_trade_risk_value, risk_per_unit)
+        quantity_cap = min(quantity_cap, cap_qty) if quantity_cap > 0 else cap_qty
+        if cap_qty < requested_quantity:
+            adjustment_reasons.append('CAPPED_BY_PER_TRADE_RISK')
+
     max_position_value = _safe_float(config.max_position_value, 0.0)
     if max_position_value > 0 and entry_price > 0:
         cap_qty = _qty_limit(max_position_value, entry_price)
@@ -174,6 +184,8 @@ def allocate_position_size(
             adjustment_reasons.append('CAPPED_BY_OPEN_RISK')
 
     if quantity_cap <= 0:
+        if per_trade_risk_pct > 0:
+            block_reasons.append('PER_TRADE_RISK_LIMIT')
         if max_position_value > 0:
             block_reasons.append('MAX_POSITION_VALUE')
         if max_portfolio_exposure_pct > 0:
@@ -218,6 +230,13 @@ def evaluate_portfolio_risk(
 
     if bool(config.kill_switch_enabled):
         reasons.append('PORTFOLIO_KILL_SWITCH_ACTIVE')
+
+    per_trade_risk_pct = _safe_float(config.per_trade_risk_pct, 0.0)
+    if capital > 0 and per_trade_risk_pct > 0:
+        per_trade_risk_cap = capital * (per_trade_risk_pct / 100.0)
+        snapshot['per_trade_risk_cap'] = round(per_trade_risk_cap, 4)
+        if candidate_risk > per_trade_risk_cap:
+            reasons.append('PER_TRADE_RISK_LIMIT')
 
     max_position_value = _safe_float(config.max_position_value, 0.0)
     if max_position_value > 0 and candidate_notional > max_position_value:

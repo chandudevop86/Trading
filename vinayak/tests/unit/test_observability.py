@@ -2,6 +2,7 @@
 
 import os
 
+from vinayak.observability.alerting import build_active_alerts, publish_active_alerts
 from vinayak.observability.observability_dashboard_spec import (
     build_grafana_dashboard_spec,
     build_observability_dashboard_html,
@@ -16,6 +17,15 @@ from vinayak.observability.observability_metrics import (
     reset_observability_state,
     set_metric,
 )
+
+
+class _StubBus:
+    def __init__(self) -> None:
+        self.messages: list[tuple[str, dict, str]] = []
+
+    def publish(self, name: str, payload: dict, *, source: str) -> bool:
+        self.messages.append((name, payload, source))
+        return True
 
 
 def test_observability_metrics_and_stage_snapshot(tmp_path) -> None:
@@ -62,6 +72,52 @@ def test_observability_logger_and_health_payload(tmp_path) -> None:
     assert len(tail_events(5)) >= 1
 
 
+def test_observability_alerts_cover_execution_and_risk(tmp_path) -> None:
+    os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path)
+    reset_observability_state()
+
+    set_metric('trading_app_up', 1)
+    set_metric('latest_data_timestamp', '2026-04-02T09:20:00Z')
+    set_metric('execution_attempt_total', 3)
+    set_metric('execution_success_total', 0)
+    set_metric('execution_failed_total', 1)
+    set_metric('execution_blocked_total', 2)
+    set_metric('duplicate_execution_block_total', 1)
+    set_metric('portfolio_kill_switch_active', 1)
+    set_metric('portfolio_daily_loss_limit', 500.0)
+    set_metric('pnl_today', -650.0)
+
+    alerts = build_active_alerts()
+    names = {item['name'] for item in alerts}
+    assert 'execution_failed_total increased' in names
+    assert 'execution_blocked_total increased' in names
+    assert 'duplicate_execution_block_total increased' in names
+    assert 'portfolio_kill_switch_active is enabled' in names
+    assert 'pnl_today breached portfolio_daily_loss_limit' in names
+
+    payload = build_observability_dashboard_payload()
+    assert any(kpi['name'] == 'execution_failed_total' for kpi in payload['kpis'])
+    assert payload['validation_risk_health']['status'] == 'FAIL'
+
+
+def test_observability_alert_publishing_routes_notification_event(tmp_path) -> None:
+    os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path)
+    reset_observability_state()
+    set_metric('execution_failed_total', 2)
+
+    bus = _StubBus()
+    sent = publish_active_alerts(
+        message_bus=bus,
+        telegram_token='token',
+        telegram_chat_id='chat',
+    )
+
+    assert sent >= 1
+    assert len(bus.messages) == 1
+    assert bus.messages[0][0] == 'notification.requested'
+    assert 'Observability alert summary' in bus.messages[0][1]['message']
+
+
 def test_dashboard_spec_outputs_are_readable() -> None:
     wireframe = build_text_wireframe()
     grafana = build_grafana_dashboard_spec()
@@ -71,4 +127,3 @@ def test_dashboard_spec_outputs_are_readable() -> None:
     assert grafana['title'] == 'Vinayak Paper Trading Observability'
     assert any(panel['title'] == 'Recent Failures' for panel in grafana['panels'])
     assert '/dashboard/observability' in html
-

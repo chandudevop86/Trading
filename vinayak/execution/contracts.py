@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import hashlib
 import uuid
@@ -10,6 +10,7 @@ import pandas as pd
 
 CONTRACT_VERSION = 'strict_trade_candidate_v1'
 REQUIRED_CANDIDATE_FIELDS = [
+    'trade_id',
     'symbol',
     'timestamp',
     'strategy_name',
@@ -19,6 +20,9 @@ REQUIRED_CANDIDATE_FIELDS = [
     'entry',
     'stop_loss',
     'target',
+    'entry_price',
+    'target_price',
+    'quantity',
     'timeframe',
     'validation_status',
     'validation_score',
@@ -28,6 +32,7 @@ REQUIRED_CANDIDATE_FIELDS = [
 
 
 class StrictTradeCandidateDict(TypedDict, total=False):
+    trade_id: str
     symbol: str
     timestamp: str
     strategy_name: str
@@ -37,12 +42,14 @@ class StrictTradeCandidateDict(TypedDict, total=False):
     entry: float
     stop_loss: float
     target: float
+    entry_price: float
+    target_price: float
+    quantity: int
     timeframe: str
     validation_status: str
     validation_score: float
     validation_reasons: list[str]
     execution_allowed: bool
-    trade_id: str
     zone_type: str
     rr_ratio: float
     vwap_alignment: bool
@@ -56,6 +63,7 @@ class StrictTradeCandidateDict(TypedDict, total=False):
 
 @dataclass(slots=True)
 class StrictTradeCandidate:
+    trade_id: str
     symbol: str
     timestamp: str
     strategy_name: str
@@ -65,12 +73,14 @@ class StrictTradeCandidate:
     entry: float
     stop_loss: float
     target: float
+    entry_price: float
+    target_price: float
+    quantity: int
     timeframe: str
     validation_status: str = 'PENDING'
     validation_score: float = 0.0
     validation_reasons: list[str] | None = None
     execution_allowed: bool = False
-    trade_id: str = ''
     zone_type: str = ''
     rr_ratio: float = 0.0
     vwap_alignment: bool | None = None
@@ -159,6 +169,7 @@ def normalize_candidate_contract(
     entry = _safe_float(raw.get('entry', raw.get('entry_price', raw.get('price', raw.get('close', 0.0)))))
     stop_loss = _safe_float(raw.get('stop_loss', raw.get('stoploss', raw.get('sl', raw.get('trailing_stop_loss', 0.0)))))
     target = _safe_float(raw.get('target', raw.get('target_price', raw.get('tp', 0.0))))
+    quantity = int(round(_safe_float(raw.get('quantity', 0))))
     rr_ratio = _safe_float(raw.get('rr_ratio', 0.0))
     if rr_ratio <= 0 and entry > 0 and stop_loss > 0 and target > 0:
         risk = abs(entry - stop_loss)
@@ -169,22 +180,27 @@ def normalize_candidate_contract(
     elif not isinstance(validation_reasons, list):
         validation_reasons = []
 
+    zone_id = _build_zone_id(raw, resolved_strategy, resolved_setup_type, resolved_timestamp, resolved_side, resolved_symbol)
+    trade_id = _build_trade_id(raw, zone_id, resolved_symbol, resolved_strategy, resolved_timestamp, resolved_side, entry)
     normalized: StrictTradeCandidateDict = {
+        'trade_id': trade_id,
         'symbol': resolved_symbol,
         'timestamp': resolved_timestamp,
         'strategy_name': resolved_strategy,
         'setup_type': resolved_setup_type,
-        'zone_id': _build_zone_id(raw, resolved_strategy, resolved_setup_type, resolved_timestamp, resolved_side, resolved_symbol),
+        'zone_id': zone_id,
         'side': resolved_side,
         'entry': round(entry, 4),
         'stop_loss': round(stop_loss, 4),
         'target': round(target, 4),
+        'entry_price': round(entry, 4),
+        'target_price': round(target, 4),
+        'quantity': quantity,
         'timeframe': resolved_timeframe,
         'validation_status': str(raw.get('validation_status', 'PENDING') or 'PENDING').strip().upper(),
         'validation_score': round(_safe_float(raw.get('validation_score', raw.get('score', 0.0))), 2),
         'validation_reasons': [str(item) for item in validation_reasons if str(item).strip()],
         'execution_allowed': bool(raw.get('execution_allowed', False)),
-        'trade_id': _build_trade_id(raw, _build_zone_id(raw, resolved_strategy, resolved_setup_type, resolved_timestamp, resolved_side, resolved_symbol), resolved_symbol, resolved_strategy, resolved_timestamp, resolved_side, entry),
         'zone_type': str(raw.get('zone_type', '') or ''),
         'rr_ratio': round(rr_ratio, 4),
         'vwap_alignment': raw.get('vwap_alignment') if 'vwap_alignment' in raw else None,
@@ -197,11 +213,12 @@ def normalize_candidate_contract(
     }
     normalized.update(raw)
     normalized.update({
+        'trade_id': str(normalized.get('trade_id', '') or trade_id),
         'symbol': resolved_symbol,
         'timestamp': resolved_timestamp,
         'strategy_name': resolved_strategy,
         'setup_type': resolved_setup_type,
-        'zone_id': normalized['zone_id'],
+        'zone_id': zone_id,
         'side': resolved_side,
         'entry': round(entry, 4),
         'entry_price': round(entry, 4),
@@ -209,12 +226,12 @@ def normalize_candidate_contract(
         'stoploss': round(stop_loss, 4),
         'target': round(target, 4),
         'target_price': round(target, 4),
+        'quantity': quantity,
         'timeframe': resolved_timeframe,
         'validation_status': normalized['validation_status'],
         'validation_score': normalized['validation_score'],
         'validation_reasons': list(normalized['validation_reasons']),
         'execution_allowed': bool(normalized['execution_allowed']),
-        'trade_id': str(normalized.get('trade_id', '') or _build_trade_id(raw, normalized['zone_id'], resolved_symbol, resolved_strategy, resolved_timestamp, resolved_side, entry)),
         'rr_ratio': round(rr_ratio, 4),
         'strategy': resolved_strategy,
         'signal_time': str(raw.get('signal_time') or resolved_timestamp),
@@ -245,6 +262,8 @@ def validate_candidate_contract(candidate: dict[str, Any]) -> tuple[bool, list[s
         if value in (None, ''):
             reasons.append(f'MISSING_{field.upper()}')
 
+    if str(normalized.get('trade_id', '')).strip() == '':
+        reasons.append('INVALID_TRADE_ID')
     if str(normalized.get('side', '')).upper() not in {'BUY', 'SELL'}:
         reasons.append('INVALID_SIDE')
     if _safe_float(raw.get('validation_score', normalized.get('validation_score'))) <= 0:
@@ -255,6 +274,8 @@ def validate_candidate_contract(candidate: dict[str, Any]) -> tuple[bool, list[s
         reasons.append('INVALID_STOP_LOSS')
     if _safe_float(normalized.get('target')) <= 0:
         reasons.append('INVALID_TARGET')
+    if int(_safe_float(normalized.get('quantity'))) <= 0:
+        reasons.append('INVALID_QUANTITY')
     if str(normalized.get('timestamp', '')).strip() == '':
         reasons.append('INVALID_TIMESTAMP')
 

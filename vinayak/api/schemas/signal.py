@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
@@ -191,6 +191,7 @@ class LiveAnalysisResponse(BaseModel):
     execution_rows: list[LiveAnalysisExecutionRow]
     validation_summary: dict[str, Any] = Field(default_factory=dict)
     report_artifacts: LiveAnalysisReportArtifacts
+    alert_notifications_sent: int = 0
 
 
 

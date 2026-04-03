@@ -17,6 +17,7 @@ from vinayak.analytics.readiness import evaluate_readiness
 from vinayak.metrics import run_full_metrics_engine
 from vinayak.notifications.telegram.service import build_trade_summary, send_telegram_message
 from vinayak.validation.trade_evaluation import build_trade_evaluation_summary
+from vinayak.observability.alerting import publish_active_alerts
 from vinayak.observability.observability_logger import log_event, log_exception
 from vinayak.observability.observability_metrics import record_stage, set_metric
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
@@ -474,6 +475,7 @@ def run_live_trading_analysis(
             paper_log_path=str(paper_log_path),
             live_log_path=str(live_log_path),
             capital=capital,
+            per_trade_risk_pct=risk_pct,
             max_trades_per_day=max_trades_per_day,
             max_daily_loss=max_daily_loss,
             max_position_value=max_position_value,
@@ -499,6 +501,13 @@ def run_live_trading_analysis(
     record_stage('trade_build', status='SUCCESS', symbol=symbol, strategy=strategy, message='Trade rows built', trace_id=trace_id)
     validation_rows = execution_rows if execution_rows else signal_rows
     validation_summary = _validation_summary_from_rows(validation_rows, strategy)
+    _update_observability_metrics_from_run(validation_rows, candles_df)
+    alert_notifications_sent = publish_active_alerts(
+        message_bus=message_bus,
+        telegram_token=telegram_token,
+        telegram_chat_id=telegram_chat_id,
+        source='live_analysis_alerting',
+    )
 
     total_duration = round(time.perf_counter() - started, 4)
     set_metric('trading_cycle_duration_seconds', total_duration)
@@ -522,6 +531,7 @@ def run_live_trading_analysis(
         'validation_summary': validation_summary,
         'data_status': _data_status(candles_df),
         'system_status': validation_summary.get('system_status', 'NOT_READY'),
+        'alert_notifications_sent': alert_notifications_sent,
     }
     response['report_artifacts'] = _build_report_artifacts(response)
     message_bus.publish(

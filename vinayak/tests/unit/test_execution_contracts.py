@@ -91,3 +91,36 @@ def test_reviewed_trade_events_have_explicit_canonical_names() -> None:
     assert EVENT_REVIEWED_TRADE_STATUS_UPDATED == 'reviewed_trade.status.updated'
     assert EVENT_TRADE_REVIEWED == EVENT_REVIEWED_TRADE_CREATED
 
+
+
+def test_validate_candidate_contract_requires_execution_fields() -> None:
+    from vinayak.execution.contracts import validate_candidate_contract
+
+    valid, reasons, normalized = validate_candidate_contract(
+        {
+            'trade_id': 'TRADE-1',
+            'symbol': '^NSEI',
+            'timestamp': '2026-04-02 09:20:00',
+            'strategy_name': 'BREAKOUT',
+            'setup_type': 'BREAKOUT',
+            'zone_id': 'ZONE-1',
+            'side': 'BUY',
+            'entry': 101.25,
+            'entry_price': 101.25,
+            'stop_loss': 99.75,
+            'target': 104.25,
+            'target_price': 104.25,
+            'quantity': 12,
+            'timeframe': '5m',
+            'validation_status': 'PASS',
+            'validation_score': 8.2,
+            'validation_reasons': [],
+            'execution_allowed': True,
+        }
+    )
+
+    assert valid is True
+    assert reasons == []
+    assert normalized['quantity'] == 12
+    assert normalized['entry_price'] == 101.25
+    assert normalized['target_price'] == 104.25

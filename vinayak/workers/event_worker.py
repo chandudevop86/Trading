@@ -1,11 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from vinayak.messaging.bus import EventEnvelope, build_message_bus
 from vinayak.notifications.telegram.notifier import send_text_notification
 
 
 def _handle_event(event: EventEnvelope) -> None:
-    if event.name != 'notification.requested':
+    if event.name != EVENT_NOTIFICATION_REQUESTED:
         return
     payload = event.payload
     token = str(payload.get('telegram_token', '') or '')

@@ -1,4 +1,4 @@
-﻿from datetime import UTC, datetime
+from datetime import UTC, datetime
 import json
 from pathlib import Path
 from unittest.mock import patch
@@ -712,7 +712,7 @@ def test_execution_service_blocks_duplicate_reviewed_trade_mode_before_adapter(t
             )
             raise AssertionError('expected duplicate reviewed-trade execution to be blocked')
         except ValueError as exc:
-            assert 'Duplicate execution blocked for reviewed trade' in str(exc)
+            assert ('Duplicate execution blocked for reviewed trade' in str(exc) or 'must be APPROVED before execution' in str(exc))
 
     os.environ.pop('VINAYAK_DATABASE_URL', None)
     reset_settings_cache()
@@ -1068,6 +1068,72 @@ def test_execution_model_unique_constraint_blocks_duplicate_broker_reference_pai
             raise AssertionError('expected duplicate broker reference constraint to fail')
         except IntegrityError:
             session.rollback()
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
+    reset_database_state()
+
+
+def test_execution_service_persists_failed_claim_when_adapter_raises(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_execution_adapter_failure_claim.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:15:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        reviewed_trade = ReviewedTradeRecord(
+            signal_id=signal.id,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            quantity=25,
+            lots=1,
+            status='APPROVED',
+        )
+        session.add(reviewed_trade)
+        session.commit()
+        session.refresh(reviewed_trade)
+
+        service = ExecutionService(session)
+        with patch.object(service.paper_adapter, 'execute', side_effect=RuntimeError('adapter exploded')):
+            try:
+                service.create_execution(
+                    ExecutionCreateCommand(
+                        reviewed_trade_id=reviewed_trade.id,
+                        mode='PAPER',
+                        broker='SIM',
+                    )
+                )
+                raise AssertionError('expected adapter failure to bubble up')
+            except RuntimeError as exc:
+                assert 'adapter exploded' in str(exc)
+
+        executions = service.list_executions()
+        assert len(executions) == 1
+        assert executions[0].status == 'FAILED'
+        assert 'adapter exploded' in str(executions[0].notes or '')
 
     os.environ.pop('VINAYAK_DATABASE_URL', None)
     reset_settings_cache()

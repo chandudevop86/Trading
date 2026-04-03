@@ -247,3 +247,26 @@ def test_execute_workspace_candidates_caps_quantity_for_position_value(tmp_path:
         _cleanup_db_session(session)
 
 
+
+
+def test_execute_workspace_candidates_caps_quantity_for_per_trade_risk(tmp_path: Path) -> None:
+    session = _build_db_session(tmp_path)
+    try:
+        _candidates, result = execute_workspace_candidates(
+            "DEMAND_SUPPLY",
+            "NIFTY",
+            _candles(),
+            [_candidate()],
+            execution_mode="PAPER",
+            paper_log_path=str(tmp_path / "paper.csv"),
+            live_log_path=str(tmp_path / "live.csv"),
+            capital=100000,
+            per_trade_risk_pct=0.01,
+            db_session=session,
+        )
+
+        assert result.executed_count == 1
+        assert result.rows[0]["quantity"] == 6
+        assert "CAPPED_BY_PER_TRADE_RISK" in result.rows[0]["allocation_adjustment_reasons"]
+    finally:
+        _cleanup_db_session(session)

@@ -1,4 +1,4 @@
-﻿import inspect
+import inspect
 from pathlib import Path
 
 from vinayak.api.services import trading_workspace as service
@@ -150,6 +150,101 @@ def test_run_live_trading_analysis_forwards_recent_risk_controls(monkeypatch, tm
     assert result['signal_count'] == 1
 
 
+
+def test_run_live_trading_analysis_forces_live_auto_execute_to_paper(monkeypatch, tmp_path: Path) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        service,
+        'fetch_live_ohlcv',
+        lambda **kwargs: [
+            {
+                'timestamp': '2026-03-24 09:15:00',
+                'open': 100.0,
+                'high': 102.0,
+                'low': 99.0,
+                'close': 101.0,
+                'volume': 1200,
+                'price': 101.0,
+                'interval': kwargs['interval'],
+                'provider': 'YAHOO',
+                'symbol': kwargs['symbol'],
+                'source': 'YAHOO_DOWNLOAD',
+                'is_closed': True,
+            }
+        ],
+    )
+    monkeypatch.setattr(service, 'attach_option_metrics', lambda rows, **kwargs: rows)
+    monkeypatch.setattr(service, 'attach_lots', lambda rows, **kwargs: rows)
+    monkeypatch.setattr(service, '_build_report_artifacts', lambda result: {
+        'json_report': {'local_path': 'vinayak/data/reports/mock.json'},
+        'summary_report': {'local_path': 'vinayak/data/reports/mock.txt'},
+    })
+    monkeypatch.setattr(
+        service,
+        'run_strategy_workflow',
+        lambda context, **kwargs: [
+            {
+                'strategy': 'BTST',
+                'symbol': context.symbol,
+                'side': 'BUY',
+                'trade_no': 1,
+                'trade_label': 'Trade 1',
+                'entry_time': '2026-03-24 09:15:00',
+                'entry_price': 101.0,
+                'stop_loss': 99.0,
+                'target_price': 103.0,
+                'quantity': 10,
+            }
+        ],
+    )
+
+    def _fake_execute_workspace_candidates(strategy, symbol, candles, signal_rows, **kwargs):
+        captured['workspace_kwargs'] = kwargs
+        return (
+            [],
+            type(
+                'ExecutionResult',
+                (),
+                {
+                    'executed_count': 0,
+                    'blocked_count': 0,
+                    'error_count': 0,
+                    'skipped_count': 0,
+                    'duplicate_count': 0,
+                    'rows': [],
+                },
+            )(),
+        )
+
+    monkeypatch.setattr(service, 'execute_workspace_candidates', _fake_execute_workspace_candidates)
+
+    result = service.run_live_trading_analysis(
+        symbol='^NSEI',
+        interval='5m',
+        period='1d',
+        strategy='BTST',
+        capital=100000,
+        risk_pct=1.0,
+        rr_ratio=2.0,
+        trailing_sl_pct=0.5,
+        strike_step=50,
+        moneyness='ATM',
+        strike_steps=0,
+        mtf_ema_period=3,
+        mtf_setup_mode='either',
+        mtf_retest_strength=True,
+        mtf_max_trades_per_day=3,
+        auto_execute=True,
+        execution_type='LIVE',
+        paper_log_path=str(tmp_path / 'paper.csv'),
+        live_log_path=str(tmp_path / 'live.csv'),
+    )
+
+    assert captured['workspace_kwargs']['execution_mode'] == 'PAPER'
+    assert result['execution_summary']['mode'] == 'PAPER'
+    assert 'forced to PAPER mode' in result['execution_note']
+
 def test_build_report_artifacts_prefers_execution_rows_for_traceability(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
 
@@ -180,6 +275,7 @@ def test_run_live_trading_analysis_uses_workspace_gateway() -> None:
     assert 'execute_workspace_candidates(' in source
     assert 'build_execution_candidates(' not in source
     assert 'execute_paper_trades(' not in source
+
 
 
 

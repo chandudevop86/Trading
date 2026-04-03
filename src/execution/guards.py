@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time
@@ -266,24 +266,34 @@ def execute_live_trades(
     started = time.perf_counter()
     try:
         result = execute_candidates(
-        candidates,
-        output_path,
-        deduplicate=deduplicate,
-        execution_mode="LIVE",
-        broker_client=broker_client,
-        broker_name=broker_name,
-        security_map=security_map,
-        max_trades_per_day=max_trades_per_day,
-        max_daily_loss=max_daily_loss,
-        max_open_trades=max_open_trades,
-        live_enabled=live_enabled,
-        symbol_allowlist=symbol_allowlist,
-        max_order_quantity=max_order_quantity,
-        max_order_value=max_order_value,
-        order_history_path=order_history_path,
-        optimizer_report_path=optimizer_report_path,
-        enforce_optimizer_gate=enforce_optimizer_gate,
-    )
+            candidates,
+            output_path,
+            deduplicate=deduplicate,
+            execution_mode="LIVE",
+            broker_client=broker_client,
+            broker_name=broker_name,
+            security_map=security_map,
+            max_trades_per_day=max_trades_per_day,
+            max_daily_loss=max_daily_loss,
+            max_open_trades=max_open_trades,
+            live_enabled=live_enabled,
+            symbol_allowlist=symbol_allowlist,
+            max_order_quantity=max_order_quantity,
+            max_order_value=max_order_value,
+            order_history_path=order_history_path,
+            optimizer_report_path=optimizer_report_path,
+            enforce_optimizer_gate=enforce_optimizer_gate,
+        )
+        duration = round(time.perf_counter() - started, 4)
+        set_metric('trading_cycle_duration_seconds', duration)
+        record_stage('execute', status='SUCCESS', duration_seconds=duration, message='execute_live_trades completed')
+        log_event(component='live_execution', event_name='execute_live_trades', severity='INFO', message='Live trades executed through guard gateway', context_json={'candidates': len(candidates), 'duration_seconds': duration})
+        return result
+    except Exception as exc:
+        increment_metric('trading_cycle_failures_total', 1)
+        record_stage('execute', status='FAIL', message=str(exc))
+        log_exception(component='live_execution', event_name='execute_live_trades_failed', exc=exc, message='execute_live_trades failed', context_json={'candidates': len(candidates)})
+        raise
 
 
 __all__ = [
@@ -295,3 +305,4 @@ __all__ = [
     "normalize_trade_schema",
     "trade_unique_key",
 ]
+

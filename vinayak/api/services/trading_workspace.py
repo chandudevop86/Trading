@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -46,6 +46,16 @@ if pd is None:  # pragma: no cover
 
 DEFAULT_PAPER_LOG_PATH = Path('vinayak/data/paper_trading_logs_all.csv')
 DEFAULT_LIVE_LOG_PATH = Path('vinayak/data/live_trading_logs_all.csv')
+
+def _resolve_workspace_auto_execution_mode(requested_execution_type: str, auto_execute: bool) -> tuple[str, str]:
+    requested = str(requested_execution_type or 'NONE').strip().upper()
+    if not auto_execute:
+        return requested, ''
+    if requested == 'LIVE':
+        return 'PAPER', 'Auto-execute forced to PAPER mode. Live entry and exit require an explicit manual route.'
+    if requested == 'PAPER':
+        return 'PAPER', 'Auto-execute is operating in PAPER mode.'
+    return requested, ''
 
 
 def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -455,7 +465,8 @@ def run_live_trading_analysis(
         except Exception as exc:
             telegram_error = str(exc)
 
-    execution_mode = str(execution_type or 'NONE').upper()
+    requested_execution_mode = str(execution_type or 'NONE').upper()
+    execution_mode, execution_note = _resolve_workspace_auto_execution_mode(requested_execution_mode, auto_execute)
     execution_summary: dict[str, Any] = {
         'mode': execution_mode,
         'executed_count': 0,
@@ -526,6 +537,7 @@ def run_live_trading_analysis(
         'telegram_sent': telegram_sent,
         'telegram_error': telegram_error,
         'telegram_payload': telegram_payload or {},
+        'execution_note': execution_note,
         'execution_summary': execution_summary,
         'execution_rows': execution_rows,
         'validation_summary': validation_summary,
@@ -543,11 +555,13 @@ def run_live_trading_analysis(
             'period': period,
             'signal_count': len(signal_rows),
             'execution_mode': execution_mode,
+            'requested_execution_mode': requested_execution_mode,
             'report_artifacts': response['report_artifacts'],
         },
         source='live_analysis',
     )
     return response
+
 
 
 

@@ -3,14 +3,14 @@
     "alerts_recent_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:27Z",
-      "value": 150.0
+      "updated_at": "2026-04-03T09:29:24Z",
+      "value": 154.0
     },
     "capital_allocator_adjustments_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
-      "value": 18.0
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 20.0
     },
     "duplicate_execution_block_total": {
       "kind": "counter",
@@ -21,8 +21,8 @@
     "duplicate_trade_blocks_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:18Z",
-      "value": 32.0
+      "updated_at": "2026-04-03T09:29:23Z",
+      "value": 33.0
     },
     "exceptions_total": {
       "kind": "counter",
@@ -33,14 +33,14 @@
     "executed_paper_trades_today": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 1
     },
     "execution_attempt_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:36Z",
-      "value": 201.0
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 204.0
     },
     "execution_blocked_total": {
       "kind": "counter",
@@ -48,41 +48,53 @@
       "updated_at": "2026-04-02T21:20:23Z",
       "value": 44.0
     },
+    "execution_success_rate": {
+      "kind": "gauge",
+      "labels": {},
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": 0.0
+    },
     "execution_success_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:36Z",
-      "value": 153.0
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 156.0
+    },
+    "high_quality_setup_rate": {
+      "kind": "gauge",
+      "labels": {},
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": 0.0
     },
     "latest_data_timestamp": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:15Z",
-      "value": "2026-04-02 09:20:00"
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": "2026-03-24 09:15:00"
     },
     "market_data_delay_seconds": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:15Z",
-      "value": 43215.43
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": 864861.26
     },
     "market_data_duplicates_total": {
-      "kind": "counter",
+      "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:15Z",
-      "value": 20.0
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": 0
     },
     "market_data_nulls_total": {
-      "kind": "counter",
+      "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:15Z",
-      "value": 0.0
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": 0
     },
     "market_data_rows_loaded_total": {
-      "kind": "counter",
+      "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:15Z",
-      "value": 40.0
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": 1
     },
     "market_data_status": {
       "kind": "gauge",
@@ -105,8 +117,8 @@
     "outbox_enqueue_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:38Z",
-      "value": 686.0
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 698.0
     },
     "outbox_last_dispatch_duration_seconds": {
       "kind": "gauge",
@@ -129,80 +141,122 @@
     "paper_trade_expected_blocks_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:19Z",
-      "value": 36.0
+      "updated_at": "2026-04-03T09:29:24Z",
+      "value": 39.0
     },
     "paper_trade_rejections_total": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 0
     },
     "paper_trades_executed_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
-      "value": 38.0
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 41.0
+    },
+    "pnl_today": {
+      "kind": "gauge",
+      "labels": {},
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": 0.0
+    },
+    "portfolio_daily_loss_limit": {
+      "kind": "gauge",
+      "labels": {},
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 0.0
     },
     "portfolio_kill_switch_active": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 0
+    },
+    "portfolio_max_trades_per_day": {
+      "kind": "gauge",
+      "labels": {},
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 0
     },
     "portfolio_open_exposure_value": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 0.0
     },
     "portfolio_open_positions": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 0
     },
     "portfolio_open_risk_value": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 0.0
+    },
+    "portfolio_per_trade_risk_pct": {
+      "kind": "gauge",
+      "labels": {},
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 0.01
     },
     "rejected_trades_today": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 0
     },
     "risk_guard_blocks_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:19Z",
-      "value": 27.0
+      "updated_at": "2026-04-03T09:29:24Z",
+      "value": 29.0
+    },
+    "rolling_expectancy": {
+      "kind": "gauge",
+      "labels": {},
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": 0.0
+    },
+    "rolling_win_rate": {
+      "kind": "gauge",
+      "labels": {},
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": 0.0
+    },
+    "schema_validation_failures_total": {
+      "kind": "gauge",
+      "labels": {},
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": 0
     },
     "total_signals_today": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 1
     },
     "trade_candidates_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
-      "value": 185.0
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 194.0
     },
     "trading_app_up": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 1
     },
     "trading_cycle_duration_seconds": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:39Z",
-      "value": 0.4047
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 0.5
     },
     "trading_cycle_failures_total": {
       "kind": "counter",
@@ -213,245 +267,41 @@
     "valid_signals_today": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 1
+    },
+    "validation_pass_rate": {
+      "kind": "gauge",
+      "labels": {},
+      "updated_at": "2026-04-03T09:29:21Z",
+      "value": 0.0
     },
     "zone_score_avg": {
       "kind": "gauge",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 82.5
     },
     "zones_accepted_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
-      "value": 185.0
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 194.0
     },
     "zones_detected_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
-      "value": 185.0
+      "updated_at": "2026-04-03T09:29:25Z",
+      "value": 194.0
     },
     "zones_rejected_total": {
       "kind": "counter",
       "labels": {},
-      "updated_at": "2026-04-02T21:20:20Z",
+      "updated_at": "2026-04-03T09:29:25Z",
       "value": 0.0
     }
   },
   "recent_stage_events": [
-    {
-      "duration_seconds": 0.3072,
-      "message": "Workspace execution cycle finished",
-      "stage": "execute",
-      "status": "SUCCESS",
-      "strategy": "DEMAND_SUPPLY",
-      "symbol": "NIFTY",
-      "timestamp": "2026-04-02T20:40:59Z",
-      "trace_id": ""
-    },
-    {
-      "duration_seconds": 0.2579,
-      "message": "Workspace execution cycle finished",
-      "stage": "execute",
-      "status": "SUCCESS",
-      "strategy": "DEMAND_SUPPLY",
-      "symbol": "NIFTY",
-      "timestamp": "2026-04-02T20:41:00Z",
-      "trace_id": ""
-    },
-    {
-      "duration_seconds": 0.2793,
-      "message": "Workspace execution cycle finished",
-      "stage": "execute",
-      "status": "SUCCESS",
-      "strategy": "DEMAND_SUPPLY",
-      "symbol": "NIFTY",
-      "timestamp": "2026-04-02T20:41:00Z",
-      "trace_id": ""
-    },
-    {
-      "duration_seconds": 0.403,
-      "message": "Workspace execution cycle finished",
-      "stage": "execute",
-      "status": "SUCCESS",
-      "strategy": "DEMAND_SUPPLY",
-      "symbol": "NIFTY",
-      "timestamp": "2026-04-02T20:41:01Z",
-      "trace_id": ""
-    },
-    {
-      "duration_seconds": 0.0,
-      "message": "Live market rows fetched",
-      "stage": "market_fetch",
-      "status": "SUCCESS",
-      "strategy": "BTST",
-      "symbol": "^NSEI",
-      "timestamp": "2026-04-02T20:41:01Z",
-      "trace_id": "^NSEI_BTST_1775162461"
-    },
-    {
-      "duration_seconds": 0.0567,
-      "message": "Data prepared for indicators",
-      "stage": "indicator_calc",
-      "status": "SUCCESS",
-      "strategy": "BTST",
-      "symbol": "^NSEI",
-      "timestamp": "2026-04-02T20:41:01Z",
-      "trace_id": "^NSEI_BTST_1775162461"
-    },
-    {
-      "duration_seconds": 0.0,
-      "message": "Strategy workflow completed",
-      "stage": "zone_detection",
-      "status": "SUCCESS",
-      "strategy": "BTST",
-      "symbol": "^NSEI",
-      "timestamp": "2026-04-02T20:41:01Z",
-      "trace_id": "^NSEI_BTST_1775162461"
-    },
-    {
-      "duration_seconds": 0.0,
-      "message": "Trade rows built",
-      "stage": "trade_build",
-      "status": "SUCCESS",
-      "strategy": "BTST",
-      "symbol": "^NSEI",
-      "timestamp": "2026-04-02T20:41:01Z",
-      "trace_id": "^NSEI_BTST_1775162461"
-    },
-    {
-      "duration_seconds": 0.0,
-      "message": "Trading data normalized",
-      "stage": "dataframe_normalize",
-      "status": "SUCCESS",
-      "strategy": "",
-      "symbol": "",
-      "timestamp": "2026-04-02T20:44:56Z",
-      "trace_id": ""
-    },
-    {
-      "duration_seconds": 0.4491,
-      "message": "Workspace execution cycle finished",
-      "stage": "execute",
-      "status": "SUCCESS",
-      "strategy": "DEMAND_SUPPLY",
-      "symbol": "NIFTY",
-      "timestamp": "2026-04-02T20:44:59Z",
-      "trace_id": ""
-    },
-    {
-      "duration_seconds": 0.2578,
-      "message": "Workspace execution cycle finished",
-      "stage": "execute",
-      "status": "SUCCESS",
-      "strategy": "DEMAND_SUPPLY",
-      "symbol": "NIFTY",
-      "timestamp": "2026-04-02T20:44:59Z",
-      "trace_id": ""
-    },
-    {
-      "duration_seconds": 0.3386,
-      "message": "Workspace execution cycle finished",
-      "stage": "execute",
-      "status": "SUCCESS",
-      "strategy": "DEMAND_SUPPLY",
-      "symbol": "NIFTY",
-      "timestamp": "2026-04-02T20:45:00Z",
-      "trace_id": ""
-    },
-    {
-      "duration_seconds": 0.386,
-      "message": "Workspace execution cycle finished",
-      "stage": "execute",
-      "status": "SUCCESS",
-      "strategy": "DEMAND_SUPPLY",
-      "symbol": "NIFTY",
-      "timestamp": "2026-04-02T20:45:00Z",
-      "trace_id": ""
-    },
-    {
-      "duration_seconds": 0.3547,
-      "message": "Workspace execution cycle finished",
-      "stage": "execute",
-      "status": "SUCCESS",
-      "strategy": "DEMAND_SUPPLY",
-      "symbol": "NIFTY",
-      "timestamp": "2026-04-02T20:45:01Z",
-      "trace_id": ""
-    },
-    {
-      "duration_seconds": 0.5187,
-      "message": "Workspace execution cycle finished",
-      "stage": "execute",
-      "status": "SUCCESS",
-      "strategy": "DEMAND_SUPPLY",
-      "symbol": "NIFTY",
-      "timestamp": "2026-04-02T20:45:02Z",
-      "trace_id": ""
-    },
-    {
-      "duration_seconds": 0.1371,
-      "message": "Outbox dispatch cycle completed",
-      "stage": "notify",
-      "status": "WARN",
-      "strategy": "",
-      "symbol": "",
-      "timestamp": "2026-04-02T20:45:11Z",
-      "trace_id": "outbox_dispatch"
-    },
-    {
-      "duration_seconds": 0.0,
-      "message": "Live market rows fetched",
-      "stage": "market_fetch",
-      "status": "SUCCESS",
-      "strategy": "BTST",
-      "symbol": "^NSEI",
-      "timestamp": "2026-04-02T20:45:21Z",
-      "trace_id": "^NSEI_BTST_1775162721"
-    },
-    {
-      "duration_seconds": 0.008,
-      "message": "Data prepared for indicators",
-      "stage": "indicator_calc",
-      "status": "SUCCESS",
-      "strategy": "BTST",
-      "symbol": "^NSEI",
-      "timestamp": "2026-04-02T20:45:21Z",
-      "trace_id": "^NSEI_BTST_1775162721"
-    },
-    {
-      "duration_seconds": 0.0,
-      "message": "Strategy workflow completed",
-      "stage": "zone_detection",
-      "status": "SUCCESS",
-      "strategy": "BTST",
-      "symbol": "^NSEI",
-      "timestamp": "2026-04-02T20:45:21Z",
-      "trace_id": "^NSEI_BTST_1775162721"
-    },
-    {
-      "duration_seconds": 0.0,
-      "message": "Trade rows built",
-      "stage": "trade_build",
-      "status": "SUCCESS",
-      "strategy": "BTST",
-      "symbol": "^NSEI",
-      "timestamp": "2026-04-02T20:45:21Z",
-      "trace_id": "^NSEI_BTST_1775162721"
-    },
-    {
-      "duration_seconds": 0.3804,
-      "message": "Workspace execution cycle finished",
-      "stage": "execute",
-      "status": "SUCCESS",
-      "strategy": "DEMAND_SUPPLY",
-      "symbol": "NIFTY",
-      "timestamp": "2026-04-02T21:07:01Z",
-      "trace_id": ""
-    },
     {
       "duration_seconds": 0.2554,
       "message": "Workspace execution cycle finished",
@@ -741,6 +591,216 @@
       "symbol": "^NSEI",
       "timestamp": "2026-04-02T21:20:39Z",
       "trace_id": "^NSEI_BTST_1775164838"
+    },
+    {
+      "duration_seconds": 0.0823,
+      "message": "execute_paper_trades completed",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "",
+      "symbol": "",
+      "timestamp": "2026-04-03T09:25:08Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.0559,
+      "message": "execute_paper_trades completed",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "",
+      "symbol": "",
+      "timestamp": "2026-04-03T09:25:08Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.0144,
+      "message": "execute_paper_trades completed",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "",
+      "symbol": "",
+      "timestamp": "2026-04-03T09:25:09Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.0322,
+      "message": "execute_paper_trades completed",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "",
+      "symbol": "",
+      "timestamp": "2026-04-03T09:26:56Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.0664,
+      "message": "execute_paper_trades completed",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "",
+      "symbol": "",
+      "timestamp": "2026-04-03T09:26:56Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.0326,
+      "message": "execute_paper_trades completed",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "",
+      "symbol": "",
+      "timestamp": "2026-04-03T09:26:56Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.0,
+      "message": "Live market rows fetched",
+      "stage": "market_fetch",
+      "status": "SUCCESS",
+      "strategy": "BTST",
+      "symbol": "^NSEI",
+      "timestamp": "2026-04-03T09:29:19Z",
+      "trace_id": "^NSEI_BTST_1775208559"
+    },
+    {
+      "duration_seconds": 0.0146,
+      "message": "Data prepared for indicators",
+      "stage": "indicator_calc",
+      "status": "SUCCESS",
+      "strategy": "BTST",
+      "symbol": "^NSEI",
+      "timestamp": "2026-04-03T09:29:19Z",
+      "trace_id": "^NSEI_BTST_1775208559"
+    },
+    {
+      "duration_seconds": 0.0,
+      "message": "Strategy workflow completed",
+      "stage": "zone_detection",
+      "status": "SUCCESS",
+      "strategy": "BTST",
+      "symbol": "^NSEI",
+      "timestamp": "2026-04-03T09:29:19Z",
+      "trace_id": "^NSEI_BTST_1775208559"
+    },
+    {
+      "duration_seconds": 0.0,
+      "message": "Trade rows built",
+      "stage": "trade_build",
+      "status": "SUCCESS",
+      "strategy": "BTST",
+      "symbol": "^NSEI",
+      "timestamp": "2026-04-03T09:29:19Z",
+      "trace_id": "^NSEI_BTST_1775208559"
+    },
+    {
+      "duration_seconds": 0.0,
+      "message": "Live market rows fetched",
+      "stage": "market_fetch",
+      "status": "SUCCESS",
+      "strategy": "BTST",
+      "symbol": "^NSEI",
+      "timestamp": "2026-04-03T09:29:20Z",
+      "trace_id": "^NSEI_BTST_1775208560"
+    },
+    {
+      "duration_seconds": 0.0154,
+      "message": "Data prepared for indicators",
+      "stage": "indicator_calc",
+      "status": "SUCCESS",
+      "strategy": "BTST",
+      "symbol": "^NSEI",
+      "timestamp": "2026-04-03T09:29:20Z",
+      "trace_id": "^NSEI_BTST_1775208560"
+    },
+    {
+      "duration_seconds": 0.0,
+      "message": "Strategy workflow completed",
+      "stage": "zone_detection",
+      "status": "SUCCESS",
+      "strategy": "BTST",
+      "symbol": "^NSEI",
+      "timestamp": "2026-04-03T09:29:20Z",
+      "trace_id": "^NSEI_BTST_1775208560"
+    },
+    {
+      "duration_seconds": 0.0,
+      "message": "Trade rows built",
+      "stage": "trade_build",
+      "status": "SUCCESS",
+      "strategy": "BTST",
+      "symbol": "^NSEI",
+      "timestamp": "2026-04-03T09:29:20Z",
+      "trace_id": "^NSEI_BTST_1775208560"
+    },
+    {
+      "duration_seconds": 0.4355,
+      "message": "Workspace execution cycle finished",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "DEMAND_SUPPLY",
+      "symbol": "NIFTY",
+      "timestamp": "2026-04-03T09:29:22Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.3876,
+      "message": "Workspace execution cycle finished",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "DEMAND_SUPPLY",
+      "symbol": "NIFTY",
+      "timestamp": "2026-04-03T09:29:23Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.3466,
+      "message": "Workspace execution cycle finished",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "DEMAND_SUPPLY",
+      "symbol": "NIFTY",
+      "timestamp": "2026-04-03T09:29:23Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.3249,
+      "message": "Workspace execution cycle finished",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "DEMAND_SUPPLY",
+      "symbol": "NIFTY",
+      "timestamp": "2026-04-03T09:29:24Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.3593,
+      "message": "Workspace execution cycle finished",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "DEMAND_SUPPLY",
+      "symbol": "NIFTY",
+      "timestamp": "2026-04-03T09:29:24Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.4521,
+      "message": "Workspace execution cycle finished",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "DEMAND_SUPPLY",
+      "symbol": "NIFTY",
+      "timestamp": "2026-04-03T09:29:25Z",
+      "trace_id": ""
+    },
+    {
+      "duration_seconds": 0.5,
+      "message": "Workspace execution cycle finished",
+      "stage": "execute",
+      "status": "SUCCESS",
+      "strategy": "DEMAND_SUPPLY",
+      "symbol": "NIFTY",
+      "timestamp": "2026-04-03T09:29:25Z",
+      "trace_id": ""
     }
   ],
   "stages": {
@@ -755,9 +815,9 @@
       "trace_id": ""
     },
     "execute": {
-      "duration_seconds": 0.477,
+      "duration_seconds": 0.5,
       "last_failure": "",
-      "last_success": "2026-04-02T21:20:20Z",
+      "last_success": "2026-04-03T09:29:25Z",
       "message": "Workspace execution cycle finished",
       "status": "SUCCESS",
       "strategy": "DEMAND_SUPPLY",
@@ -765,24 +825,24 @@
       "trace_id": ""
     },
     "indicator_calc": {
-      "duration_seconds": 0.0163,
+      "duration_seconds": 0.0154,
       "last_failure": "",
-      "last_success": "2026-04-02T21:20:38Z",
+      "last_success": "2026-04-03T09:29:20Z",
       "message": "Data prepared for indicators",
       "status": "SUCCESS",
       "strategy": "BTST",
       "symbol": "^NSEI",
-      "trace_id": "^NSEI_BTST_1775164838"
+      "trace_id": "^NSEI_BTST_1775208560"
     },
     "market_fetch": {
       "duration_seconds": 0.0,
       "last_failure": "",
-      "last_success": "2026-04-02T21:20:38Z",
+      "last_success": "2026-04-03T09:29:20Z",
       "message": "Live market rows fetched",
       "status": "SUCCESS",
       "strategy": "BTST",
       "symbol": "^NSEI",
-      "trace_id": "^NSEI_BTST_1775164838"
+      "trace_id": "^NSEI_BTST_1775208560"
     },
     "notify": {
       "duration_seconds": 0.119,
@@ -797,12 +857,12 @@
     "trade_build": {
       "duration_seconds": 0.0,
       "last_failure": "",
-      "last_success": "2026-04-02T21:20:39Z",
+      "last_success": "2026-04-03T09:29:20Z",
       "message": "Trade rows built",
       "status": "SUCCESS",
       "strategy": "BTST",
       "symbol": "^NSEI",
-      "trace_id": "^NSEI_BTST_1775164838"
+      "trace_id": "^NSEI_BTST_1775208560"
     },
     "validation": {
       "duration_seconds": 0.0,
@@ -817,13 +877,13 @@
     "zone_detection": {
       "duration_seconds": 0.0,
       "last_failure": "",
-      "last_success": "2026-04-02T21:20:39Z",
+      "last_success": "2026-04-03T09:29:20Z",
       "message": "Strategy workflow completed",
       "status": "SUCCESS",
       "strategy": "BTST",
       "symbol": "^NSEI",
-      "trace_id": "^NSEI_BTST_1775164838"
+      "trace_id": "^NSEI_BTST_1775208560"
     }
   },
-  "updated_at": "2026-04-02T21:20:39Z"
+  "updated_at": "2026-04-03T09:29:25Z"
 }

@@ -167,15 +167,20 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def resolve_auto_run_execution_type(requested_execution: str) -> tuple[str, str]:
+    requested = str(requested_execution or 'PAPER').strip().upper()
+    if requested == 'NONE':
+        return 'NONE', 'Execution disabled for auto-run.'
+    if requested == 'LIVE':
+        return 'PAPER', 'Auto-run forced to PAPER mode. Live entry and exit are disabled for this entrypoint.'
+    return 'PAPER', 'Auto-run is operating in PAPER mode for entry and exit handling.'
+
+
 def main() -> None:
     args = parse_args()
 
     requested_execution = str(args.execution_type or 'PAPER').strip().upper()
-    execution_type = requested_execution
-    execution_note = ''
-
-    if requested_execution == 'LIVE':
-        execution_note = 'Live execution enabled for auto-run when Dhan credentials and security map are configured.'
+    execution_type, execution_note = resolve_auto_run_execution_type(requested_execution)
 
     backtest_args = argparse.Namespace(
         symbol=args.symbol,
@@ -278,5 +283,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
 

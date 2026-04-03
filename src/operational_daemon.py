@@ -109,41 +109,26 @@ def execute_trading_cycle(config: RuntimeConfig) -> dict[str, Any]:
     write_rows(paths.trades_csv, trades)
 
     candidates = prepare_candidates_for_execution(daemon.strategy, symbol, candles, trades)
-    if broker_config.mode == 'LIVE':
-        execution_result = execute_candidates(
-            candidates,
-            paths.executed_trades_csv,
-            execution_mode='LIVE',
-            broker_name='DHAN',
-            live_enabled=broker_config.live_enabled,
-            max_trades_per_day=broker_config.max_trades_per_day,
-            max_daily_loss=broker_config.max_daily_loss or None,
-            symbol_allowlist=list(broker_config.symbol_allowlist),
-            max_order_quantity=broker_config.max_order_quantity or None,
-            max_order_value=broker_config.max_order_value or None,
-            order_history_path=paths.order_history_csv,
-        )
-    else:
-        execution_result = execute_candidates(
-            candidates,
-            paths.executed_trades_csv,
-            execution_mode='PAPER',
-            max_trades_per_day=broker_config.max_trades_per_day,
-            max_daily_loss=broker_config.max_daily_loss or None,
-            order_history_path=paths.order_history_csv,
-        )
-        close_paper_trades(
-            paths.executed_trades_csv,
-            candles.to_dict(orient='records'),
-            max_hold_minutes=60,
-        )
-        summarize_trade_log(
-            paths.executed_trades_csv,
-            capital=float(daemon.capital),
-            strategy_name='PAPER_EXECUTION',
-            summary_output=paths.data_dir / 'paper_trade_summary.csv',
-            validation_output=paths.data_dir / 'paper_trade_validation.csv',
-        )
+    execution_result = execute_candidates(
+        candidates,
+        paths.executed_trades_csv,
+        execution_mode='PAPER',
+        max_trades_per_day=broker_config.max_trades_per_day,
+        max_daily_loss=broker_config.max_daily_loss or None,
+        order_history_path=paths.order_history_csv,
+    )
+    close_paper_trades(
+        paths.executed_trades_csv,
+        candles.to_dict(orient='records'),
+        max_hold_minutes=60,
+    )
+    summarize_trade_log(
+        paths.executed_trades_csv,
+        capital=float(daemon.capital),
+        strategy_name='PAPER_EXECUTION',
+        summary_output=paths.data_dir / 'paper_trade_summary.csv',
+        validation_output=paths.data_dir / 'paper_trade_validation.csv',
+    )
 
     backtest_summary: dict[str, Any] = {}
     if daemon.run_backtest:
@@ -231,7 +216,7 @@ def main() -> None:
     for target in [paths.data_dir, paths.logs_dir]:
         target.mkdir(parents=True, exist_ok=True)
 
-    _append_text_log(paths.app_log, f'Daemon starting environment={config.environment} broker_mode={config.broker.mode}')
+    _append_text_log(paths.app_log, f'Daemon starting environment={config.environment} broker_mode=PAPER_FORCED')
     while True:
         try:
             execute_trading_cycle(config)

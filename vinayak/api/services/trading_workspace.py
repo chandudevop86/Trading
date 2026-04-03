@@ -347,6 +347,38 @@ def _update_observability_metrics_from_run(rows: list[dict[str, Any]], candles: 
     set_metric('execution_success_rate', round(float(execution.get('execution_success_rate', 0.0)), 4))
     set_metric('validation_pass_rate', round(float(validation.get('validation_pass_rate', 0.0)), 4))
     set_metric('high_quality_setup_rate', round(float(validation.get('high_quality_setup_rate', 0.0)), 4))
+
+def refresh_market_data_snapshot(
+    *,
+    symbol: str,
+    interval: str,
+    period: str,
+    security_map_path: str = 'data/dhan_security_map.csv',
+) -> dict[str, Any]:
+    live_rows = fetch_live_ohlcv(
+        symbol=symbol,
+        interval=interval,
+        period=period,
+        provider='DHAN',
+        security_map_path=security_map_path,
+        force_refresh=True,
+    )
+    candles_df = prepare_trading_data(pd.DataFrame(live_rows))
+    _update_observability_metrics_from_run([], candles_df)
+    normalized_rows = _normalize_rows(live_rows)
+    return {
+        'symbol': symbol,
+        'interval': interval,
+        'period': period,
+        'candles': normalized_rows,
+        'candle_count': len(normalized_rows),
+        'data_status': {
+            **_data_status(candles_df),
+            'provider': str((live_rows[-1] if live_rows else {}).get('provider', '') or ''),
+            'source': str((live_rows[-1] if live_rows else {}).get('source', '') or ''),
+            'latest_interval': str((live_rows[-1] if live_rows else {}).get('interval', interval) or interval),
+        },
+    }
 def run_live_trading_analysis(
     *,
     symbol: str,
@@ -561,6 +593,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

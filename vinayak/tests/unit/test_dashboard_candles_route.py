@@ -52,6 +52,39 @@ def test_dashboard_candles_route_returns_live_rows(monkeypatch) -> None:
     assert captured['force_refresh'] is True
 
 
+
+def test_dashboard_market_heartbeat_refreshes_snapshot(monkeypatch) -> None:
+    _login_admin()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        dashboard_route,
+        'refresh_market_data_snapshot',
+        lambda **kwargs: captured.update(kwargs) or {
+            'symbol': kwargs['symbol'],
+            'interval': kwargs['interval'],
+            'period': kwargs['period'],
+            'candles': [],
+            'candle_count': 0,
+            'data_status': {
+                'status': 'VALID',
+                'provider': 'DHAN',
+                'source': 'DHAN_HISTORICAL',
+                'latest_timestamp': '2026-04-03 09:20:00',
+            },
+        },
+    )
+
+    response = client.get('/dashboard/market-heartbeat?symbol=^NSEI&interval=5m&period=1d')
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['data_status']['provider'] == 'DHAN'
+    assert body['data_status']['source'] == 'DHAN_HISTORICAL'
+    assert captured['symbol'] == '^NSEI'
+    assert captured['interval'] == '5m'
+    assert captured['period'] == '1d'
+
 def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> None:
     _login_admin()
     captured: dict[str, object] = {}
@@ -177,6 +210,7 @@ def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> N
     assert captured['max_portfolio_exposure_pct'] == 35
     assert captured['max_open_risk_pct'] == 5
     assert captured['kill_switch_enabled'] is True
+
 
 
 

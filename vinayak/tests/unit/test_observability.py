@@ -196,3 +196,4 @@ def test_dashboard_spec_outputs_are_readable() -> None:
     assert any(panel['title'] == 'Recent Failures' for panel in grafana['panels'])
     assert '/dashboard/observability' in html
     assert 'Latest Market Data' in html
+

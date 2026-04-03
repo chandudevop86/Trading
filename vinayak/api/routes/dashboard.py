@@ -19,7 +19,7 @@ from vinayak.api.schemas.signal import (
 from vinayak.api.schemas.strategy import LiveAnalysisRequest
 from vinayak.api.services.dashboard_summary import DashboardSummaryService
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
-from vinayak.api.services.trading_workspace import run_live_trading_analysis
+from vinayak.api.services.trading_workspace import refresh_market_data_snapshot, run_live_trading_analysis
 from vinayak.observability.observability_health import build_observability_dashboard_payload
 
 
@@ -35,6 +35,15 @@ def get_dashboard_summary(db: Session = Depends(get_db)) -> DashboardSummaryResp
 @router.get('/observability')
 def get_observability_dashboard() -> dict:
     return build_observability_dashboard_payload()
+
+
+@router.get('/market-heartbeat')
+def get_market_heartbeat(
+    symbol: str = Query(default='^NSEI', min_length=1),
+    interval: str = Query(default='5m', min_length=1),
+    period: str = Query(default='1d', min_length=1),
+) -> dict:
+    return refresh_market_data_snapshot(symbol=symbol, interval=interval, period=period)
 
 
 @router.get('/candles', response_model=LiveOhlcvResponse)
@@ -119,6 +128,7 @@ def post_live_analysis(request: LiveAnalysisRequest, db: Session = Depends(get_d
             summary_report=ReportArtifactLocation(**result['report_artifacts']['summary_report']),
         ),
     )
+
 
 
 

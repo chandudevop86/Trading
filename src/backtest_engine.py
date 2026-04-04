@@ -963,9 +963,9 @@ def run_backtest(df: Any, strategy_func: Callable[..., list[dict[str, object]]],
     summary['invalid_trade_count'] = int(summary['malformed_trade_count'])
     summary['duplicate_controls_enforced'] = 'YES' if int(cfg.duplicate_cooldown_minutes) > 0 else 'NO'
     summary['cooldown_controls_enforced'] = 'YES' if int(cfg.duplicate_cooldown_minutes) > 0 else 'NO'
+    summary = _merge_shared_validation(summary, closed_trades, cfg.strategy_name)
     validation = _validation_report(summary, cfg)
     summary.update(validation)
-    summary = _merge_shared_validation(summary, closed_trades, cfg.strategy_name)
     write_rows(cfg.summary_output, [summary])
     write_rows(cfg.validation_output, [validation])
     return summary
@@ -1014,9 +1014,9 @@ def summarize_trade_log(
     summary['duplicate_controls_enforced'] = 'YES' if enforced else 'NO'
     summary['cooldown_controls_enforced'] = 'YES' if enforced else 'NO'
     summary['market_session'] = '09:15-15:30'
+    summary = _merge_shared_validation(summary, closed_rows, strategy_name)
     validation_row = _validation_report(summary, cfg)
     summary.update(validation_row)
-    summary = _merge_shared_validation(summary, closed_rows, strategy_name)
     write_rows(summary_output, [summary])
     write_rows(validation_output, [validation_row])
     return summary

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,14 +30,25 @@ class GuardResult:
     reasons: list[str]
     metrics: dict[str, Any]
 
-
 def _parse_time(value: str) -> datetime.time:
     return datetime.strptime(value, "%H:%M").time()
 
-
 def check_all_guards(candidate: dict[str, Any], state: TradingState, config: GuardConfig | None = None) -> GuardResult:
     cfg = config or GuardConfig()
-    ok, contract_reasons, normalized = validate_candidate_contract(candidate)
+    raw_candidate = dict(candidate)
+    normalized = normalize_candidate_contract(raw_candidate)
+    legacy_compatible = (
+        str(normalized.get("side", "") or "").upper() in {"BUY", "SELL"}
+        and str(normalized.get("timestamp", "") or "").strip() != ""
+        and float(normalized.get("entry", 0.0) or 0.0) > 0
+        and float(normalized.get("stop_loss", 0.0) or 0.0) > 0
+        and float(normalized.get("target", 0.0) or 0.0) > 0
+        and int(float(normalized.get("quantity", 0) or 0)) > 0
+    )
+    if legacy_compatible:
+        ok, contract_reasons, _ = validate_candidate_contract(normalized)
+    else:
+        ok, contract_reasons, _ = validate_candidate_contract(raw_candidate)
     reasons: list[str] = []
     metrics: dict[str, Any] = {
         "contract_valid": ok,
@@ -48,11 +59,12 @@ def check_all_guards(candidate: dict[str, Any], state: TradingState, config: Gua
     }
     if not ok:
         reasons.extend(contract_reasons)
-    if str(normalized.get("validation_status", "FAIL") or "FAIL").upper() != "PASS":
+    validation_status = str(normalized.get("validation_status", "PENDING") or "PENDING").upper()
+    if validation_status == "FAIL":
         reasons.append("VALIDATION_NOT_PASS")
-    if not bool(normalized.get("execution_allowed", False)):
+    if validation_status == "PASS" and not bool(normalized.get("execution_allowed", False)):
         reasons.append("EXECUTION_NOT_ALLOWED")
-    if not str(normalized.get("zone_id", "") or "").strip():
+    if validation_status == "PASS" and not str(raw_candidate.get("zone_id", normalized.get("zone_id", "")) or "").strip():
         reasons.append("MISSING_ZONE_ID")
     if state.is_duplicate_zone(normalized):
         reasons.append("DUPLICATE_ZONE")
@@ -68,11 +80,11 @@ def check_all_guards(candidate: dict[str, Any], state: TradingState, config: Gua
     if pd.isna(timestamp):
         reasons.append("INVALID_SESSION")
     else:
-        if getattr(timestamp, 'tzinfo', None) is None:
-            timestamp = pd.Timestamp(timestamp).tz_localize('UTC')
+        if getattr(timestamp, "tzinfo", None) is None:
+            timestamp = pd.Timestamp(timestamp).tz_localize(IST)
         else:
-            timestamp = pd.Timestamp(timestamp)
-        session_timestamp = timestamp.tz_convert(IST)
+            timestamp = pd.Timestamp(timestamp).tz_convert(IST)
+        session_timestamp = timestamp
         start = _parse_time(cfg.allowed_start_time)
         end = _parse_time(cfg.cutoff_time)
         if session_timestamp.time() < start or session_timestamp.time() > end:
@@ -105,4 +117,5 @@ def check_all_guards(candidate: dict[str, Any], state: TradingState, config: Gua
 
 
 __all__ = ["GuardConfig", "GuardResult", "check_all_guards"]
+
 

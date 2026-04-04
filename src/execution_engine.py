@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import csv
 import hashlib
@@ -508,16 +508,19 @@ def validate_candidate(candidate: dict[str, object]) -> tuple[bool, str, dict[st
 
     validation_status = str(normalized.get('validation_status', normalized.get('zone_validation_status', '')) or '').strip().upper()
     strategy_name = _normalize_text(normalized.get('strategy'))
-    zone_id = str(normalized.get('zone_id', '') or '').strip()
-    requires_zone_gate = bool(zone_id or validation_status or strategy_name == 'DEMAND_SUPPLY' or ('DEMAND' in strategy_name and 'SUPPLY' in strategy_name))
-    if validation_status and validation_status != 'PASS':
+    zone_id = str(candidate.get('zone_id', normalized.get('zone_id', '')) or '').strip()
+    requires_zone_gate = bool(
+        strategy_name == 'DEMAND_SUPPLY' or ('DEMAND' in strategy_name and 'SUPPLY' in strategy_name)
+    )
+    if validation_status == 'FAIL':
         return False, SKIP_REASON_VALIDATION_STATUS_FAIL, normalized
     if bool(normalized.get('setup_already_used', False)):
         return False, SKIP_REASON_DUPLICATE_ZONE_SETUP, normalized
-    if requires_zone_gate and not zone_id:
+    if requires_zone_gate and validation_status == 'PASS' and not zone_id:
         return False, SKIP_REASON_MISSING_ZONE_ID, normalized
-    if requires_zone_gate and 'execution_allowed' in normalized and not bool(normalized.get('execution_allowed')):
+    if requires_zone_gate and validation_status == 'PASS' and 'execution_allowed' in candidate and not bool(normalized.get('execution_allowed')):
         return False, SKIP_REASON_EXECUTION_GATE_BLOCKED, normalized
+    normalized['zone_id'] = zone_id or str(normalized.get('zone_id', '') or '')
 
     price = _price_value(normalized)
     if price <= 0:

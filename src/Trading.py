@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import sys
 import types
@@ -365,9 +365,9 @@ def _display_value(value: object) -> str:
         return ''
     if isinstance(value, bool):
         return 'YES' if value else 'NO'
-    if isinstance(value, int):
-        return str(value)
     if isinstance(value, float):
+        if pd.isna(value):
+            return ''
         return f'{value:.2f}' if value != int(value) else str(int(value))
     return str(value)
 

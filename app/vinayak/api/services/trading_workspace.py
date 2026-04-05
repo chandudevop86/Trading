@@ -26,7 +26,7 @@ from vinayak.legacy.market_data import load_legacy_security_map
 from vinayak.legacy.options import build_legacy_option_metrics_map, extract_legacy_option_records, fetch_legacy_option_chain, normalize_legacy_index_symbol
 from vinayak.api.services.report_storage import cache_json_artifact, store_json_report, store_text_report
 from vinayak.messaging.bus import build_message_bus
-from vinayak.messaging.topics import EVENT_ANALYSIS_COMPLETED, EVENT_NOTIFICATION_REQUESTED
+from vinayak.messaging.events import EVENT_ANALYSIS_COMPLETED, EVENT_NOTIFICATION_REQUESTED
 
 
 
@@ -682,6 +682,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

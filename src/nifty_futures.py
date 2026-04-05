@@ -6,6 +6,7 @@ from pathlib import Path
 from src.csv_io import write_csv_rows
 from src.nse_futures import extract_futures_records, fetch_futures_chain
 from src.pipeline import apply_rules, load_rules
+from src.legacy_scope import fail_deprecated_entrypoint
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,5 +45,6 @@ def run(symbol: str, snapshot_output: Path, rules_path: Path, scored_output: Pat
 
 
 if __name__ == "__main__":
+    fail_deprecated_entrypoint('src.nifty_futures')
     args = parse_args()
     run(args.symbol, args.snapshot_output, args.rules, args.scored_output)

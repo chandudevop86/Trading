@@ -6,7 +6,7 @@ from pathlib import Path
 from src.csv_io import write_csv_rows
 from src.nse_client import fetch_nifty50_rows
 from src.pipeline import apply_rules, load_rules
-from src.legacy_scope import warn_compatibility_entrypoint
+from src.legacy_scope import fail_deprecated_entrypoint
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,6 +43,6 @@ def run(snapshot_output: Path, rules_path: Path, scored_output: Path) -> None:
 
 
 if __name__ == "__main__":
-    warn_compatibility_entrypoint('src.nifty50')
+    fail_deprecated_entrypoint('src.nifty50')
     args = parse_args()
     run(args.snapshot_output, args.rules, args.scored_output)

@@ -7,13 +7,13 @@ Supported current-state legacy operator surface:
 - Batch/operator CLIs under active support: `src.auto_run`, `src.auto_backtest`, `src.breakout_bot`, `src.dhan_example`, `src.dhan_account`
 
 Compatibility-supported but not primary operator surface:
-- `src.nifty50` -> prefer `tools/run_auto_backtest.ps1` when the workflow is batch-oriented
-- `src.nifty_options` -> prefer `streamlit run src/Trading.py`
-- `src.nifty_futures` -> prefer `streamlit run src/Trading.py`
 - `src.btst_bot` -> prefer `py -3 -m src.auto_backtest`
 
 Deprecated legacy operator surface:
-- `src.main` -> use `py -3 -m src.nifty50`
+- `src.main` -> use `tools/run_auto_backtest.ps1`
+- `src.nifty50` -> use `tools/run_auto_backtest.ps1`
+- `src.nifty_options` -> use `streamlit run src/Trading.py`
+- `src.nifty_futures` -> use `streamlit run src/Trading.py`
 - `src.reconcile_live` -> use `py -3 -m src.auto_run`
 - `src.reconcile_positions` -> use `py -3 -m src.auto_run`
 

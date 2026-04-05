@@ -106,6 +106,10 @@ def test_report_contains_readiness_and_rejection_summary() -> None:
     assert "zone_rows" in report
     assert "trade_rows" in report
     assert "rejection_summary" in report
+    assert "rejection_analytics" in report
+    assert "by_reason" in report["rejection_analytics"]
+    assert "by_session" in report["rejection_analytics"]
+    assert "by_structure_type" in report["rejection_analytics"]
     assert "structure_metrics" in report
     assert "DBR" in report["structure_metrics"]
     assert "RBR" in report["structure_metrics"]

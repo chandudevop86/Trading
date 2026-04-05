@@ -15,7 +15,7 @@ class TestStrategyTuning(unittest.TestCase):
     def test_demand_supply_preset_targets_fewer_higher_quality_trades(self):
         preset = strategy_tuning_preset('Demand Supply')
         self.assertEqual(preset.duplicate_signal_cooldown_bars, 12)
-        self.assertEqual(preset.max_trades_per_day, 1)
+        self.assertEqual(preset.max_trades_per_day, 2)
         self.assertEqual(preset.min_trades, 100)
         self.assertEqual((preset.target_trades_low, preset.target_trades_high), (100, 160))
         self.assertEqual((preset.conservative_threshold, preset.balanced_threshold, preset.aggressive_threshold), (8.2, 6.8, 5.8))

@@ -192,9 +192,6 @@ def _validation_score_bucket(score: float) -> str:
     if score >= 5.0:
         return "5-6"
     return "<5"
-        return float(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def _parse_time(value: str) -> time:
@@ -627,7 +624,14 @@ def validate_supply_demand_trade(
         "risk_per_unit": round(risk_per_unit, 4),
         "rr_ratio": round(rr_ratio, 4),
         "rejection_strength": round(rejection_strength, 2),
-        "zone_score": round(zone.total_score, 2),`r`n        "zone_score_bucket": _zone_score_bucket(float(zone.total_score)),`r`n        "zone_selection_score": zone_selection_score,`r`n        "structure_type": str(zone.structure_type),`r`n        "session": str(row.get("session", "") or "UNKNOWN").upper(),`r`n        "structure_clarity": round(float(zone.structure_clarity_score), 2),`r`n        "strict_validation_score": int(score),`r`n        "validation_score_bucket": _validation_score_bucket(float(score)),
+        "zone_score": round(zone.total_score, 2),
+        "zone_score_bucket": _zone_score_bucket(float(zone.total_score)),
+        "zone_selection_score": zone_selection_score,
+        "structure_type": str(zone.structure_type),
+        "session": str(row.get("session", "") or "UNKNOWN").upper(),
+        "structure_clarity": round(float(zone.structure_clarity_score), 2),
+        "strict_validation_score": int(score),
+        "validation_score_bucket": _validation_score_bucket(float(score)),
         "fresh_zone": bool(retest["fresh_zone"]),
         "strong_move_away": strong_move_away,
         "clean_base": clean_base,

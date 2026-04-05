@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 
 from vinayak.execution.contracts import normalize_candidate_contract
 from vinayak.messaging.events import (
@@ -102,6 +102,10 @@ def test_strategy_signal_exposes_strict_trade_contract_fields() -> None:
     assert row['zone_id'] == 'ZONE-DBR-1'
     assert row['quantity'] == 12
     assert row['validation_score'] == 83.5
+    assert row['strict_validation_score'] == 0
+    assert row['rejection_reason'] == ''
+    assert row['zone_score_components'] == {}
+    assert row['validation_log']['strict_validation_score'] == 0
     assert row['broker'] == 'SIM'
     assert row['mode'] == 'PAPER'
     assert row['contract_version'] == 'strict_trade_signal_v2'
@@ -147,3 +151,31 @@ def test_validate_candidate_contract_requires_execution_fields() -> None:
     assert normalized['target_price'] == 104.25
 
 
+
+
+def test_normalize_candidate_contract_preserves_strict_validation_fields() -> None:
+    normalized = normalize_candidate_contract(
+        {
+            'symbol': '^NSEI',
+            'timestamp': '2026-04-02 09:20:00',
+            'strategy': 'Breakout',
+            'side': 'BUY',
+            'entry_price': 101.25,
+            'stop_loss': 99.75,
+            'target_price': 104.25,
+            'validation_status': 'FAIL',
+            'validation_score': 4.2,
+            'validation_reasons': ['weak_zone_score'],
+            'execution_allowed': False,
+            'strict_validation_score': 4,
+            'rejection_reason': 'weak_zone_score',
+            'zone_score_components': {'zone_score': 35.0},
+            'validation_log': {'strict_validation_score': 4, 'rejection_reason': 'weak_zone_score'},
+        },
+        timeframe='5m',
+    )
+
+    assert normalized['strict_validation_score'] == 4
+    assert normalized['rejection_reason'] == 'weak_zone_score'
+    assert normalized['zone_score_components']['zone_score'] == 35.0
+    assert normalized['validation_log']['strict_validation_score'] == 4

@@ -1,8 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
 from vinayak.metrics import run_full_metrics_engine
+from vinayak.metrics.utils import coerce_trade_records
 from vinayak.metrics.validation_metrics import compute_setup_quality_score
 
 
@@ -141,4 +142,59 @@ def test_readiness_report_fail_on_duplicates_and_health() -> None:
     result = run_full_metrics_engine(trades, candles=_candles(stale=True), health_snapshots=[_health(ok=False, error_message='broker down')])
     assert result['readiness']['overall_status'] == 'FAIL'
     assert 'stale_data_detected' in result['readiness']['failed_checks']
+
+
+
+def test_coerce_trade_records_backfills_strict_fields_for_legacy_rows() -> None:
+    frame = coerce_trade_records([
+        {
+            'trade_id': 'LEGACY-1',
+            'symbol': 'nifty',
+            'strategy_name': 'breakout',
+            'side': 'buy',
+            'entry_time': _NOW - timedelta(minutes=45),
+            'exit_time': _NOW - timedelta(minutes=30),
+            'entry_price': 100.0,
+            'exit_price': 101.5,
+            'stop_loss': 99.0,
+            'target_price': 103.0,
+            'quantity': 10,
+            'pnl': 15.0,
+            'validation_status': 'PASS',
+            'validation_score': 8.2,
+            'validation_reasons': '[]',
+            'zone_score': 82.0,
+            'freshness_score': 78.0,
+            'move_away_score': 80.0,
+            'rejection_strength': 74.0,
+            'structure_clarity': 77.0,
+        },
+        {
+            'trade_id': 'LEGACY-2',
+            'symbol': 'nifty',
+            'strategy_name': 'breakout',
+            'side': 'sell',
+            'entry_time': _NOW - timedelta(minutes=25),
+            'exit_time': _NOW - timedelta(minutes=10),
+            'entry_price': 101.0,
+            'exit_price': 102.0,
+            'stop_loss': 102.5,
+            'target_price': 99.0,
+            'quantity': 10,
+            'pnl': -10.0,
+            'validation_status': 'FAIL',
+            'validation_score': 4.4,
+            'validation_reasons': 'weak_zone_score, retest_not_confirmed',
+        },
+    ], deduplicate=False)
+
+    assert frame.loc[0, 'strict_validation_score'] == 8
+    assert frame.loc[0, 'rejection_reason'] == ''
+    assert frame.loc[0, 'execution_allowed'] is True
+    assert frame.loc[0, 'zone_score_components']['zone_score'] == 82.0
+    assert frame.loc[0, 'validation_log']['strict_validation_score'] == 8
+    assert frame.loc[1, 'strict_validation_score'] == 4
+    assert frame.loc[1, 'rejection_reason'] == 'weak_zone_score, retest_not_confirmed'
+    assert frame.loc[1, 'execution_allowed'] is False
+    assert frame.loc[1, 'validation_log']['rejection_reason'] == 'weak_zone_score, retest_not_confirmed'
 

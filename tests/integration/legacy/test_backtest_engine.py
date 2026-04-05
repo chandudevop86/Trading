@@ -343,3 +343,38 @@ if __name__ == '__main__':
 
 
 
+
+    def test_summarize_trade_log_exposes_phase3_clean_trade_fields(self):
+        rows = [
+            {
+                'strategy': 'PAPER_SAMPLE',
+                'trade_status': 'CLOSED',
+                'execution_status': 'CLOSED',
+                'entry_time': '2026-03-01 09:15:00',
+                'exit_time': '2026-03-01 09:20:00',
+                'pnl': 50.0,
+                'gross_pnl': 55.0,
+                'trading_cost': 5.0,
+                'rr_achieved': 1.2,
+                'score': 8.0,
+                'validation_status': 'PASS',
+                'rejection_reason': '',
+                'strict_validation_score': 8,
+            }
+        ]
+
+        with TemporaryDirectory() as td:
+            summary = summarize_trade_log(
+                rows,
+                capital=100000.0,
+                strategy_name='PAPER_SAMPLE',
+                summary_output=Path(td) / 'summary.csv',
+                validation_output=Path(td) / 'validation.csv',
+                validation=BacktestValidationConfig(min_trades=100, target_trades=150, max_trades=200),
+            )
+
+        self.assertEqual(summary['clean_trade_count'], 1)
+        self.assertEqual(summary['clean_trade_metrics_only'], 'YES')
+        self.assertIn('readiness_summary', summary)
+        self.assertIn('edge_proof_status', summary)
+        self.assertIn('promotion_status', summary)

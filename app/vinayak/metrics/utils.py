@@ -1,7 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+import ast
 import re
 
 import pandas as pd
@@ -43,6 +44,7 @@ HEALTH_ALIASES = {
 
 _BOOLEAN_TRUE = {'1', 'true', 'yes', 'y', 'pass', 'passed', 'ok'}
 _BOOLEAN_FALSE = {'0', 'false', 'no', 'n', 'fail', 'failed'}
+
 
 def _collapse_duplicate_columns(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.columns.is_unique:
@@ -155,6 +157,127 @@ def _coerce_frame(records: Any) -> pd.DataFrame:
     return pd.DataFrame(records or [])
 
 
+def _parse_list_like(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value or '').strip()
+    if not text:
+        return []
+    if text.startswith('[') and text.endswith(']'):
+        try:
+            parsed = ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            parsed = None
+        if isinstance(parsed, list):
+            return [str(item).strip() for item in parsed if str(item).strip()]
+    return [part.strip() for part in text.split(',') if part.strip()]
+
+
+def _parse_dict_like(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    text = str(value or '').strip()
+    if not text:
+        return {}
+    if text.startswith('{') and text.endswith('}'):
+        try:
+            parsed = ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            parsed = None
+        if isinstance(parsed, dict):
+            return dict(parsed)
+    return {}
+
+
+def _infer_strict_score(frame: pd.DataFrame) -> pd.Series:
+    existing = pd.to_numeric(frame.get('strict_validation_score', pd.Series([None] * len(frame), index=frame.index)), errors='coerce')
+    validation_score = pd.to_numeric(frame.get('validation_score', frame.get('score', pd.Series([None] * len(frame), index=frame.index))), errors='coerce')
+    validation_status = frame.get('validation_status', pd.Series([''] * len(frame), index=frame.index)).fillna('').astype(str).str.upper()
+    rejection_reason = frame.get('rejection_reason', pd.Series([''] * len(frame), index=frame.index)).fillna('').astype(str).str.strip()
+
+    inferred = existing.copy()
+    small_score = validation_score.where(validation_score.le(10.0))
+    large_score = (validation_score / 10.0).where(validation_score.gt(10.0))
+    inferred = inferred.fillna(small_score)
+    inferred = inferred.fillna(large_score)
+    inferred = inferred.where(inferred.notna(), 7.0)
+    inferred = inferred.where(~(validation_status.eq('FAIL') & rejection_reason.ne('')), inferred.clip(upper=6.0))
+    inferred = inferred.where(~(validation_status.eq('PASS') & rejection_reason.eq('')), inferred.clip(lower=7.0))
+    return inferred.fillna(0.0).round().astype(int)
+
+
+def _backfill_strict_trade_fields(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+
+    if 'validation_reasons' in frame.columns:
+        frame['validation_reasons'] = frame['validation_reasons'].apply(_parse_list_like)
+    else:
+        frame['validation_reasons'] = [[] for _ in range(len(frame))]
+
+    if 'rejection_reason' not in frame.columns:
+        frame['rejection_reason'] = ''
+    frame['rejection_reason'] = frame['rejection_reason'].fillna('').astype(str).str.strip()
+    if 'duplicate_reason' in frame.columns:
+        duplicate_reason = frame['duplicate_reason'].fillna('').astype(str).str.strip()
+        frame.loc[frame['rejection_reason'].eq('') & duplicate_reason.ne(''), 'rejection_reason'] = duplicate_reason
+    if 'validation_error' in frame.columns:
+        validation_error = frame['validation_error'].fillna('').astype(str).str.strip()
+        frame.loc[frame['rejection_reason'].eq('') & validation_error.ne(''), 'rejection_reason'] = validation_error
+    frame.loc[frame['rejection_reason'].eq(''), 'rejection_reason'] = frame.loc[frame['rejection_reason'].eq(''), 'validation_reasons'].apply(lambda value: ', '.join(value) if isinstance(value, list) else str(value or ''))
+
+    frame['strict_validation_score'] = _infer_strict_score(frame)
+
+    if 'zone_score_components' in frame.columns:
+        frame['zone_score_components'] = frame['zone_score_components'].apply(_parse_dict_like)
+    else:
+        frame['zone_score_components'] = [{} for _ in range(len(frame))]
+
+    component_columns = [
+        'zone_score',
+        'freshness_score',
+        'move_away_score',
+        'rejection_strength',
+        'structure_clarity',
+        'retest_score',
+        'validation_score',
+    ]
+    def _build_components(row: pd.Series) -> dict[str, Any]:
+        existing = dict(row.get('zone_score_components', {}) or {})
+        for column in component_columns:
+            value = row.get(column)
+            numeric = _safe_float(value, None)
+            if numeric is not None and column not in existing:
+                existing[column] = numeric
+        if 'strict_validation_score' not in existing:
+            existing['strict_validation_score'] = int(row.get('strict_validation_score', 0) or 0)
+        return existing
+    frame['zone_score_components'] = frame.apply(_build_components, axis=1)
+
+    if 'validation_log' in frame.columns:
+        frame['validation_log'] = frame['validation_log'].apply(_parse_dict_like)
+    else:
+        frame['validation_log'] = [{} for _ in range(len(frame))]
+
+    def _build_validation_log(row: pd.Series) -> dict[str, Any]:
+        existing = dict(row.get('validation_log', {}) or {})
+        existing.setdefault('rejection_reason', str(row.get('rejection_reason', '') or ''))
+        existing.setdefault('validation_reasons', list(row.get('validation_reasons', []) or []))
+        existing.setdefault('strict_validation_score', int(row.get('strict_validation_score', 0) or 0))
+        existing.setdefault('zone_score_components', dict(row.get('zone_score_components', {}) or {}))
+        return existing
+    frame['validation_log'] = frame.apply(_build_validation_log, axis=1)
+
+    if 'execution_allowed' not in frame.columns:
+        frame['execution_allowed'] = pd.Series([None] * len(frame), index=frame.index)
+    validation_status = frame.get('validation_status', pd.Series([''] * len(frame), index=frame.index)).fillna('').astype(str).str.upper()
+    frame['execution_allowed'] = frame['execution_allowed'].apply(_coerce_bool)
+    default_execution_allowed = validation_status.eq('PASS') & frame['rejection_reason'].eq('')
+    frame['execution_allowed'] = frame['execution_allowed'].where(frame['execution_allowed'].notna(), default_execution_allowed)
+    frame['execution_allowed'] = frame['execution_allowed'].fillna(False).astype(bool)
+    return frame
+
+
 def coerce_trade_records(records: Any, *, deduplicate: bool = True) -> pd.DataFrame:
     frame = _coerce_frame(records)
     if frame.empty:
@@ -163,7 +286,8 @@ def coerce_trade_records(records: Any, *, deduplicate: bool = True) -> pd.DataFr
             'stop_loss', 'target_price', 'quantity', 'pnl', 'gross_pnl', 'fees', 'slippage', 'status', 'execution_mode',
             'signal_time', 'execution_time', 'validation_passed', 'rejection_reason', 'zone_score', 'vwap_alignment',
             'adx_value', 'trend_ok', 'volatility_ok', 'chop_ok', 'duplicate_blocked', 'retest_confirmed',
-            'move_away_score', 'freshness_score', 'rejection_strength', 'structure_clarity'
+            'move_away_score', 'freshness_score', 'rejection_strength', 'structure_clarity', 'strict_validation_score',
+            'zone_score_components', 'validation_log', 'execution_allowed', 'validation_reasons'
         ])
     frame.columns = [normalize_column_name(col) for col in frame.columns]
     frame = _rename_columns(frame, TRADE_ALIASES)
@@ -171,9 +295,10 @@ def coerce_trade_records(records: Any, *, deduplicate: bool = True) -> pd.DataFr
     frame = _ensure_datetime(frame, ['entry_time', 'exit_time', 'signal_time', 'execution_time', 'timestamp'])
     frame = _ensure_numeric(frame, [
         'entry_price', 'exit_price', 'stop_loss', 'target_price', 'quantity', 'pnl', 'gross_pnl', 'fees', 'slippage',
-        'zone_score', 'adx_value', 'move_away_score', 'freshness_score', 'rejection_strength', 'structure_clarity'
+        'zone_score', 'adx_value', 'move_away_score', 'freshness_score', 'rejection_strength', 'structure_clarity',
+        'validation_score', 'strict_validation_score', 'retest_score'
     ])
-    frame = _ensure_boolean(frame, ['validation_passed', 'vwap_alignment', 'trend_ok', 'volatility_ok', 'chop_ok', 'duplicate_blocked', 'retest_confirmed'])
+    frame = _ensure_boolean(frame, ['validation_passed', 'vwap_alignment', 'trend_ok', 'volatility_ok', 'chop_ok', 'duplicate_blocked', 'retest_confirmed', 'execution_allowed'])
     if 'gross_pnl' not in frame.columns:
         frame['gross_pnl'] = frame.get('pnl')
     if 'pnl' not in frame.columns:
@@ -197,8 +322,7 @@ def coerce_trade_records(records: Any, *, deduplicate: bool = True) -> pd.DataFr
             frame['entry_time'] = frame['signal_time']
         else:
             frame['entry_time'] = pd.NaT
-    if 'rejection_reason' not in frame.columns and 'validation_reasons' in frame.columns:
-        frame['rejection_reason'] = frame['validation_reasons'].apply(lambda value: ', '.join(value) if isinstance(value, list) else str(value or ''))
+    frame = _backfill_strict_trade_fields(frame)
     frame['trade_id'] = frame['trade_id'].fillna('').astype(str)
     frame['symbol'] = frame['symbol'].fillna('UNKNOWN').astype(str).str.upper()
     frame['strategy'] = frame['strategy'].fillna('UNKNOWN').astype(str)
@@ -271,6 +395,5 @@ def closed_trades_only(trades: pd.DataFrame) -> pd.DataFrame:
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
-
 
 

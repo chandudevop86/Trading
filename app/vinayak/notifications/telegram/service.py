@@ -8,6 +8,19 @@ from vinayak.observability.observability_logger import log_event, log_exception
 from vinayak.observability.observability_metrics import increment_metric, record_stage, set_metric
 
 
+def _fallback_trade_summary(trades: list[dict[str, object]] | None = None) -> str:
+    rows = len(trades or [])
+    last = trades[-1] if trades else {}
+    return (
+        'Signal alert\n'
+        f"Rows: {rows}\n"
+        f"Last time: {last.get('timestamp', last.get('signal_time', 'N/A'))}\n"
+        f"Last side: {last.get('side', 'N/A')}\n"
+        f"Trade ID: {last.get('trade_id', 'N/A')}\n"
+        f"Zone ID: {last.get('zone_id', 'N/A')}"
+    )
+
+
 def build_trade_summary(trades: list[dict[str, object]]) -> str:
     try:
         if not trades:
@@ -129,13 +142,22 @@ def build_trade_summary(trades: list[dict[str, object]]) -> str:
         )
         return message
     except Exception as exc:
+        fallback = _fallback_trade_summary(trades)
         log_exception(
             component='telegram',
             event_name='build_trade_summary_failed',
             exc=exc,
             message='Failed generating trade summary',
+            context_json={'rows': len(trades or []), 'fallback_payload_size': len(fallback)},
         )
-        raise
+        log_event(
+            component='telegram',
+            event_name='build_trade_summary_fallback',
+            severity='WARNING',
+            message='Using fallback trade summary',
+            context_json={'rows': len(trades or []), 'payload_size': len(fallback)},
+        )
+        return fallback
 
 
 def send_telegram_message(token: str, chat_id: str, text: str) -> dict[str, Any]:

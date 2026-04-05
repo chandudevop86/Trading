@@ -308,13 +308,16 @@ def prepare_workspace_candidates(
     prepared: list[dict[str, Any]] = []
     for raw in signal_rows:
         candidate = _normalize_candidate(dict(raw), strategy=strategy, symbol=symbol)
-        if candidate["validation_status"] in {"", "PENDING"}:
-            validation = validate_trade(candidate, candles)
-            candidate["validation_status"] = str(validation.get("decision", "FAIL") or "FAIL").upper()
-            candidate["validation_score"] = round(_safe_float(validation.get("score", 0.0)), 2)
-            candidate["validation_reasons"] = [str(item) for item in list(validation.get("reasons", []) or []) if str(item).strip()]
-            candidate["execution_allowed"] = candidate["validation_status"] == "PASS"
-            candidate["validation_metrics"] = dict(validation.get("metrics", {}) or {})
+        validation = validate_trade(candidate, candles)
+        candidate["validation_status"] = str(validation.get("decision", "FAIL") or "FAIL").upper()
+        candidate["validation_score"] = round(_safe_float(validation.get("score", 0.0)), 2)
+        candidate["validation_reasons"] = [str(item) for item in list(validation.get("reasons", []) or []) if str(item).strip()]
+        candidate["execution_allowed"] = candidate["validation_status"] == "PASS" and not candidate["validation_reasons"]
+        candidate["validation_metrics"] = dict(validation.get("metrics", {}) or {})
+        candidate["strict_validation_score"] = int(_safe_float(candidate["validation_metrics"].get("strict_validation_score", candidate.get("strict_validation_score", 0))))
+        candidate["zone_score_components"] = dict(candidate["validation_metrics"])
+        candidate["rejection_reason"] = ", ".join(candidate["validation_reasons"])
+        candidate["validation_log"] = dict(validation.get("rejection_log", {}) or {})
         candidate["reason_codes"] = list(candidate.get("reason_codes", [])) if isinstance(candidate.get("reason_codes"), list) else []
         candidate["reason_codes"] = list(dict.fromkeys(candidate["reason_codes"] + candidate["validation_reasons"]))
         prepared.append(candidate)
@@ -536,6 +539,7 @@ __all__ = [
     'execute_workspace_candidates',
     'prepare_workspace_candidates',
 ]
+
 
 
 

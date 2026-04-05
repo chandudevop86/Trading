@@ -1,4 +1,5 @@
-from pathlib import Path
+﻿from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -57,6 +58,10 @@ def _candidate() -> dict[str, object]:
     }
 
 
+def _pass_validation() -> dict[str, object]:
+    return {"decision": "PASS", "score": 8.5, "reasons": [], "metrics": {}}
+
+
 def test_prepare_workspace_candidates_treats_false_string_as_blocked() -> None:
     rows = prepare_workspace_candidates(
         "DEMAND_SUPPLY",
@@ -72,18 +77,37 @@ def test_prepare_workspace_candidates_treats_false_string_as_blocked() -> None:
     assert rows[0]["execution_allowed"] is False
 
 
+def test_prepare_workspace_candidates_revalidates_prefilled_pass_payload() -> None:
+    with patch(
+        "vinayak.execution.gateway.validate_trade",
+        return_value={"decision": "FAIL", "score": 0.0, "reasons": ["forced_fail"], "metrics": {}},
+    ):
+        rows = prepare_workspace_candidates(
+            "DEMAND_SUPPLY",
+            "NIFTY",
+            _candles(),
+            [_candidate()],
+        )
+
+    assert len(rows) == 1
+    assert rows[0]["validation_status"] == "FAIL"
+    assert rows[0]["execution_allowed"] is False
+    assert rows[0]["validation_reasons"] == ["forced_fail"]
+
+
 def test_prepare_workspace_candidates_preserves_strict_pass_payload() -> None:
-    rows = prepare_workspace_candidates(
-        "DEMAND_SUPPLY",
-        "NIFTY",
-        _candles(),
-        [{
-            **_candidate(),
-            "timestamp": "2026-04-02 09:20:00",
-            "entry": 101.0,
-            "zone_id": "ZONE-1",
-        }],
-    )
+    with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+        rows = prepare_workspace_candidates(
+            "DEMAND_SUPPLY",
+            "NIFTY",
+            _candles(),
+            [{
+                **_candidate(),
+                "timestamp": "2026-04-02 09:20:00",
+                "entry": 101.0,
+                "zone_id": "ZONE-1",
+            }],
+        )
 
     assert len(rows) == 1
     assert rows[0]["validation_status"] == "PASS"
@@ -110,17 +134,18 @@ def test_execute_workspace_candidates_requires_db_session(tmp_path: Path) -> Non
 def test_execute_workspace_candidates_creates_reviewed_trade_and_executes(tmp_path: Path) -> None:
     session = _build_db_session(tmp_path)
     try:
-        candidates, result = execute_workspace_candidates(
-            "DEMAND_SUPPLY",
-            "NIFTY",
-            _candles(),
-            [_candidate()],
-            execution_mode="PAPER",
-            paper_log_path=str(tmp_path / "paper.csv"),
-            live_log_path=str(tmp_path / "live.csv"),
-            capital=100000,
-            db_session=session,
-        )
+        with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+            candidates, result = execute_workspace_candidates(
+                "DEMAND_SUPPLY",
+                "NIFTY",
+                _candles(),
+                [_candidate()],
+                execution_mode="PAPER",
+                paper_log_path=str(tmp_path / "paper.csv"),
+                live_log_path=str(tmp_path / "live.csv"),
+                capital=100000,
+                db_session=session,
+            )
 
         assert len(candidates) == 1
         assert result.executed_count == 1
@@ -130,20 +155,22 @@ def test_execute_workspace_candidates_creates_reviewed_trade_and_executes(tmp_pa
     finally:
         _cleanup_db_session(session)
 
+
 def test_execute_workspace_candidates_blocks_live_without_manual_review(tmp_path: Path) -> None:
     session = _build_db_session(tmp_path)
     try:
-        candidates, result = execute_workspace_candidates(
-            "DEMAND_SUPPLY",
-            "NIFTY",
-            _candles(),
-            [_candidate()],
-            execution_mode="LIVE",
-            paper_log_path=str(tmp_path / "paper.csv"),
-            live_log_path=str(tmp_path / "live.csv"),
-            capital=100000,
-            db_session=session,
-        )
+        with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+            candidates, result = execute_workspace_candidates(
+                "DEMAND_SUPPLY",
+                "NIFTY",
+                _candles(),
+                [_candidate()],
+                execution_mode="LIVE",
+                paper_log_path=str(tmp_path / "paper.csv"),
+                live_log_path=str(tmp_path / "live.csv"),
+                capital=100000,
+                db_session=session,
+            )
 
         assert len(candidates) == 1
         assert result.executed_count == 0
@@ -166,17 +193,18 @@ def test_execute_workspace_candidates_blocks_duplicate_trade(tmp_path: Path) -> 
             encoding="utf-8",
         )
 
-        candidates, result = execute_workspace_candidates(
-            "DEMAND_SUPPLY",
-            "NIFTY",
-            _candles(),
-            [_candidate()],
-            execution_mode="PAPER",
-            paper_log_path=str(paper_log),
-            live_log_path=str(tmp_path / "live.csv"),
-            capital=100000,
-            db_session=session,
-        )
+        with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+            candidates, result = execute_workspace_candidates(
+                "DEMAND_SUPPLY",
+                "NIFTY",
+                _candles(),
+                [_candidate()],
+                execution_mode="PAPER",
+                paper_log_path=str(paper_log),
+                live_log_path=str(tmp_path / "live.csv"),
+                capital=100000,
+                db_session=session,
+            )
 
         assert len(candidates) == 1
         assert result.blocked_count == 1
@@ -197,24 +225,24 @@ def test_execute_workspace_candidates_blocks_cooldown(tmp_path: Path) -> None:
             encoding="utf-8",
         )
 
-        _candidates, result = execute_workspace_candidates(
-            "DEMAND_SUPPLY",
-            "NIFTY",
-            _candles(),
-            [{**_candidate(), "timestamp": "2026-04-02 09:30:00"}],
-            execution_mode="PAPER",
-            paper_log_path=str(paper_log),
-            live_log_path=str(tmp_path / "live.csv"),
-            capital=100000,
-            db_session=session,
-        )
+        with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+            _candidates, result = execute_workspace_candidates(
+                "DEMAND_SUPPLY",
+                "NIFTY",
+                _candles(),
+                [{**_candidate(), "timestamp": "2026-04-02 09:30:00"}],
+                execution_mode="PAPER",
+                paper_log_path=str(paper_log),
+                live_log_path=str(tmp_path / "live.csv"),
+                capital=100000,
+                db_session=session,
+            )
 
         assert result.blocked_count == 1
         assert result.duplicate_count == 0
         assert "COOLDOWN_ACTIVE" in result.rows[0]["reason"]
     finally:
         _cleanup_db_session(session)
-
 
 
 def test_execute_workspace_candidates_blocks_when_active_trade_exists(tmp_path: Path) -> None:
@@ -227,37 +255,41 @@ def test_execute_workspace_candidates_blocks_when_active_trade_exists(tmp_path: 
             encoding="utf-8",
         )
 
-        _candidates, result = execute_workspace_candidates(
-            "DEMAND_SUPPLY",
-            "NIFTY",
-            _candles(),
-            [{**_candidate(), "timestamp": "2026-04-02 10:00:00"}],
-            execution_mode="PAPER",
-            paper_log_path=str(paper_log),
-            live_log_path=str(tmp_path / "live.csv"),
-            capital=100000,
-            db_session=session,
-        )
+        with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+            _candidates, result = execute_workspace_candidates(
+                "DEMAND_SUPPLY",
+                "NIFTY",
+                _candles(),
+                [{**_candidate(), "timestamp": "2026-04-02 10:00:00"}],
+                execution_mode="PAPER",
+                paper_log_path=str(paper_log),
+                live_log_path=str(tmp_path / "live.csv"),
+                capital=100000,
+                db_session=session,
+            )
 
         assert result.blocked_count == 1
         assert "ACTIVE_TRADE_EXISTS" in result.rows[0]["reason"]
     finally:
         _cleanup_db_session(session)
+
+
 def test_execute_workspace_candidates_blocks_kill_switch(tmp_path: Path) -> None:
     session = _build_db_session(tmp_path)
     try:
-        _candidates, result = execute_workspace_candidates(
-            "DEMAND_SUPPLY",
-            "NIFTY",
-            _candles(),
-            [_candidate()],
-            execution_mode="PAPER",
-            paper_log_path=str(tmp_path / "paper.csv"),
-            live_log_path=str(tmp_path / "live.csv"),
-            capital=100000,
-            kill_switch_enabled=True,
-            db_session=session,
-        )
+        with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+            _candidates, result = execute_workspace_candidates(
+                "DEMAND_SUPPLY",
+                "NIFTY",
+                _candles(),
+                [_candidate()],
+                execution_mode="PAPER",
+                paper_log_path=str(tmp_path / "paper.csv"),
+                live_log_path=str(tmp_path / "live.csv"),
+                capital=100000,
+                kill_switch_enabled=True,
+                db_session=session,
+            )
 
         assert result.blocked_count == 1
         assert "PORTFOLIO_KILL_SWITCH_ACTIVE" in result.rows[0]["reason"]
@@ -268,18 +300,19 @@ def test_execute_workspace_candidates_blocks_kill_switch(tmp_path: Path) -> None
 def test_execute_workspace_candidates_caps_quantity_for_position_value(tmp_path: Path) -> None:
     session = _build_db_session(tmp_path)
     try:
-        _candidates, result = execute_workspace_candidates(
-            "DEMAND_SUPPLY",
-            "NIFTY",
-            _candles(),
-            [_candidate()],
-            execution_mode="PAPER",
-            paper_log_path=str(tmp_path / "paper.csv"),
-            live_log_path=str(tmp_path / "live.csv"),
-            capital=100000,
-            max_position_value=500.0,
-            db_session=session,
-        )
+        with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+            _candidates, result = execute_workspace_candidates(
+                "DEMAND_SUPPLY",
+                "NIFTY",
+                _candles(),
+                [_candidate()],
+                execution_mode="PAPER",
+                paper_log_path=str(tmp_path / "paper.csv"),
+                live_log_path=str(tmp_path / "live.csv"),
+                capital=100000,
+                max_position_value=500.0,
+                db_session=session,
+            )
 
         assert result.executed_count == 1
         assert result.blocked_count == 0
@@ -289,23 +322,22 @@ def test_execute_workspace_candidates_caps_quantity_for_position_value(tmp_path:
         _cleanup_db_session(session)
 
 
-
-
 def test_execute_workspace_candidates_caps_quantity_for_per_trade_risk(tmp_path: Path) -> None:
     session = _build_db_session(tmp_path)
     try:
-        _candidates, result = execute_workspace_candidates(
-            "DEMAND_SUPPLY",
-            "NIFTY",
-            _candles(),
-            [_candidate()],
-            execution_mode="PAPER",
-            paper_log_path=str(tmp_path / "paper.csv"),
-            live_log_path=str(tmp_path / "live.csv"),
-            capital=100000,
-            per_trade_risk_pct=0.01,
-            db_session=session,
-        )
+        with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+            _candidates, result = execute_workspace_candidates(
+                "DEMAND_SUPPLY",
+                "NIFTY",
+                _candles(),
+                [_candidate()],
+                execution_mode="PAPER",
+                paper_log_path=str(tmp_path / "paper.csv"),
+                live_log_path=str(tmp_path / "live.csv"),
+                capital=100000,
+                per_trade_risk_pct=0.01,
+                db_session=session,
+            )
 
         assert result.executed_count == 1
         assert result.rows[0]["quantity"] == 6
@@ -313,3 +345,26 @@ def test_execute_workspace_candidates_caps_quantity_for_per_trade_risk(tmp_path:
     finally:
         _cleanup_db_session(session)
 
+
+
+def test_prepare_workspace_candidates_attaches_validation_log() -> None:
+    with patch(
+        "vinayak.execution.gateway.validate_trade",
+        return_value={
+            "decision": "FAIL",
+            "score": 4.0,
+            "reasons": ["weak_zone_score", "retest_not_confirmed"],
+            "metrics": {"strict_validation_score": 4, "zone_score": 35.0},
+            "rejection_log": {"rejection_reason": "weak_zone_score, retest_not_confirmed", "strict_validation_score": 4},
+        },
+    ):
+        rows = prepare_workspace_candidates(
+            "DEMAND_SUPPLY",
+            "NIFTY",
+            _candles(),
+            [_candidate()],
+        )
+
+    assert rows[0]["strict_validation_score"] == 4
+    assert rows[0]["rejection_reason"] == "weak_zone_score, retest_not_confirmed"
+    assert rows[0]["validation_log"]["strict_validation_score"] == 4

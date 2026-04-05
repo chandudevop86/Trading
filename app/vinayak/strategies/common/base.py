@@ -28,6 +28,19 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    lowered = str(value).strip().lower()
+    if lowered in {'1', 'true', 'yes', 'y', 'on', 'pass', 'passed'}:
+        return True
+    if lowered in {'0', 'false', 'no', 'n', 'off', 'fail', 'failed'}:
+        return False
+    return default
+
+
 @dataclass(slots=True)
 class StrategySignal:
     strategy_name: str
@@ -49,6 +62,10 @@ class StrategySignal:
     validation_score: float = 0.0
     validation_reasons: list[str] = field(default_factory=list)
     execution_allowed: bool = False
+    strict_validation_score: int = 0
+    rejection_reason: str = ''
+    zone_score_components: dict[str, Any] = field(default_factory=dict)
+    validation_log: dict[str, Any] = field(default_factory=dict)
     broker: str = ''
     mode: str = ''
     contract_version: str = STRICT_TRADE_SIGNAL_VERSION
@@ -89,9 +106,40 @@ class StrategySignal:
             reasons = [str(item).strip() for item in list(raw_reasons or []) if str(item).strip()]
         self.validation_reasons = list(dict.fromkeys(reasons))
         if 'execution_allowed' in metadata:
-            self.execution_allowed = bool(metadata.get('execution_allowed'))
+            self.execution_allowed = _coerce_bool(metadata.get('execution_allowed'))
         elif self.validation_status == 'PASS' and not self.validation_reasons:
             self.execution_allowed = True
+        else:
+            self.execution_allowed = False
+
+        self.strict_validation_score = _safe_int(
+            self.strict_validation_score if self.strict_validation_score else metadata.get('strict_validation_score', 0),
+            0,
+        )
+        self.rejection_reason = str(
+            self.rejection_reason
+            or metadata.get('rejection_reason')
+            or ', '.join(self.validation_reasons)
+            or ''
+        ).strip()
+        self.zone_score_components = dict(
+            self.zone_score_components
+            or metadata.get('zone_score_components')
+            or metadata.get('validation_metrics')
+            or {}
+        )
+        self.validation_log = dict(
+            self.validation_log
+            or metadata.get('validation_log')
+            or {}
+        )
+        if not self.validation_log:
+            self.validation_log = {
+                'rejection_reason': self.rejection_reason,
+                'validation_reasons': list(self.validation_reasons),
+                'strict_validation_score': self.strict_validation_score,
+            }
+
         if self.side not in _ACTIONABLE_SIDES:
             self.execution_allowed = False
         if not self.trade_id:
@@ -107,6 +155,10 @@ class StrategySignal:
         metadata.setdefault('validation_score', self.validation_score)
         metadata.setdefault('validation_reasons', list(self.validation_reasons))
         metadata.setdefault('execution_allowed', self.execution_allowed)
+        metadata.setdefault('strict_validation_score', self.strict_validation_score)
+        metadata.setdefault('rejection_reason', self.rejection_reason)
+        metadata.setdefault('zone_score_components', dict(self.zone_score_components))
+        metadata.setdefault('validation_log', dict(self.validation_log))
         metadata.setdefault('broker', self.broker)
         metadata.setdefault('mode', self.mode)
         metadata.setdefault('trade_id', self.trade_id)
@@ -154,6 +206,10 @@ class StrategySignal:
             'validation_score': self.validation_score,
             'validation_reasons': list(self.validation_reasons),
             'execution_allowed': self.execution_allowed,
+            'strict_validation_score': self.strict_validation_score,
+            'rejection_reason': self.rejection_reason,
+            'zone_score_components': dict(self.zone_score_components),
+            'validation_log': dict(self.validation_log),
             'broker': self.broker,
             'mode': self.mode,
             'contract_version': self.contract_version,

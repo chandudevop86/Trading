@@ -307,6 +307,11 @@ def _validation_summary_from_rows(rows: list[dict[str, Any]], strategy: str) -> 
         'readiness_reasons': readiness.get('reasons', []),
         'validation_pass_rate': readiness.get('validation_pass_rate', 0.0),
         'top_rejection_reasons': readiness.get('top_rejection_reasons', {}),
+        'clean_trade_metrics_only': readiness.get('clean_trade_metrics_only', False),
+        'clean_trade_count': readiness.get('clean_trade_count', 0),
+        'edge_proof_status': readiness.get('edge_proof_status', 'PAPER_ONLY'),
+        'readiness_summary': readiness.get('readiness_summary', ''),
+        'edge_report': readiness.get('edge_report', {}),
     }
 
 
@@ -542,22 +547,43 @@ def run_live_trading_analysis(
     telegram_error = ''
     telegram_payload: dict[str, Any] | None = None
     if send_telegram and signal_rows:
-        message = build_trade_summary(signal_rows)
-        message_bus.publish(
-            EVENT_NOTIFICATION_REQUESTED,
-            {
-                'channel': 'telegram',
-                'message': message,
-                'symbol': symbol,
-                'strategy': strategy,
-            },
-            source='live_analysis',
-        )
         try:
-            telegram_payload = send_telegram_message(telegram_token, telegram_chat_id, message)
-            telegram_sent = True
+            message = build_trade_summary(signal_rows)
+            message_bus.publish(
+                EVENT_NOTIFICATION_REQUESTED,
+                {
+                    'channel': 'telegram',
+                    'message': message,
+                    'symbol': symbol,
+                    'strategy': strategy,
+                },
+                source='live_analysis',
+            )
+            try:
+                telegram_payload = send_telegram_message(telegram_token, telegram_chat_id, message)
+                telegram_sent = True
+            except Exception as exc:
+                telegram_error = str(exc)
+                log_exception(
+                    component='trading_workspace',
+                    event_name='telegram_send_failed',
+                    exc=exc,
+                    symbol=symbol,
+                    strategy=strategy,
+                    message='Telegram delivery failed during live analysis',
+                    context_json={'message_preview': message[:200], 'signal_count': len(signal_rows)},
+                )
         except Exception as exc:
             telegram_error = str(exc)
+            log_exception(
+                component='trading_workspace',
+                event_name='telegram_summary_failed',
+                exc=exc,
+                symbol=symbol,
+                strategy=strategy,
+                message='Telegram summary generation failed during live analysis',
+                context_json={'signal_count': len(signal_rows)},
+            )
 
     requested_execution_mode = str(execution_type or 'NONE').upper()
     execution_mode, execution_note = _resolve_workspace_auto_execution_mode(requested_execution_mode, auto_execute)
@@ -655,6 +681,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

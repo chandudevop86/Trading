@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 import uuid
@@ -50,6 +50,10 @@ class StrictTradeCandidateDict(TypedDict, total=False):
     validation_score: float
     validation_reasons: list[str]
     execution_allowed: bool
+    strict_validation_score: int
+    rejection_reason: str
+    zone_score_components: dict[str, Any]
+    validation_log: dict[str, Any]
     zone_type: str
     rr_ratio: float
     vwap_alignment: bool
@@ -81,6 +85,10 @@ class StrictTradeCandidate:
     validation_score: float = 0.0
     validation_reasons: list[str] | None = None
     execution_allowed: bool = False
+    strict_validation_score: int = 0
+    rejection_reason: str = ''
+    zone_score_components: dict[str, Any] | None = None
+    validation_log: dict[str, Any] | None = None
     zone_type: str = ''
     rr_ratio: float = 0.0
     vwap_alignment: bool | None = None
@@ -214,6 +222,10 @@ def normalize_candidate_contract(
         'validation_score': round(_safe_float(raw.get('validation_score', raw.get('score', 0.0))), 2),
         'validation_reasons': [str(item) for item in validation_reasons if str(item).strip()],
         'execution_allowed': _coerce_execution_allowed(raw.get('execution_allowed', False), default=False),
+        'strict_validation_score': int(round(_safe_float(raw.get('strict_validation_score', 0)))),
+        'rejection_reason': str(raw.get('rejection_reason', '') or ''),
+        'zone_score_components': dict(raw.get('zone_score_components', raw.get('validation_metrics', {})) or {}),
+        'validation_log': dict(raw.get('validation_log', {}) or {}),
         'zone_type': str(raw.get('zone_type', '') or ''),
         'rr_ratio': round(rr_ratio, 4),
         'vwap_alignment': raw.get('vwap_alignment') if 'vwap_alignment' in raw else None,
@@ -245,6 +257,10 @@ def normalize_candidate_contract(
         'validation_score': normalized['validation_score'],
         'validation_reasons': list(normalized['validation_reasons']),
         'execution_allowed': _coerce_execution_allowed(normalized['execution_allowed'], default=False),
+        'strict_validation_score': int(round(_safe_float(normalized.get('strict_validation_score', 0)))),
+        'rejection_reason': str(normalized.get('rejection_reason', '') or ''),
+        'zone_score_components': dict(normalized.get('zone_score_components', normalized.get('validation_metrics', {})) or {}),
+        'validation_log': dict(normalized.get('validation_log', {}) or {}),
         'rr_ratio': round(rr_ratio, 4),
         'strategy': resolved_strategy,
         'signal_time': str(raw.get('signal_time') or resolved_timestamp),
@@ -313,4 +329,7 @@ __all__ = [
     'normalize_candidate_contract',
     'validate_candidate_contract',
 ]
+
+
+
 

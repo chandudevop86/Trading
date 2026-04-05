@@ -219,3 +219,23 @@ def test_dashboard_spec_outputs_are_readable() -> None:
     assert any(panel['title'] == 'Recent Failures' for panel in grafana['panels'])
     assert '/dashboard/observability' in html
     assert 'Latest Market Data' in html
+
+
+
+def test_event_worker_logs_notification_failure(monkeypatch) -> None:
+    logged: dict[str, object] = {}
+    monkeypatch.setenv('TELEGRAM_BOT_TOKEN', 'env-token')
+    monkeypatch.setenv('TELEGRAM_CHAT_ID', 'env-chat')
+    monkeypatch.setattr(event_worker, 'send_text_notification', lambda **kwargs: (_ for _ in ()).throw(RuntimeError('ssl boom')))
+    monkeypatch.setattr(event_worker, 'log_exception', lambda **kwargs: logged.update(kwargs) or {})
+
+    event_worker._handle_event(event_worker.EventEnvelope(
+        name='notification.requested',
+        payload={'message': 'hello', 'symbol': 'NIFTY', 'strategy': 'Demand Supply'},
+        emitted_at='2026-04-04T00:00:00Z',
+        source='test',
+    ))
+
+    assert logged['component'] == 'event_worker'
+    assert logged['event_name'] == 'notification_delivery_failed'
+    assert logged['symbol'] == 'NIFTY'

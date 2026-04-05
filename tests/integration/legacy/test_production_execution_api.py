@@ -423,3 +423,22 @@ if __name__ == "__main__":
 
 
 
+
+    def test_readiness_api_uses_clean_trades_only_for_edge_metrics(self):
+        trades = pd.DataFrame(
+            [
+                {"pnl": 100.0, "risk_per_unit": 1.0, "quantity": 50, "validation_status": "PASS", "execution_status": "CLOSED", "trade_status": "CLOSED", "exit_time": "2026-04-02 10:00:00", "rejection_reason": "", "strict_validation_score": 8},
+                {"pnl": 9999.0, "risk_per_unit": 1.0, "quantity": 50, "validation_status": "FAIL", "execution_status": "REJECTED", "trade_status": "REJECTED", "exit_time": "2026-04-02 10:15:00", "rejection_reason": "bad_rr", "strict_validation_score": 4},
+            ]
+        )
+        rejects = pd.DataFrame(
+            [
+                {"reasons": "bad_rr"},
+            ]
+        )
+        summary = evaluate_readiness(trades, rejects)
+        self.assertTrue(summary["clean_trade_metrics_only"])
+        self.assertEqual(summary["clean_trade_count"], 1)
+        self.assertEqual(summary["expectancy"], 100.0)
+        self.assertEqual(summary["edge_report"]["clean_trade_count"], 1)
+        self.assertEqual(summary["validation_failure_summary"]["bad_rr"], 1)

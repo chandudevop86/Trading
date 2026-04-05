@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
@@ -836,6 +836,11 @@ def _validation_report(summary: dict[str, object], cfg: BacktestConfig) -> dict[
         'duplicate_rejections': duplicate_rejections,
         'duplicate_trade_count': duplicate_rejections,
         'invalid_trade_count': invalid_trade_count,
+        'clean_trade_count': _safe_int(summary.get('clean_trades', total_trades)),
+        'clean_trade_metrics_only': 'YES',
+        'edge_proof_status': str(summary.get('go_live_status', summary.get('paper_readiness_status', 'PAPER_ONLY'))),
+        'readiness_summary': str(summary.get('paper_readiness_summary', '')),
+        'promotion_status': str(summary.get('promotion_status', 'RESEARCH_ONLY')),
         'validation_passed': deployment_ready,
         'deployment_ready': deployment_ready,
         'deployment_blockers': '; '.join(blockers),
@@ -1020,6 +1025,7 @@ def summarize_trade_log(
     write_rows(summary_output, [summary])
     write_rows(validation_output, [validation_row])
     return summary
+
 
 
 

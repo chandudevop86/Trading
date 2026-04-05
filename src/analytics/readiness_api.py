@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import Counter
 from typing import Any
@@ -34,12 +34,44 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _reason_count(value: Any) -> int:
+    if isinstance(value, list):
+        return sum(1 for item in value if str(item).strip())
+    if isinstance(value, str):
+        return sum(1 for item in value.split(",") if item.strip())
+    return 0
+
+
+def _clean_trade_frame(rows: Any) -> pd.DataFrame:
+    trades = _coerce_frame(rows)
+    if trades.empty:
+        return trades.copy()
+
+    exit_time = pd.to_datetime(trades.get("exit_time", pd.Series([None] * len(trades), index=trades.index)), errors="coerce", utc=True)
+    execution_status = trades.get("execution_status", pd.Series([""] * len(trades), index=trades.index)).fillna("").astype(str).str.upper()
+    trade_status = trades.get("trade_status", pd.Series([""] * len(trades), index=trades.index)).fillna("").astype(str).str.upper()
+    validation_status = trades.get("validation_status", pd.Series([""] * len(trades), index=trades.index)).fillna("").astype(str).str.upper()
+    rejection_reason = trades.get("rejection_reason", pd.Series([""] * len(trades), index=trades.index)).fillna("").astype(str).str.strip()
+    rejection_count = trades.get("validation_reasons", pd.Series([[]] * len(trades), index=trades.index)).apply(_reason_count)
+    duplicate_blocked = trades.get("duplicate_blocked", pd.Series([False] * len(trades), index=trades.index)).fillna(False).astype(bool)
+    strict_validation_score = pd.to_numeric(trades.get("strict_validation_score", pd.Series([None] * len(trades), index=trades.index)), errors="coerce")
+
+    closed_mask = exit_time.notna() | execution_status.isin(["CLOSED", "EXITED", "FILLED"]) | trade_status.isin(["CLOSED", "EXITED"])
+    validation_mask = validation_status.eq("PASS") | validation_status.eq("")
+    rejection_mask = rejection_reason.eq("") & rejection_count.eq(0)
+    strict_mask = strict_validation_score.isna() | strict_validation_score.ge(7)
+    execution_mask = ~execution_status.isin(["REJECTED", "BLOCKED", "ERROR", "CANCELLED"])
+
+    keep_mask = closed_mask & validation_mask & rejection_mask & strict_mask & execution_mask & (~duplicate_blocked)
+    return trades.loc[keep_mask].copy().reset_index(drop=True)
+
+
 def summarize_validation_failures(rejects_df: Any) -> dict[str, int]:
     frame = _coerce_frame(rejects_df)
     counter: Counter[str] = Counter()
     if frame.empty:
         return {}
-    for column in ("reasons", "validation_reasons", "reason_codes", "blocked_reason"):
+    for column in ("reasons", "validation_reasons", "reason_codes", "blocked_reason", "rejection_reason"):
         if column not in frame.columns:
             continue
         for value in frame[column].tolist():
@@ -54,8 +86,9 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
     cfg = {**DEFAULT_READINESS_THRESHOLDS, **dict(config or {})}
     trades = _coerce_frame(trades_df)
     rejects = _coerce_frame(rejects_df)
+    clean_trades = _clean_trade_frame(trades)
 
-    metrics = compute_trade_metrics(trades)
+    metrics = compute_trade_metrics(clean_trades)
     top_rejection_reasons = summarize_validation_failures(rejects)
     raw_verdict = evaluate_production_readiness(metrics)
 
@@ -64,14 +97,8 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
     if not trades.empty and "validation_status" in trades.columns:
         total_passed = int(len(trades[trades["validation_status"].astype(str).str.upper() == "PASS"]))
     else:
-        total_passed = int(len(trades))
-    if not trades.empty and "execution_status" in trades.columns:
-        total_executed = int(
-            len(trades[trades["execution_status"].astype(str).str.upper().isin(["EXECUTED", "FILLED", "SENT", "OPEN", "CLOSED"])])
-        )
-    else:
-        total_executed = int(len(trades))
-
+        total_passed = int(len(clean_trades))
+    total_executed = int(len(clean_trades))
     total_candidates = max(total_candidates, int(metrics.get("total_trades", 0)) + total_rejected)
     validation_pass_rate = round((total_passed / total_candidates * 100.0), 2) if total_candidates > 0 else 0.0
 
@@ -113,6 +140,14 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
         "duplicate_prevention_proven": bool(metrics.get("duplicate_prevention_proven", False)),
     }
 
+    edge_report = {
+        "clean_trade_count": int(len(clean_trades)),
+        "expectancy": metrics.get("expectancy", 0.0),
+        "profit_factor": metrics.get("profit_factor", 0.0),
+        "max_drawdown": metrics.get("max_drawdown", 0.0),
+        "win_rate": metrics.get("win_rate", 0.0),
+    }
+
     return {
         "verdict": verdict,
         "readiness_decision": verdict,
@@ -126,6 +161,7 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
             "total_passed": total_passed,
             "total_rejected": total_rejected,
             "total_executed": total_executed,
+            "clean_trade_count": int(len(clean_trades)),
         },
         "metrics": {
             "validation_pass_rate": validation_pass_rate,
@@ -135,6 +171,7 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
             "max_drawdown": metrics.get("max_drawdown", 0.0),
             "avg_r_multiple": metrics.get("avg_r_multiple", 0.0),
             "duplicate_prevention_proven": bool(metrics.get("duplicate_prevention_proven", False)),
+            "clean_trade_count": int(len(clean_trades)),
         },
         "top_rejection_reasons": top_rejection_reasons,
         "validation_failure_summary": top_rejection_reasons,
@@ -149,6 +186,11 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
         "max_drawdown": metrics.get("max_drawdown", 0.0),
         "avg_r_multiple": metrics.get("avg_r_multiple", 0.0),
         "duplicate_prevention_proven": bool(metrics.get("duplicate_prevention_proven", False)),
+        "clean_trade_count": int(len(clean_trades)),
+        "clean_trade_metrics_only": True,
+        "edge_proof_status": verdict,
+        "readiness_summary": f"Readiness is based on {len(clean_trades)} clean trades only; rejected candidates are tracked separately.",
+        "edge_report": edge_report,
     }
 
 

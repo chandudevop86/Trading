@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import os
@@ -52,6 +52,11 @@ def _validation_snapshot(path: Path) -> dict[str, object]:
         'readiness_reasons': readiness.get('reasons', []),
         'validation_pass_rate': readiness.get('validation_pass_rate', 0.0),
         'top_rejection_reasons': readiness.get('top_rejection_reasons', {}),
+        'clean_trade_metrics_only': readiness.get('clean_trade_metrics_only', False),
+        'clean_trade_count': readiness.get('clean_trade_count', 0),
+        'edge_proof_status': readiness.get('edge_proof_status', 'PAPER_ONLY'),
+        'readiness_summary': readiness.get('readiness_summary', ''),
+        'edge_report': readiness.get('edge_report', {}),
     }
 
 
@@ -87,4 +92,5 @@ class DashboardSummaryService:
             'recent_audit_failures': recent_audit_failures,
             'validation_summary': _validation_snapshot(DEFAULT_PAPER_LOG_PATH),
         }
+
 

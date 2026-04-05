@@ -8,6 +8,7 @@ from pathlib import Path
 from src.breakout_bot import Candle, add_intraday_vwap, load_candles
 from src.csv_io import read_csv_rows, write_csv_rows
 from src.trade_safety import calculate_net_pnl, daily_limit_reached
+from src.legacy_scope import warn_compatibility_entrypoint
 
 
 @dataclass(slots=True)
@@ -173,6 +174,7 @@ def run(
 
 
 if __name__ == '__main__':
+    warn_compatibility_entrypoint('src.btst_bot')
     args = parse_args()
     run(
         args.input,
@@ -185,3 +187,5 @@ if __name__ == '__main__':
         max_daily_loss=(args.max_daily_loss if args.max_daily_loss > 0 else None),
         max_trades_per_day=args.max_trades_per_day,
     )
+
+

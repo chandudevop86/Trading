@@ -1,9 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
 from src.execution_engine import reconcile_live_positions
+from src.legacy_scope import fail_deprecated_entrypoint
 
 
 def parse_args() -> argparse.Namespace:
@@ -26,4 +27,5 @@ def main() -> None:
 
 
 if __name__ == '__main__':
+    fail_deprecated_entrypoint('src.reconcile_positions')
     main()

@@ -7,8 +7,8 @@ from typing import Any
 
 import pandas as pd
 
-from vinayak.observability.observability_logger import log_event, log_exception
-from vinayak.observability.observability_metrics import increment_metric, record_stage, set_metric
+from src.observability.logging import log_event, log_exception
+from src.observability.metrics import increment_metric, record_stage, set_metric
 
 
 @dataclass(slots=True)
@@ -305,4 +305,5 @@ __all__ = [
     "normalize_trade_schema",
     "trade_unique_key",
 ]
+
 

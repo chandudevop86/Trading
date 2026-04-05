@@ -7,7 +7,7 @@ import pandas as pd
 from vinayak.observability.observability_logger import log_event, log_exception
 from vinayak.observability.observability_metrics import increment_metric, record_stage, set_metric
 from vinayak.data.cleaner import CleanerConfig, coerce_ohlcv
-from src.data_processing import REQUIRED_OHLCV_COLUMNS, load_and_process_ohlcv
+from vinayak.legacy.data_processing import REQUIRED_OHLCV_COLUMNS, load_legacy_ohlcv_processing
 
 
 def enrich_trading_data(df: Any, *, expected_interval_minutes: int = 5) -> pd.DataFrame:
@@ -20,7 +20,7 @@ def enrich_trading_data(df: Any, *, expected_interval_minutes: int = 5) -> pd.Da
             allow_vwap_compute=True,
         ),
     )
-        prepared, _ = load_and_process_ohlcv(
+        prepared, _ = load_legacy_ohlcv_processing(
             cleaned,
             include_derived=True,
             expected_interval_minutes=expected_interval_minutes,
@@ -49,7 +49,7 @@ def prepare_trading_data(df: Any, *, include_derived: bool = False) -> pd.DataFr
             allow_vwap_compute=bool(include_derived),
         ),
     )
-        prepared, _ = load_and_process_ohlcv(cleaned, include_derived=include_derived)
+        prepared, _ = load_legacy_ohlcv_processing(cleaned, include_derived=include_derived)
         prepared.attrs.update(dict(getattr(cleaned, 'attrs', {}) or {}))
         latest_ts = str(prepared.iloc[-1]['timestamp']) if not prepared.empty else ''
         set_metric('latest_data_timestamp', latest_ts)
@@ -82,4 +82,5 @@ def prepare_trading_data(df: Any, *, include_derived: bool = False) -> pd.DataFr
 
 
 __all__ = ["REQUIRED_OHLCV_COLUMNS", "enrich_trading_data", "prepare_trading_data"]
+
 

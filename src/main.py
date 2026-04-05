@@ -1,9 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
 from src.pipeline import run
+from src.legacy_scope import fail_deprecated_entrypoint
 
 
 def parse_args() -> argparse.Namespace:
@@ -15,5 +16,6 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
+    fail_deprecated_entrypoint('src.main')
     args = parse_args()
     run(args.input, args.rules, args.output)

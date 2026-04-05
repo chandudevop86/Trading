@@ -5,8 +5,8 @@ from typing import Any
 
 import pandas as pd
 
-from vinayak.observability.observability_logger import log_event, log_exception
-from vinayak.observability.observability_metrics import increment_metric, record_stage, set_metric
+from src.observability.logging import log_event, log_exception
+from src.observability.metrics import increment_metric, record_stage, set_metric
 from src.data.cleaner import CleanerConfig, OHLCVValidationError, coerce_ohlcv
 from src.strict_zone_validation import StrictValidationConfig, validate_zone_candidate
 
@@ -176,3 +176,4 @@ def validate_trade(setup: dict[str, Any], candles: pd.DataFrame, config: Validat
 
 
 __all__ = ["ValidationConfig", "validate_trade"]
+

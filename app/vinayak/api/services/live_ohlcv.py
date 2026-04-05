@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -8,16 +8,7 @@ import os
 import re
 
 from vinayak.cache.redis_client import RedisCache, build_cache_key
-
-try:
-    from src.live_ohlcv import fetch_live_ohlcv as canonical_fetch_live_ohlcv
-except Exception:  # pragma: no cover
-    canonical_fetch_live_ohlcv = None  # type: ignore
-
-try:
-    from src.dhan_api import load_security_map
-except Exception:  # pragma: no cover
-    load_security_map = None  # type: ignore
+from vinayak.legacy.market_data import fetch_legacy_live_ohlcv as canonical_fetch_live_ohlcv, load_legacy_security_map as load_security_map
 
 try:
     import yfinance as yf  # type: ignore
@@ -376,6 +367,8 @@ def write_csv(rows: list[dict[str, Any]], path: str | Path) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
 
 
 

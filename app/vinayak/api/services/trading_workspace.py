@@ -22,22 +22,12 @@ from vinayak.observability.observability_logger import log_event, log_exception
 from vinayak.observability.observability_metrics import get_observability_snapshot, record_stage, set_metric
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
 from vinayak.execution.gateway import execute_workspace_candidates
+from vinayak.legacy.market_data import load_legacy_security_map
+from vinayak.legacy.options import build_legacy_option_metrics_map, extract_legacy_option_records, fetch_legacy_option_chain, normalize_legacy_index_symbol
 from vinayak.api.services.report_storage import cache_json_artifact, store_json_report, store_text_report
 from vinayak.messaging.bus import build_message_bus
 from vinayak.messaging.topics import EVENT_ANALYSIS_COMPLETED, EVENT_NOTIFICATION_REQUESTED
 
-try:
-    from src.dhan_api import load_security_map
-except Exception:  # pragma: no cover
-    load_security_map = None  # type: ignore
-
-try:
-    from src.nse_option_chain import build_metrics_map, extract_option_records, fetch_option_chain, normalize_index_symbol
-except Exception:  # pragma: no cover
-    build_metrics_map = None  # type: ignore
-    extract_option_records = None  # type: ignore
-    fetch_option_chain = None  # type: ignore
-    normalize_index_symbol = None  # type: ignore
 
 
 if pd is None:  # pragma: no cover
@@ -164,10 +154,10 @@ def attach_option_metrics(rows: list[dict[str, object]], symbol: str, fetch_opti
 
     metrics_map: dict[tuple[int, str], dict[str, object]] = {}
     status = 'DISABLED'
-    if fetch_option_metrics and fetch_option_chain and extract_option_records and build_metrics_map and normalize_index_symbol:
+    if fetch_option_metrics and fetch_legacy_option_chain and extract_legacy_option_records and build_legacy_option_metrics_map and normalize_legacy_index_symbol:
         try:
-            payload = fetch_option_chain(normalize_index_symbol(symbol), timeout=10.0)
-            metrics_map = build_metrics_map(extract_option_records(payload))
+            payload = fetch_legacy_option_chain(normalize_legacy_index_symbol(symbol), timeout=10.0)
+            metrics_map = build_legacy_option_metrics_map(extract_legacy_option_records(payload))
             status = 'FETCH_OK'
         except Exception:
             metrics_map = {}
@@ -263,9 +253,9 @@ def _normalize_rows(rows: list[dict[str, object]]) -> list[dict[str, Any]]:
 
 def _resolve_live_execution_kwargs(security_map_path: str) -> dict[str, object]:
     security_map: dict[str, dict[str, str]] = {}
-    if load_security_map is not None:
+    if load_legacy_security_map is not None:
         try:
-            security_map = load_security_map(Path(str(security_map_path)))
+            security_map = load_legacy_security_map(Path(str(security_map_path)))
         except Exception:
             security_map = {}
     return {'broker_name': 'DHAN', 'security_map': security_map}
@@ -692,6 +682,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

@@ -4,8 +4,8 @@ import csv
 from pathlib import Path
 from typing import Iterable
 
-from vinayak.observability.observability_logger import log_event, log_exception
-from vinayak.observability.observability_metrics import increment_metric, set_metric
+from src.observability.logging import log_event, log_exception
+from src.observability.metrics import increment_metric, set_metric
 
 
 def _duplicate_count(rows: list[dict[str, str]]) -> int:
@@ -105,3 +105,4 @@ def write_csv_rows(output_path: Path, rows: Iterable[dict[str, object]]) -> None
             context_json={'path': str(output_path), 'rows': len(rows_list)},
         )
         raise
+

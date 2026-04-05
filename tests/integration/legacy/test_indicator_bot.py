@@ -1,7 +1,7 @@
 ﻿import unittest
 
 from src.breakout_bot import load_candles
-from src.indicator_bot import IndicatorConfig, build_indicator_summary, generate_indicator_rows
+from src.indicator_bot import IndicatorConfig, build_indicator_summary, generate_indicator_rows, generate_trades
 
 
 class TestIndicatorBot(unittest.TestCase):
@@ -60,6 +60,31 @@ class TestIndicatorBot(unittest.TestCase):
         out = generate_indicator_rows(candles, config=strict)
         self.assertTrue(any(r["market_signal"] in {"OVERBOUGHT", "BULLISH_TREND"} for r in out))
 
+    def test_generate_trades_emits_scored_indicator_setups(self):
+        rows = []
+        price = 100.0
+        for i in range(90):
+            rows.append(
+                {
+                    "timestamp": f"2026-03-03 {9 + ((15 + i * 5) // 60):02d}:{(15 + i * 5) % 60:02d}:00",
+                    "open": str(round(price, 2)),
+                    "high": str(round(price + 1.2, 2)),
+                    "low": str(round(price - 0.4, 2)),
+                    "close": str(round(price + 0.9, 2)),
+                    "volume": str(1000 + i * 25),
+                }
+            )
+            price += 0.45
+
+        candles = load_candles(rows)
+        trades = generate_trades(candles, capital=100000.0, risk_pct=0.01, rr_ratio=2.0, config=IndicatorConfig(mode='Aggressive', min_score_threshold=4.0, allow_reversal_signals=True, require_trend_alignment=False, duplicate_signal_cooldown_bars=1))
+
+        self.assertTrue(trades)
+        first = trades[0]
+        self.assertIn(first['score_bucket'], {'A', 'B', 'C', 'D'})
+        self.assertEqual(first['indicator_grade'], first['score_bucket'])
+        self.assertGreaterEqual(float(first['strict_validation_score']), 4.0)
+        self.assertEqual(first['validation_status'], 'PASS')
     def test_build_indicator_summary(self):
         summary = build_indicator_summary(
             [
@@ -82,3 +107,6 @@ class TestIndicatorBot(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+

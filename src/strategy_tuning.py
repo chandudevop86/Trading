@@ -54,11 +54,11 @@ STRATEGY_TUNING_PRESETS: dict[str, StrategyTuningPreset] = {
         conservative_threshold=8.2,
         balanced_threshold=6.8,
         aggressive_threshold=5.8,
-        duplicate_signal_cooldown_bars=18,
-        max_trades_per_day=1,
+        duplicate_signal_cooldown_bars=12,
+        max_trades_per_day=2,
         min_trades=100,
-        target_trades_low=120,
-        target_trades_high=180,
+        target_trades_low=100,
+        target_trades_high=160,
         min_win_rate=40.0,
         min_profit_factor=1.30,
         min_expectancy_per_trade=0.0,
@@ -297,4 +297,6 @@ def optimizer_report_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str, 
     for idx, row in enumerate(rows, start=1):
         row['optimizer_rank'] = idx
     return rows
+
+
 

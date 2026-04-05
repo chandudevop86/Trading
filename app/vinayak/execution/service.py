@@ -170,6 +170,31 @@ class ExecutionService:
             or ''
         )
 
+        service_block_reasons = self._service_block_reasons(
+            command,
+            mode=mode,
+            reviewed_trade=reviewed_trade,
+            signal=signal,
+        )
+        if service_block_reasons:
+            increment_metric('execution_blocked_total', 1)
+            self._log_blocked_execution(
+                reason='service_level_gate_blocked',
+                mode=mode,
+                broker=broker,
+                reviewed_trade_id=command.reviewed_trade_id,
+                signal_id=signal_id,
+                broker_reference=None,
+                symbol=trade_symbol,
+                strategy=trade_strategy,
+                trade_id=command.trade_id,
+                message='Execution blocked by service-level readiness or risk gates',
+                block_reasons=service_block_reasons,
+            )
+            raise ValueError(
+                'Execution blocked by service-level gates: ' + ', '.join(service_block_reasons)
+            )
+
         increment_metric('execution_attempt_total', 1)
         log_event(
             component='execution_service',
@@ -271,6 +296,20 @@ class ExecutionService:
                 executed_at=datetime.now(UTC),
                 broker_reference=None,
                 notes=f'Adapter failure before execution persistence: {exc}',
+            )
+            self.outbox.enqueue(
+                event_name=EVENT_TRADE_EXECUTED,
+                payload={
+                    'execution_id': record.id,
+                    'signal_id': signal_id,
+                    'reviewed_trade_id': command.reviewed_trade_id,
+                    'mode': mode,
+                    'broker': broker,
+                    'status': ExecutionStatus.FAILED,
+                    'broker_reference': None,
+                    'error': str(exc),
+                },
+                source='execution_service',
             )
             self.session.commit()
             self.session.refresh(record)
@@ -550,6 +589,38 @@ class ExecutionService:
 
         return result
 
+    def _service_block_reasons(
+        self,
+        command: ExecutionCreateCommand,
+        *,
+        mode: str,
+        reviewed_trade: ReviewedTradeRecord,
+        signal: Any | None,
+    ) -> list[str]:
+        metadata = dict(command.metadata or {})
+        trade_payload = {
+            'reviewed_trade_status': str(getattr(reviewed_trade, 'status', '') or command.reviewed_trade_status or ''),
+            'validation_status': str(command.validation_status or '').upper().strip(),
+            'execution_allowed': metadata.get('execution_allowed'),
+            'duplicate_reason': metadata.get('duplicate_reason', ''),
+            'setup_already_used': bool(metadata.get('setup_already_used')),
+        }
+        reasons = self.reviewed_trade_service.get_block_reasons(trade_payload, context=metadata)
+
+        if mode == 'LIVE':
+            system_status = str(metadata.get('system_status') or metadata.get('readiness_verdict') or '').upper().strip()
+            go_live_status = str(metadata.get('go_live_status') or metadata.get('edge_proof_status') or '').upper().strip()
+            if system_status != 'READY':
+                reasons.append('system_not_ready_for_live')
+            if go_live_status != 'LIVE_READY':
+                reasons.append('go_live_status_not_live_ready')
+
+        deduped: list[str] = []
+        for reason in reasons:
+            if reason and reason not in deduped:
+                deduped.append(reason)
+        return deduped
+
     def _normalize_mode(self, mode: str) -> str:
         normalized = str(mode or '').upper().strip()
         if normalized not in {'PAPER', 'LIVE'}:
@@ -788,6 +859,7 @@ __all__ = [
     'ExecutionService',
     'ExecutionStatus',
 ]
+
 
 
 

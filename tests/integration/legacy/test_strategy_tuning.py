@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 
 from src.strategy_tuning import apply_strategy_benchmark, optimizer_report_rows, strategy_tuning_preset
 
@@ -14,10 +14,10 @@ class TestStrategyTuning(unittest.TestCase):
 
     def test_demand_supply_preset_targets_fewer_higher_quality_trades(self):
         preset = strategy_tuning_preset('Demand Supply')
-        self.assertEqual(preset.duplicate_signal_cooldown_bars, 18)
+        self.assertEqual(preset.duplicate_signal_cooldown_bars, 12)
         self.assertEqual(preset.max_trades_per_day, 1)
         self.assertEqual(preset.min_trades, 100)
-        self.assertEqual((preset.target_trades_low, preset.target_trades_high), (120, 180))
+        self.assertEqual((preset.target_trades_low, preset.target_trades_high), (100, 160))
         self.assertEqual((preset.conservative_threshold, preset.balanced_threshold, preset.aggressive_threshold), (8.2, 6.8, 5.8))
 
     def test_amd_preset_targets_fewer_higher_quality_trades(self):
@@ -75,7 +75,7 @@ class TestStrategyTuning(unittest.TestCase):
         )
         self.assertEqual(failed['sample_window_passed'], 'NO')
         self.assertEqual(failed['deployment_ready'], 'NO')
-        self.assertIn('MAX_TRADES>180', failed['deployment_blockers'])
+        self.assertIn('MAX_TRADES>160', failed['deployment_blockers'])
     def test_optimizer_report_rows_orders_by_rank_score(self):
         rows = optimizer_report_rows(
             [
@@ -107,4 +107,6 @@ class TestStrategyTuning(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
 

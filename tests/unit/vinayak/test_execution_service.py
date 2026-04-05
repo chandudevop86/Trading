@@ -253,6 +253,7 @@ def test_live_execution_adapter_blocks_without_credentials(tmp_path: Path) -> No
                 reviewed_trade_id=reviewed_trade.id,
                 mode='LIVE',
                 broker='DHAN',
+                metadata={'system_status': 'READY', 'go_live_status': 'LIVE_READY'},
             )
         )
 
@@ -331,6 +332,7 @@ def test_live_execution_adapter_uses_real_dhan_shape_when_ready(tmp_path: Path) 
                     reviewed_trade_id=reviewed_trade.id,
                     mode='LIVE',
                     broker='DHAN',
+                    metadata={'system_status': 'READY', 'go_live_status': 'LIVE_READY'},
                 )
             )
 
@@ -1134,6 +1136,139 @@ def test_execution_service_persists_failed_claim_when_adapter_raises(tmp_path: P
         assert len(executions) == 1
         assert executions[0].status == 'FAILED'
         assert 'adapter exploded' in str(executions[0].notes or '')
+
+        with get_engine().connect() as conn:
+            event_names = [row[0] for row in conn.execute(text('select event_name from outbox_events order by id')).fetchall()]
+            payloads = [row[0] for row in conn.execute(text('select payload from outbox_events order by id')).fetchall()]
+        assert event_names == ['trade.execute.requested', 'trade.executed']
+        assert any('FAILED' in payload for payload in payloads)
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
+    reset_database_state()
+
+
+def test_live_execution_requires_ready_readiness_context(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_live_execution_requires_ready.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:15:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        reviewed_trade = ReviewedTradeRecord(
+            signal_id=signal.id,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            quantity=25,
+            lots=1,
+            status='APPROVED',
+        )
+        session.add(reviewed_trade)
+        session.commit()
+        session.refresh(reviewed_trade)
+
+        service = ExecutionService(session)
+        try:
+            service.create_execution(
+                ExecutionCreateCommand(
+                    reviewed_trade_id=reviewed_trade.id,
+                    mode='LIVE',
+                    broker='DHAN',
+                    metadata={'system_status': 'PAPER_ONLY', 'go_live_status': 'PAPER_ONLY'},
+                )
+            )
+            raise AssertionError('expected live readiness gate to block execution')
+        except ValueError as exc:
+            assert 'system_not_ready_for_live' in str(exc)
+            assert 'go_live_status_not_live_ready' in str(exc)
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    reset_settings_cache()
+    reset_database_state()
+
+
+def test_live_execution_blocks_when_kill_switch_context_is_active(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_live_execution_kill_switch.db'
+
+    import os
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    reset_settings_cache()
+    reset_database_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        signal = SignalRecord(
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            signal_time=datetime.fromisoformat('2026-03-20T09:15:00'),
+            status='NEW',
+        )
+        session.add(signal)
+        session.commit()
+        session.refresh(signal)
+
+        reviewed_trade = ReviewedTradeRecord(
+            signal_id=signal.id,
+            strategy_name='Breakout',
+            symbol='^NSEI',
+            side='BUY',
+            entry_price=100.0,
+            stop_loss=99.0,
+            target_price=102.0,
+            quantity=25,
+            lots=1,
+            status='APPROVED',
+        )
+        session.add(reviewed_trade)
+        session.commit()
+        session.refresh(reviewed_trade)
+
+        service = ExecutionService(session)
+        try:
+            service.create_execution(
+                ExecutionCreateCommand(
+                    reviewed_trade_id=reviewed_trade.id,
+                    mode='LIVE',
+                    broker='DHAN',
+                    metadata={
+                        'system_status': 'READY',
+                        'go_live_status': 'LIVE_READY',
+                        'kill_switch_enabled': True,
+                    },
+                )
+            )
+            raise AssertionError('expected kill switch gate to block execution')
+        except ValueError as exc:
+            assert 'kill_switch_active' in str(exc)
 
     os.environ.pop('VINAYAK_DATABASE_URL', None)
     reset_settings_cache()

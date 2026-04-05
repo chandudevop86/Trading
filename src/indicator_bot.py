@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,13 +20,15 @@ class IndicatorConfig:
     rsi_oversold: float = 30.0
     adx_trend_min: float = 20.0
     mode: str = 'Balanced'
-    duplicate_signal_cooldown_bars: int = 4
+    duplicate_signal_cooldown_bars: int = 12
+    min_score_threshold: float = 5.5
+    allow_reversal_signals: bool = False
+    require_trend_alignment: bool = True
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
 
     def __post_init__(self) -> None:
         self.scoring.mode = self.mode
-        self.scoring.thresholds = ScoreThresholds(conservative=6.0, balanced=4.0, aggressive=2.5)
-
+        self.scoring.thresholds = ScoreThresholds(conservative=6.5, balanced=5.5, aggressive=4.0)
 
 def _ema(values: list[float], period: int) -> list[float | None]:
     out: list[float | None] = [None] * len(values)
@@ -159,10 +161,6 @@ def _trend_strength(adx_val: float | None, adx_trend_min: float) -> str:
 def _market_signal(close: float, vwap: float, rsi_val: float | None, adx_val: float | None, macd_val: float | None, macd_signal: float | None, config: IndicatorConfig) -> str:
     if rsi_val is None or adx_val is None or macd_val is None or macd_signal is None:
         return 'INSUFFICIENT_DATA'
-    if rsi_val > config.rsi_overbought:
-        return 'OVERBOUGHT'
-    if rsi_val < config.rsi_oversold:
-        return 'OVERSOLD'
     bullish = close > vwap and macd_val > macd_signal and rsi_val >= 50
     bearish = close < vwap and macd_val < macd_signal and rsi_val <= 50
     if adx_val < config.adx_trend_min and 40 <= rsi_val <= 60:
@@ -171,6 +169,10 @@ def _market_signal(close: float, vwap: float, rsi_val: float | None, adx_val: fl
         return 'BULLISH_TREND'
     if bearish and adx_val >= config.adx_trend_min:
         return 'BEARISH_TREND'
+    if rsi_val > config.rsi_overbought:
+        return 'OVERBOUGHT'
+    if rsi_val < config.rsi_oversold:
+        return 'OVERSOLD'
     return 'NEUTRAL'
 
 
@@ -221,6 +223,16 @@ def build_indicator_summary(rows: list[dict[str, object]]) -> str:
     )
 
 
+def _score_bucket_label(score: float) -> str:
+    if score >= 8.0:
+        return 'A'
+    if score >= 7.0:
+        return 'B'
+    if score >= 6.0:
+        return 'C'
+    return 'D'
+
+
 def _score_side(row: dict[str, object], side: str, config: IndicatorConfig) -> tuple[float, dict[str, float], str] | None:
     close_price = float(row.get('close', 0.0) or 0.0)
     vwap_price = float(row.get('vwap', 0.0) or 0.0)
@@ -230,23 +242,33 @@ def _score_side(row: dict[str, object], side: str, config: IndicatorConfig) -> t
     macd_signal = float(row.get('macd_signal') or 0.0)
     hist = float(row.get('macd_hist') or 0.0)
     trend_strength = str(row.get('trend_strength', ''))
+    market_signal = str(row.get('market_signal', 'NEUTRAL') or 'NEUTRAL').upper()
+
+    if config.require_trend_alignment:
+        bullish_ok = market_signal == 'BULLISH_TREND' or (config.allow_reversal_signals and market_signal == 'OVERSOLD')
+        bearish_ok = market_signal == 'BEARISH_TREND' or (config.allow_reversal_signals and market_signal == 'OVERBOUGHT')
+        if side == 'BUY' and not bullish_ok:
+            return None
+        if side == 'SELL' and not bearish_ok:
+            return None
+
     score = weighted_score(
         {
             'trend': trend_strength in {'STRONG', 'VERY_STRONG', 'MODERATE'},
             'vwap': close_price >= vwap_price if side == 'BUY' else close_price <= vwap_price,
-            'rsi': (rsi_value >= 46.0 and rsi_value <= config.rsi_overbought + 8.0) if side == 'BUY' else (rsi_value <= 54.0 and rsi_value >= config.rsi_oversold - 8.0),
-            'adx': adx_value >= max(config.adx_trend_min - 3.0, 12.0),
-            'macd': (macd_value >= macd_signal and hist >= -0.08) if side == 'BUY' else (macd_value <= macd_signal and hist <= 0.08),
+            'rsi': (rsi_value >= 52.0 and rsi_value <= config.rsi_overbought + 4.0) if side == 'BUY' else (rsi_value <= 48.0 and rsi_value >= config.rsi_oversold - 4.0),
+            'adx': adx_value >= max(config.adx_trend_min, 18.0),
+            'macd': (macd_value >= macd_signal and hist >= 0.0) if side == 'BUY' else (macd_value <= macd_signal and hist <= 0.0),
             'retest': abs(close_price - vwap_price) <= max(abs(close_price) * 0.002, 0.2),
-            'reaction': abs(hist) >= 0.01,
+            'reaction': abs(hist) >= 0.02,
         },
         config.scoring,
     )
-    if not score.accepted:
+    required_score = max(float(config.min_score_threshold), float(score.threshold))
+    if not score.accepted or float(score.total) < required_score:
         return None
     reason = f'{side.lower()} indicator score={score.total:.2f}'
     return score.total, score.components, reason
-
 
 def generate_trades(
     df: Any,
@@ -304,6 +326,11 @@ def generate_trades(
                     'indicator_score': round(sum(components.get(key, 0.0) for key in ['vwap', 'rsi', 'adx', 'macd']), 2),
                     'zone_score': round(sum(components.get(key, 0.0) for key in ['retest', 'reaction']), 2),
                     'total_score': round(score_value, 2),
+                    'score_bucket': _score_bucket_label(float(score_value)),
+                    'indicator_grade': _score_bucket_label(float(score_value)),
+                    'score_components': dict(components),
+                    'strict_validation_score': int(round(float(score_value))),
+                    'validation_status': 'PASS',
                     'rejection_reason': '',
                     'market_signal': market_signal,
                     'rsi': row.get('rsi', ''),
@@ -325,4 +352,13 @@ def run(input_path: Path, output_path: Path, capital: float, risk_pct: float, rr
     trades = generate_trades(candles, capital=capital, risk_pct=risk_pct, rr_ratio=rr_ratio, config=config)
     write_csv_rows(output_path, trades)
     return trades
+
+
+
+
+
+
+
+
+
 

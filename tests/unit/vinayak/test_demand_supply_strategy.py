@@ -112,3 +112,4 @@ def test_report_contains_readiness_and_rejection_summary() -> None:
     assert "RBD" in report["structure_metrics"]
     assert "DBD" in report["structure_metrics"]
     assert "readiness_summary" in report
+

@@ -267,25 +267,14 @@ def _run_demand_supply_strategy(context: StrategyContext, dependencies: Strategy
 
 
 def _run_indicator_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
-    raw_rows = dependencies.indicator_row_generator(context.candle_rows, config=IndicatorConfig())
-    rows: list[dict[str, object]] = []
-    for row in raw_rows:
-        signal = str(row.get('market_signal', '')).upper()
-        side = 'BUY' if signal in {'BULLISH_TREND', 'OVERSOLD', 'BUY', 'LONG'} else 'SELL' if signal in {'BEARISH_TREND', 'OVERBOUGHT', 'SELL', 'SHORT'} else ''
-        if not side:
-            continue
-        item = dict(row)
-        item['side'] = side
-        item['entry'] = item.get('close', item.get('price', 0.0))
-        item['entry_price'] = item.get('entry')
-        item['target'] = item.get('entry')
-        item['target_price'] = item.get('entry')
-        item['stop_loss'] = item.get('entry')
-        item['score'] = 0.0
-        item['reason'] = str(item.get('market_signal', 'SIGNAL'))
-        rows.append(item)
-    return rows
-
+    configured_mode = str(context.mode or 'Balanced').strip() or 'Balanced'
+    return dependencies.indicator_trade_generator(
+        context.candle_rows,
+        capital=float(context.capital),
+        risk_pct=float(context.risk_pct) / 100.0,
+        rr_ratio=float(context.rr_ratio),
+        config=IndicatorConfig(mode=configured_mode),
+    )
 
 def _run_one_trade_strategy(context: StrategyContext, dependencies: StrategyDependencies) -> list[dict[str, object]]:
     return dependencies.one_trade_generator(
@@ -449,6 +438,7 @@ def run_strategy_workflow(
         attach_option_strikes_fn=attach_option_strikes_fn,
         attach_option_metrics_fn=attach_option_metrics_fn,
     )
+
 
 
 

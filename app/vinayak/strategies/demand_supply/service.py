@@ -84,8 +84,8 @@ class SupplyDemandStrategyConfig:
     mode: str = "Balanced"
     trailing_sl_pct: float = 0.0
     pivot_window: int = 2
-    max_trades_per_day: int = 1
-    duplicate_signal_cooldown_bars: int = 24
+    max_trades_per_day: int = 2
+    duplicate_signal_cooldown_bars: int = 12
     require_vwap_alignment: bool = True
     require_trend_bias: bool = True
     require_market_structure: bool = True
@@ -169,6 +169,29 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         if value is None or str(value).strip() == "":
             return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _zone_score_bucket(score: float) -> str:
+    if score >= 80.0:
+        return "80+"
+    if score >= 70.0:
+        return "70-79"
+    if score >= 60.0:
+        return "60-69"
+    return "<60"
+
+
+def _validation_score_bucket(score: float) -> str:
+    if score >= 9.0:
+        return "9-10"
+    if score >= 7.0:
+        return "7-8"
+    if score >= 5.0:
+        return "5-6"
+    return "<5"
         return float(value)
     except (TypeError, ValueError):
         return default
@@ -604,10 +627,7 @@ def validate_supply_demand_trade(
         "risk_per_unit": round(risk_per_unit, 4),
         "rr_ratio": round(rr_ratio, 4),
         "rejection_strength": round(rejection_strength, 2),
-        "zone_score": round(zone.total_score, 2),
-        "zone_selection_score": zone_selection_score,
-        "structure_clarity": round(float(zone.structure_clarity_score), 2),
-        "strict_validation_score": int(score),
+        "zone_score": round(zone.total_score, 2),`r`n        "zone_score_bucket": _zone_score_bucket(float(zone.total_score)),`r`n        "zone_selection_score": zone_selection_score,`r`n        "structure_type": str(zone.structure_type),`r`n        "session": str(row.get("session", "") or "UNKNOWN").upper(),`r`n        "structure_clarity": round(float(zone.structure_clarity_score), 2),`r`n        "strict_validation_score": int(score),`r`n        "validation_score_bucket": _validation_score_bucket(float(score)),
         "fresh_zone": bool(retest["fresh_zone"]),
         "strong_move_away": strong_move_away,
         "clean_base": clean_base,
@@ -668,7 +688,13 @@ def generate_supply_demand_trade_candidates(
                 "zone_id": zone.zone_id,
                 "symbol": zone.symbol,
                 "zone_type": zone.type,
+                "structure_type": str(zone.structure_type),
+                "session": str(validation.metrics.get("session", "UNKNOWN") or "UNKNOWN").upper(),
+                "zone_score": float(validation.metrics.get("zone_score", zone.total_score)),
+                "zone_score_bucket": str(validation.metrics.get("zone_score_bucket", _zone_score_bucket(float(zone.total_score)))),
                 "validation_score": validation.validation_score,
+                "validation_score_bucket": str(validation.metrics.get("validation_score_bucket", _validation_score_bucket(float(validation.validation_score)))),
+                "zone_selection_score": float(validation.metrics.get("zone_selection_score", 0.0)),
                 "reasons": list(validation.rejection_reasons),
                 "reason_text": ", ".join(_REJECTION_REASON_TEXT.get(reason, reason.replace("_", " ")) for reason in validation.rejection_reasons),
             })
@@ -679,7 +705,13 @@ def generate_supply_demand_trade_candidates(
                 "zone_id": zone.zone_id,
                 "symbol": zone.symbol,
                 "zone_type": zone.type,
+                "structure_type": str(zone.structure_type),
+                "session": str(validation.metrics.get("session", "UNKNOWN") or "UNKNOWN").upper(),
+                "zone_score": float(validation.metrics.get("zone_score", zone.total_score)),
+                "zone_score_bucket": str(validation.metrics.get("zone_score_bucket", _zone_score_bucket(float(zone.total_score)))),
                 "validation_score": validation.validation_score,
+                "validation_score_bucket": str(validation.metrics.get("validation_score_bucket", _validation_score_bucket(float(validation.validation_score)))),
+                "zone_selection_score": float(validation.metrics.get("zone_selection_score", 0.0)),
                 "reasons": ["invalid_rr"],
                 "reason_text": "quantity sizing produced zero quantity",
             })
@@ -812,6 +844,25 @@ def summarize_structure_metrics(
     }
     return summary
 
+def summarize_rejection_analytics(rejects: Sequence[dict[str, Any]] | None = None) -> dict[str, dict[str, int]]:
+    reject_list = list(rejects or [])
+    analytics = {
+        "by_reason": Counter(),
+        "by_session": Counter(),
+        "by_structure_type": Counter(),
+        "by_zone_type": Counter(),
+        "by_zone_score_bucket": Counter(),
+        "by_validation_score_bucket": Counter(),
+    }
+    for row in reject_list:
+        for reason in row.get("reasons", []) or []:
+            analytics["by_reason"][str(reason)] += 1
+        analytics["by_session"][str(row.get("session", "UNKNOWN") or "UNKNOWN").upper()] += 1
+        analytics["by_structure_type"][str(row.get("structure_type", "UNKNOWN") or "UNKNOWN").upper()] += 1
+        analytics["by_zone_type"][str(row.get("zone_type", "UNKNOWN") or "UNKNOWN").upper()] += 1
+        analytics["by_zone_score_bucket"][str(row.get("zone_score_bucket", "UNKNOWN") or "UNKNOWN")] += 1
+        analytics["by_validation_score_bucket"][str(row.get("validation_score_bucket", "UNKNOWN") or "UNKNOWN")] += 1
+    return {name: dict(counter) for name, counter in analytics.items()}
 def build_supply_demand_report(
     candles: pd.DataFrame,
     config: SupplyDemandStrategyConfig | None = None,
@@ -823,14 +874,16 @@ def build_supply_demand_report(
     trades, rejects, zones = generate_supply_demand_trade_candidates(candles, cfg, existing_trade_rows=existing_trade_rows)
     readiness = evaluate_supply_demand_readiness(executed_trade_rows or trades, rejects)
     structure_metrics = summarize_structure_metrics(zones, trades, rejects)
+    rejection_summary = dict(Counter(reason for row in rejects for reason in row.get("reasons", [])))
+    rejection_analytics = summarize_rejection_analytics(rejects)
     return {
         "zone_rows": [zone.to_dict() for zone in zones],
         "trade_rows": trades,
-        "rejection_summary": dict(Counter(reason for row in rejects for reason in row.get("reasons", []))),
+        "rejection_summary": rejection_summary,
+        "rejection_analytics": rejection_analytics,
         "structure_metrics": structure_metrics,
         "readiness_summary": readiness,
     }
-
 
 def generate_trades(df: pd.DataFrame, capital: float, risk_pct: float, rr_ratio: float, config: SupplyDemandStrategyConfig | None = None) -> list[dict[str, Any]]:
     cfg = config or SupplyDemandStrategyConfig()
@@ -946,3 +999,11 @@ def run_demand_supply_strategy(
             )
         )
     return signals
+
+
+
+
+
+
+
+

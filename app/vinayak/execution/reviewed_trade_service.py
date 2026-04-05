@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
@@ -183,6 +183,15 @@ class ReviewedTradeService:
         except (TypeError, ValueError):
             pass
 
+        if bool(ctx.get("kill_switch_enabled")):
+            reasons.append("kill_switch_active")
+
+        if bool(ctx.get("active_trade_exists")):
+            reasons.append("active_trade_exists")
+
+        if bool(ctx.get("cooldown_active")):
+            reasons.append("cooldown_active")
+
         deduped_reasons: list[str] = []
         for reason in reasons:
             if reason and reason not in deduped_reasons:
@@ -279,3 +288,5 @@ __all__ = [
     "ReviewedTradeService",
     "ReviewedTradeStatusUpdateCommand",
 ]
+
+

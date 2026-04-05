@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import types
 import unittest
 
@@ -6,7 +6,7 @@ sys.modules.setdefault('yfinance', types.SimpleNamespace())
 sys.modules.setdefault('certifi', types.SimpleNamespace(where=lambda: ''))
 sys.modules.setdefault('dateutil', types.SimpleNamespace(parser=types.SimpleNamespace(parse=lambda text: text, ParserError=ValueError)))
 
-from src.auto_backtest import _build_breakout_bias_evaluation, _build_equity_curve_rows, _pnl_summary
+from src.auto_backtest import _build_breakout_bias_evaluation, _build_equity_curve_rows, _execution_candidates_for_mode, _pnl_summary
 
 
 class TestAutoBacktestMetrics(unittest.TestCase):
@@ -58,6 +58,35 @@ class TestAutoBacktestMetrics(unittest.TestCase):
         self.assertEqual(summary['profit_factor'], 'INF')
         self.assertEqual(summary['max_drawdown'], 0.0)
 
+    def test_execution_candidates_for_mode_falls_back_to_indicator_focus_for_paper(self):
+        selected = _execution_candidates_for_mode(
+            [
+                {
+                    'strategy': 'INDICATOR',
+                    'validation_status': 'FAIL',
+                    'validation_reasons': 'too_few_trades',
+                }
+            ],
+            {
+                'INDICATOR': [
+                    {
+                        'strategy': 'INDICATOR',
+                        'timestamp': '2026-03-20 10:00:00',
+                        'score': 7.0,
+                        'validation_reasons': [],
+                    }
+                ]
+            },
+            execution_type='PAPER',
+            allow_live_on_pass=False,
+            allow_paper_on_fail=False,
+            paper_focus_strategy='INDICATOR',
+        )
+
+        self.assertEqual(len(selected), 1)
+        self.assertTrue(selected[0]['execution_allowed'])
+        self.assertEqual(selected[0]['strategy_validation_status'], 'FAIL')
+        self.assertEqual(selected[0]['strategy_validation_reasons'], 'too_few_trades')
     def test_breakout_bias_evaluation_reports_better_mode_and_deltas(self):
         comparison = _build_breakout_bias_evaluation(
             {'strategy': 'BREAKOUT', 'total_pnl': 1250.0, 'win_rate_pct': 60.0, 'trades': 5},
@@ -74,3 +103,4 @@ class TestAutoBacktestMetrics(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

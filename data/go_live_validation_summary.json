@@ -1,7 +1,7 @@
 {
   "backtest_metrics": {
     "avg_rr": 2.0,
-    "completed_trades": 100,
+    "completed_trades": 15,
     "cooldown_controls_enforced": false,
     "drawdown_proven": false,
     "duplicate_trade_count": 0,
@@ -63,7 +63,7 @@
   "paper_metrics": {
     "avg_rr": 2.0,
     "completed_trades": 0,
-    "cooldown_controls_enforced": false,
+    "cooldown_controls_enforced": true,
     "drawdown_proven": false,
     "duplicate_trade_count": 0,
     "execution_error_count": 0,
@@ -137,7 +137,7 @@
     "cooldown_duplicate_controls": {
       "actual": {
         "backtest": false,
-        "paper": false
+        "paper": true
       },
       "message": "Cooldown and duplicate controls must be actively enforced before go-live.",
       "rule": "cooldown_duplicate_controls",
@@ -162,7 +162,7 @@
       "threshold": ">0.0"
     },
     "minimum_trade_confidence": {
-      "actual": 100,
+      "actual": 15,
       "message": "Need at least 150 completed backtest trades before live use.",
       "rule": "minimum_trade_confidence",
       "source": "backtest",
@@ -266,7 +266,7 @@
       "threshold": "09:15-15:30"
     },
     {
-      "actual": 100,
+      "actual": 15,
       "message": "Need at least 150 completed backtest trades before live use.",
       "rule": "minimum_trade_confidence",
       "source": "backtest",
@@ -394,7 +394,7 @@
     {
       "actual": {
         "backtest": false,
-        "paper": false
+        "paper": true
       },
       "message": "Cooldown and duplicate controls must be actively enforced before go-live.",
       "rule": "cooldown_duplicate_controls",

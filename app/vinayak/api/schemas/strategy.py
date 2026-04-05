@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 
@@ -97,6 +97,18 @@ class ExecutionContractRequest(BaseModel):
     reviewed_trade_id: int | None = Field(default=None, gt=0)
     validation_status: str = Field(default='PENDING')
     reviewed_trade_status: str = Field(default='PENDING')
+    execution_allowed: bool | None = None
+    system_status: str = Field(default='')
+    go_live_status: str = Field(default='')
+    duplicate_reason: str = Field(default='')
+    setup_already_used: bool = Field(default=False)
+    trades_taken_today: int | None = Field(default=None, ge=0)
+    max_trades_per_day: int | None = Field(default=None, ge=1)
+    realized_pnl_today: float | None = None
+    max_daily_loss: float | None = Field(default=None, ge=0)
+    kill_switch_enabled: bool = Field(default=False)
+    active_trade_exists: bool = Field(default=False)
+    cooldown_active: bool = Field(default=False)
     broker: str = Field(default='')
     mode: str = Field(default='')
 
@@ -161,6 +173,7 @@ class LiveAnalysisRequest(BaseModel):
     fixed_cost_per_trade: float = Field(default=0.0, ge=0)
     max_daily_loss: float | None = Field(default=None, ge=0)
     max_trades_per_day: int | None = Field(default=None, ge=1)
+
 
 
 

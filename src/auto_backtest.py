@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import csv
@@ -533,6 +533,7 @@ def _execution_candidates_for_mode(
     execution_type: str,
     allow_live_on_pass: bool,
     allow_paper_on_fail: bool,
+    paper_focus_strategy: str,
 ) -> list[dict[str, object]]:
     selected: list[dict[str, object]] = []
     for row in summary_rows:
@@ -576,6 +577,24 @@ def _execution_candidates_for_mode(
                 )
                 continue
             print(f"[PROMOTION] Strategy {strategy} blocked from paper execution: {validation_reasons}")
+
+    if execution_type == 'PAPER' and not selected:
+        focus_strategy = str(paper_focus_strategy or '').strip().upper()
+        if focus_strategy:
+            focus_candidates = candidate_map.get(focus_strategy, [])
+            focus_row = next((row for row in summary_rows if str(row.get('strategy', '') or '').strip().upper() == focus_strategy), None)
+            if focus_candidates:
+                focus_status = str((focus_row or {}).get('validation_status', 'FAIL') or 'FAIL').upper()
+                focus_reasons = str((focus_row or {}).get('validation_reasons', '') or 'paper_focus_strategy_override').strip() or 'paper_focus_strategy_override'
+                print(f"[PROMOTION] Strategy {focus_strategy} approved for paper evidence collection: {focus_reasons}")
+                selected.extend(
+                    _prepare_selected_candidates(
+                        focus_candidates,
+                        mark_execution_ready=True,
+                        strategy_validation_status=focus_status,
+                        strategy_validation_reasons=focus_reasons,
+                    )
+                )
     return selected
 
 
@@ -754,6 +773,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--execution-type', default='PAPER', choices=['PAPER', 'LIVE', 'NONE'])
     parser.add_argument('--allow-live-on-pass', action='store_true')
     parser.add_argument('--allow-paper-on-fail', action='store_true')
+    parser.add_argument('--paper-focus-strategy', default='INDICATOR')
     parser.add_argument('--min-trades', type=float, default=None)
     parser.add_argument('--max-trades', type=float, default=None)
     parser.add_argument('--min-win-rate-pct', type=float, default=None)
@@ -963,6 +983,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     execution_type = requested_execution_type
     allow_live_on_pass = bool(getattr(args, 'allow_live_on_pass', False))
     allow_paper_on_fail = bool(getattr(args, 'allow_paper_on_fail', False))
+    paper_focus_strategy = str(getattr(args, 'paper_focus_strategy', 'INDICATOR') or 'INDICATOR')
     candidate_map = _build_candidate_map(all_candidates)
     candidates = _execution_candidates_for_mode(
         ranked_summary_rows,
@@ -970,6 +991,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         execution_type=execution_type,
         allow_live_on_pass=allow_live_on_pass,
         allow_paper_on_fail=allow_paper_on_fail,
+        paper_focus_strategy=paper_focus_strategy,
     ) if execution_type in {'PAPER', 'LIVE'} else []
     crisis_overrides = apply_crisis_overrides(
         candidates,
@@ -1075,7 +1097,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             duplicate_controls_enforced=execution_type == 'NONE',
         )
 
-    selected_backtest_summary = best_promotable or (ranked_summary_rows[0] if ranked_summary_rows else {})
+    focused_backtest_summary = next(
+        (
+            row for row in ranked_summary_rows
+            if str(row.get('strategy', '') or '').strip().upper() == str(paper_focus_strategy or '').strip().upper()
+        ),
+        None,
+    )
+    selected_backtest_summary = best_promotable or focused_backtest_summary or (ranked_summary_rows[0] if ranked_summary_rows else {})
     merged_paper_summary = {**validation_summary, **execution_summary}
     go_live_evaluation = evaluate_go_live(
         selected_backtest_summary,
@@ -1202,6 +1231,13 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+
+
+
+
+
+
 
 
 

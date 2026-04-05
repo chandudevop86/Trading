@@ -50,6 +50,8 @@ def initialize_database(database_url: str | None = None) -> None:
     from vinayak.db.models.outbox_event import OutboxEventRecord  # noqa: F401
     from vinayak.db.models.reviewed_trade import ReviewedTradeRecord  # noqa: F401
     from vinayak.db.models.signal import SignalRecord  # noqa: F401
+    from vinayak.db.models.user import UserRecord  # noqa: F401
 
     Base.metadata.create_all(bind=get_engine(database_url))
+
 

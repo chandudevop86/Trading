@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Any
 
@@ -130,8 +130,6 @@ def publish_active_alerts(
         EVENT_NOTIFICATION_REQUESTED,
         {
             'channel': 'telegram',
-            'telegram_token': token,
-            'telegram_chat_id': chat_id,
             'message': build_alert_notification_message(actionable),
             'alerts': actionable,
         },
@@ -148,3 +146,5 @@ __all__ = [
     'build_alert_notification_message',
     'publish_active_alerts',
 ]
+
+

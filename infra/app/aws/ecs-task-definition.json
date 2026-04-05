@@ -1,4 +1,4 @@
-﻿{
+{
   "family": "vinayak-api",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
@@ -27,7 +27,7 @@
         { "name": "VINAYAK_DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:vinayak/database-url" },
         { "name": "DHAN_CLIENT_ID", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:vinayak/dhan-client-id" },
         { "name": "DHAN_ACCESS_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:vinayak/dhan-access-token" },
-        { "name": "TELEGRAM_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:vinayak/telegram-token" },
+        { "name": "TELEGRAM_BOT_TOKEN", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:vinayak/telegram-bot-token" },
         { "name": "TELEGRAM_CHAT_ID", "valueFrom": "arn:aws:secretsmanager:<region>:<account-id>:secret:vinayak/telegram-chat-id" }
       ],
       "logConfiguration": {
@@ -48,3 +48,4 @@
     }
   ]
 }
+

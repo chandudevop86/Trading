@@ -17,6 +17,7 @@ from vinayak.observability.observability_metrics import (
     reset_observability_state,
     set_metric,
 )
+from vinayak.workers import event_worker
 
 
 class _StubBus:
@@ -100,7 +101,7 @@ def test_observability_alerts_cover_execution_and_risk(tmp_path) -> None:
     assert payload['validation_risk_health']['status'] == 'FAIL'
 
 
-def test_observability_alert_publishing_routes_notification_event(tmp_path) -> None:
+def test_observability_alert_publishing_routes_notification_event_without_credentials(tmp_path) -> None:
     os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path)
     reset_observability_state()
     set_metric('execution_failed_total', 2)
@@ -116,6 +117,28 @@ def test_observability_alert_publishing_routes_notification_event(tmp_path) -> N
     assert len(bus.messages) == 1
     assert bus.messages[0][0] == 'notification.requested'
     assert 'Observability alert summary' in bus.messages[0][1]['message']
+    assert 'telegram_token' not in bus.messages[0][1]
+    assert 'telegram_chat_id' not in bus.messages[0][1]
+
+
+def test_event_worker_uses_environment_telegram_target(monkeypatch) -> None:
+    sent: dict[str, str] = {}
+    monkeypatch.setenv('TELEGRAM_BOT_TOKEN', 'env-token')
+    monkeypatch.setenv('TELEGRAM_CHAT_ID', 'env-chat')
+    monkeypatch.setattr(
+        event_worker,
+        'send_text_notification',
+        lambda *, token, chat_id, message: sent.update({'token': token, 'chat_id': chat_id, 'message': message}) or {'ok': True},
+    )
+
+    event_worker._handle_event(event_worker.EventEnvelope(
+        name='notification.requested',
+        payload={'message': 'hello', 'telegram_token': 'request-token', 'telegram_chat_id': 'request-chat'},
+        emitted_at='2026-04-04T00:00:00Z',
+        source='test',
+    ))
+
+    assert sent == {'token': 'env-token', 'chat_id': 'env-chat', 'message': 'hello'}
 
 
 def test_observability_payload_includes_latest_signal_and_execution_details(tmp_path) -> None:
@@ -196,4 +219,3 @@ def test_dashboard_spec_outputs_are_readable() -> None:
     assert any(panel['title'] == 'Recent Failures' for panel in grafana['panels'])
     assert '/dashboard/observability' in html
     assert 'Latest Market Data' in html
-

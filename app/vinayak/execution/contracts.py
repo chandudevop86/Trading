@@ -104,6 +104,19 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+def _coerce_execution_allowed(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    lowered = str(value).strip().lower()
+    if lowered == '':
+        return bool(default)
+    if lowered in {'1', 'true', 'yes', 'y', 'on', 'pass', 'passed'}:
+        return True
+    if lowered in {'0', 'false', 'no', 'n', 'off', 'fail', 'failed'}:
+        return False
+    return bool(default)
 
 
 def _normalize_timestamp(value: Any) -> str:
@@ -200,7 +213,7 @@ def normalize_candidate_contract(
         'validation_status': str(raw.get('validation_status', 'PENDING') or 'PENDING').strip().upper(),
         'validation_score': round(_safe_float(raw.get('validation_score', raw.get('score', 0.0))), 2),
         'validation_reasons': [str(item) for item in validation_reasons if str(item).strip()],
-        'execution_allowed': bool(raw.get('execution_allowed', False)),
+        'execution_allowed': _coerce_execution_allowed(raw.get('execution_allowed', False), default=False),
         'zone_type': str(raw.get('zone_type', '') or ''),
         'rr_ratio': round(rr_ratio, 4),
         'vwap_alignment': raw.get('vwap_alignment') if 'vwap_alignment' in raw else None,
@@ -231,7 +244,7 @@ def normalize_candidate_contract(
         'validation_status': normalized['validation_status'],
         'validation_score': normalized['validation_score'],
         'validation_reasons': list(normalized['validation_reasons']),
-        'execution_allowed': bool(normalized['execution_allowed']),
+        'execution_allowed': _coerce_execution_allowed(normalized['execution_allowed'], default=False),
         'rr_ratio': round(rr_ratio, 4),
         'strategy': resolved_strategy,
         'signal_time': str(raw.get('signal_time') or resolved_timestamp),
@@ -300,3 +313,4 @@ __all__ = [
     'normalize_candidate_contract',
     'validate_candidate_contract',
 ]
+

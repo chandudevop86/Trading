@@ -40,12 +40,7 @@ def _load_user_from_session_token(raw_token: str | None) -> AuthenticatedUser | 
 
 
 def get_current_user(request: Request) -> AuthenticatedUser | None:
-    user = _load_user_from_session_token(request.cookies.get(COOKIE_NAME))
-    if user is not None:
-        return user
-    if request.cookies.get(LEGACY_COOKIE_NAME) == session_token():
-        return AuthenticatedUser(id=0, username=admin_username(), role=ADMIN_ROLE, is_active=True)
-    return None
+    return _load_user_from_session_token(request.cookies.get(COOKIE_NAME))
 
 
 def is_authenticated(request: Request) -> bool:
@@ -64,3 +59,4 @@ def require_admin_session(request: Request) -> AuthenticatedUser:
     if str(user.role).upper() != ADMIN_ROLE:
         raise HTTPException(status_code=403, detail='Admin authentication required.')
     return user
+

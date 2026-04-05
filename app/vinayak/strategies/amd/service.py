@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import floor
@@ -149,7 +149,7 @@ def _prepare_df(data: Any) -> pd.DataFrame:
     gain = delta.clip(lower=0.0)
     loss = (-delta).clip(lower=0.0)
     avg_gain = gain.ewm(alpha=1 / 14, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1 / 14, adjust=False).mean().replace(0.0, pd.NA)
+    avg_loss = loss.ewm(alpha=1 / 14, adjust=False).mean().replace(0.0, float('nan'))
     rs = avg_gain.div(avg_loss)
     df['rsi'] = (100.0 - (100.0 / (1.0 + rs))).fillna(50.0)
     df['session_day'] = df['timestamp'].dt.strftime('%Y-%m-%d')
@@ -311,4 +311,5 @@ def run_amd_strategy(
             break
 
     return trades
+
 

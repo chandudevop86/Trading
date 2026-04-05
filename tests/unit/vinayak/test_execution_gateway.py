@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 import pandas as pd
 
@@ -55,6 +55,21 @@ def _candidate() -> dict[str, object]:
         "zone_id": "ZONE-DBR-TEST",
         "trade_id": "TRADE-DBR-TEST",
     }
+
+
+def test_prepare_workspace_candidates_treats_false_string_as_blocked() -> None:
+    rows = prepare_workspace_candidates(
+        "DEMAND_SUPPLY",
+        "NIFTY",
+        _candles(),
+        [{
+            **_candidate(),
+            "execution_allowed": "false",
+        }],
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["execution_allowed"] is False
 
 
 def test_prepare_workspace_candidates_preserves_strict_pass_payload() -> None:
@@ -201,6 +216,33 @@ def test_execute_workspace_candidates_blocks_cooldown(tmp_path: Path) -> None:
         _cleanup_db_session(session)
 
 
+
+def test_execute_workspace_candidates_blocks_when_active_trade_exists(tmp_path: Path) -> None:
+    session = _build_db_session(tmp_path)
+    try:
+        paper_log = tmp_path / "paper.csv"
+        paper_log.write_text(
+            "symbol,signal_time,side,setup_type,execution_status,trade_status,entry_price,stop_loss,target_price,quantity\n"
+            "NIFTY,2026-04-02 09:05:00,BUY,DBR,FILLED,OPEN,101,99.5,104,10\n",
+            encoding="utf-8",
+        )
+
+        _candidates, result = execute_workspace_candidates(
+            "DEMAND_SUPPLY",
+            "NIFTY",
+            _candles(),
+            [{**_candidate(), "timestamp": "2026-04-02 10:00:00"}],
+            execution_mode="PAPER",
+            paper_log_path=str(paper_log),
+            live_log_path=str(tmp_path / "live.csv"),
+            capital=100000,
+            db_session=session,
+        )
+
+        assert result.blocked_count == 1
+        assert "ACTIVE_TRADE_EXISTS" in result.rows[0]["reason"]
+    finally:
+        _cleanup_db_session(session)
 def test_execute_workspace_candidates_blocks_kill_switch(tmp_path: Path) -> None:
     session = _build_db_session(tmp_path)
     try:
@@ -270,3 +312,4 @@ def test_execute_workspace_candidates_caps_quantity_for_per_trade_risk(tmp_path:
         assert "CAPPED_BY_PER_TRADE_RISK" in result.rows[0]["allocation_adjustment_reasons"]
     finally:
         _cleanup_db_session(session)
+

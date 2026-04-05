@@ -12,11 +12,11 @@ services:
       APP_ENV: uat
       APP_HOST: 0.0.0.0
       APP_PORT: 8000
-      VINAYAK_DATABASE_URL: postgresql+psycopg2://vinayak:vinayak@vinayak-postgres-uat:5432/vinayak
+      VINAYAK_DATABASE_URL: postgresql+psycopg2://vinayak:${UAT_POSTGRES_PASSWORD:?UAT_POSTGRES_PASSWORD required}@vinayak-postgres-uat:5432/vinayak
       REDIS_URL: redis://vinayak-redis-uat:6379/0
       MESSAGE_BUS_ENABLED: "true"
       MESSAGE_BUS_BACKEND: rabbitmq
-      MESSAGE_BUS_URL: amqp://guest:guest@vinayak-rabbitmq-uat:5672/
+      MESSAGE_BUS_URL: amqp://vinayak:${UAT_RABBITMQ_PASSWORD:?UAT_RABBITMQ_PASSWORD required}@vinayak-rabbitmq-uat:5672/
       MESSAGE_BUS_TOPIC_PREFIX: vinayak.uat
     ports:
       - "8000:8000"
@@ -38,11 +38,11 @@ services:
       - ../env/uat.env.example
     environment:
       APP_ENV: uat
-      VINAYAK_DATABASE_URL: postgresql+psycopg2://vinayak:vinayak@vinayak-postgres-uat:5432/vinayak
+      VINAYAK_DATABASE_URL: postgresql+psycopg2://vinayak:${UAT_POSTGRES_PASSWORD:?UAT_POSTGRES_PASSWORD required}@vinayak-postgres-uat:5432/vinayak
       REDIS_URL: redis://vinayak-redis-uat:6379/0
       MESSAGE_BUS_ENABLED: "true"
       MESSAGE_BUS_BACKEND: rabbitmq
-      MESSAGE_BUS_URL: amqp://guest:guest@vinayak-rabbitmq-uat:5672/
+      MESSAGE_BUS_URL: amqp://vinayak:${UAT_RABBITMQ_PASSWORD:?UAT_RABBITMQ_PASSWORD required}@vinayak-rabbitmq-uat:5672/
       MESSAGE_BUS_TOPIC_PREFIX: vinayak.uat
     command: ["python", "-m", "vinayak.workers.outbox_worker"]
     depends_on:
@@ -59,11 +59,11 @@ services:
       - ../env/uat.env.example
     environment:
       APP_ENV: uat
-      VINAYAK_DATABASE_URL: postgresql+psycopg2://vinayak:vinayak@vinayak-postgres-uat:5432/vinayak
+      VINAYAK_DATABASE_URL: postgresql+psycopg2://vinayak:${UAT_POSTGRES_PASSWORD:?UAT_POSTGRES_PASSWORD required}@vinayak-postgres-uat:5432/vinayak
       REDIS_URL: redis://vinayak-redis-uat:6379/0
       MESSAGE_BUS_ENABLED: "true"
       MESSAGE_BUS_BACKEND: rabbitmq
-      MESSAGE_BUS_URL: amqp://guest:guest@vinayak-rabbitmq-uat:5672/
+      MESSAGE_BUS_URL: amqp://vinayak:${UAT_RABBITMQ_PASSWORD:?UAT_RABBITMQ_PASSWORD required}@vinayak-rabbitmq-uat:5672/
       MESSAGE_BUS_TOPIC_PREFIX: vinayak.uat
     command: ["python", "-m", "vinayak.workers.event_worker"]
     depends_on:
@@ -76,7 +76,7 @@ services:
     environment:
       POSTGRES_DB: vinayak
       POSTGRES_USER: vinayak
-      POSTGRES_PASSWORD: vinayak
+      POSTGRES_PASSWORD: ${UAT_POSTGRES_PASSWORD:?UAT_POSTGRES_PASSWORD required}
     ports:
       - "5433:5432"
     volumes:
@@ -93,6 +93,9 @@ services:
   vinayak-rabbitmq-uat:
     image: rabbitmq:3-management-alpine
     container_name: vinayak-rabbitmq-uat
+    environment:
+      RABBITMQ_DEFAULT_USER: vinayak
+      RABBITMQ_DEFAULT_PASS: ${UAT_RABBITMQ_PASSWORD:?UAT_RABBITMQ_PASSWORD required}
     ports:
       - "5673:5672"
       - "15673:15672"
@@ -103,4 +106,3 @@ services:
 volumes:
   vinayak_postgres_uat_data:
   vinayak_rabbitmq_uat_data:
-

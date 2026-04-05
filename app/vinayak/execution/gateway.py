@@ -56,6 +56,20 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(float(value))
     except (TypeError, ValueError):
         return default
+def _coerce_execution_allowed(value: Any, *, validation_status: str, validation_reasons: list[str]) -> bool:
+    default = validation_status == "PASS" and not validation_reasons
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    lowered = str(value).strip().lower()
+    if lowered == "":
+        return default
+    if lowered in {"1", "true", "yes", "y", "on", "pass", "passed"}:
+        return True
+    if lowered in {"0", "false", "no", "n", "off", "fail", "failed"}:
+        return False
+    return default
 
 
 def _parse_timestamp(value: Any) -> datetime | None:
@@ -128,7 +142,7 @@ def _normalize_candidate(candidate: dict[str, Any], *, strategy: str, symbol: st
     validation_status = str(item.get("validation_status") or "PENDING").strip().upper()
     validation_score = round(_safe_float(item.get("validation_score", item.get("score", 0.0))), 2)
     validation_reasons = _normalize_validation_reasons(item.get("validation_reasons", item.get("reason_codes", [])))
-    execution_allowed = bool(item.get("execution_allowed", validation_status == "PASS" and not validation_reasons))
+    execution_allowed = _coerce_execution_allowed(item.get("execution_allowed"), validation_status=validation_status, validation_reasons=validation_reasons)
     timeframe = str(item.get("timeframe") or item.get("interval") or "").strip()
     normalized = {
         **item,
@@ -179,6 +193,17 @@ def _trade_unique_key(candidate: dict[str, Any], bucket_minutes: int = _DEFAULT_
     ])
 
 
+def _has_active_trade(historical_rows: list[dict[str, Any]]) -> bool:
+    for row in historical_rows:
+        status = str(row.get("execution_status") or row.get("status") or row.get("trade_status") or "").upper()
+        trade_status = str(row.get("trade_status") or "").upper()
+        if trade_status in {"CLOSED", "EXITED", "CANCELLED", "REJECTED", "BLOCKED", "ERROR"}:
+            continue
+        if status in _EXECUTED_STATUSES:
+            return True
+    return False
+
+
 def _executed_trade_times(rows: list[dict[str, Any]], signal_date: datetime) -> list[datetime]:
     times: list[datetime] = []
     for row in rows:
@@ -214,7 +239,7 @@ def _guard_reasons(
         reasons.append("MISSING_TIMESTAMP")
     if candidate.get("validation_status") != "PASS":
         reasons.append("VALIDATION_STATUS_FAIL")
-    if not bool(candidate.get("execution_allowed", False)):
+    if not _coerce_execution_allowed(candidate.get("execution_allowed"), validation_status=str(candidate.get("validation_status") or "").upper(), validation_reasons=_normalize_validation_reasons(candidate.get("validation_reasons", []))):
         reasons.append("EXECUTION_GATE_BLOCKED")
     if _safe_float(candidate.get("entry_price")) <= 0:
         reasons.append("MISSING_PRICE")
@@ -242,6 +267,8 @@ def _guard_reasons(
         realized_pnl = sum(_safe_float(row.get("pnl", 0.0)) for row in today_rows)
         if max_daily_loss and float(max_daily_loss) > 0 and realized_pnl <= -abs(float(max_daily_loss)):
             reasons.append("MAX_DAILY_LOSS")
+        if _has_active_trade(historical_rows):
+            reasons.append("ACTIVE_TRADE_EXISTS")
         recent_times = _executed_trade_times(historical_rows, signal_time)
         if recent_times and cooldown_minutes > 0:
             delta_seconds = (signal_time - max(recent_times)).total_seconds()
@@ -509,6 +536,7 @@ __all__ = [
     'execute_workspace_candidates',
     'prepare_workspace_candidates',
 ]
+
 
 
 

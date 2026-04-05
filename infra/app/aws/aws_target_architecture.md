@@ -1,4 +1,4 @@
-﻿# AWS Target Architecture For Vinayak
+# AWS Target Architecture For Vinayak
 
 ## Goal
 
@@ -75,7 +75,7 @@ Core:
 Broker and notification:
 - `DHAN_CLIENT_ID`
 - `DHAN_ACCESS_TOKEN`
-- `TELEGRAM_TOKEN`
+- `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
 ## ECS Services
@@ -108,3 +108,4 @@ Current project still has local-file fallbacks for some report/log outputs. For 
 Use these for ALB target group checks:
 - `GET /health/live`
 - `GET /health/ready`
+

@@ -19,7 +19,7 @@ client = TestClient(app)
 def _login_admin() -> None:
     response = client.post('/admin/login', data={
         'username': 'admin',
-        'password': 'vinayak123',
+        'password': 'vinayak-test-password',
     })
     assert response.status_code == 200
 
@@ -203,7 +203,7 @@ def test_breakout_route_can_persist_signal_review_and_execution_flow(tmp_path: P
         count = conn.execute(text('select count(*) from signals')).scalar_one()
     assert count == 1
 
-    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
     list_response = fresh.get('/signals')
     assert list_response.status_code == 200
     listed = list_response.json()
@@ -273,7 +273,7 @@ def test_signal_review_shortcut_endpoint(tmp_path: Path) -> None:
     response = fresh.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
     assert response.status_code == 200
 
-    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
     signal_id = fresh.get('/signals').json()['signals'][0]['id']
 
     review_create = fresh.post(f'/signals/{signal_id}/review', json={
@@ -313,7 +313,7 @@ def test_execution_audit_endpoints_for_live_route(tmp_path: Path) -> None:
     response = fresh.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
     assert response.status_code == 200
 
-    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
     signal_id = fresh.get('/signals').json()['signals'][0]['id']
 
     review_create = fresh.post('/reviewed-trades', json={
@@ -381,7 +381,7 @@ def test_dashboard_summary_endpoint(tmp_path: Path) -> None:
     response = fresh.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
     assert response.status_code == 200
 
-    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
     signal_id = fresh.get('/signals').json()['signals'][0]['id']
 
     review_create = fresh.post('/reviewed-trades', json={
@@ -430,7 +430,7 @@ def test_execution_route_blocks_unapproved_reviewed_trade(tmp_path: Path) -> Non
     response = fresh.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
     assert response.status_code == 200
 
-    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
     signal_id = fresh.get('/signals').json()['signals'][0]['id']
 
     review_create = fresh.post('/reviewed-trades', json={
@@ -474,7 +474,7 @@ def test_execution_route_rejects_invalid_paper_broker(tmp_path: Path) -> None:
     response = fresh.post('/strategies/breakout/run', json=_breakout_payload(save_signals=True))
     assert response.status_code == 200
 
-    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
     signal_id = fresh.get('/signals').json()['signals'][0]['id']
     review_create = fresh.post('/reviewed-trades', json={'signal_id': signal_id, 'quantity': 10, 'lots': 1})
     reviewed_trade = review_create.json()
@@ -502,6 +502,8 @@ def test_admin_protected_routes_require_login() -> None:
     assert fresh.get('/executions').status_code == 401
     assert fresh.get('/executions/audit-logs').status_code == 401
     assert fresh.get('/dashboard/summary').status_code == 401
+
+
 
 
 

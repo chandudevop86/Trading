@@ -1,4 +1,4 @@
-from fastapi.testclient import TestClient
+﻿from fastapi.testclient import TestClient
 
 from vinayak.api.main import app
 from vinayak.api.routes import dashboard as dashboard_route
@@ -10,7 +10,7 @@ client = TestClient(app)
 def _login_admin() -> None:
     response = client.post('/admin/login', data={
         'username': 'admin',
-        'password': 'vinayak123',
+        'password': 'vinayak-test-password',
     })
     assert response.status_code == 200
 
@@ -210,6 +210,8 @@ def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> N
     assert captured['max_portfolio_exposure_pct'] == 35
     assert captured['max_open_risk_pct'] == 5
     assert captured['kill_switch_enabled'] is True
+
+
 
 
 

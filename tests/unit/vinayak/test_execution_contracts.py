@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 from vinayak.execution.contracts import normalize_candidate_contract
 from vinayak.messaging.events import (
@@ -35,6 +35,27 @@ def test_normalize_candidate_contract_adds_canonical_fields() -> None:
     assert normalized['target'] == 104.25
     assert normalized['timeframe'] == '5m'
     assert normalized['contract_version'] == 'strict_trade_candidate_v1'
+
+
+def test_normalize_candidate_contract_coerces_string_execution_allowed_to_false() -> None:
+    normalized = normalize_candidate_contract(
+        {
+            'symbol': '^NSEI',
+            'timestamp': '2026-04-02 09:20:00',
+            'strategy': 'Breakout',
+            'side': 'BUY',
+            'entry_price': 101.25,
+            'stop_loss': 99.75,
+            'target_price': 104.25,
+            'validation_status': 'PASS',
+            'validation_score': 8.2,
+            'validation_reasons': [],
+            'execution_allowed': 'false',
+        },
+        timeframe='5m',
+    )
+
+    assert normalized['execution_allowed'] is False
 
 
 def test_strategy_signal_exposes_strict_trade_contract_fields() -> None:
@@ -124,3 +145,5 @@ def test_validate_candidate_contract_requires_execution_fields() -> None:
     assert normalized['quantity'] == 12
     assert normalized['entry_price'] == 101.25
     assert normalized['target_price'] == 104.25
+
+

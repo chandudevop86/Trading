@@ -15,7 +15,7 @@ client = TestClient(app)
 
 
 def _admin_login() -> None:
-    response = client.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+    response = client.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
     assert response.status_code == 200
 
 
@@ -67,3 +67,5 @@ def test_outbox_routes_list_and_retry_failed_event(tmp_path: Path) -> None:
     os.environ.pop('MESSAGE_BUS_ENABLED', None)
     reset_settings_cache()
     reset_database_state()
+
+

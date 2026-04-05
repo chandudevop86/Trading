@@ -76,6 +76,27 @@ def test_duplicate_zone_is_blocked() -> None:
     assert any("duplicate_zone" in row["reasons"] for row in second_rejects)
 
 
+
+def test_generate_candidates_exposes_strict_validation_score() -> None:
+    cfg = SupplyDemandStrategyConfig(min_base_candles=2, max_base_candles=3, min_departure_ratio=1.2, min_total_score=20.0)
+    trades, rejects, _zones = generate_supply_demand_trade_candidates(_sample_frame(), cfg)
+
+    assert rejects == []
+    assert trades
+    assert trades[0]["strict_validation_score"] >= 7
+    assert trades[0]["retest_confirmed"] is True
+    assert trades[0]["zone_selection_score"] >= 5.0
+
+
+def test_generate_candidates_rejects_touch_without_retest_confirmation() -> None:
+    cfg = SupplyDemandStrategyConfig(min_base_candles=2, max_base_candles=3, min_departure_ratio=1.2, min_total_score=20.0)
+    weak_retest = _sample_frame().iloc[:-1].copy()
+
+    trades, rejects, _zones = generate_supply_demand_trade_candidates(weak_retest, cfg)
+
+    assert trades == []
+    assert rejects
+    assert any("retest_not_confirmed" in row["reasons"] for row in rejects)
 def test_report_contains_readiness_and_rejection_summary() -> None:
     report = build_supply_demand_report(
         _sample_frame(),
@@ -91,4 +112,3 @@ def test_report_contains_readiness_and_rejection_summary() -> None:
     assert "RBD" in report["structure_metrics"]
     assert "DBD" in report["structure_metrics"]
     assert "readiness_summary" in report
-

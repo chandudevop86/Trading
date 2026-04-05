@@ -36,11 +36,13 @@ _REJECTION_REASON_TEXT = {
     "invalid_rr": "reward to risk was below threshold",
     "max_retests_exceeded": "zone had too many retests",
     "rejection_candle_weak": "rejection candle was too weak",
+    "retest_not_confirmed": "zone touch did not produce a confirmed retest entry",
     "session_filter_failed": "trade was outside the allowed session",
     "trend_alignment_failed": "trend alignment filter failed",
     "violated_zone": "zone was already violated",
     "vwap_alignment_failed": "VWAP alignment filter failed",
     "weak_departure": "departure from the base was too weak",
+    "weak_structure_clarity": "structure around the zone was not clean enough",
     "weak_zone_score": "zone score was below the minimum threshold",
 }
 
@@ -88,11 +90,13 @@ class SupplyDemandStrategyConfig:
     max_retest_bars: int = 4
     min_reaction_strength: float = 0.75
     min_zone_selection_score: float = 5.0
+    min_structure_clarity_score: float = 60.0
     min_confirmation_body_ratio: float = 0.6
     zone_departure_buffer_pct: float = 0.0006
     vwap_reclaim_buffer_pct: float = 0.0005
     allow_afternoon_session: bool = False
     avoid_midday: bool = True
+    require_retest_confirmation: bool = True
 
 
 @dataclass(slots=True)
@@ -397,6 +401,77 @@ def _entry_candle(frame: pd.DataFrame, zone: SupplyDemandZone) -> pd.Series:
     return frame.iloc[min(zone.base_end_index + 1, len(frame) - 1)]
 
 
+def _body_ratio(row: pd.Series) -> float:
+    candle_range = max(float(row["high"] - row["low"]), 1e-6)
+    return abs(float(row["close"]) - float(row["open"])) / candle_range
+
+
+def _directional_wick_ratio(row: pd.Series, side: str) -> float:
+    candle_range = max(float(row["high"] - row["low"]), 1e-6)
+    if side == "BUY":
+        return max(min(float(row["open"]), float(row["close"])) - float(row["low"]), 0.0) / candle_range
+    return max(float(row["high"]) - max(float(row["open"]), float(row["close"])), 0.0) / candle_range
+
+
+def _find_retest_confirmation(
+    frame: pd.DataFrame,
+    zone: SupplyDemandZone,
+    side: str,
+    config: SupplyDemandStrategyConfig,
+) -> tuple[pd.Series, dict[str, Any]]:
+    touch_idx: int | None = None
+    for idx in range(zone.base_end_index + 1, len(frame)):
+        row = frame.iloc[idx]
+        if float(row["low"]) <= float(zone.zone_high) and float(row["high"]) >= float(zone.zone_low):
+            touch_idx = idx
+            break
+    if touch_idx is None:
+        fallback = _entry_candle(frame, zone)
+        return fallback, {
+            "fresh_zone": zone.test_count <= 1 and not zone.violated,
+            "retest_clean": False,
+            "retest_confirmed": False,
+            "retest_touch_count": 0,
+            "retest_touch_timestamp": "",
+            "retest_confirmation_timestamp": "",
+            "retest_body_ratio": 0.0,
+            "retest_wick_ratio": 0.0,
+        }
+
+    touch_row = frame.iloc[touch_idx]
+    confirmation_limit = min(len(frame), touch_idx + max(int(config.max_retest_bars), 1) + 1)
+    for idx in range(touch_idx + 1, confirmation_limit):
+        row = frame.iloc[idx]
+        body_ratio = _body_ratio(row)
+        wick_ratio = _directional_wick_ratio(row, side)
+        if side == "BUY":
+            directional_close = float(row["close"]) > float(row["open"]) and float(row["close"]) >= float(zone.zone_high)
+        else:
+            directional_close = float(row["close"]) < float(row["open"]) and float(row["close"]) <= float(zone.zone_low)
+        if directional_close and body_ratio >= max(float(config.min_confirmation_body_ratio) - 0.1, 0.4):
+            return row, {
+                "fresh_zone": zone.test_count <= 1 and not zone.violated,
+                "retest_clean": True,
+                "retest_confirmed": True,
+                "retest_touch_count": 1,
+                "retest_touch_timestamp": pd.Timestamp(touch_row["timestamp"]).strftime("%Y-%m-%d %H:%M:%S"),
+                "retest_confirmation_timestamp": pd.Timestamp(row["timestamp"]).strftime("%Y-%m-%d %H:%M:%S"),
+                "retest_body_ratio": round(body_ratio, 4),
+                "retest_wick_ratio": round(wick_ratio, 4),
+            }
+
+    return touch_row, {
+        "fresh_zone": zone.test_count == 0 and not zone.violated,
+        "retest_clean": False,
+        "retest_confirmed": False,
+        "retest_touch_count": 1,
+        "retest_touch_timestamp": pd.Timestamp(touch_row["timestamp"]).strftime("%Y-%m-%d %H:%M:%S"),
+        "retest_confirmation_timestamp": "",
+        "retest_body_ratio": 0.0,
+        "retest_wick_ratio": 0.0,
+    }
+
+
 def _rejection_strength(row: pd.Series, side: str) -> float:
     candle_range = max(float(row["high"] - row["low"]), 1e-6)
     body_ratio = abs(float(row["close"] - float(row["open"]))) / candle_range
@@ -581,6 +656,14 @@ def generate_supply_demand_trade_candidates(
             "strength_score": float(zone.strength_score),
             "freshness_score": float(zone.freshness_score),
             "cleanliness_score": float(zone.cleanliness_score),
+            "zone_selection_score": float(validation.metrics["zone_selection_score"]),
+            "strict_validation_score": int(validation.metrics["strict_validation_score"]),
+            "retest_confirmed": bool(validation.metrics["retest_confirmed"]),
+            "retest_touch_count": int(validation.metrics["retest_touch_count"]),
+            "retest_touch_time": str(validation.metrics["retest_touch_timestamp"]),
+            "retest_confirmation_time": str(validation.metrics["retest_confirmation_timestamp"]),
+            "rejection_strength": float(validation.metrics["rejection_strength"]),
+            "structure_clarity": float(validation.metrics["structure_clarity"]),
         }
         trades.append(candidate)
         traded_zone_ids.add(zone.zone_id)

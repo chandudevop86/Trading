@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -547,8 +547,6 @@ def run_live_trading_analysis(
             EVENT_NOTIFICATION_REQUESTED,
             {
                 'channel': 'telegram',
-                'telegram_token': telegram_token,
-                'telegram_chat_id': telegram_chat_id,
                 'message': message,
                 'symbol': symbol,
                 'strategy': strategy,
@@ -657,6 +655,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

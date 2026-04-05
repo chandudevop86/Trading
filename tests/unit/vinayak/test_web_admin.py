@@ -1,4 +1,4 @@
-﻿import os
+import os
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -24,14 +24,14 @@ def _cleanup_db() -> None:
 def test_admin_console_requires_login_and_then_renders_dashboard(tmp_path: Path) -> None:
     _configure_db(tmp_path)
     try:
-        fresh = TestClient(app)
+        fresh = TestClient(app, raise_server_exceptions=False)
         login_page = fresh.get('/admin')
         assert login_page.status_code == 200
         assert 'Vinayak Login' in login_page.text
 
         response = fresh.post('/admin/login', data={
             'username': 'admin',
-            'password': 'vinayak123',
+            'password': 'vinayak-test-password',
         })
         assert response.status_code == 200
         html = response.text
@@ -48,14 +48,14 @@ def test_admin_console_requires_login_and_then_renders_dashboard(tmp_path: Path)
 def test_workspace_requires_login_and_then_renders(tmp_path: Path) -> None:
     _configure_db(tmp_path)
     try:
-        fresh = TestClient(app)
+        fresh = TestClient(app, raise_server_exceptions=False)
         login_page = fresh.get('/workspace')
         assert login_page.status_code == 200
         assert 'Vinayak Login' in login_page.text
 
         response = fresh.post('/admin/login', data={
             'username': 'admin',
-            'password': 'vinayak123',
+            'password': 'vinayak-test-password',
         })
         assert response.status_code == 200
 
@@ -70,10 +70,10 @@ def test_workspace_requires_login_and_then_renders(tmp_path: Path) -> None:
 def test_admin_can_create_user_and_user_can_login(tmp_path: Path) -> None:
     _configure_db(tmp_path)
     try:
-        fresh = TestClient(app)
+        fresh = TestClient(app, raise_server_exceptions=False)
         admin_login = fresh.post('/admin/login', data={
             'username': 'admin',
-            'password': 'vinayak123',
+            'password': 'vinayak-test-password',
         })
         assert admin_login.status_code == 200
 
@@ -109,7 +109,7 @@ def test_admin_can_create_user_and_user_can_login(tmp_path: Path) -> None:
 def test_admin_login_rejects_invalid_credentials(tmp_path: Path) -> None:
     _configure_db(tmp_path)
     try:
-        fresh = TestClient(app)
+        fresh = TestClient(app, raise_server_exceptions=False)
         response = fresh.post('/admin/login', data={
             'username': 'admin',
             'password': 'wrong-password',
@@ -123,7 +123,7 @@ def test_admin_login_rejects_invalid_credentials(tmp_path: Path) -> None:
 def test_user_pages_require_login(tmp_path: Path) -> None:
     _configure_db(tmp_path)
     try:
-        fresh = TestClient(app)
+        fresh = TestClient(app, raise_server_exceptions=False)
         home = fresh.get('/app')
         assert home.status_code == 200
         assert 'Vinayak Login' in home.text
@@ -138,8 +138,8 @@ def test_user_pages_require_login(tmp_path: Path) -> None:
 def test_non_admin_cannot_open_admin_dashboard(tmp_path: Path) -> None:
     _configure_db(tmp_path)
     try:
-        fresh = TestClient(app)
-        fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+        fresh = TestClient(app, raise_server_exceptions=False)
+        fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
         fresh.post('/admin/users/create', data={'username': 'viewer1', 'password': 'viewer123', 'role': 'USER'})
         fresh.post('/logout')
         fresh.post('/login', data={'username': 'viewer1', 'password': 'viewer123'})
@@ -153,14 +153,14 @@ def test_non_admin_cannot_open_admin_dashboard(tmp_path: Path) -> None:
 def test_admin_api_routes_use_same_cookie_session(tmp_path: Path) -> None:
     _configure_db(tmp_path)
     try:
-        fresh = TestClient(app)
+        fresh = TestClient(app, raise_server_exceptions=False)
 
         unauth = fresh.get('/dashboard/summary')
         assert unauth.status_code == 401
 
         login = fresh.post('/admin/login', data={
             'username': 'admin',
-            'password': 'vinayak123',
+            'password': 'vinayak-test-password',
         })
         assert login.status_code == 200
 
@@ -170,15 +170,110 @@ def test_admin_api_routes_use_same_cookie_session(tmp_path: Path) -> None:
         _cleanup_db()
 
 
+def test_admin_password_rotation_from_env_updates_bootstrap_admin(tmp_path: Path) -> None:
+    _configure_db(tmp_path)
+    os.environ['VINAYAK_ADMIN_PASSWORD'] = 'firstpass123'
+    try:
+        fresh = TestClient(app, raise_server_exceptions=False)
+        first_login = fresh.post('/admin/login', data={
+            'username': 'admin',
+            'password': 'firstpass123',
+        })
+        assert first_login.status_code == 200
+
+        fresh.post('/admin/logout')
+        os.environ['VINAYAK_ADMIN_PASSWORD'] = 'secondpass456'
+
+        old_login = fresh.post('/admin/login', data={
+            'username': 'admin',
+            'password': 'firstpass123',
+        })
+        assert old_login.status_code == 200
+        assert 'Invalid admin username or password.' in old_login.text
+
+        new_login = fresh.post('/admin/login', data={
+            'username': 'admin',
+            'password': 'secondpass456',
+        })
+        assert new_login.status_code == 200
+        assert 'Admin Dashboard' in new_login.text
+    finally:
+        os.environ.pop('VINAYAK_ADMIN_PASSWORD', None)
+        _cleanup_db()
+
+
+def test_password_rotation_invalidates_existing_admin_session(tmp_path: Path) -> None:
+    _configure_db(tmp_path)
+    os.environ['VINAYAK_ADMIN_PASSWORD'] = 'firstpass123'
+    try:
+        fresh = TestClient(app, raise_server_exceptions=False)
+        login = fresh.post('/admin/login', data={
+            'username': 'admin',
+            'password': 'firstpass123',
+        })
+        assert login.status_code == 200
+        assert fresh.get('/dashboard/summary').status_code == 200
+
+        os.environ['VINAYAK_ADMIN_PASSWORD'] = 'secondpass456'
+
+        stale_session = fresh.get('/dashboard/summary')
+        assert stale_session.status_code == 401
+
+        relogin = fresh.post('/admin/login', data={
+            'username': 'admin',
+            'password': 'secondpass456',
+        })
+        assert relogin.status_code == 200
+        assert fresh.get('/dashboard/summary').status_code == 200
+    finally:
+        os.environ.pop('VINAYAK_ADMIN_PASSWORD', None)
+        _cleanup_db()
+
+
 def test_admin_validation_page_shows_empty_state_when_no_analysis_exists(tmp_path: Path) -> None:
     _configure_db(tmp_path)
     try:
-        fresh = TestClient(app)
-        fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak123'})
+        fresh = TestClient(app, raise_server_exceptions=False)
+        fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
         response = fresh.get('/admin/validation')
         assert response.status_code == 200
         assert 'No analysis run yet' in response.text
         assert 'Why Not Ready' in response.text
         assert 'NO_ANALYSIS_RUN_YET' in response.text
+    finally:
+        _cleanup_db()
+
+
+def test_admin_login_requires_explicit_admin_env_configuration(tmp_path: Path, monkeypatch) -> None:
+    _configure_db(tmp_path)
+    try:
+        monkeypatch.delenv('VINAYAK_ADMIN_USERNAME', raising=False)
+        monkeypatch.delenv('VINAYAK_ADMIN_PASSWORD', raising=False)
+        monkeypatch.delenv('VINAYAK_ADMIN_SECRET', raising=False)
+        fresh = TestClient(app, raise_server_exceptions=False)
+
+        response = fresh.post('/admin/login', data={
+            'username': 'admin',
+            'password': 'vinayak-test-password',
+        })
+
+        assert response.status_code == 500
+    finally:
+        _cleanup_db()
+
+
+def test_admin_login_rejects_placeholder_admin_env_configuration(tmp_path: Path, monkeypatch) -> None:
+    _configure_db(tmp_path)
+    try:
+        monkeypatch.setenv('VINAYAK_ADMIN_PASSWORD', 'change-me-in-production')
+        monkeypatch.setenv('VINAYAK_ADMIN_SECRET', 'change-me-in-production')
+        fresh = TestClient(app, raise_server_exceptions=False)
+
+        response = fresh.post('/admin/login', data={
+            'username': 'admin',
+            'password': 'change-me-in-production',
+        })
+
+        assert response.status_code == 500
     finally:
         _cleanup_db()

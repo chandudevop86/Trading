@@ -1,9 +1,10 @@
-﻿import os
+import os
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from vinayak.api.main import app
+from vinayak.api.routes.health import _sanitize_database_url
 from vinayak.core.config import reset_settings_cache
 from vinayak.db.session import reset_database_state
 
@@ -21,6 +22,14 @@ def test_health_live_route_returns_ok() -> None:
     response = client.get('/health/live')
     assert response.status_code == 200
     assert response.json() == {'status': 'ok'}
+
+
+def test_database_url_sanitizer_removes_credentials() -> None:
+    sanitized = _sanitize_database_url('postgresql+psycopg2://vinayak:super-secret@db.example:5432/vinayak')
+
+    assert sanitized == 'postgresql+psycopg2://db.example:5432/vinayak'
+    assert 'super-secret' not in sanitized
+    assert 'vinayak@' not in sanitized
 
 
 def test_health_ready_route_reports_platform_dependencies(tmp_path: Path) -> None:
@@ -46,6 +55,51 @@ def test_health_ready_route_reports_platform_dependencies(tmp_path: Path) -> Non
     assert payload['checks']['cache']['engine'] == 'redis'
     assert payload['checks']['document_store']['engine'] == 'mongodb'
     assert payload['checks']['message_bus']['engine'] == 'noop'
+
+    reset_database_state(os.environ['VINAYAK_DATABASE_URL'])
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    os.environ.pop('MESSAGE_BUS_ENABLED', None)
+    reset_settings_cache()
+
+
+def test_health_ready_route_detects_missing_admin_auth_config_without_detail(tmp_path: Path, monkeypatch) -> None:
+    database_path = tmp_path / 'vinayak-health-missing-admin.db'
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{database_path.as_posix()}"
+    os.environ['MESSAGE_BUS_ENABLED'] = 'false'
+    monkeypatch.delenv('VINAYAK_ADMIN_USERNAME', raising=False)
+    monkeypatch.delenv('VINAYAK_ADMIN_PASSWORD', raising=False)
+    monkeypatch.delenv('VINAYAK_ADMIN_SECRET', raising=False)
+    reset_settings_cache()
+    reset_database_state(os.environ['VINAYAK_DATABASE_URL'])
+
+    response = client.get('/health/ready')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['status'] == 'degraded'
+    assert payload['checks']['admin_auth'] == {'status': 'error'}
+
+    reset_database_state(os.environ['VINAYAK_DATABASE_URL'])
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    os.environ.pop('MESSAGE_BUS_ENABLED', None)
+    reset_settings_cache()
+
+
+def test_health_ready_route_rejects_placeholder_admin_auth_config_without_detail(tmp_path: Path, monkeypatch) -> None:
+    database_path = tmp_path / 'vinayak-health-placeholder-admin.db'
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{database_path.as_posix()}"
+    os.environ['MESSAGE_BUS_ENABLED'] = 'false'
+    monkeypatch.setenv('VINAYAK_ADMIN_PASSWORD', 'change-me-in-production')
+    monkeypatch.setenv('VINAYAK_ADMIN_SECRET', 'change-me-in-production')
+    reset_settings_cache()
+    reset_database_state(os.environ['VINAYAK_DATABASE_URL'])
+
+    response = client.get('/health/ready')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['status'] == 'degraded'
+    assert payload['checks']['admin_auth'] == {'status': 'error'}
 
     reset_database_state(os.environ['VINAYAK_DATABASE_URL'])
     os.environ.pop('VINAYAK_DATABASE_URL', None)

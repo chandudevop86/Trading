@@ -48,3 +48,11 @@ def test_sprint_one_files_exist() -> None:
     ]
     for path in required:
         assert path.exists(), f'Missing Sprint 1 file: {path}'
+
+
+def test_initialize_database_registers_user_table() -> None:
+    from vinayak.db.session import Base, initialize_database
+
+    initialize_database('sqlite:///:memory:')
+
+    assert 'users' in Base.metadata.tables

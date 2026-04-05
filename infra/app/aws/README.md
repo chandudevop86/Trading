@@ -1,4 +1,4 @@
-﻿# Vinayak AWS Target: ECS + ALB + RDS + ElastiCache + S3 + Secrets Manager
+# Vinayak AWS Target: ECS + ALB + RDS + ElastiCache + S3 + Secrets Manager
 
 This folder defines the selected target deployment model for Vinayak.
 
@@ -67,7 +67,7 @@ Store these in Secrets Manager or SSM Parameter Store:
 - `VINAYAK_DATABASE_URL`
 - `DHAN_CLIENT_ID`
 - `DHAN_ACCESS_TOKEN`
-- `TELEGRAM_TOKEN`
+- `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 - any future broker or API keys
 
@@ -85,3 +85,4 @@ Store these in Secrets Manager or SSM Parameter Store:
 - Redis should be private-only
 - S3 should store generated reports and export bundles instead of local-only files
 - CloudWatch alarms should cover ECS health, ALB 5xx, RDS CPU/storage, and task restarts
+

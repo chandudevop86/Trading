@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -7,11 +7,8 @@ from sqlalchemy.orm import Session
 from vinayak.api.dependencies.admin_auth import (
     COOKIE_NAME,
     LEGACY_COOKIE_NAME,
-    admin_password,
-    admin_username,
     get_current_user,
     require_admin_session,
-    require_user_session,
 )
 from vinayak.api.dependencies.db import get_db
 from vinayak.auth.service import ADMIN_ROLE, UserAuthService
@@ -170,6 +167,14 @@ def _render_login(error_message: str | None = None) -> HTMLResponse:
     error_block = f'<div class="error">{error_message}</div>' if error_message else ''
     return HTMLResponse(LOGIN_HTML.replace('__ERROR_BLOCK__', error_block))
 
+def _secure_cookies_enabled() -> bool:
+    value = str(__import__('os').getenv('VINAYAK_SECURE_COOKIES', 'true') or 'true').strip().lower()
+    return value not in {'0', 'false', 'no'}
+
+
+def _set_session_cookie(response: RedirectResponse, token: str) -> None:
+    response.set_cookie(COOKIE_NAME, token, httponly=True, samesite='lax', secure=_secure_cookies_enabled())
+
 
 def _redirect_for_role(role: str) -> str:
     return '/admin/dashboard' if str(role).upper() == ADMIN_ROLE else '/app'
@@ -204,9 +209,7 @@ def login(username: str = Form(...), password: str = Form(...), db: Session = De
     if user is None:
         return _render_login('Invalid username or password.')
     response = RedirectResponse(url=_redirect_for_role(user.role), status_code=303)
-    response.set_cookie(COOKIE_NAME, user.to_cookie_token(auth.auth_secret()), httponly=True, samesite='lax')
-    if str(user.role).upper() == ADMIN_ROLE:
-        response.set_cookie(LEGACY_COOKIE_NAME, UserAuthService.auth_secret() and __import__('hashlib').sha256(f"{admin_username()}:{admin_password()}:{UserAuthService.auth_secret()}".encode('utf-8')).hexdigest(), httponly=True, samesite='lax')
+    _set_session_cookie(response, auth.create_session_token(user))
     return response
 
 
@@ -349,8 +352,7 @@ def admin_login(username: str = Form(...), password: str = Form(...), db: Sessio
     if user is None or str(user.role).upper() != ADMIN_ROLE:
         return _render_login('Invalid admin username or password.')
     response = RedirectResponse(url='/admin/dashboard', status_code=303)
-    response.set_cookie(COOKIE_NAME, user.to_cookie_token(auth.auth_secret()), httponly=True, samesite='lax')
-    response.set_cookie(LEGACY_COOKIE_NAME, __import__('hashlib').sha256(f"{admin_username()}:{admin_password()}:{UserAuthService.auth_secret()}".encode('utf-8')).hexdigest(), httponly=True, samesite='lax')
+    _set_session_cookie(response, auth.create_session_token(user))
     return response
 
 
@@ -360,3 +362,6 @@ def admin_logout():
     response.delete_cookie(COOKIE_NAME)
     response.delete_cookie(LEGACY_COOKIE_NAME)
     return response
+
+
+

@@ -123,14 +123,36 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
 
     go_live_status = str(trade_summary.get('go_live_status', '') or '').upper()
     pass_fail_status = str(trade_summary.get('pass_fail_status', readiness.get('overall_status', 'FAIL')) or 'FAIL').upper()
-    if go_live_status == 'LIVE_READY':
+    oos_status = str(trade_summary.get('oos_status', 'OOS_NEED_MORE_DATA') or 'OOS_NEED_MORE_DATA').upper()
+    overfit_risk_score = float(trade_summary.get('overfit_risk_score', 10.0) or 10.0)
+    regime_consistency_score = float(trade_summary.get('regime_consistency_score', 0.0) or 0.0)
+
+    hard_gate_reasons: list[str] = []
+    soft_gate_reasons: list[str] = []
+    if oos_status == 'OOS_FAIL':
+        hard_gate_reasons.append('OOS_FAIL')
+    elif oos_status in {'OOS_BORDERLINE', 'OOS_NEED_MORE_DATA'}:
+        soft_gate_reasons.append(oos_status)
+    if overfit_risk_score >= 7.5:
+        hard_gate_reasons.append('OVERFIT_RISK_HIGH')
+    elif overfit_risk_score >= 5.0:
+        soft_gate_reasons.append('OVERFIT_RISK_MODERATE')
+    if regime_consistency_score < 3.5:
+        hard_gate_reasons.append('REGIME_CONSISTENCY_TOO_LOW')
+    elif regime_consistency_score < 5.5:
+        soft_gate_reasons.append('REGIME_CONSISTENCY_BORDERLINE')
+
+    if hard_gate_reasons:
+        verdict = 'NOT_READY'
+    elif go_live_status == 'LIVE_READY' and not soft_gate_reasons:
         verdict = 'READY'
-    elif pass_fail_status in {'PASS', 'NEED_MORE_DATA', 'PAPER_ONLY'} or readiness.get('overall_status') == 'WARNING':
+    elif pass_fail_status in {'PASS', 'NEED_MORE_DATA', 'PAPER_ONLY'} or readiness.get('overall_status') == 'WARNING' or soft_gate_reasons:
         verdict = 'PAPER_ONLY'
     else:
         verdict = 'NOT_READY'
 
     reasons = list(trade_summary.get('pass_fail_reasons', [])) or list(readiness.get('failed_checks', [])) or list(readiness.get('warnings', []))
+    reasons = list(dict.fromkeys(reasons + hard_gate_reasons + soft_gate_reasons))
     threshold_status = {
         'min_trades': int(metrics.get('total_trades', 0)) >= int(cfg['min_trades']),
         'min_expectancy': float(metrics.get('expectancy', 0.0)) > float(cfg['min_expectancy']),
@@ -138,6 +160,9 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
         'max_drawdown': float(metrics.get('max_drawdown', 0.0)) <= float(cfg['max_drawdown']),
         'min_validation_pass_rate': validation_pass_rate >= float(cfg['min_validation_pass_rate']),
         'duplicate_prevention_proven': bool(metrics.get('duplicate_prevention_proven', False)),
+        'oos_pass': oos_status == 'OOS_PASS',
+        'overfit_risk_ok': overfit_risk_score < 5.0,
+        'regime_consistency_ok': regime_consistency_score >= 5.5,
     }
 
     edge_report = {
@@ -152,6 +177,39 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
         'trade_data_quality_score': trade_summary.get('trade_data_quality_score', 0.0),
         'go_live_status': trade_summary.get('go_live_status', 'PAPER_ONLY'),
         'promotion_status': trade_summary.get('promotion_status', 'RESEARCH_ONLY'),
+        'regime_consistency_score': trade_summary.get('regime_consistency_score', 0.0),
+        'regime_consistency_label': trade_summary.get('regime_consistency_label', 'DEPENDENT'),
+        'dominant_regime': trade_summary.get('dominant_regime', 'none'),
+        'weakest_regime': trade_summary.get('weakest_regime', 'none'),
+        'regime_profit_concentration': trade_summary.get('regime_profit_concentration', 0.0),
+        'walkforward_windows': trade_summary.get('walkforward_windows', 0),
+        'walkforward_consistency_score': trade_summary.get('walkforward_consistency_score', 0.0),
+        'oos_status': trade_summary.get('oos_status', 'OOS_NEED_MORE_DATA'),
+        'oos_pass_rate': trade_summary.get('oos_pass_rate', 0.0),
+        'overfit_risk_score': trade_summary.get('overfit_risk_score', 10.0),
+        'overfit_risk_label': trade_summary.get('overfit_risk_label', 'HIGH'),
+        'edge_decay_score': trade_summary.get('edge_decay_score', 10.0),
+    }
+
+    regime_report = {
+        'regime_consistency_score': trade_summary.get('regime_consistency_score', 0.0),
+        'regime_consistency_label': trade_summary.get('regime_consistency_label', 'DEPENDENT'),
+        'dominant_regime': trade_summary.get('dominant_regime', 'none'),
+        'weakest_regime': trade_summary.get('weakest_regime', 'none'),
+        'regime_profit_concentration': trade_summary.get('regime_profit_concentration', 0.0),
+        'regime_metrics': trade_summary.get('regime_metrics', {}),
+    }
+
+    walkforward_report = {
+        'walkforward_windows': trade_summary.get('walkforward_windows', 0),
+        'walkforward_consistency_score': trade_summary.get('walkforward_consistency_score', 0.0),
+        'oos_status': trade_summary.get('oos_status', 'OOS_NEED_MORE_DATA'),
+        'oos_pass_rate': trade_summary.get('oos_pass_rate', 0.0),
+        'oos_reasons': trade_summary.get('oos_reasons', []),
+        'oos_warnings': trade_summary.get('oos_warnings', []),
+        'overfit_risk_score': trade_summary.get('overfit_risk_score', 10.0),
+        'overfit_risk_label': trade_summary.get('overfit_risk_label', 'HIGH'),
+        'edge_decay_score': trade_summary.get('edge_decay_score', 10.0),
     }
 
     return {
@@ -200,8 +258,21 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
         'go_live_status': trade_summary.get('go_live_status', 'PAPER_ONLY'),
         'promotion_status': trade_summary.get('promotion_status', 'RESEARCH_ONLY'),
         'edge_report': edge_report,
+        'regime_report': regime_report,
+        'walkforward_report': walkforward_report,
+        'regime_consistency_score': regime_report['regime_consistency_score'],
+        'regime_consistency_label': regime_report['regime_consistency_label'],
+        'dominant_regime': regime_report['dominant_regime'],
+        'weakest_regime': regime_report['weakest_regime'],
+        'walkforward_windows': walkforward_report['walkforward_windows'],
+        'oos_status': walkforward_report['oos_status'],
+        'oos_pass_rate': walkforward_report['oos_pass_rate'],
+        'overfit_risk_score': walkforward_report['overfit_risk_score'],
+        'overfit_risk_label': walkforward_report['overfit_risk_label'],
     }
 
 
 __all__ = ['DEFAULT_READINESS_THRESHOLDS', 'evaluate_readiness', 'summarize_validation_failures']
+
+
 

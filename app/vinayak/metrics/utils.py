@@ -274,6 +274,7 @@ def _backfill_strict_trade_fields(frame: pd.DataFrame) -> pd.DataFrame:
     frame['execution_allowed'] = frame['execution_allowed'].apply(_coerce_bool)
     default_execution_allowed = validation_status.eq('PASS') & frame['rejection_reason'].eq('')
     frame['execution_allowed'] = frame['execution_allowed'].where(frame['execution_allowed'].notna(), default_execution_allowed)
+    frame['execution_allowed'] = frame['execution_allowed'].infer_objects(copy=False)
     frame['execution_allowed'] = frame['execution_allowed'].fillna(False).astype(bool)
     return frame
 
@@ -395,5 +396,6 @@ def closed_trades_only(trades: pd.DataFrame) -> pd.DataFrame:
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
 
 

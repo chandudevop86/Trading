@@ -190,11 +190,12 @@ def test_coerce_trade_records_backfills_strict_fields_for_legacy_rows() -> None:
 
     assert frame.loc[0, 'strict_validation_score'] == 8
     assert frame.loc[0, 'rejection_reason'] == ''
-    assert frame.loc[0, 'execution_allowed'] is True
+    assert bool(frame.loc[0, 'execution_allowed']) is True
     assert frame.loc[0, 'zone_score_components']['zone_score'] == 82.0
     assert frame.loc[0, 'validation_log']['strict_validation_score'] == 8
     assert frame.loc[1, 'strict_validation_score'] == 4
     assert frame.loc[1, 'rejection_reason'] == 'weak_zone_score, retest_not_confirmed'
-    assert frame.loc[1, 'execution_allowed'] is False
+    assert bool(frame.loc[1, 'execution_allowed']) is False
     assert frame.loc[1, 'validation_log']['rejection_reason'] == 'weak_zone_score, retest_not_confirmed'
+
 

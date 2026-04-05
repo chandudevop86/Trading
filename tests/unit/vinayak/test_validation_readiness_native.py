@@ -1,3 +1,4 @@
+from unittest.mock import patch
 from vinayak.validation.engine import validate_trade
 from vinayak.analytics.readiness import evaluate_readiness
 from vinayak.validation.trade_evaluation import build_trade_evaluation_summary
@@ -142,3 +143,148 @@ def test_readiness_uses_clean_trades_only_for_edge_metrics() -> None:
     assert readiness['expectancy'] == 200.0
     assert readiness['edge_report']['clean_trade_count'] == 1
     assert readiness['top_rejection_reasons']['weak_zone_score'] >= 1
+
+def test_readiness_exposes_regime_and_walkforward_reports() -> None:
+    rows = [
+        {
+            'strategy': 'VINAYAK_PAPER',
+            'symbol': '^NSEI',
+            'execution_type': 'PAPER',
+            'side': 'BUY',
+            'timestamp': '2026-04-02 09:20:00',
+            'entry_time': '2026-04-02 09:20:00',
+            'exit_time': '2026-04-02 10:00:00',
+            'entry_price': 100.0,
+            'exit_price': 102.0,
+            'pnl': 200.0,
+            'trade_status': 'CLOSED',
+            'execution_status': 'FILLED',
+            'validation_status': 'PASS',
+            'validation_reasons': [],
+            'rejection_reason': '',
+            'strict_validation_score': 8,
+            'trend_bias': 'BULLISH',
+            'atr_pct': 0.45,
+        },
+        {
+            'strategy': 'VINAYAK_PAPER',
+            'symbol': '^NSEI',
+            'execution_type': 'PAPER',
+            'side': 'SELL',
+            'timestamp': '2026-04-02 10:15:00',
+            'entry_time': '2026-04-02 10:15:00',
+            'exit_time': '2026-04-02 10:45:00',
+            'entry_price': 101.0,
+            'exit_price': 100.0,
+            'pnl': 100.0,
+            'trade_status': 'CLOSED',
+            'execution_status': 'FILLED',
+            'validation_status': 'PASS',
+            'validation_reasons': [],
+            'rejection_reason': '',
+            'strict_validation_score': 8,
+            'market_state': 'QUIET',
+            'atr_pct': 0.2,
+        },
+    ]
+
+    readiness = evaluate_readiness(rows, rows)
+
+    assert 'regime_report' in readiness
+    assert 'walkforward_report' in readiness
+    assert 'regime_consistency_score' in readiness
+    assert 'walkforward_windows' in readiness
+    assert 'oos_status' in readiness
+    assert 'overfit_risk_score' in readiness
+    assert 'dominant_regime' in readiness['regime_report']
+    assert 'oos_status' in readiness['walkforward_report']
+
+def test_readiness_hard_blocks_oos_fail_and_high_overfit() -> None:
+    rows = [
+        {
+            'strategy': 'VINAYAK_PAPER',
+            'symbol': '^NSEI',
+            'execution_type': 'PAPER',
+            'side': 'BUY',
+            'timestamp': '2026-04-02 09:20:00',
+            'entry_time': '2026-04-02 09:20:00',
+            'exit_time': '2026-04-02 10:00:00',
+            'entry_price': 100.0,
+            'exit_price': 102.0,
+            'pnl': 200.0,
+            'trade_status': 'CLOSED',
+            'execution_status': 'FILLED',
+            'validation_status': 'PASS',
+            'validation_reasons': [],
+            'rejection_reason': '',
+            'strict_validation_score': 8,
+        }
+    ]
+
+    with patch('vinayak.analytics.readiness.build_trade_evaluation_summary', return_value={
+        'clean_trades': 120,
+        'pass_fail_status': 'PASS',
+        'go_live_status': 'LIVE_READY',
+        'promotion_status': 'REJECT',
+        'paper_readiness_summary': 'blocked by oos',
+        'oos_status': 'OOS_FAIL',
+        'overfit_risk_score': 8.2,
+        'overfit_risk_label': 'HIGH',
+        'regime_consistency_score': 6.2,
+        'regime_consistency_label': 'DECENT',
+        'walkforward_windows': 5,
+        'oos_pass_rate': 20.0,
+        'pass_fail_reasons': [],
+    }):
+        readiness = evaluate_readiness(rows, rows, config={'min_trades': 1})
+
+    assert readiness['verdict'] == 'NOT_READY'
+    assert 'OOS_FAIL' in readiness['reasons']
+    assert 'OVERFIT_RISK_HIGH' in readiness['reasons']
+    assert readiness['threshold_status']['oos_pass'] is False
+    assert readiness['threshold_status']['overfit_risk_ok'] is False
+
+
+def test_readiness_caps_borderline_oos_to_paper_only() -> None:
+    rows = [
+        {
+            'strategy': 'VINAYAK_PAPER',
+            'symbol': '^NSEI',
+            'execution_type': 'PAPER',
+            'side': 'BUY',
+            'timestamp': '2026-04-03 09:15:00',
+            'entry_time': '2026-04-03 09:15:00',
+            'exit_time': '2026-04-03 09:20:00',
+            'entry_price': 100.0,
+            'exit_price': 101.0,
+            'pnl': 10.0,
+            'trade_status': 'CLOSED',
+            'execution_status': 'FILLED',
+            'validation_status': 'PASS',
+            'validation_reasons': [],
+            'rejection_reason': '',
+            'strict_validation_score': 8,
+        }
+    ]
+
+    with patch('vinayak.analytics.readiness.build_trade_evaluation_summary', return_value={
+        'clean_trades': 120,
+        'pass_fail_status': 'PASS',
+        'go_live_status': 'LIVE_READY',
+        'promotion_status': 'BACKTEST_OK',
+        'paper_readiness_summary': 'borderline oos',
+        'oos_status': 'OOS_BORDERLINE',
+        'overfit_risk_score': 4.0,
+        'overfit_risk_label': 'LOW',
+        'regime_consistency_score': 5.0,
+        'regime_consistency_label': 'FRAGILE',
+        'walkforward_windows': 4,
+        'oos_pass_rate': 55.0,
+        'pass_fail_reasons': [],
+    }):
+        readiness = evaluate_readiness(rows, rows, config={'min_trades': 1})
+
+    assert readiness['verdict'] == 'PAPER_ONLY'
+    assert 'OOS_BORDERLINE' in readiness['reasons'] or 'REGIME_CONSISTENCY_BORDERLINE' in readiness['reasons']
+
+

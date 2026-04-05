@@ -312,6 +312,17 @@ def _validation_summary_from_rows(rows: list[dict[str, Any]], strategy: str) -> 
         'edge_proof_status': readiness.get('edge_proof_status', 'PAPER_ONLY'),
         'readiness_summary': readiness.get('readiness_summary', ''),
         'edge_report': readiness.get('edge_report', {}),
+        'regime_report': readiness.get('regime_report', {}),
+        'walkforward_report': readiness.get('walkforward_report', {}),
+        'regime_consistency_score': readiness.get('regime_consistency_score', 0.0),
+        'regime_consistency_label': readiness.get('regime_consistency_label', 'DEPENDENT'),
+        'dominant_regime': readiness.get('dominant_regime', 'none'),
+        'weakest_regime': readiness.get('weakest_regime', 'none'),
+        'walkforward_windows': readiness.get('walkforward_windows', 0),
+        'oos_status': readiness.get('oos_status', 'OOS_NEED_MORE_DATA'),
+        'oos_pass_rate': readiness.get('oos_pass_rate', 0.0),
+        'overfit_risk_score': readiness.get('overfit_risk_score', 10.0),
+        'overfit_risk_label': readiness.get('overfit_risk_label', 'HIGH'),
     }
 
 
@@ -681,6 +692,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

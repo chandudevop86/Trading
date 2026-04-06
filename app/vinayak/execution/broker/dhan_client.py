@@ -17,8 +17,8 @@ class DhanClientRequestError(RuntimeError):
 
 class DhanClient:
     def __init__(self, client_id: str | None, access_token: str | None, *, base_url: str | None = None, timeout: int | None = None) -> None:
-        self.client_id = client_id if client_id is not None else os.getenv('DHAN_CLIENT_ID')
-        self.access_token = access_token if access_token is not None else os.getenv('DHAN_ACCESS_TOKEN')
+        self.client_id = client_id 
+        self.access_token = access_token
         self.base_url = str(base_url or os.getenv('DHAN_BASE_URL', 'https://api-hq.dhan.co')).rstrip('/')
         self.timeout = int(timeout or os.getenv('DHAN_TIMEOUT', '30'))
 

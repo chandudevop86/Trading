@@ -204,3 +204,6 @@ class UserAuthService:
         if not hmac.compare_digest(raw, expected):
             return None
         return AuthenticatedUser(id=record.id, username=record.username, role=record.role, is_active=record.is_active)
+export VINAYAK_ADMIN_USERNAME=admin
+export VINAYAK_ADMIN_PASSWORD=vinayak@123
+export VINAYAK_ADMIN_SECRET=super-secret-key-987

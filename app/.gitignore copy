@@ -1,0 +1,38 @@
+﻿.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Runtime logs
+logs/
+logs/*.log
+logs/errors.log
+logs/execution.log
+logs/rejections.log
+
+# Local generated data and caches
+data/
+*.db
+data/*.csv
+data/*.db
+data/cache/
+data/cache/**
+src/**/__pycache__/
+chrome-headless-profile/
+vinayak/docs/chrome-headless-profile/
+data/legacy_runtime.db
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+vinayak/data/observability/
+.edge-print-profile-*/
+
+data/legacy_runtime.db
+*.db
+data/*.db
+data/*.db
+*.db

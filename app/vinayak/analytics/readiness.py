@@ -100,7 +100,7 @@ def summarize_validation_failures(rejects_df: Any) -> dict[str, int]:
     return dict(counter)
 
 
-def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] | None = None) -> dict[str, Any]:
+def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] | None = None, *, trade_summary: dict[str, Any] | None = None) -> dict[str, Any]:
     cfg = {**DEFAULT_READINESS_THRESHOLDS, **dict(config or {})}
     trades = _coerce_frame(trades_df)
     rejects = _coerce_frame(rejects_df)
@@ -110,7 +110,9 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
     metrics = compute_trade_metrics(clean_trades)
     readiness = engine['readiness']
     top_rejection_reasons = summarize_validation_failures(rejects)
-    trade_summary = build_trade_evaluation_summary(clean_trades.to_dict(orient='records'), strategy_name='PHASE3_VALIDATION') if not clean_trades.empty else {}
+    resolved_trade_summary = dict(trade_summary or {}) if isinstance(trade_summary, dict) else {}
+    if not resolved_trade_summary and not clean_trades.empty:
+        resolved_trade_summary = build_trade_evaluation_summary(clean_trades.to_dict(orient='records'), strategy_name='PHASE3_VALIDATION')
 
     total_candidates = int(len(trades) + len(rejects))
     total_rejected = int(len(rejects))
@@ -121,11 +123,11 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
     total_executed = int(len(clean_trades))
     validation_pass_rate = round((total_passed / total_candidates * 100.0), 2) if total_candidates > 0 else 0.0
 
-    go_live_status = str(trade_summary.get('go_live_status', '') or '').upper()
-    pass_fail_status = str(trade_summary.get('pass_fail_status', readiness.get('overall_status', 'FAIL')) or 'FAIL').upper()
-    oos_status = str(trade_summary.get('oos_status', 'OOS_NEED_MORE_DATA') or 'OOS_NEED_MORE_DATA').upper()
-    overfit_risk_score = float(trade_summary.get('overfit_risk_score', 10.0) or 10.0)
-    regime_consistency_score = float(trade_summary.get('regime_consistency_score', 0.0) or 0.0)
+    go_live_status = str(resolved_trade_summary.get('go_live_status', '') or '').upper()
+    pass_fail_status = str(resolved_trade_summary.get('pass_fail_status', readiness.get('overall_status', 'FAIL')) or 'FAIL').upper()
+    oos_status = str(resolved_trade_summary.get('oos_status', 'OOS_NEED_MORE_DATA') or 'OOS_NEED_MORE_DATA').upper()
+    overfit_risk_score = float(resolved_trade_summary.get('overfit_risk_score', 10.0) or 10.0)
+    regime_consistency_score = float(resolved_trade_summary.get('regime_consistency_score', 0.0) or 0.0)
 
     hard_gate_reasons: list[str] = []
     soft_gate_reasons: list[str] = []
@@ -151,7 +153,7 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
     else:
         verdict = 'NOT_READY'
 
-    reasons = list(trade_summary.get('pass_fail_reasons', [])) or list(readiness.get('failed_checks', [])) or list(readiness.get('warnings', []))
+    reasons = list(resolved_trade_summary.get('pass_fail_reasons', [])) or list(readiness.get('failed_checks', [])) or list(readiness.get('warnings', []))
     reasons = list(dict.fromkeys(reasons + hard_gate_reasons + soft_gate_reasons))
     threshold_status = {
         'min_trades': int(metrics.get('total_trades', 0)) >= int(cfg['min_trades']),
@@ -166,50 +168,50 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
     }
 
     edge_report = {
-        'clean_trade_count': int(trade_summary.get('clean_trades', metrics.get('total_trades', 0))),
-        'expectancy_per_trade': trade_summary.get('expectancy_per_trade', metrics.get('expectancy', 0.0)),
-        'expectancy_r': trade_summary.get('expectancy_r', 0.0),
-        'profit_factor': trade_summary.get('profit_factor', metrics.get('profit_factor', 0.0)),
-        'max_drawdown_pct': trade_summary.get('max_drawdown_pct', metrics.get('max_drawdown', 0.0)),
-        'win_rate': trade_summary.get('win_rate', metrics.get('win_rate', 0.0)),
-        'expectancy_stability_score': trade_summary.get('expectancy_stability_score', 0.0),
-        'profit_factor_stability_score': trade_summary.get('profit_factor_stability_score', 0.0),
-        'trade_data_quality_score': trade_summary.get('trade_data_quality_score', 0.0),
-        'go_live_status': trade_summary.get('go_live_status', 'PAPER_ONLY'),
-        'promotion_status': trade_summary.get('promotion_status', 'RESEARCH_ONLY'),
-        'regime_consistency_score': trade_summary.get('regime_consistency_score', 0.0),
-        'regime_consistency_label': trade_summary.get('regime_consistency_label', 'DEPENDENT'),
-        'dominant_regime': trade_summary.get('dominant_regime', 'none'),
-        'weakest_regime': trade_summary.get('weakest_regime', 'none'),
-        'regime_profit_concentration': trade_summary.get('regime_profit_concentration', 0.0),
-        'walkforward_windows': trade_summary.get('walkforward_windows', 0),
-        'walkforward_consistency_score': trade_summary.get('walkforward_consistency_score', 0.0),
-        'oos_status': trade_summary.get('oos_status', 'OOS_NEED_MORE_DATA'),
-        'oos_pass_rate': trade_summary.get('oos_pass_rate', 0.0),
-        'overfit_risk_score': trade_summary.get('overfit_risk_score', 10.0),
-        'overfit_risk_label': trade_summary.get('overfit_risk_label', 'HIGH'),
-        'edge_decay_score': trade_summary.get('edge_decay_score', 10.0),
+        'clean_trade_count': int(resolved_trade_summary.get('clean_trades', metrics.get('total_trades', 0))),
+        'expectancy_per_trade': resolved_trade_summary.get('expectancy_per_trade', metrics.get('expectancy', 0.0)),
+        'expectancy_r': resolved_trade_summary.get('expectancy_r', 0.0),
+        'profit_factor': resolved_trade_summary.get('profit_factor', metrics.get('profit_factor', 0.0)),
+        'max_drawdown_pct': resolved_trade_summary.get('max_drawdown_pct', metrics.get('max_drawdown', 0.0)),
+        'win_rate': resolved_trade_summary.get('win_rate', metrics.get('win_rate', 0.0)),
+        'expectancy_stability_score': resolved_trade_summary.get('expectancy_stability_score', 0.0),
+        'profit_factor_stability_score': resolved_trade_summary.get('profit_factor_stability_score', 0.0),
+        'trade_data_quality_score': resolved_trade_summary.get('trade_data_quality_score', 0.0),
+        'go_live_status': resolved_trade_summary.get('go_live_status', 'PAPER_ONLY'),
+        'promotion_status': resolved_trade_summary.get('promotion_status', 'RESEARCH_ONLY'),
+        'regime_consistency_score': resolved_trade_summary.get('regime_consistency_score', 0.0),
+        'regime_consistency_label': resolved_trade_summary.get('regime_consistency_label', 'DEPENDENT'),
+        'dominant_regime': resolved_trade_summary.get('dominant_regime', 'none'),
+        'weakest_regime': resolved_trade_summary.get('weakest_regime', 'none'),
+        'regime_profit_concentration': resolved_trade_summary.get('regime_profit_concentration', 0.0),
+        'walkforward_windows': resolved_trade_summary.get('walkforward_windows', 0),
+        'walkforward_consistency_score': resolved_trade_summary.get('walkforward_consistency_score', 0.0),
+        'oos_status': resolved_trade_summary.get('oos_status', 'OOS_NEED_MORE_DATA'),
+        'oos_pass_rate': resolved_trade_summary.get('oos_pass_rate', 0.0),
+        'overfit_risk_score': resolved_trade_summary.get('overfit_risk_score', 10.0),
+        'overfit_risk_label': resolved_trade_summary.get('overfit_risk_label', 'HIGH'),
+        'edge_decay_score': resolved_trade_summary.get('edge_decay_score', 10.0),
     }
 
     regime_report = {
-        'regime_consistency_score': trade_summary.get('regime_consistency_score', 0.0),
-        'regime_consistency_label': trade_summary.get('regime_consistency_label', 'DEPENDENT'),
-        'dominant_regime': trade_summary.get('dominant_regime', 'none'),
-        'weakest_regime': trade_summary.get('weakest_regime', 'none'),
-        'regime_profit_concentration': trade_summary.get('regime_profit_concentration', 0.0),
-        'regime_metrics': trade_summary.get('regime_metrics', {}),
+        'regime_consistency_score': resolved_trade_summary.get('regime_consistency_score', 0.0),
+        'regime_consistency_label': resolved_trade_summary.get('regime_consistency_label', 'DEPENDENT'),
+        'dominant_regime': resolved_trade_summary.get('dominant_regime', 'none'),
+        'weakest_regime': resolved_trade_summary.get('weakest_regime', 'none'),
+        'regime_profit_concentration': resolved_trade_summary.get('regime_profit_concentration', 0.0),
+        'regime_metrics': resolved_trade_summary.get('regime_metrics', {}),
     }
 
     walkforward_report = {
-        'walkforward_windows': trade_summary.get('walkforward_windows', 0),
-        'walkforward_consistency_score': trade_summary.get('walkforward_consistency_score', 0.0),
-        'oos_status': trade_summary.get('oos_status', 'OOS_NEED_MORE_DATA'),
-        'oos_pass_rate': trade_summary.get('oos_pass_rate', 0.0),
-        'oos_reasons': trade_summary.get('oos_reasons', []),
-        'oos_warnings': trade_summary.get('oos_warnings', []),
-        'overfit_risk_score': trade_summary.get('overfit_risk_score', 10.0),
-        'overfit_risk_label': trade_summary.get('overfit_risk_label', 'HIGH'),
-        'edge_decay_score': trade_summary.get('edge_decay_score', 10.0),
+        'walkforward_windows': resolved_trade_summary.get('walkforward_windows', 0),
+        'walkforward_consistency_score': resolved_trade_summary.get('walkforward_consistency_score', 0.0),
+        'oos_status': resolved_trade_summary.get('oos_status', 'OOS_NEED_MORE_DATA'),
+        'oos_pass_rate': resolved_trade_summary.get('oos_pass_rate', 0.0),
+        'oos_reasons': resolved_trade_summary.get('oos_reasons', []),
+        'oos_warnings': resolved_trade_summary.get('oos_warnings', []),
+        'overfit_risk_score': resolved_trade_summary.get('overfit_risk_score', 10.0),
+        'overfit_risk_label': resolved_trade_summary.get('overfit_risk_label', 'HIGH'),
+        'edge_decay_score': resolved_trade_summary.get('edge_decay_score', 10.0),
     }
 
     return {
@@ -253,10 +255,10 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
         'duplicate_prevention_proven': bool(metrics.get('duplicate_prevention_proven', False)),
         'clean_trade_metrics_only': True,
         'edge_proof_status': edge_report['go_live_status'],
-        'readiness_summary': trade_summary.get('paper_readiness_summary', readiness.get('summary', '')),
-        'paper_readiness_summary': trade_summary.get('paper_readiness_summary', ''),
-        'go_live_status': trade_summary.get('go_live_status', 'PAPER_ONLY'),
-        'promotion_status': trade_summary.get('promotion_status', 'RESEARCH_ONLY'),
+        'readiness_summary': resolved_trade_summary.get('paper_readiness_summary', readiness.get('summary', '')),
+        'paper_readiness_summary': resolved_trade_summary.get('paper_readiness_summary', ''),
+        'go_live_status': resolved_trade_summary.get('go_live_status', 'PAPER_ONLY'),
+        'promotion_status': resolved_trade_summary.get('promotion_status', 'RESEARCH_ONLY'),
         'edge_report': edge_report,
         'regime_report': regime_report,
         'walkforward_report': walkforward_report,
@@ -273,6 +275,8 @@ def evaluate_readiness(trades_df: Any, rejects_df: Any, config: dict[str, Any] |
 
 
 __all__ = ['DEFAULT_READINESS_THRESHOLDS', 'evaluate_readiness', 'summarize_validation_failures']
+
+
 
 
 

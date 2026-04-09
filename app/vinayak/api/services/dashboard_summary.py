@@ -33,7 +33,7 @@ def _validation_snapshot(path: Path) -> dict[str, object]:
     if not rows:
         return {}
     summary = build_trade_evaluation_summary(rows, strategy_name='VINAYAK_PAPER')
-    readiness = evaluate_readiness(rows, rows)
+    readiness = evaluate_readiness(rows, rows, trade_summary=summary)
     return {
         'clean_trades': summary.get('clean_trades', summary.get('closed_trades', 0)),
         'expectancy_per_trade': summary.get('expectancy_per_trade', 0.0),
@@ -103,6 +103,7 @@ class DashboardSummaryService:
             'recent_audit_failures': recent_audit_failures,
             'validation_summary': _validation_snapshot(DEFAULT_PAPER_LOG_PATH),
         }
+
 
 
 

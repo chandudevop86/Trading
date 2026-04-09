@@ -263,7 +263,7 @@ def _validation_summary_from_rows(rows: list[dict[str, Any]], strategy: str) -> 
     if not rows:
         return {}
     summary = build_trade_evaluation_summary(rows, strategy_name=str(strategy or 'VINAYAK'))
-    readiness = evaluate_readiness(rows, rows)
+    readiness = evaluate_readiness(rows, rows, trade_summary=summary)
     return {
         'clean_trades': summary.get('clean_trades', summary.get('closed_trades', 0)),
         'expectancy_per_trade': summary.get('expectancy_per_trade', 0.0),
@@ -669,6 +669,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

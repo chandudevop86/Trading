@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import hashlib
@@ -27,10 +27,7 @@ from src.csv_io import read_csv_rows
 from src.runtime_config import RuntimeConfig
 from src.trading_core import append_log
 from src.strategy_tuning import normalize_strategy_key, strategy_tuning_preset
-<<<<<<< HEAD
 from src.execution.contracts import normalize_candidate_contract
-=======
->>>>>>> fed8576 ( modifyed with ltp verson2)
 from src.runtime_persistence import (
     load_current_rows,
     load_execution_risk_state,
@@ -414,11 +411,7 @@ def _cooldown_window_seconds(record: dict[str, object]) -> int:
     if bars > 0 and timeframe_minutes > 0:
         return int(bars * timeframe_minutes * 60)
     preset = strategy_tuning_preset(str(record.get("strategy", "") or ""))
-<<<<<<< HEAD
     if timeframe_minutes > 0 and int(getattr(preset, "duplicate_cooldown_minutes", 0) or 0) > 0:
-=======
-    if int(getattr(preset, "duplicate_cooldown_minutes", 0) or 0) > 0:
->>>>>>> fed8576 ( modifyed with ltp verson2)
         return int(preset.duplicate_cooldown_minutes) * 60
     return 0
 
@@ -1415,19 +1408,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
         batch_seen_trade_ids.add(trade_id)
         batch_seen_trade_keys.add(trade_key)
         batch_seen_signal_keys.add(duplicate_signal_key)
-<<<<<<< HEAD
         batch_seen_signal_instances.add(str(base_row.get('signal_instance_key', '') or make_signal_instance_key(base_row)))
-=======
-        trade_cooldown_group = _trade_cooldown_group_key(base_row)
-        trade_cooldown_seconds = _cooldown_window_seconds(base_row)
-        previous_trade_time = batch_recent_trade_times.get(trade_cooldown_group)
-        if previous_trade_time is None:
-            previous_trade_time = recent_trade_times.get(trade_cooldown_group)
-        if trade_cooldown_seconds > 0 and signal_time is not None and previous_trade_time is not None:
-            if (signal_time - previous_trade_time).total_seconds() < trade_cooldown_seconds:
-                _mark_skipped(result, base_row, SKIP_REASON_DUPLICATE_SIGNAL_COOLDOWN)
-                continue
->>>>>>> fed8576 ( modifyed with ltp verson2)
         if signal_time is not None:
             batch_recent_signal_times[cooldown_group] = signal_time
             batch_recent_trade_times[trade_cooldown_group] = signal_time
@@ -1442,10 +1423,7 @@ def _execute_candidates(candidates: list[dict[str, object]], output_path: Path, 
             blocked["trade_status"] = TRADE_STATUS_BLOCKED
             blocked["execution_status"] = "BLOCKED"
             blocked["blocked_reason"] = SKIP_REASON_MAX_OPEN_TRADES if open_trade_limit_hit else SKIP_REASON_MAX_TRADES_PER_DAY if trade_limit_hit else SKIP_REASON_MAX_DAILY_LOSS
-<<<<<<< HEAD
             blocked = _annotate_rejection_row(blocked, reason=str(blocked["blocked_reason"]), category='risk')
-=======
->>>>>>> fed8576 ( modifyed with ltp verson2)
             blocked["risk_limit_reason"] = f"max open trades={int(max_open_trades)}" if open_trade_limit_hit else _risk_limit_message(effective_max_trades_per_day, max_daily_loss)
             blocked["broker_name"] = resolved_broker_name
             blocked["broker_status"] = "RISK_LIMIT"
@@ -2177,7 +2155,6 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
 
 
 
-<<<<<<< HEAD
 
 
 
@@ -2192,5 +2169,3 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
 
 
 
-=======
->>>>>>> fed8576 ( modifyed with ltp verson2)

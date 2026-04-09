@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import floor
@@ -987,9 +987,6 @@ __all__ = [
 
 
 
-<<<<<<< HEAD
 
 
 
-=======
->>>>>>> fed8576 ( modifyed with ltp verson2)

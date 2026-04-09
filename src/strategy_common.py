@@ -1,11 +1,7 @@
-<<<<<<< HEAD
 from __future__ import annotations
 
 NSE_MARKET_OPEN = '09:15'
 NSE_MARKET_CLOSE = '15:30'
-=======
-﻿from __future__ import annotations
->>>>>>> fed8576 ( modifyed with ltp verson2)
 
 from datetime import datetime, time
 
@@ -23,7 +19,6 @@ def parse_hhmm(value: str, fallback: str) -> time:
 def session_window(
     current: datetime | time,
     *,
-<<<<<<< HEAD
     morning_start: str = "09:25",
     morning_end: str = "11:15",
     midday_start: str = "11:16",
@@ -58,31 +53,11 @@ def session_window(
     if normalized <= market_close:
         return "CLOSING_BLOCKED"
     return "OUTSIDE_MARKET"
-=======
-    morning_start: str = "09:20",
-    morning_end: str = "11:30",
-    midday_start: str = "12:00",
-    midday_end: str = "13:30",
-    allow_afternoon_session: bool = False,
-    afternoon_start: str = "13:45",
-    afternoon_end: str = "15:00",
-) -> str:
-    current_time = current if isinstance(current, time) else current.time()
-    normalized = current_time.replace(second=0, microsecond=0)
-    if parse_hhmm(morning_start, "09:20") <= normalized <= parse_hhmm(morning_end, "11:30"):
-        return "MORNING"
-    if parse_hhmm(midday_start, "12:00") <= normalized <= parse_hhmm(midday_end, "13:30"):
-        return "MIDDAY_BLOCKED"
-    if allow_afternoon_session and parse_hhmm(afternoon_start, "13:45") <= normalized <= parse_hhmm(afternoon_end, "15:00"):
-        return "AFTERNOON"
-    return ""
->>>>>>> fed8576 ( modifyed with ltp verson2)
 
 
 def session_allowed(
     current: datetime | time,
     *,
-<<<<<<< HEAD
     morning_start: str = "09:25",
     morning_end: str = "11:15",
     midday_start: str = "11:16",
@@ -90,15 +65,6 @@ def session_allowed(
     allow_afternoon_session: bool = False,
     afternoon_start: str = "13:46",
     afternoon_end: str = "14:45",
-=======
-    morning_start: str = "09:20",
-    morning_end: str = "11:30",
-    midday_start: str = "12:00",
-    midday_end: str = "13:30",
-    allow_afternoon_session: bool = False,
-    afternoon_start: str = "13:45",
-    afternoon_end: str = "15:00",
->>>>>>> fed8576 ( modifyed with ltp verson2)
 ) -> bool:
     return session_window(
         current,
@@ -110,7 +76,4 @@ def session_allowed(
         afternoon_start=afternoon_start,
         afternoon_end=afternoon_end,
     ) in {"MORNING", "AFTERNOON"}
-<<<<<<< HEAD
 
-=======
->>>>>>> fed8576 ( modifyed with ltp verson2)

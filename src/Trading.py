@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import sys
 import types
@@ -17,7 +17,6 @@ from src.amd_fvg_sd_bot import generate_trades as generate_amd_fvg_sd_trades
 from src.breakout_bot import generate_trades as generate_breakout_trades
 from src.strategy_demand_supply import generate_trades as generate_demand_supply_trades
 from src.indicator_bot import generate_indicator_rows
-<<<<<<< HEAD
 from src.runtime_defaults import (
     APP_LOG,
     BROKER_OPTIONS,
@@ -33,9 +32,6 @@ from src.runtime_defaults import (
     runtime_log_paths,
     runtime_output_paths,
 )
-=======
-from src.runtime_config import RuntimeConfig
->>>>>>> fed8576 ( modifyed with ltp verson2)
 from src.mtf_trade_bot import generate_trades as generate_mtf_trade_trades
 from src.runtime_strategy_presets import OPERATOR_DEFAULTS
 from src.strike_selector import attach_option_strikes
@@ -54,34 +50,6 @@ from src.visualization.zone_heatmap import build_zone_heatmap
 from src.trading_runtime_service import latest_actionable_trades, run_operator_action
 from src.trading_ui_service import apply_minimal_theme, build_request, initialize_ui_runtime, log_ui_event, render_operator_panels, render_summary_cards
 
-<<<<<<< HEAD
-=======
-RUNTIME_CONFIG = RuntimeConfig.load()
-DATA_DIR = RUNTIME_CONFIG.paths.data_dir
-LOG_DIR = RUNTIME_CONFIG.paths.logs_dir
-OHLCV_OUTPUT = RUNTIME_CONFIG.paths.ohlcv_csv
-LIVE_OHLCV_OUTPUT = RUNTIME_CONFIG.paths.live_ohlcv_csv
-TRADES_OUTPUT = RUNTIME_CONFIG.paths.trades_csv
-SIGNAL_OUTPUT = RUNTIME_CONFIG.paths.signal_output_csv
-EXECUTED_TRADES_OUTPUT = RUNTIME_CONFIG.paths.executed_trades_csv
-PAPER_LOG_OUTPUT = RUNTIME_CONFIG.paths.paper_trading_log_csv
-LIVE_LOG_OUTPUT = RUNTIME_CONFIG.paths.live_trading_log_csv
-BACKTEST_TRADES_OUTPUT = RUNTIME_CONFIG.paths.backtest_trades_csv
-BACKTEST_SUMMARY_OUTPUT = RUNTIME_CONFIG.paths.backtest_summary_csv
-BACKTEST_RESULTS_OUTPUT = RUNTIME_CONFIG.paths.backtest_results_csv
-ORDER_HISTORY_OUTPUT = RUNTIME_CONFIG.paths.order_history_csv
-PAPER_ORDER_HISTORY_OUTPUT = RUNTIME_CONFIG.paths.paper_order_history_csv
-APP_LOG = RUNTIME_CONFIG.paths.app_log
-BROKER_LOG = RUNTIME_CONFIG.paths.broker_log
-EXECUTION_LOG = RUNTIME_CONFIG.paths.execution_log
-REJECTIONS_LOG = RUNTIME_CONFIG.paths.rejections_log
-ERRORS_LOG = RUNTIME_CONFIG.paths.errors_log
-DEFAULT_SYMBOL = os.getenv('TRADING_SYMBOL', '^NSEI').strip() or '^NSEI'
-DEFAULT_INTERVAL = os.getenv('TRADING_INTERVAL', '5m').strip() or '5m'
-TIMEFRAME_OPTIONS = ['1m', '5m', '15m', '30m', '1h', '1d']
-STRATEGY_OPTIONS = ['Breakout', 'Demand Supply', 'Indicator', 'One Trade/Day', 'MTF 5m', 'AMD + FVG + Supply/Demand']
-BROKER_OPTIONS = ['Paper', 'Dhan Live']
->>>>>>> fed8576 ( modifyed with ltp verson2)
 
 configure_file_logging()
 
@@ -806,10 +774,7 @@ if __name__ == '__main__':
     main()
 
 
-<<<<<<< HEAD
 
 
 
 
-=======
->>>>>>> fed8576 ( modifyed with ltp verson2)

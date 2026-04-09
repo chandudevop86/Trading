@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$Once,
     [int]$StreamlitPort = 8501,
     [int]$VinayakPort = 8002

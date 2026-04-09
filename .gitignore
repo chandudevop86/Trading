@@ -1,4 +1,4 @@
-﻿.env
+.env
 .venv/
 venv/
 __pycache__/
@@ -8,7 +8,6 @@ __pycache__/
 
 # Runtime logs
 logs/
-<<<<<<< HEAD
 logs/*.log
 logs/errors.log
 logs/execution.log
@@ -17,29 +16,17 @@ logs/rejections.log
 # Local generated data and caches
 data/
 *.db
-=======
-*.log
-
-# Local generated data and caches
->>>>>>> fed8576 ( modifyed with ltp verson2)
 data/*.csv
 data/*.db
 data/cache/
 data/cache/**
 src/**/__pycache__/
-<<<<<<< HEAD
 chrome-headless-profile/
 vinayak/docs/chrome-headless-profile/
 data/legacy_runtime.db
-=======
->>>>>>> fed8576 ( modifyed with ltp verson2)
 
 # OS/editor noise
 .DS_Store
 Thumbs.db
-<<<<<<< HEAD
 vinayak/data/observability/
 .edge-print-profile-*/
-
-=======
->>>>>>> fed8576 ( modifyed with ltp verson2)

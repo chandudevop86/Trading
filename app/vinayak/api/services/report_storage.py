@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
@@ -7,6 +7,10 @@ import json
 import os
 
 from vinayak.cache.redis_client import RedisCache
+
+
+_REDIS_CACHE = RedisCache.from_env()
+_S3_CLIENT = None
 
 
 def _safe_name(text: str) -> str:
@@ -36,10 +40,12 @@ def _s3_key(filename: str, now: datetime | None = None) -> str:
 
 
 def _upload_bytes_to_s3(bucket: str, key: str, body: bytes, content_type: str) -> str:
-    import boto3
-    session = boto3.session.Session(region_name=_region())
-    client = session.client('s3')
-    client.put_object(Bucket=bucket, Key=key, Body=body, ContentType=content_type)
+    global _S3_CLIENT
+    if _S3_CLIENT is None:
+        import boto3
+        session = boto3.session.Session(region_name=_region())
+        _S3_CLIENT = session.client('s3')
+    _S3_CLIENT.put_object(Bucket=bucket, Key=key, Body=body, ContentType=content_type)
     return f's3://{bucket}/{key}'
 
 
@@ -68,8 +74,6 @@ def store_json_report(name: str, payload: Any) -> dict[str, str]:
 
 
 def cache_json_artifact(name: str, payload: Any, *, ttl_seconds: int = 900) -> bool:
-    cache = RedisCache.from_env()
-    if not cache.is_configured():
+    if not _REDIS_CACHE.is_configured():
         return False
-    return cache.set_json(f'vinayak:artifact:{_safe_name(name)}', payload, ttl_seconds=ttl_seconds)
-
+    return _REDIS_CACHE.set_json(f'vinayak:artifact:{_safe_name(name)}', payload, ttl_seconds=ttl_seconds)

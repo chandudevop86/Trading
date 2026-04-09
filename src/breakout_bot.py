@@ -256,6 +256,7 @@ def _candidate_sides(bias: str, *, use_first_hour_bias: bool) -> list[str]:
     return ['BUY', 'SELL']
 
 
+<<<<<<< HEAD
 def _recent_swings(day_candles: list[Candle], idx: int, swing_window: int) -> tuple[list[float], list[float]]:
     highs: list[float] = []
     lows: list[float] = []
@@ -287,6 +288,8 @@ def _market_structure_ok(day_candles: list[Candle], idx: int, side: str, config:
     return False, 'STRUCTURE_WEAK'
 
 
+=======
+>>>>>>> fed8576 ( modifyed with ltp verson2)
 def _session_allowed(candle: Candle, config: BreakoutConfig) -> bool:
     return session_allowed(
         candle.timestamp,
@@ -310,12 +313,15 @@ def _midday_restricted(candle: Candle, config: BreakoutConfig) -> bool:
         afternoon_start=config.afternoon_session_start,
         afternoon_end=config.afternoon_session_end,
     ) == 'MIDDAY_BLOCKED'
+<<<<<<< HEAD
 
 def _avg_candle_range(day_candles: list[Candle], idx: int, lookback: int = 5) -> float:
     start = max(0, idx - max(1, int(lookback)) + 1)
     sample = [max(float(c.high) - float(c.low), 0.0) for c in day_candles[start:idx + 1]]
     return (sum(sample) / len(sample)) if sample else 0.0
 
+=======
+>>>>>>> fed8576 ( modifyed with ltp verson2)
 
 def _body_ratio(candle: Candle) -> float:
     range_value = max(float(candle.high) - float(candle.low), 0.0)
@@ -752,6 +758,7 @@ def run(
         send_telegram_message(telegram_token, telegram_chat_id, build_trade_summary(trades))
     return trades
 
+<<<<<<< HEAD
 
 
 
@@ -768,3 +775,5 @@ def run(
 
 
 
+=======
+>>>>>>> fed8576 ( modifyed with ltp verson2)

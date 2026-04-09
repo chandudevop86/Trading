@@ -1,4 +1,4 @@
-import csv
+﻿import csv
 import io
 import json
 import os
@@ -845,6 +845,7 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(result.executed_count, 1)
             self.assertEqual(result.skipped_count, 1)
             self.assertEqual(result.skipped_rows[0]['duplicate_reason'], 'DUPLICATE_SIGNAL_COOLDOWN')
+<<<<<<< HEAD:snapshots/v7_2026-03-30/project/tests/test_execution_engine.py
     def test_execute_paper_trades_writes_structured_validation_and_execution_logs(self):
         candidates = [
             {"strategy": "BREAKOUT", "symbol": "NIFTY", "signal_time": "2026-03-06 10:00:00", "side": "BUY", "price": 100.0, "reason": "missing quantity", "stop_loss": 99.0, "target_price": 102.0},
@@ -908,5 +909,19 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(broker_events[-1]['event'], 'broker_order_result')
 
 
+=======
+>>>>>>> fed8576 ( modifyed with ltp verson2):tests/test_execution_engine.py
 if __name__ == '__main__':
+
     unittest.main()
+<<<<<<< HEAD:snapshots/v7_2026-03-30/project/tests/test_execution_engine.py
+=======
+
+
+
+
+
+
+
+
+>>>>>>> fed8576 ( modifyed with ltp verson2):tests/test_execution_engine.py

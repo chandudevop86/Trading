@@ -987,6 +987,9 @@ __all__ = [
 
 
 
+<<<<<<< HEAD
 
 
 
+=======
+>>>>>>> fed8576 ( modifyed with ltp verson2)

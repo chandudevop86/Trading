@@ -1,15 +1,25 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 import json
 import os
+import time
 
 from vinayak.cache.redis_client import RedisCache
 from vinayak.observability.alerting import build_active_alerts
 from vinayak.observability.observability_logger import tail_events
 from vinayak.observability.observability_metrics import get_observability_snapshot
+
+
+_REDIS_CACHE = RedisCache.from_env()
+_LATEST_ANALYSIS_TTL_SECONDS = 2.0
+_LATEST_ANALYSIS_CACHE: dict[str, Any] = {
+    'signature': None,
+    'loaded_at': 0.0,
+    'value': {},
+}
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -53,19 +63,30 @@ def _reports_dir() -> Path:
 
 
 def _load_latest_analysis() -> dict[str, Any]:
-    cache = RedisCache.from_env()
-    cached = cache.get_json('vinayak:artifact:latest_live_analysis') if cache.is_configured() else None
+    cached = _REDIS_CACHE.get_json('vinayak:artifact:latest_live_analysis') if _REDIS_CACHE.is_configured() else None
     if isinstance(cached, dict) and cached:
         return cached
     report_files = sorted(_reports_dir().glob('*live_analysis_result.json'), key=lambda path: path.stat().st_mtime, reverse=True)
-    for path in report_files:
-        try:
-            payload = json.loads(path.read_text(encoding='utf-8'))
-        except Exception:
-            continue
-        if isinstance(payload, dict):
-            return payload
-    return {}
+    latest_path = report_files[0] if report_files else None
+    if latest_path is None or not latest_path.exists() or latest_path.stat().st_size == 0:
+        _LATEST_ANALYSIS_CACHE['signature'] = None
+        _LATEST_ANALYSIS_CACHE['loaded_at'] = time.monotonic()
+        _LATEST_ANALYSIS_CACHE['value'] = {}
+        return {}
+    stat = latest_path.stat()
+    signature = (str(latest_path.resolve()), stat.st_mtime_ns, stat.st_size)
+    now = time.monotonic()
+    if _LATEST_ANALYSIS_CACHE.get('signature') == signature and (now - float(_LATEST_ANALYSIS_CACHE.get('loaded_at', 0.0))) <= _LATEST_ANALYSIS_TTL_SECONDS:
+        return dict(_LATEST_ANALYSIS_CACHE.get('value', {}))
+    try:
+        payload = json.loads(latest_path.read_text(encoding='utf-8'))
+    except Exception:
+        payload = {}
+    value = payload if isinstance(payload, dict) else {}
+    _LATEST_ANALYSIS_CACHE['signature'] = signature
+    _LATEST_ANALYSIS_CACHE['loaded_at'] = now
+    _LATEST_ANALYSIS_CACHE['value'] = value
+    return dict(value)
 
 
 def _build_detail_cards(row: dict[str, Any], fields: list[tuple[str, str]]) -> list[dict[str, Any]]:
@@ -266,6 +287,7 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
 
 
 __all__ = ['build_observability_dashboard_payload']
+
 
 
 

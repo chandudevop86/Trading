@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
@@ -220,16 +220,20 @@ def _build_rejection_log(setup: dict[str, Any], strategy: str, symbol: str, reas
     }
 
 
-def validate_trade(setup: dict[str, Any], candles: pd.DataFrame, config: ValidationConfig | None = None) -> dict[str, Any]:
+def validate_trade(setup: dict[str, Any], candles: pd.DataFrame, config: ValidationConfig | None = None, *, cleaned_candles: pd.DataFrame | None = None, market_metrics: dict[str, float | bool] | None = None) -> dict[str, Any]:
     cfg = config or ValidationConfig()
     symbol = str(dict(setup or {}).get("symbol", "") or "")
     strategy = str(dict(setup or {}).get("strategy_name", dict(setup or {}).get("strategy", "")) or "")
     try:
-        cleaned = coerce_ohlcv(
-            candles,
-            CleanerConfig(expected_interval_minutes=cfg.expected_interval_minutes, require_vwap=True, allow_vwap_compute=True),
-        )
-        market_metrics = _latest_metrics(cleaned)
+        cleaned = cleaned_candles
+        if cleaned is None:
+            cleaned = coerce_ohlcv(
+                candles,
+                CleanerConfig(expected_interval_minutes=cfg.expected_interval_minutes, require_vwap=True, allow_vwap_compute=True),
+            )
+        resolved_market_metrics = dict(market_metrics or {}) if isinstance(market_metrics, dict) else {}
+        if not resolved_market_metrics:
+            resolved_market_metrics = _latest_metrics(cleaned)
         side = _side(setup)
         entry = _safe_float(setup.get("entry", setup.get("entry_price", setup.get("price"))))
         stop = _safe_float(setup.get("stoploss", setup.get("stop_loss", setup.get("sl"))))
@@ -239,11 +243,11 @@ def validate_trade(setup: dict[str, Any], candles: pd.DataFrame, config: Validat
             risk = abs(entry - stop)
             reward = abs(target - entry)
             rr_ratio = reward / risk if risk > 1e-6 else 0.0
-        scorecard = _build_scorecard(dict(setup or {}), market_metrics, cfg)
+        scorecard = _build_scorecard(dict(setup or {}), resolved_market_metrics, cfg)
         scorecard["side"] = side
         scorecard["rr_ratio"] = round(rr_ratio, 4)
-        scorecard["atr_pct"] = round(_safe_float(market_metrics.get("atr_pct")), 4)
-        scorecard["chop_score"] = round(_safe_float(market_metrics.get("chop_score")), 4)
+        scorecard["atr_pct"] = round(_safe_float(resolved_market_metrics.get("atr_pct")), 4)
+        scorecard["chop_score"] = round(_safe_float(resolved_market_metrics.get("chop_score")), 4)
         reasons = _build_rejection_reasons(scorecard, rr_ratio, cfg)
         score = max(float(scorecard["strict_validation_score"]), round(float(scorecard["setup_quality_score"]) / 10.0, 2))
         rejection_log = _build_rejection_log(dict(setup or {}), strategy, symbol, reasons, scorecard, rr_ratio)
@@ -251,7 +255,7 @@ def validate_trade(setup: dict[str, Any], candles: pd.DataFrame, config: Validat
             "decision": "PASS" if not reasons and score >= cfg.min_score else "FAIL",
             "score": round(score, 2),
             "reasons": reasons,
-            "metrics": {**market_metrics, **scorecard},
+            "metrics": {**resolved_market_metrics, **scorecard},
             "rejection_log": rejection_log,
         }
         if payload["decision"] != "PASS":
@@ -281,5 +285,5 @@ def validate_trade(setup: dict[str, Any], candles: pd.DataFrame, config: Validat
             "rejection_log": _build_rejection_log(dict(setup or {}), strategy, symbol, ["invalid_input"], {"strict_validation_score": 0, "setup_quality_score": 0.0}, 0.0),
         }
 
-
 __all__ = ["ValidationConfig", "validate_trade"]
+

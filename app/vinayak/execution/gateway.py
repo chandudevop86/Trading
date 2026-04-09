@@ -16,7 +16,7 @@ from vinayak.execution.risk_engine import PortfolioRiskConfig, allocate_position
 from vinayak.execution.service import ExecutionService
 from vinayak.observability.observability_logger import log_event
 from vinayak.observability.observability_metrics import increment_metric, record_stage, set_metric
-from vinayak.validation.engine import validate_trade
+from vinayak.validation.engine import CleanerConfig, _latest_metrics, coerce_ohlcv, validate_trade
 
 
 _DEFAULT_SESSION_START = time(9, 15)
@@ -318,12 +318,22 @@ def prepare_workspace_candidates(
     signal_rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     prepared: list[dict[str, Any]] = []
+    cleaned_candles = coerce_ohlcv(
+        candles,
+        CleanerConfig(expected_interval_minutes=5, require_vwap=True, allow_vwap_compute=True),
+    )
+    shared_market_metrics = _latest_metrics(cleaned_candles)
     for raw in signal_rows:
         candidate = _normalize_candidate(dict(raw), strategy=strategy, symbol=symbol)
-        validation = validate_trade(candidate, candles)
+        validation = validate_trade(
+            candidate,
+            candles,
+            cleaned_candles=cleaned_candles,
+            market_metrics=shared_market_metrics,
+        )
         candidate["validation_status"] = str(validation.get("decision", "FAIL") or "FAIL").upper()
         candidate["validation_score"] = round(_safe_float(validation.get("score", 0.0)), 2)
-        candidate["validation_reasons"] = [str(item) for item in list(validation.get("reasons", []) or []) if str(item).strip()]
+        candidate["validation_reasons"] = [str(item).strip() for item in list(validation.get("reasons", []) or []) if str(item).strip()]
         candidate["execution_allowed"] = candidate["validation_status"] == "PASS" and not candidate["validation_reasons"]
         candidate["validation_metrics"] = dict(validation.get("metrics", {}) or {})
         candidate["strict_validation_score"] = int(_safe_float(candidate["validation_metrics"].get("strict_validation_score", candidate.get("strict_validation_score", 0))))
@@ -346,7 +356,6 @@ def prepare_workspace_candidates(
     set_metric('rejected_trades_today', rejected_count)
     log_event(component='execution_gateway', event_name='trade_candidates_prepared', severity='INFO', message='Prepared workspace candidates', context_json={'total': len(prepared), 'valid': valid_count, 'rejected': rejected_count})
     return prepared
-
 
 def execute_workspace_candidates(
     strategy: str,
@@ -553,13 +562,4 @@ __all__ = [
     'execute_workspace_candidates',
     'prepare_workspace_candidates',
 ]
-
-
-
-
-
-
-
-
-
 

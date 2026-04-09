@@ -2,10 +2,18 @@
 
 import os
 
+import os
+
 from vinayak.messaging.bus import EventEnvelope, build_message_bus
 from vinayak.messaging.events import EVENT_NOTIFICATION_REQUESTED
 from vinayak.notifications.telegram.notifier import send_text_notification
 from vinayak.observability.observability_logger import log_exception
+
+
+def _env_telegram_target() -> tuple[str, str]:
+    token = str(os.getenv('TELEGRAM_BOT_TOKEN', '') or '').strip()
+    chat_id = str(os.getenv('TELEGRAM_CHAT_ID', '') or '').strip()
+    return token, chat_id
 
 
 def _env_telegram_target() -> tuple[str, str]:

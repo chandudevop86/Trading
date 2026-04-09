@@ -53,21 +53,7 @@ def _resolve_workspace_auto_execution_mode(requested_execution_type: str, auto_e
 def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-
-    df = df.copy()
-    if 'timestamp' not in df.columns:
-        raise ValueError('Candles missing timestamp column')
-
-    df['timestamp'] = pd.to_datetime(df['timestamp'], errors='coerce')
-    for col in ['open', 'high', 'low', 'close', 'volume']:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-
-    df = df.dropna(subset=['timestamp', 'open', 'high', 'low', 'close'])
-    df = df.drop_duplicates(subset=['timestamp'])
-    df = df.sort_values('timestamp').reset_index(drop=True)
-    return df
-
+    return canonical_prepare_trading_data(df, include_derived=False)
 
 def df_to_candles(df: pd.DataFrame) -> list[Candle]:
     candles: list[Candle] = []
@@ -683,6 +669,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

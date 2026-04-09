@@ -20,6 +20,15 @@ class BtstConfig:
     max_trades_per_day: int | None = 1
 
 
+@dataclass(slots=True)
+class BtstConfig:
+    allow_stbt: bool = True
+    cost_bps: float = 0.0
+    fixed_cost_per_trade: float = 0.0
+    max_daily_loss: float | None = None
+    max_trades_per_day: int | None = 1
+
+
 def _group_by_day(candles: list[Candle]) -> dict:
     by_day: dict = {}
     for candle in candles:

@@ -29,6 +29,7 @@ class RoleViewService:
     def __init__(self, session: Session | None = None) -> None:
         self.session = session
         self.cache = RedisCache.from_env()
+        self._latest_analysis_cache: dict[str, Any] | None = None
 
     def build_admin_dashboard(self) -> dict[str, Any]:
         summary = DashboardSummaryService(self.session).build_summary() if self.session is not None else {}
@@ -187,15 +188,20 @@ class RoleViewService:
         return {name: self._tail_text(path, limit=limit) for name, path in DEFAULT_LOGS.items()}
 
     def load_latest_analysis(self) -> dict[str, Any]:
+        if self._latest_analysis_cache is not None:
+            return dict(self._latest_analysis_cache)
         cached = self.cache.get_json('vinayak:artifact:latest_live_analysis') if self.cache.is_configured() else None
         if isinstance(cached, dict) and cached:
-            return cached
+            self._latest_analysis_cache = dict(cached)
+            return dict(self._latest_analysis_cache)
         report_files = sorted(DEFAULT_REPORTS_DIR.glob('*live_analysis_result.json'), key=lambda path: path.stat().st_mtime, reverse=True)
         latest_path = report_files[0] if report_files else None
         if latest_path is None:
+            self._latest_analysis_cache = {}
             return {}
         payload = self._read_json_file(latest_path)
-        return payload if isinstance(payload, dict) else {}
+        self._latest_analysis_cache = dict(payload) if isinstance(payload, dict) else {}
+        return dict(self._latest_analysis_cache)
 
     def _cache_key(self, path: Path, kind: str) -> str:
         return f'{kind}:{path.as_posix()}'
@@ -261,3 +267,4 @@ class RoleViewService:
 
 
 __all__ = ['RoleViewService']
+

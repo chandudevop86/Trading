@@ -59,6 +59,16 @@ def _resolve_workspace_auto_execution_mode(requested_execution_type: str, auto_e
         return 'PAPER', 'Auto-execute is operating in PAPER mode.'
     return requested, ''
 
+def _resolve_workspace_auto_execution_mode(requested_execution_type: str, auto_execute: bool) -> tuple[str, str]:
+    requested = str(requested_execution_type or 'NONE').strip().upper()
+    if not auto_execute:
+        return requested, ''
+    if requested == 'LIVE':
+        return 'PAPER', 'Auto-execute forced to PAPER mode. Live entry and exit require an explicit manual route.'
+    if requested == 'PAPER':
+        return 'PAPER', 'Auto-execute is operating in PAPER mode.'
+    return requested, ''
+
 
 def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:

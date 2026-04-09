@@ -1,4 +1,4 @@
-﻿import tempfile
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -144,6 +144,7 @@ class TestProductionExecutionApi(unittest.TestCase):
                     "entry": 100.0,
                     "stop_loss": 99.0,
                     "target": 102.5,
+                    "quantity": 1,
                     "timeframe": "5m",
                     "validation_status": "PASS",
                     "validation_score": 8.0,
@@ -208,6 +209,7 @@ class TestProductionExecutionApi(unittest.TestCase):
                 "entry": 100.0,
                 "stop_loss": 99.0,
                 "target": 102.0,
+                "quantity": 1,
                 "timeframe": "5m",
                 "validation_status": "PASS",
                 "validation_score": 8.0,
@@ -227,7 +229,7 @@ class TestProductionExecutionApi(unittest.TestCase):
         candidate = normalize_candidate_contract(
             {
                 "symbol": "NIFTY",
-                "timestamp": pd.Timestamp(self._current_ts()).replace(hour=8, minute=30).strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": pd.Timestamp(self._current_ts()).replace(hour=2, minute=0).strftime("%Y-%m-%d %H:%M:%S"),
                 "strategy_name": "BREAKOUT",
                 "setup_type": "BREAKOUT",
                 "zone_id": "NIFTY_BO_01",
@@ -235,6 +237,7 @@ class TestProductionExecutionApi(unittest.TestCase):
                 "entry": 100.0,
                 "stop_loss": 99.0,
                 "target": 102.0,
+                "quantity": 1,
                 "timeframe": "5m",
                 "validation_status": "PASS",
                 "validation_score": 8.0,
@@ -410,6 +413,8 @@ class TestProductionExecutionApi(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
 
 
 

@@ -4,7 +4,7 @@
       {
         "adx": 26.3,
         "amd_phase": "",
-        "backtest_run_at_utc": "2026-04-09 10:18:09",
+        "backtest_run_at_utc": "2026-04-09 10:45:12",
         "contract_version": "strict_trade_candidate_v1",
         "crisis_policy_execution_type": "PAPER",
         "crisis_quantity_scale": 0.5,

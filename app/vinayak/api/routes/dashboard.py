@@ -21,9 +21,39 @@ from vinayak.api.services.dashboard_summary import DashboardSummaryService
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
 from vinayak.api.services.trading_workspace import refresh_market_data_snapshot, run_live_trading_analysis
 from vinayak.observability.observability_health import build_observability_dashboard_payload
+from vinayak.web.services.role_view_service import RoleViewService
 
 
 router = APIRouter(prefix='/dashboard', tags=['dashboard'], dependencies=[Depends(require_admin_session)])
+
+
+def _to_live_analysis_response(result: dict) -> LiveAnalysisResponse:
+    return LiveAnalysisResponse(
+        symbol=result['symbol'],
+        interval=result['interval'],
+        period=result['period'],
+        strategy=result['strategy'],
+        generated_at=result['generated_at'],
+        candle_count=result['candle_count'],
+        signal_count=result['signal_count'],
+        side_counts=result['side_counts'],
+        candles=[LiveOhlcvRowResponse(**row) for row in result['candles']],
+        signals=[LiveAnalysisSignalRow(**row) for row in result['signals']],
+        telegram_sent=result['telegram_sent'],
+        telegram_error=result['telegram_error'],
+        telegram_payload=result['telegram_payload'],
+        execution_note=result.get('execution_note', ''),
+        execution_summary=LiveAnalysisExecutionSummary(**result['execution_summary']),
+        execution_rows=[LiveAnalysisExecutionRow(**row) for row in result['execution_rows']],
+        validation_summary=result.get('validation_summary', {}),
+        data_status=result.get('data_status', {}),
+        system_status=result.get('system_status', 'NOT_READY'),
+        report_artifacts=LiveAnalysisReportArtifacts(
+            json_report=ReportArtifactLocation(**result['report_artifacts']['json_report']),
+            summary_report=ReportArtifactLocation(**result['report_artifacts']['summary_report']),
+        ),
+        alert_notifications_sent=result.get('alert_notifications_sent', 0),
+    )
 
 
 @router.get('/summary', response_model=DashboardSummaryResponse)
@@ -60,6 +90,14 @@ def get_dashboard_candles(
         total=len(rows),
         candles=[LiveOhlcvRowResponse(**row) for row in rows],
     )
+
+
+@router.get('/live-analysis/latest', response_model=LiveAnalysisResponse | None)
+def get_latest_live_analysis(db: Session = Depends(get_db)) -> LiveAnalysisResponse | None:
+    result = RoleViewService(db).load_latest_analysis()
+    if not result:
+        return None
+    return _to_live_analysis_response(result)
 
 
 @router.post('/live-analysis', response_model=LiveAnalysisResponse)
@@ -104,35 +142,4 @@ def post_live_analysis(request: LiveAnalysisRequest, db: Session = Depends(get_d
         kill_switch_enabled=request.kill_switch_enabled,
         db_session=db,
     )
-    return LiveAnalysisResponse(
-        symbol=result['symbol'],
-        interval=result['interval'],
-        period=result['period'],
-        strategy=result['strategy'],
-        generated_at=result['generated_at'],
-        candle_count=result['candle_count'],
-        signal_count=result['signal_count'],
-        side_counts=result['side_counts'],
-        candles=[LiveOhlcvRowResponse(**row) for row in result['candles']],
-        signals=[LiveAnalysisSignalRow(**row) for row in result['signals']],
-        telegram_sent=result['telegram_sent'],
-        telegram_error=result['telegram_error'],
-        telegram_payload=result['telegram_payload'],
-        execution_summary=LiveAnalysisExecutionSummary(**result['execution_summary']),
-        execution_rows=[LiveAnalysisExecutionRow(**row) for row in result['execution_rows']],
-        validation_summary=result.get('validation_summary', {}),
-        data_status=result.get('data_status', {}),
-        system_status=result.get('system_status', 'NOT_READY'),
-        report_artifacts=LiveAnalysisReportArtifacts(
-            json_report=ReportArtifactLocation(**result['report_artifacts']['json_report']),
-            summary_report=ReportArtifactLocation(**result['report_artifacts']['summary_report']),
-        ),
-    )
-
-
-
-
-
-
-
-
+    return _to_live_analysis_response(result)

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 
 def _page(title: str, body: str, script: str = '') -> str:
@@ -378,9 +378,23 @@ WORKSPACE_HTML = _page(
     function loadStoredRun() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return;
+        if (!raw) return false;
         renderResult(JSON.parse(raw));
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    async function hydrateLatestRun() {
+      try {
+        const latest = await getJson('/dashboard/live-analysis/latest');
+        if (latest) {
+          renderResult(latest);
+          return;
+        }
       } catch (error) {}
+      loadStoredRun();
     }
 
     document.getElementById('runAnalysisBtn').addEventListener('click', async () => {
@@ -415,7 +429,7 @@ WORKSPACE_HTML = _page(
       });
     });
 
-    loadStoredRun();
+    hydrateLatestRun();
   </script>
     """
 )
@@ -548,6 +562,9 @@ WORKSPACE_DOWNLOADS_HTML = _page(
   </script>
     """
 )
+
+
+
 
 
 

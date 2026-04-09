@@ -4,7 +4,7 @@ import os
 from fastapi import HTTPException, Request
 
 from vinayak.auth.service import ADMIN_ROLE, AuthenticatedUser, UserAuthService
-from vinayak.db.session import build_session_factory, initialize_database
+from vinayak.db.session import build_session_factory
 
 
 COOKIE_NAME = 'vinayak_session'
@@ -86,3 +86,4 @@ def require_admin_session(request: Request) -> AuthenticatedUser:
     if str(user.role).upper() != ADMIN_ROLE:
         raise HTTPException(status_code=403, detail='Admin authentication required.')
     return user
+

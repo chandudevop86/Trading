@@ -9,10 +9,16 @@ from vinayak.api.routes.outbox import router as outbox_router
 from vinayak.api.routes.reviewed_trades import router as reviewed_trades_router
 from vinayak.api.routes.signals import router as signals_router
 from vinayak.api.routes.strategies import router as strategies_router
+from vinayak.db.session import initialize_database
 from vinayak.web.app.main import router as web_router
 
 
 app = FastAPI(title='Vinayak Trading Platform', version='0.2.0')
+
+
+@app.on_event('startup')
+def startup_initialize_database() -> None:
+    initialize_database()
 
 
 @app.exception_handler(ValueError)

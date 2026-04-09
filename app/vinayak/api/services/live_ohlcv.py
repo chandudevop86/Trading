@@ -28,6 +28,8 @@ DEFAULT_FALLBACK_PATHS = [
 ]
 REDIS_CANDLE_TTL_SECONDS = 900
 _PERIOD_RE = re.compile(r'^(?P<count>\d+)(?P<unit>m[oo]?|d|wk|w|y)$', re.IGNORECASE)
+_REDIS_CACHE = RedisCache.from_env()
+_SECURITY_MAP_CACHE: dict[str, dict[str, Any]] = {}
 
 
 def _sanitize_key(text: object) -> str:
@@ -236,7 +238,7 @@ def _read_fallback_ohlcv(path: str | Path | None = None) -> list[dict[str, Any]]
 
 
 def _read_redis_rows(key: str) -> list[dict[str, Any]]:
-    payload = RedisCache.from_env().get_json(key)
+    payload = _REDIS_CACHE.get_json(key)
     if isinstance(payload, list) and payload:
         return [dict(item) for item in payload if isinstance(item, dict)]
     return []
@@ -245,7 +247,27 @@ def _read_redis_rows(key: str) -> list[dict[str, Any]]:
 def _write_redis_rows(key: str, rows: list[dict[str, Any]]) -> None:
     if not rows:
         return
-    RedisCache.from_env().set_json(key, rows, ttl_seconds=REDIS_CANDLE_TTL_SECONDS)
+    _REDIS_CACHE.set_json(key, rows, ttl_seconds=REDIS_CANDLE_TTL_SECONDS)
+
+
+def _load_security_map_cached(path: Path) -> dict[str, Any] | None:
+    if load_security_map is None or not path.exists():
+        return None
+    try:
+        stat = path.stat()
+    except Exception:
+        return None
+    cache_key = str(path.resolve())
+    signature = (stat.st_mtime_ns, stat.st_size)
+    cached = _SECURITY_MAP_CACHE.get(cache_key)
+    if cached and cached.get('signature') == signature:
+        return cached.get('value')
+    try:
+        value = load_security_map(path)
+    except Exception:
+        return None
+    _SECURITY_MAP_CACHE[cache_key] = {'signature': signature, 'value': value}
+    return value
 
 
 def fetch_live_ohlcv(
@@ -263,13 +285,9 @@ def fetch_live_ohlcv(
     selected_provider = str(provider or os.getenv('VINAYAK_MARKET_DATA_PROVIDER', os.getenv('MARKET_DATA_PROVIDER', 'AUTO')) or 'AUTO').strip().upper()
     if canonical_fetch_live_ohlcv is not None:
         security_map: dict[str, Any] | None = None
-        if selected_provider in {'DHAN', 'AUTO'} and load_security_map is not None:
+        if selected_provider in {'DHAN', 'AUTO'}:
             resolved_map_path = Path(str(security_map_path or os.getenv('DHAN_SECURITY_MAP', 'app/vinayak/data/dhan_security_map.csv')))
-            if resolved_map_path.exists():
-                try:
-                    security_map = load_security_map(resolved_map_path)
-                except Exception:
-                    security_map = None
+            security_map = _load_security_map_cached(resolved_map_path)
         if selected_provider in {'DHAN', 'AUTO', 'YAHOO'}:
             try:
                 rows = canonical_fetch_live_ohlcv(
@@ -310,7 +328,6 @@ def fetch_live_ohlcv(
             interval=interval,
             cache_dir=cache_dir,
         )
-    csv_fallback_rows = _read_fallback_ohlcv(fallback_path)
 
     if use_cache and not force_refresh:
         cached_rows = _read_redis_rows(exact_redis_key)
@@ -341,6 +358,7 @@ def fetch_live_ohlcv(
     except Exception:
         if stale_rows:
             return stale_rows
+        csv_fallback_rows = _read_fallback_ohlcv(fallback_path)
         if csv_fallback_rows:
             return csv_fallback_rows
         raise
@@ -354,7 +372,7 @@ def fetch_live_ohlcv(
         return rows
     if stale_rows:
         return stale_rows
-    return csv_fallback_rows
+    return _read_fallback_ohlcv(fallback_path)
 
 
 def write_csv(rows: list[dict[str, Any]], path: str | Path) -> None:
@@ -367,8 +385,3 @@ def write_csv(rows: list[dict[str, Any]], path: str | Path) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
-
-
-
-
-

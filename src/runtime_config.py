@@ -178,6 +178,10 @@ class RuntimeConfig:
     def local_mode(self) -> bool:
         return str(self.environment or 'local').strip().lower() in {'local', 'dev', 'development', 'docker', 'test'}
 
+    @property
+    def local_mode(self) -> bool:
+        return str(self.environment or 'local').strip().lower() in {'local', 'dev', 'development', 'docker', 'test'}
+
     @classmethod
     def load(cls, env_path: str | Path = '.env') -> 'RuntimeConfig':
         load_env_file(env_path)

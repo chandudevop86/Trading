@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import hashlib
@@ -2122,6 +2122,7 @@ def apply_live_order_updates_to_log(live_log_path: str | Path, order_updates: li
         writer.writerows(updated_rows)
 
     return changed_rows
+
 
 
 

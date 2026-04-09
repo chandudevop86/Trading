@@ -14,6 +14,8 @@ from vinayak.execution.broker.dhan_client import DhanClient
 from vinayak.messaging.bus import build_message_bus
 
 
+_REDIS_CACHE = RedisCache.from_env()
+
 router = APIRouter(prefix='/health', tags=['health'])
 
 
@@ -65,18 +67,16 @@ def _broker_check() -> dict[str, str]:
 
 
 def _redis_check() -> dict[str, str]:
-    cache = RedisCache.from_env()
-    if not cache.is_configured():
+    if not _REDIS_CACHE.is_configured():
         return {'status': 'disabled', 'engine': 'redis'}
     try:
-        client = cache._get_client()
+        client = _REDIS_CACHE._get_client()
         if client is None:
             return {'status': 'disabled', 'engine': 'redis'}
         client.ping()
         return {'status': 'ok', 'engine': 'redis'}
     except Exception:
         return {'status': 'error', 'engine': 'redis'}
-
 
 @router.get('')
 def health() -> dict[str, str]:
@@ -117,3 +117,4 @@ def health_ready() -> dict[str, object]:
             'message_bus_backend': settings.message_bus.backend,
         },
     }
+

@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 import types
 import unittest
 from unittest.mock import patch
@@ -9,12 +9,12 @@ sys.modules.setdefault('yfinance', types.SimpleNamespace())
 sys.modules.setdefault('certifi', types.SimpleNamespace(where=lambda: ''))
 
 from src.runtime_models import TradingActionRequest
-from src.trading_runtime_service import run_operator_action
+from src.trading_runtime_service import _run_live_strategy, run_operator_action
 from src.runtime_workflow_service import latest_optimizer_gate, run_execution
 
 
 class TestTradingRuntimeService(unittest.TestCase):
-    def _request(self, *, run_requested: bool = False, backtest_requested: bool = False) -> TradingActionRequest:
+    def _request(self, *, broker_choice: str = 'Paper', run_requested: bool = False, backtest_requested: bool = False) -> TradingActionRequest:
         return TradingActionRequest(
             strategy='Breakout',
             symbol='NIFTY',
@@ -23,14 +23,15 @@ class TestTradingRuntimeService(unittest.TestCase):
             risk_pct=1.0,
             rr_ratio=2.0,
             mode='Balanced',
-            broker_choice='Paper',
+            broker_choice=broker_choice,
             run_requested=run_requested,
             backtest_requested=backtest_requested,
         )
 
     def test_backtest_action_returns_summary_without_live_trade_payload(self):
         candles = pd.DataFrame([{'timestamp': '2026-03-20 09:30:00', 'open': 100.0, 'high': 101.0, 'low': 99.5, 'close': 100.5, 'volume': 1000.0}])
-        with patch('src.trading_runtime_service._run_live_strategy', return_value=(candles, [{'side': 'BUY'}], '60d')) as mock_live:
+        live_payload = (candles, [{'side': 'BUY'}], '60d', {'provider': 'YAHOO', 'data_quality_score': 9.8})
+        with patch('src.trading_runtime_service._run_live_strategy', return_value=live_payload) as mock_live:
             with patch('src.trading_runtime_service._run_strategy_backtest', return_value={'total_trades': 4, 'total_pnl': 250.0}) as mock_backtest:
                 result = run_operator_action(self._request(backtest_requested=True))
 
@@ -41,13 +42,15 @@ class TestTradingRuntimeService(unittest.TestCase):
         self.assertEqual(result.trades, [])
         self.assertEqual(result.active_summary['total_trades'], 4)
         self.assertEqual(result.paper_summary, {})
+        self.assertEqual(result.market_data_summary['provider'], 'YAHOO')
         self.assertEqual(result.execution_messages, [])
         self.assertEqual(result.todays_trades, 0)
 
     def test_run_action_keeps_trade_payload_and_execution_messages(self):
         candles = pd.DataFrame([{'timestamp': '2026-03-20 09:30:00', 'open': 100.0, 'high': 101.0, 'low': 99.5, 'close': 100.5, 'volume': 1000.0}])
         trades = [{'side': 'BUY', 'entry_price': 100.5}]
-        with patch('src.trading_runtime_service._run_live_strategy', return_value=(candles, trades, '60d')) as mock_live:
+        live_payload = (candles, trades, '60d', {'provider': 'DHAN', 'data_quality_score': 9.6})
+        with patch('src.trading_runtime_service._run_live_strategy', return_value=live_payload) as mock_live:
             with patch('src.trading_runtime_service._run_execution', return_value=(object(), [('success', '1 trade executed')], 'Paper broker active')) as mock_exec:
                 with patch('src.trading_runtime_service.paper_execution_summary', return_value={'total_trades': 1, 'total_pnl': 100.0}) as mock_summary:
                     with patch('src.trading_runtime_service.todays_trade_count', return_value=1) as mock_count:
@@ -61,8 +64,44 @@ class TestTradingRuntimeService(unittest.TestCase):
         self.assertEqual(result.trades, trades)
         self.assertEqual(result.execution_messages, [('success', '1 trade executed')])
         self.assertEqual(result.active_summary['total_trades'], 1)
+        self.assertEqual(result.market_data_summary['provider'], 'DHAN')
         self.assertEqual(result.todays_trades, 1)
 
+    def test_run_live_strategy_prefers_dhan_bundle_for_dhan_broker(self):
+        candles = pd.DataFrame([
+            {'timestamp': pd.Timestamp('2026-03-20 09:30:00'), 'open': 100.0, 'high': 101.0, 'low': 99.5, 'close': 100.5, 'volume': 1000.0}
+        ])
+        bundle = types.SimpleNamespace(
+            symbol='NIFTY',
+            interval='5m',
+            period='60d',
+            provider='DHAN',
+            frame=candles,
+            validation_report={'passed': True, 'rows_out': 1, 'data_quality_score': 9.7},
+            provider_attempts=(types.SimpleNamespace(to_dict=lambda: {'provider': 'DHAN', 'passed': True}),),
+        )
+        request = self._request(broker_choice='Dhan Live')
+
+        with patch('src.trading_runtime_service.fetch_nifty_data_bundle', return_value=bundle) as mock_bundle:
+            with patch('src.trading_runtime_service._load_runtime_security_map', return_value={'NIFTY': {'security_id': '13'}}) as mock_security_map:
+                with patch('src.trading_runtime_service.run_live_strategy_workflow', return_value=(candles, [{'side': 'BUY'}], '60d')) as mock_workflow:
+                    returned_candles, returned_trades, period, market_data_summary = _run_live_strategy(request)
+
+        mock_security_map.assert_called_once()
+        mock_bundle.assert_called_once_with(
+            'NIFTY',
+            interval='5m',
+            period='60d',
+            provider='DHAN',
+            security_map={'NIFTY': {'security_id': '13'}},
+            require_freshness=True,
+        )
+        mock_workflow.assert_called_once()
+        self.assertEqual(period, '60d')
+        self.assertEqual(returned_trades[0]['side'], 'BUY')
+        self.assertEqual(returned_candles.iloc[0]['close'], 100.5)
+        self.assertEqual(market_data_summary['provider'], 'DHAN')
+        self.assertTrue(market_data_summary['broker_market_data_enabled'])
 
     def test_latest_optimizer_gate_requires_deployment_ready_yes(self):
         fake_rows = [
@@ -77,18 +116,7 @@ class TestTradingRuntimeService(unittest.TestCase):
         self.assertIn('NEGATIVE_EXPECTANCY', reason)
 
     def test_run_execution_blocks_live_deployment_when_optimizer_gate_fails(self):
-        request = TradingActionRequest(
-            strategy='Breakout',
-            symbol='NIFTY',
-            timeframe='5m',
-            capital=20000.0,
-            risk_pct=1.0,
-            rr_ratio=2.0,
-            mode='Balanced',
-            broker_choice='Dhan Live',
-            run_requested=True,
-            backtest_requested=False,
-        )
+        request = self._request(broker_choice='Dhan Live', run_requested=True)
         trades = [{'side': 'BUY', 'entry_price': 100.5, 'stop_loss': 99.5, 'target_price': 102.5, 'signal_time': '2026-03-20 09:30:00', 'strategy': 'BREAKOUT'}]
         candles = pd.DataFrame([{'timestamp': '2026-03-20 09:30:00', 'open': 100.0, 'high': 101.0, 'low': 99.5, 'close': 100.5, 'volume': 1000.0}])
 
@@ -97,12 +125,14 @@ class TestTradingRuntimeService(unittest.TestCase):
 
         self.assertEqual(broker_status, 'Live broker blocked by optimizer gate')
         self.assertEqual(messages, [('warning', 'Live blocked: live deployment locked: NEGATIVE_EXPECTANCY')])
+
     def test_run_action_returns_safe_error_payload_when_runtime_fails(self):
         with patch('src.trading_runtime_service._run_live_strategy', side_effect=ValueError('bad candle payload')):
             result = run_operator_action(self._request(run_requested=True))
 
         self.assertEqual(result.broker_status, 'Runtime error')
         self.assertEqual(result.trades, [])
+        self.assertEqual(result.market_data_summary, {})
         self.assertEqual(result.execution_messages, [('error', 'bad candle payload')])
         self.assertIn('Run failed:', result.status)
         self.assertEqual(result.todays_trades, 0)
@@ -113,6 +143,7 @@ class TestTradingRuntimeService(unittest.TestCase):
 
         self.assertEqual(result.broker_status, 'Runtime error')
         self.assertEqual(result.trades, [])
+        self.assertEqual(result.market_data_summary, {})
         self.assertEqual(result.execution_messages, [('error', 'bad candle payload')])
         self.assertIn('Backtest failed:', result.status)
         self.assertEqual(result.todays_trades, 0)
@@ -120,7 +151,3 @@ class TestTradingRuntimeService(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-
-
-
-

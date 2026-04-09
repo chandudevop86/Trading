@@ -261,11 +261,11 @@ def _resolve_live_execution_kwargs(security_map_path: str) -> dict[str, object]:
     return {'broker_name': 'DHAN', 'security_map': security_map}
 
 
-def _build_report_artifacts(result: dict[str, Any]) -> dict[str, dict[str, str]]:
+def _build_report_artifacts(result: dict[str, Any], *, summary_text: str | None = None) -> dict[str, dict[str, str]]:
     trace_rows = result.get('execution_rows') or result.get('signals') or []
-    summary_text = build_trade_summary(trace_rows) if trace_rows else 'No signals generated for this run.'
+    resolved_summary_text = summary_text if summary_text is not None else (build_trade_summary(trace_rows) if trace_rows else 'No signals generated for this run.')
     json_artifact = store_json_report('live_analysis_result', result)
-    summary_artifact = store_text_report('live_analysis_summary', summary_text, extension='txt', content_type='text/plain')
+    summary_artifact = store_text_report('live_analysis_summary', resolved_summary_text, extension='txt', content_type='text/plain')
     cache_json_artifact('latest_live_analysis', result)
     return {
         'json_report': json_artifact,
@@ -547,9 +547,10 @@ def run_live_trading_analysis(
     telegram_sent = False
     telegram_error = ''
     telegram_payload: dict[str, Any] | None = None
+    summary_text = build_trade_summary(signal_rows) if signal_rows else 'No signals generated for this run.'
     if send_telegram and signal_rows:
         try:
-            message = build_trade_summary(signal_rows)
+            message = summary_text
             message_bus.publish(
                 EVENT_NOTIFICATION_REQUESTED,
                 {
@@ -666,7 +667,7 @@ def run_live_trading_analysis(
         'system_status': validation_summary.get('system_status', 'NOT_READY'),
         'alert_notifications_sent': alert_notifications_sent,
     }
-    response['report_artifacts'] = _build_report_artifacts(response)
+    response['report_artifacts'] = _build_report_artifacts(response, summary_text=summary_text)
     message_bus.publish(
         EVENT_ANALYSIS_COMPLETED,
         {
@@ -682,6 +683,7 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
 
 
 

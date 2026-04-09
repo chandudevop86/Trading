@@ -99,11 +99,11 @@ def _existing_rows(path: Path) -> list[dict[str, Any]]:
         return []
 
 
-def _write_rows(path: Path, rows: list[dict[str, Any]]) -> None:
+def _write_rows(path: Path, rows: list[dict[str, Any]], *, existing_rows: list[dict[str, Any]] | None = None) -> None:
     if not rows:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    existing = _existing_rows(path)
+    existing = list(existing_rows) if existing_rows is not None else _existing_rows(path)
     merged = existing + [{key: ("" if value is None else value) for key, value in row.items()} for row in rows]
     fieldnames: list[str] = []
     for row in merged:
@@ -526,7 +526,7 @@ def execute_workspace_candidates(
             rows_to_write.append(row)
             batch_keys.add(unique_key)
 
-    _write_rows(output_path, rows_to_write)
+    _write_rows(output_path, rows_to_write, existing_rows=historical_rows)
     duration = round(time.perf_counter() - cycle_started, 4)
     set_metric('trading_cycle_duration_seconds', duration)
     record_stage('execute', status='SUCCESS' if result.error_count == 0 else 'WARN', duration_seconds=duration, symbol=symbol, strategy=strategy, message='Workspace execution cycle finished')
@@ -539,6 +539,7 @@ __all__ = [
     'execute_workspace_candidates',
     'prepare_workspace_candidates',
 ]
+
 
 
 

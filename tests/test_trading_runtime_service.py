@@ -8,7 +8,8 @@ import pandas as pd
 sys.modules.setdefault('yfinance', types.SimpleNamespace())
 sys.modules.setdefault('certifi', types.SimpleNamespace(where=lambda: ''))
 
-from src.trading_runtime_service import TradingActionRequest, run_operator_action
+from src.runtime_models import TradingActionRequest
+from src.trading_runtime_service import run_operator_action
 
 
 class TestTradingRuntimeService(unittest.TestCase):
@@ -71,7 +72,19 @@ class TestTradingRuntimeService(unittest.TestCase):
         self.assertIn('Run failed:', result.status)
         self.assertEqual(result.todays_trades, 0)
 
+    def test_backtest_action_returns_backtest_failure_payload_when_runtime_fails(self):
+        with patch('src.trading_runtime_service._run_live_strategy', side_effect=ValueError('bad candle payload')):
+            result = run_operator_action(self._request(backtest_requested=True))
+
+        self.assertEqual(result.broker_status, 'Runtime error')
+        self.assertEqual(result.trades, [])
+        self.assertEqual(result.execution_messages, [('error', 'bad candle payload')])
+        self.assertIn('Backtest failed:', result.status)
+        self.assertEqual(result.todays_trades, 0)
+
 
 if __name__ == '__main__':
     unittest.main()
+
+
 

@@ -12,6 +12,8 @@ from vinayak.api.services.dashboard_summary import DashboardSummaryService
 from vinayak.auth.service import UserAuthService
 from vinayak.cache.redis_client import RedisCache
 
+_REDIS_CACHE = RedisCache.from_env()
+
 
 DEFAULT_PAPER_LOG_PATH = Path('app/vinayak/data/paper_trading_logs_all.csv')
 DEFAULT_REPORTS_DIR = Path('app/vinayak/data/reports')
@@ -28,7 +30,7 @@ _FILE_CACHE: dict[str, dict[str, Any]] = {}
 class RoleViewService:
     def __init__(self, session: Session | None = None) -> None:
         self.session = session
-        self.cache = RedisCache.from_env()
+        self.cache = _REDIS_CACHE
         self._latest_analysis_cache: dict[str, Any] | None = None
 
     def build_admin_dashboard(self) -> dict[str, Any]:
@@ -267,4 +269,5 @@ class RoleViewService:
 
 
 __all__ = ['RoleViewService']
+
 

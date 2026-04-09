@@ -193,6 +193,17 @@ def _trade_unique_key(candidate: dict[str, Any], bucket_minutes: int = _DEFAULT_
     ])
 
 
+def _historical_trade_keys(rows: list[dict[str, Any]]) -> set[str]:
+    keys: set[str] = set()
+    for row in rows:
+        normalized = _normalize_candidate(
+            dict(row),
+            strategy=str(row.get("strategy_name") or row.get("strategy") or "TRADE"),
+            symbol=str(row.get("symbol") or "UNKNOWN"),
+        )
+        keys.add(_trade_unique_key(normalized))
+    return keys
+
 def _has_active_trade(historical_rows: list[dict[str, Any]]) -> bool:
     for row in historical_rows:
         status = str(row.get("execution_status") or row.get("status") or row.get("trade_status") or "").upper()
@@ -231,6 +242,7 @@ def _guard_reasons(
     max_portfolio_exposure_pct: float | None,
     max_open_risk_pct: float | None,
     kill_switch_enabled: bool,
+    historical_keys: set[str] | None = None,
     cooldown_minutes: int = _DEFAULT_COOLDOWN_MINUTES,
 ) -> tuple[list[str], str, dict[str, Any], dict[str, Any]]:
     reasons: list[str] = []
@@ -253,8 +265,8 @@ def _guard_reasons(
         reasons.append("INVALID_SIDE")
 
     unique_key = _trade_unique_key(candidate)
-    historical_keys = {_trade_unique_key(_normalize_candidate(dict(row), strategy=str(row.get("strategy_name") or row.get("strategy") or "TRADE"), symbol=str(row.get("symbol") or candidate.get("symbol") or "UNKNOWN"))) for row in historical_rows}
-    if unique_key in historical_keys or unique_key in batch_keys:
+    resolved_historical_keys = historical_keys if historical_keys is not None else _historical_trade_keys(historical_rows)
+    if unique_key in resolved_historical_keys or unique_key in batch_keys:
         reasons.append("DUPLICATE_TRADE")
 
     if signal_time is not None:
@@ -367,6 +379,7 @@ def execute_workspace_candidates(
     mode = str(execution_mode or 'NONE').upper()
     output_path = Path(str(live_log_path if mode == 'LIVE' else paper_log_path))
     historical_rows = _existing_rows(output_path)
+    historical_keys = _historical_trade_keys(historical_rows)
     batch_keys: set[str] = set()
     result = WorkspaceExecutionResult()
     rows_to_write: list[dict[str, Any]] = []
@@ -396,6 +409,7 @@ def execute_workspace_candidates(
             max_portfolio_exposure_pct=max_portfolio_exposure_pct,
             max_open_risk_pct=max_open_risk_pct,
             kill_switch_enabled=kill_switch_enabled,
+            historical_keys=historical_keys,
         )
         row = dict(adjusted_candidate)
         row['trade_key'] = unique_key
@@ -539,6 +553,8 @@ __all__ = [
     'execute_workspace_candidates',
     'prepare_workspace_candidates',
 ]
+
+
 
 
 

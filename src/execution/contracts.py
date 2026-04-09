@@ -186,7 +186,7 @@ def normalize_candidate_contract(
     resolved_timestamp = _normalize_timestamp(raw.get('timestamp') or raw.get('signal_time') or raw.get('entry_time') or raw.get('time'))
     resolved_side = str(raw.get('side') or raw.get('type') or '').strip().upper()
     resolved_setup_type = _infer_setup_type(raw)
-    resolved_timeframe = str(raw.get('timeframe') or raw.get('interval') or timeframe or '').strip()
+    resolved_timeframe = str(raw.get('timeframe') or raw.get('interval') or timeframe or 'NA').strip() or 'NA'
     entry = _safe_float(raw.get('entry', raw.get('entry_price', raw.get('price', raw.get('close', 0.0)))))
     stop_loss = _safe_float(raw.get('stop_loss', raw.get('stoploss', raw.get('sl', raw.get('trailing_stop_loss', 0.0)))))
     target = _safe_float(raw.get('target', raw.get('target_price', raw.get('tp', 0.0))))

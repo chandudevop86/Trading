@@ -1,78 +1,80 @@
+<<<<<<<< HEAD:snapshots/v7_2026-03-30/project/tests/test_execution_engine.py
 ﻿import csv
 import io
 import json
 import os
 import tempfile
+========
+﻿import tempfile
+>>>>>>>> a91e444 ( modifyed with ltp verson2):tests/test_execution_engine.py
 import unittest
-from datetime import UTC, datetime
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
+
+import pandas as pd
 
 import src.execution_engine as execution_engine
+from src.execution.contracts import CONTRACT_VERSION, normalize_candidate_contract
+from src.execution.guardrails import GuardConfig, check_all_guards
+from src.execution.state import TradingState
 from src.execution_engine import (
     build_analysis_queue,
     build_execution_candidates,
     default_quantity_for_symbol,
     execute_live_trades,
     execute_paper_trades,
-    execution_result_summary,
     filter_unlogged_candidates,
-    live_kill_switch_enabled,
     live_trading_unlock_status,
-    make_trade_id,
-    make_trade_key,
-    normalize_order_quantity,
-    reconcile_live_positions,
-    reconcile_live_trades,
-    validate_candidate,
-    validate_dhan_preflight,
 )
 
 
-class _StubBrokerClient:
-    client_id = 'test-client'
-
-    def __init__(self):
-        self.calls = 0
-        self.fetch_calls = 0
-
-    def place_order(self, request):
-        self.calls += 1
-        return {'orderId': 'ORD123', 'orderStatus': 'TRANSIT', 'message': 'accepted', 'echo': request.to_payload()}
-
-    def get_order_by_id(self, order_id):
-        self.fetch_calls += 1
-        return {'orderId': order_id, 'orderStatus': 'TRADED', 'message': 'filled'}
-
-    def get_positions(self):
-        return [
-            {'tradingSymbol': 'NIFTY', 'netQty': 65},
-            {'tradingSymbol': 'BANKNIFTY', 'netQty': -50},
-        ]
-
-
-class _FailingBrokerClient:
-    def place_order(self, request):
-        raise RuntimeError('network down')
-
-
 class TestExecutionEngine(unittest.TestCase):
-    def _write_optimizer_report(self, directory: str, *, strategy: str = 'BREAKOUT', deployment_ready: str = 'YES', deployment_blockers: str = '') -> Path:
-        path = Path(directory) / 'strategy_optimizer_report.csv'
-        path.write_text(
-            'strategy,deployment_ready,deployment_blockers,optimizer_rank,rank_score\n'
-            + f'{strategy},{deployment_ready},{deployment_blockers},1,999\n',
-            encoding='utf-8',
+    def _strict_candidate(
+        self,
+        *,
+        zone_id: str,
+        timestamp: str = '2026-03-06 10:00:00',
+        strategy_name: str = 'BREAKOUT',
+        setup_type: str = 'BREAKOUT',
+        symbol: str = 'NIFTY',
+        side: str = 'BUY',
+        entry: float = 100.0,
+        stop_loss: float = 99.0,
+        target: float = 102.0,
+        timeframe: str = '5m',
+        execution_allowed: bool = True,
+        validation_status: str = 'PASS',
+        validation_score: float = 8.0,
+    ) -> dict[str, object]:
+        return normalize_candidate_contract(
+            {
+                'symbol': symbol,
+                'timestamp': timestamp,
+                'strategy_name': strategy_name,
+                'setup_type': setup_type,
+                'zone_id': zone_id,
+                'side': side,
+                'entry': entry,
+                'stop_loss': stop_loss,
+                'target': target,
+                'quantity': 65,
+                'timeframe': timeframe,
+                'validation_status': validation_status,
+                'validation_score': validation_score,
+                'validation_reasons': [] if validation_status == 'PASS' else ['validation_fail'],
+                'execution_allowed': execution_allowed,
+                'contract_version': CONTRACT_VERSION,
+            }
         )
-        return path
+
     def test_build_indicator_candidate(self):
         rows = [{'timestamp': '2026-03-06 10:00:00', 'market_signal': 'BULLISH_TREND', 'close': 22350.0}]
-        c = build_execution_candidates('Indicator (RSI/ADX/MACD+VWAP)', rows, 'NIFTY')
-        self.assertEqual(len(c), 1)
-        self.assertEqual(c[0]['side'], 'BUY')
-        self.assertEqual(c[0]['quantity'], 65)
-        self.assertIn('share_price', c[0])
-        self.assertIn('strike_price', c[0])
+        candidates = build_execution_candidates('Indicator (RSI/ADX/MACD+VWAP)', rows, 'NIFTY')
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]['side'], 'BUY')
+        self.assertEqual(candidates[0]['quantity'], 65)
+        self.assertIn('share_price', candidates[0])
+        self.assertIn('strike_price', candidates[0])
 
     def test_default_quantity_for_symbol(self):
         self.assertEqual(default_quantity_for_symbol('NIFTY'), 65)
@@ -89,377 +91,107 @@ class TestExecutionEngine(unittest.TestCase):
         self.assertEqual(len(analyzed), 1)
         self.assertEqual(analyzed[0]['analysis_status'], 'ANALYZED')
         self.assertEqual(analyzed[0]['execution_ready'], 'YES')
-        self.assertEqual(analyzed[0]['analyzed_at_utc'], '2026-03-06 10:10:00')
 
-    def test_build_execution_candidates_preserves_trade_labels(self):
-        rows = [
-            {
-                'strategy': 'MTF_5M',
-                'entry_time': '2026-03-05 10:50:00',
-                'side': 'BUY',
-                'entry_price': 107.3,
-                'stop_loss': 105.1,
-                'trailing_stop_loss': 105.1,
-                'target_price': 109.5,
-                'quantity': 65,
-                'trade_no': 2,
-                'trade_label': 'Trade 2',
-                'option_type': 'CE',
-                'strike_price': 23450,
-            }
-        ]
-
-        candidates = build_execution_candidates('MTF 5m', rows, 'NIFTY')
-
-        self.assertEqual(len(candidates), 1)
-        self.assertEqual(candidates[0]['trade_no'], 2)
-        self.assertEqual(candidates[0]['trade_label'], 'Trade 2')
-
-    def test_build_execution_candidates_preserves_reason_and_target_fallback(self):
-        rows = [
-            {
-                'strategy': 'DEMAND_SUPPLY',
-                'entry_time': '2026-03-05 10:50:00',
-                'side': 'BUY',
-                'entry_price': 107.3,
-                'stop_loss': 105.1,
-                'target': 109.5,
-                'quantity': 65,
-                'reason': 'buy zone retest score=7.2 zone_strength=4.5 bias=BULLISH',
-            }
-        ]
-
-        candidates = build_execution_candidates('Demand Supply', rows, 'NIFTY')
-
-        self.assertEqual(candidates[0]['target_price'], 109.5)
-        self.assertIn('buy zone retest', candidates[0]['reason'])
-        self.assertIn('TP:109.5', candidates[0]['reason'])
-
-
-    def test_build_execution_candidates_standardizes_trade_schema_aliases(self):
-        rows = [
-            {
-                'strategy': 'DEMAND_SUPPLY',
-                'time': '2026-03-05 10:50:00',
-                'type': 'BUY',
-                'price': 107.3,
-                'sl': 105.1,
-                'target': 109.5,
-                'total_score': 7.2,
-                'quantity': 65,
-                'reason': 'buy zone retest score=7.2',
-            }
-        ]
-
-        candidates = build_execution_candidates('Demand Supply', rows, 'NIFTY')
-
-        self.assertEqual(candidates[0]['timestamp'], '2026-03-05 10:50:00')
-        self.assertEqual(candidates[0]['signal_time'], '2026-03-05 10:50:00')
-        self.assertEqual(candidates[0]['side'], 'BUY')
-        self.assertEqual(candidates[0]['entry'], 107.3)
-        self.assertEqual(candidates[0]['entry_price'], 107.3)
-        self.assertEqual(candidates[0]['stop_loss'], 105.1)
-        self.assertEqual(candidates[0]['target'], 109.5)
-        self.assertEqual(candidates[0]['target_price'], 109.5)
-        self.assertEqual(candidates[0]['score'], 7.2)
-    def test_build_execution_candidates_drops_simulated_exit_fields(self):
-        rows = [
-            {
-                'strategy': 'DEMAND_SUPPLY',
-                'entry_time': '2026-03-05 10:50:00',
-                'side': 'BUY',
-                'entry_price': 107.3,
-                'stop_loss': 105.1,
-                'target': 109.5,
-                'quantity': 65,
-                'reason': 'buy zone retest score=7.2',
-                'pnl': 250.0,
-                'gross_pnl': 260.0,
-                'exit_time': '2026-03-05 11:20:00',
-                'exit_reason': 'TARGET',
-            }
-        ]
-
-        candidates = build_execution_candidates('Demand Supply', rows, 'NIFTY')
-
-        self.assertNotIn('pnl', candidates[0])
-        self.assertNotIn('gross_pnl', candidates[0])
-        self.assertNotIn('exit_time', candidates[0])
-        self.assertNotIn('exit_reason', candidates[0])
-    def test_make_trade_identity_is_stable(self):
-        candidate = {
-            'strategy': 'BREAKOUT',
-            'symbol': 'NIFTY',
-            'signal_time': '2026-03-06 10:00:00',
-            'side': 'BUY',
-            'price': 100.0,
-            'option_strike': '22550CE',
-        }
-        self.assertEqual(make_trade_id(candidate), make_trade_id(candidate))
-        self.assertEqual(make_trade_key(candidate), make_trade_key(candidate))
-
-    def test_execute_paper_trades_exposes_rejection_metadata_for_duplicates(self):
-        candidates = [
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},
-        ]
-
+    def test_execute_paper_trades_executes_strict_candidate(self):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td) / 'executed.csv'
-            result = execute_paper_trades(candidates, out, deduplicate=True)
+            candidate = self._strict_candidate(zone_id='NIFTY_BREAKOUT_01')
+            result = execute_paper_trades([candidate], out)
+            self.assertTrue(out.exists())
 
         self.assertEqual(result.executed_count, 1)
-        self.assertEqual(result.skipped_count, 1)
-        self.assertEqual(result.skipped_rows[0]['rejection_category'], 'deduplication')
-        self.assertEqual(result.skipped_rows[0]['rejection_reason'], 'DUPLICATE_BATCH_TRADE')
-    def test_execute_paper_trades_returns_structured_summary(self):
-        candidates = [
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:05:00', 'side': 'HOLD', 'price': 101, 'quantity': 65, 'reason': 'y'},
-        ]
+        self.assertEqual(result.blocked_count, 0)
 
+    def test_execute_paper_trades_blocks_non_strict_candidate(self):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td) / 'executed.csv'
-            result = execute_paper_trades(candidates, out)
-            self.assertEqual(result.executed_count, 1)
-            self.assertEqual(result.skipped_count, 1)
-            self.assertEqual(result.error_count, 0)
-            messages = execution_result_summary(result)
-            self.assertTrue(any('1 trade executed' in message for _, message in messages))
-            self.assertTrue(any('invalid side' in message for _, message in messages))
-
-    def test_validate_candidate_derives_stop_and_target_when_missing(self):
-        ok, reason, record = validate_candidate(
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65}
-        )
-        self.assertTrue(ok)
-        self.assertEqual(reason, '')
-        self.assertLess(record['stop_loss'], record['price'])
-        self.assertGreater(record['target_price'], record['price'])
-
-        ok, reason, record = validate_candidate(
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'stop_loss': 99}
-        )
-        self.assertTrue(ok)
-        self.assertEqual(reason, '')
-        self.assertEqual(record['stop_loss'], 99)
-        self.assertGreater(record['target_price'], record['price'])
-    def test_normalize_order_quantity_nifty(self):
-        self.assertEqual(normalize_order_quantity('NIFTY', 10), 65)
-        self.assertEqual(normalize_order_quantity('NIFTY', 129), 65)
-        self.assertEqual(normalize_order_quantity('NIFTY', 130), 130)
-
-    def test_live_kill_switch_enabled_helper(self):
-        original = os.environ.get('LIVE_TRADING_KILL_SWITCH')
-        try:
-            os.environ['LIVE_TRADING_KILL_SWITCH'] = 'true'
-            self.assertTrue(live_kill_switch_enabled())
-            os.environ['LIVE_TRADING_KILL_SWITCH'] = '0'
-            self.assertFalse(live_kill_switch_enabled())
-        finally:
-            if original is None:
-                os.environ.pop('LIVE_TRADING_KILL_SWITCH', None)
-            else:
-                os.environ['LIVE_TRADING_KILL_SWITCH'] = original
-
-    def test_execute_paper_trades(self):
-        candidates = [
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 10, 'reason': 'x'},
-            {'strategy': 'INDICATOR', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:05:00', 'side': 'HOLD', 'price': 101, 'quantity': 1, 'reason': 'neutral'},
-        ]
-
-        with tempfile.TemporaryDirectory() as td:
-            out = Path(td) / 'executed.csv'
-            done = execute_paper_trades(candidates, out)
-            self.assertEqual(len(done), 1)
-            self.assertTrue(out.exists())
-            self.assertEqual(done[0]['quantity'], 65)
-            self.assertIn('share_price', done[0])
-            self.assertIn('strike_price', done[0])
-
-    def test_execute_paper_trades_rewrites_file_when_schema_expands(self):
-        first_candidates = [
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100.0, 'quantity': 65, 'reason': 'seed'}
-        ]
-        second_candidates = [
-            {'strategy': 'DEMAND_SUPPLY', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:05:00', 'side': 'BUY', 'price': 101.0, 'quantity': 65, 'reason': 'buy zone retest score=7.0 zone_strength=4.0 bias=BULLISH', 'stop_loss': 100.0, 'target_price': 103.0, 'trade_label': 'Trade 2'}
-        ]
-
-        with tempfile.TemporaryDirectory() as td:
-            out = Path(td) / 'executed.csv'
-            execute_paper_trades(first_candidates, out, deduplicate=False)
-            execute_paper_trades(second_candidates, out, deduplicate=False)
-            rows = list(csv.reader(io.StringIO(out.read_text(encoding='utf-8'))))
-            header_fields = len(rows[0])
-            self.assertTrue(all(len(row) == header_fields for row in rows[1:]))
-
-    def test_execute_paper_trades_deduplicates(self):
-        candidates = [
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 10, 'reason': 'x'}
-        ]
-
-        with tempfile.TemporaryDirectory() as td:
-            out = Path(td) / 'executed.csv'
-            first = execute_paper_trades(candidates, out, deduplicate=True)
-            second = execute_paper_trades(candidates, out, deduplicate=True)
-            self.assertEqual(len(first), 1)
-            self.assertEqual(len(second), 0)
-
-    def test_filter_unlogged_candidates_skips_already_logged_rows(self):
-        candidates = [
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:05:00', 'side': 'SELL', 'price': 99, 'quantity': 65, 'reason': 'y'},
-        ]
-
-        with tempfile.TemporaryDirectory() as td:
-            out = Path(td) / 'executed.csv'
-            execute_paper_trades([candidates[0]], out, deduplicate=True)
-            fresh, skipped = filter_unlogged_candidates(candidates, out)
-            self.assertEqual(len(fresh), 1)
-            self.assertEqual(fresh[0]['signal_time'], '2026-03-06 10:05:00')
-            self.assertEqual(len(skipped), 1)
-            self.assertEqual(skipped[0]['signal_time'], '2026-03-06 10:00:00')
-
-    def test_filter_unlogged_candidates_skips_duplicate_signal_key_from_logged_rows(self):
-        seed = {
-            'strategy': 'DEMAND_SUPPLY',
-            'symbol': 'NIFTY',
-            'timeframe': '5m',
-            'signal_time': '2026-03-06 10:00:00',
-            'timestamp': '2026-03-06 10:00:00',
-            'side': 'BUY',
-            'price': 100.0,
-            'entry': 100.0,
-            'entry_price': 100.0,
-            'stop_loss': 99.0,
-            'target': 102.0,
-            'target_price': 102.0,
-            'quantity': 65,
-            'reason': 'seed',
-        }
-        follow_up = {
-            'strategy': 'DEMAND_SUPPLY',
-            'symbol': 'NIFTY',
-            'timeframe': '5m',
-            'signal_time': '2026-03-06 10:00:00',
-            'timestamp': '2026-03-06 10:00:00',
-            'side': 'BUY',
-            'price': 100.4,
-            'entry': 100.4,
-            'entry_price': 100.4,
-            'stop_loss': 99.3,
-            'target': 102.6,
-            'target_price': 102.6,
-            'quantity': 65,
-            'reason': 'follow_up',
-        }
-
-        with tempfile.TemporaryDirectory() as td:
-            out = Path(td) / 'executed.csv'
-            execute_paper_trades([seed], out, deduplicate=True)
-            fresh, skipped = filter_unlogged_candidates([follow_up], out)
-            self.assertEqual(len(fresh), 0)
-            self.assertEqual(len(skipped), 1)
-            self.assertEqual(skipped[0]['duplicate_reason'], 'DUPLICATE_SIGNAL_KEY')
-
-    def test_filter_unlogged_candidates_enforces_duplicate_signal_cooldown(self):
-        seed = {
-            'strategy': 'DEMAND_SUPPLY',
-            'symbol': 'NIFTY',
-            'timeframe': '5m',
-            'signal_time': '2026-03-06 10:00:00',
-            'timestamp': '2026-03-06 10:00:00',
-            'side': 'BUY',
-            'price': 100.0,
-            'entry': 100.0,
-            'entry_price': 100.0,
-            'stop_loss': 99.0,
-            'target': 102.0,
-            'target_price': 102.0,
-            'quantity': 65,
-            'reason': 'seed',
-            'duplicate_signal_cooldown_bars': 2,
-        }
-        follow_up = {
-            'strategy': 'DEMAND_SUPPLY',
-            'symbol': 'NIFTY',
-            'timeframe': '5m',
-            'signal_time': '2026-03-06 10:05:00',
-            'timestamp': '2026-03-06 10:05:00',
-            'side': 'BUY',
-            'price': 100.4,
-            'entry': 100.4,
-            'entry_price': 100.4,
-            'stop_loss': 99.3,
-            'target': 102.6,
-            'target_price': 102.6,
-            'quantity': 65,
-            'reason': 'follow_up',
-            'duplicate_signal_cooldown_bars': 2,
-        }
-
-        with tempfile.TemporaryDirectory() as td:
-            out = Path(td) / 'executed.csv'
-            execute_paper_trades([seed], out, deduplicate=True)
-            fresh, skipped = filter_unlogged_candidates([follow_up], out)
-            self.assertEqual(len(fresh), 0)
-            self.assertEqual(len(skipped), 1)
-            self.assertEqual(skipped[0]['duplicate_reason'], 'DUPLICATE_SIGNAL_COOLDOWN')
-    def test_execute_paper_trades_blocks_after_daily_trade_limit(self):
-        candidates = [
-            {'strategy': 'BREAKOUT', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 10:00:00', 'side': 'BUY', 'price': 100, 'quantity': 65, 'reason': 'x'},
-            {'strategy': 'BTST', 'symbol': 'NIFTY', 'signal_time': '2026-03-06 11:00:00', 'side': 'SELL', 'price': 99, 'quantity': 65, 'reason': 'y'},
-        ]
-
-        with tempfile.TemporaryDirectory() as td:
-            out = Path(td) / 'executed.csv'
-            rows = execute_paper_trades(candidates, out, max_trades_per_day=1)
-            self.assertEqual(len(rows), 2)
-            self.assertEqual(rows[0]['execution_status'], 'EXECUTED')
-            self.assertEqual(rows[1]['execution_status'], 'BLOCKED')
-            self.assertIn('max trades/day=1', rows[1]['risk_limit_reason'])
-
-    def test_execute_live_trades_blocks_after_daily_loss_limit(self):
-        candidates = [
-            {
+            candidate = {
                 'strategy': 'BREAKOUT',
                 'symbol': 'NIFTY',
                 'signal_time': '2026-03-06 10:00:00',
                 'side': 'BUY',
                 'price': 100.0,
                 'quantity': 65,
-                'reason': 'x',
-                'security_id': '12345',
-                'pnl': -1500.0,
             }
-        ]
+            result = execute_paper_trades([candidate], out)
 
+        self.assertEqual(result.executed_count, 0)
+        self.assertEqual(result.blocked_count, 1)
+        self.assertIn('MISSING_ZONE_ID', result.blocked_rows[0]['reason_codes'])
+        self.assertIn('MISSING_VALIDATION_STATUS', result.blocked_rows[0]['reason_codes'])
+
+    def test_execute_paper_trades_blocks_duplicate_zone(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            first = self._strict_candidate(zone_id='NIFTY_BREAKOUT_01')
+            second = self._strict_candidate(zone_id='NIFTY_BREAKOUT_01', timestamp='2026-03-06 10:20:00')
+            first_result = execute_paper_trades([first], out)
+            second_result = execute_paper_trades([second], out)
+
+        self.assertEqual(first_result.executed_count, 1)
+        self.assertEqual(second_result.executed_count, 0)
+        self.assertEqual(second_result.blocked_count, 1)
+        self.assertEqual(second_result.blocked_rows[0]['blocked_reason'], 'DUPLICATE_ZONE')
+
+    def test_execute_paper_trades_blocks_failed_validation(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            candidate = self._strict_candidate(zone_id='NIFTY_BREAKOUT_02', validation_status='FAIL', execution_allowed=False, validation_score=5.0)
+            result = execute_paper_trades([candidate], out)
+
+        self.assertEqual(result.executed_count, 0)
+        self.assertEqual(result.blocked_count, 1)
+        self.assertEqual(result.blocked_rows[0]['blocked_reason'], 'VALIDATION_NOT_PASS')
+
+    def test_filter_unlogged_candidates_skips_logged_strict_candidate(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            seed = self._strict_candidate(zone_id='NIFTY_BREAKOUT_01')
+            execute_paper_trades([seed], out)
+            fresh, skipped = filter_unlogged_candidates([seed], out)
+
+        self.assertEqual(len(fresh), 0)
+        self.assertEqual(len(skipped), 1)
+
+    def test_guardrails_block_cooldown_for_same_group(self):
+        state = TradingState.from_rows([
+            {
+                **self._strict_candidate(zone_id='NIFTY_BREAKOUT_01', timestamp='2026-03-06 10:00:00'),
+                'trade_id': 'trade-1',
+                'execution_status': 'EXECUTED',
+            }
+        ])
+        candidate = self._strict_candidate(zone_id='NIFTY_BREAKOUT_02', timestamp='2026-03-06 10:05:00')
+        result = check_all_guards(candidate, state, GuardConfig(cooldown_minutes=15))
+        self.assertFalse(result.allowed)
+        self.assertIn('COOLDOWN_ACTIVE', result.reasons)
+
+    def test_execute_engine_wrappers_delegate_to_guard_gateway(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / 'executed.csv'
+            with patch('src.execution.guards.execute_paper_trades') as mock_paper, patch('src.execution.guards.execute_live_trades') as mock_live:
+                class _Result:
+                    rows = []
+                    blocked_rows = []
+                    executed_rows = []
+                    skipped_rows = []
+                    executed_count = 0
+                    blocked_count = 0
+                    skipped_count = 0
+                    duplicate_count = 0
+                    error_count = 0
+                mock_paper.return_value = _Result()
+                mock_live.return_value = _Result()
+                execution_engine.execute_paper_trades([], out)
+                execution_engine.execute_live_trades([], out)
+
+        mock_paper.assert_called_once()
+        mock_live.assert_called_once()
+
+    def test_execute_live_trades_uses_canonical_gateway_and_blocks_invalid_contract(self):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td) / 'live.csv'
-            out.write_text(
-                'strategy,symbol,signal_time,side,price,quantity,execution_type,execution_status,executed_at_utc,pnl\n'
-                'BREAKOUT,NIFTY,2026-03-06 09:30:00,SELL,100,65,LIVE,SENT,2026-03-06 09:30:00,-1500\n',
-                encoding='utf-8',
-            )
-            rows = execute_live_trades(
-                candidates,
-                out,
-                broker_client=_StubBrokerClient(),
-                broker_name='DHAN',
-                security_map={},
-                max_daily_loss=1000.0,
-                optimizer_report_path=self._write_optimizer_report(td),
-            )
-            self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]['execution_status'], 'BLOCKED')
-            self.assertEqual(rows[0]['broker_status'], 'RISK_LIMIT')
-
-    def test_execute_live_trades_blocks_when_kill_switch_enabled(self):
-        original = os.environ.get('LIVE_TRADING_KILL_SWITCH')
-        try:
-            os.environ['LIVE_TRADING_KILL_SWITCH'] = 'true'
-            broker = _StubBrokerClient()
-            candidates = [
+            result = execute_live_trades([
                 {
                     'strategy': 'BREAKOUT',
                     'symbol': 'NIFTY',
@@ -467,33 +199,16 @@ class TestExecutionEngine(unittest.TestCase):
                     'side': 'BUY',
                     'price': 100.0,
                     'quantity': 65,
-                    'reason': 'x',
-                    'security_id': '12345',
                 }
-            ]
-            with tempfile.TemporaryDirectory() as td:
-                out = Path(td) / 'live.csv'
-                rows = execute_live_trades(
-                    candidates,
-                    out,
-                    broker_client=broker,
-                    broker_name='DHAN',
-                    security_map={},
-                    optimizer_report_path=self._write_optimizer_report(td),
-                )
-            self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]['execution_status'], 'BLOCKED')
-            self.assertEqual(rows[0]['broker_status'], 'KILL_SWITCH')
-            self.assertEqual(broker.calls, 0)
-        finally:
-            if original is None:
-                os.environ.pop('LIVE_TRADING_KILL_SWITCH', None)
-            else:
-                os.environ['LIVE_TRADING_KILL_SWITCH'] = original
+            ], out)
 
-    def test_reconcile_live_trades_updates_filled_orders(self):
-        broker = _StubBrokerClient()
+        self.assertEqual(result.executed_count, 0)
+        self.assertEqual(result.blocked_count, 1)
+        self.assertIn('MISSING_ZONE_ID', result.blocked_rows[0]['reason_codes'])
+
+    def test_live_trading_unlock_status_handles_missing_log(self):
         with tempfile.TemporaryDirectory() as td:
+<<<<<<<< HEAD:snapshots/v7_2026-03-30/project/tests/test_execution_engine.py
             out = Path(td) / 'live.csv'
             out.write_text(
                 'strategy,symbol,signal_time,side,price,quantity,execution_type,execution_status,executed_at_utc,broker_order_id,broker_status\n'
@@ -907,6 +622,13 @@ class TestExecutionEngine(unittest.TestCase):
             self.assertEqual(error_events[0]['error_message'], 'network down')
             self.assertEqual(broker_events[0]['event'], 'broker_order_routed')
             self.assertEqual(broker_events[-1]['event'], 'broker_order_result')
+========
+            path = Path(td) / 'missing.csv'
+            live_enabled, trade_count, reason = live_trading_unlock_status(path)
+        self.assertFalse(live_enabled)
+        self.assertEqual(trade_count, 0)
+        self.assertEqual(reason, '')
+>>>>>>>> a91e444 ( modifyed with ltp verson2):tests/test_execution_engine.py
 
 
 =======
@@ -914,6 +636,7 @@ class TestExecutionEngine(unittest.TestCase):
 if __name__ == '__main__':
 
     unittest.main()
+<<<<<<<< HEAD:snapshots/v7_2026-03-30/project/tests/test_execution_engine.py
 <<<<<<< HEAD:snapshots/v7_2026-03-30/project/tests/test_execution_engine.py
 =======
 
@@ -925,3 +648,7 @@ if __name__ == '__main__':
 
 
 >>>>>>> fed8576 ( modifyed with ltp verson2):tests/test_execution_engine.py
+========
+
+
+>>>>>>>> a91e444 ( modifyed with ltp verson2):tests/test_execution_engine.py

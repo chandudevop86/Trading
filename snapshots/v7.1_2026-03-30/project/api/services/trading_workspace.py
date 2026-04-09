@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -11,12 +11,12 @@ except Exception:  # pragma: no cover
     pd = None  # type: ignore
 
 from src.breakout_bot import Candle
-from src.execution_engine import build_execution_candidates, execute_live_trades, execute_paper_trades
 from src.strategy_service import StrategyContext, run_strategy_workflow
 from src.strike_selector import attach_option_strikes
 from src.telegram_notifier import build_trade_summary, send_telegram_message
 from src.trade_validation_service import build_trade_evaluation_summary
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
+from vinayak.execution.gateway import execute_workspace_candidates
 from vinayak.api.services.report_storage import cache_json_artifact, store_json_report, store_text_report
 from vinayak.messaging.bus import build_message_bus
 from vinayak.messaging.topics import EVENT_ANALYSIS_COMPLETED, EVENT_NOTIFICATION_REQUESTED
@@ -393,24 +393,19 @@ def run_live_trading_analysis(
     }
     execution_rows: list[dict[str, Any]] = []
     if auto_execute and execution_mode in {'PAPER', 'LIVE'} and signal_rows:
-        candidates = build_execution_candidates(strategy, signal_rows, symbol)
-        if execution_mode == 'LIVE':
-            result = execute_live_trades(
-                candidates,
-                Path(str(live_log_path)),
-                deduplicate=True,
-                max_trades_per_day=max_trades_per_day,
-                max_daily_loss=max_daily_loss,
-                **_resolve_live_execution_kwargs(security_map_path),
-            )
-        else:
-            result = execute_paper_trades(
-                candidates,
-                Path(str(paper_log_path)),
-                deduplicate=True,
-                max_trades_per_day=max_trades_per_day,
-                max_daily_loss=max_daily_loss,
-            )
+        _candidates, result = execute_workspace_candidates(
+            strategy,
+            symbol,
+            candles_df,
+            signal_rows,
+            execution_mode=execution_mode,
+            paper_log_path=str(paper_log_path),
+            live_log_path=str(live_log_path),
+            max_trades_per_day=max_trades_per_day,
+            max_daily_loss=max_daily_loss,
+            security_map_path=str(security_map_path),
+            resolve_live_kwargs=_resolve_live_execution_kwargs,
+        )
         execution_summary = {
             'mode': execution_mode,
             'executed_count': result.executed_count,
@@ -457,6 +452,8 @@ def run_live_trading_analysis(
         source='live_analysis',
     )
     return response
+
+
 
 
 

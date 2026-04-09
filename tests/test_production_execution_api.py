@@ -14,7 +14,8 @@ from src.execution.contracts import CONTRACT_VERSION, normalize_candidate_contra
 from src.execution.guardrails import GuardConfig, check_all_guards
 from src.execution.paper_execution_service import CanonicalExecutionConfig, ExecutionAuditLogger, execute_candidate
 from src.execution.state import TradingState
-from src.execution_engine import execute_paper_trades
+import src.execution_engine as execution_engine
+from src.execution.guards import execute_candidates, execute_paper_trades
 from src.strategy_service import standardize_strategy_rows
 from src.trading_workflows import run_paper_workflow
 
@@ -267,9 +268,9 @@ class TestProductionExecutionApi(unittest.TestCase):
             mock_run.assert_called_once()
 
     def test_runtime_modules_import_guard_gateway_for_paper_execution(self):
-        self.assertEqual(runtime_workflow_service.execute_paper_trades.__module__, "src.execution.guards")
-        self.assertEqual(trading_workflows.execute_paper_trades.__module__, "src.execution.guards")
-        self.assertEqual(operational_daemon.execute_paper_trades.__module__, "src.execution.guards")
+        self.assertEqual(runtime_workflow_service.execute_candidates.__module__, "src.execution.guards")
+        self.assertEqual(trading_workflows.execute_candidates.__module__, "src.execution.guards")
+        self.assertEqual(operational_daemon.execute_candidates.__module__, "src.execution.guards")
 
     def test_execution_engine_wrapper_delegates_to_guard_gateway(self):
         with tempfile.TemporaryDirectory() as td:
@@ -286,8 +287,27 @@ class TestProductionExecutionApi(unittest.TestCase):
                     duplicate_count = 0
                     error_count = 0
                 mock_gateway.return_value = _Result()
-                execute_paper_trades([], out)
+                execution_engine.execute_paper_trades([], out)
             mock_gateway.assert_called_once()
+
+    def test_canonical_execute_candidates_gateway_is_used_for_live_and_paper(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "executed.csv"
+            with patch("src.execution.paper_execution_service.run_canonical_paper_execution") as mock_run:
+                class _Result:
+                    rows = []
+                    blocked_rows = []
+                    executed_rows = []
+                    skipped_rows = []
+                    executed_count = 0
+                    blocked_count = 0
+                    skipped_count = 0
+                    duplicate_count = 0
+                    error_count = 0
+                mock_run.return_value = (_Result(), [], TradingState())
+                execute_candidates([], out, execution_mode="PAPER")
+                execute_candidates([], out, execution_mode="LIVE")
+            self.assertEqual(mock_run.call_count, 2)
 
     def test_run_paper_workflow_normalizes_and_executes_candidates(self):
         with tempfile.TemporaryDirectory() as td:
@@ -373,5 +393,8 @@ class TestProductionExecutionApi(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+
 
 

@@ -52,7 +52,7 @@ class TestOperationalDaemon(unittest.TestCase):
             with patch('src.operational_daemon.run_strategy', return_value=trades):
                 with patch('src.operational_daemon.write_rows'):
                     with patch('src.operational_daemon.prepare_candidates_for_execution', return_value=trades):
-                        with patch('src.operational_daemon.execute_paper_trades', return_value=execution_result):
+                        with patch('src.operational_daemon.execute_candidates', return_value=execution_result):
                             with patch('src.operational_daemon.close_paper_trades'):
                                 with patch('src.operational_daemon.summarize_trade_log'):
                                     with patch('src.operational_daemon.execution_result_summary', return_value=[('success', '1 trade executed')]):
@@ -68,6 +68,7 @@ class TestOperationalDaemon(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 
 
 

@@ -1,3 +1,4 @@
+﻿import inspect
 from pathlib import Path
 
 from vinayak.api.services import trading_workspace as service
@@ -52,22 +53,47 @@ def test_run_live_trading_analysis_forwards_recent_risk_controls(monkeypatch, tm
 
     monkeypatch.setattr(service, 'run_strategy_workflow', _fake_run_strategy_workflow)
 
-    def _fake_execute_paper_trades(candidates, output_path, deduplicate=True, **kwargs):
-        captured['paper_kwargs'] = kwargs
-        return type(
-            'ExecutionResult',
-            (),
-            {
-                'executed_count': 1,
-                'blocked_count': 0,
-                'error_count': 0,
-                'skipped_count': 0,
-                'duplicate_count': 0,
-                'rows': [{'trade_id': 'BTST-1', 'side': 'BUY', 'execution_status': 'FILLED', 'price': 101.0}],
-            },
-        )()
+    def _fake_execute_workspace_candidates(strategy, symbol, candles, signal_rows, **kwargs):
+        captured['workspace_args'] = {
+            'strategy': strategy,
+            'symbol': symbol,
+            'row_count': len(signal_rows),
+        }
+        captured['workspace_kwargs'] = kwargs
+        return (
+            [
+                {
+                    'symbol': symbol,
+                    'timestamp': '2026-03-24 09:15:00',
+                    'strategy_name': strategy,
+                    'setup_type': 'BTST',
+                    'zone_id': 'TEST_ZONE_1',
+                    'side': 'BUY',
+                    'entry': 101.0,
+                    'stop_loss': 99.0,
+                    'target': 103.0,
+                    'timeframe': '5m',
+                    'validation_status': 'PASS',
+                    'validation_score': 8.1,
+                    'validation_reasons': [],
+                    'execution_allowed': True,
+                }
+            ],
+            type(
+                'ExecutionResult',
+                (),
+                {
+                    'executed_count': 1,
+                    'blocked_count': 0,
+                    'error_count': 0,
+                    'skipped_count': 0,
+                    'duplicate_count': 0,
+                    'rows': [{'trade_id': 'BTST-1', 'side': 'BUY', 'execution_status': 'FILLED', 'price': 101.0}],
+                },
+            )(),
+        )
 
-    monkeypatch.setattr(service, 'execute_paper_trades', _fake_execute_paper_trades)
+    monkeypatch.setattr(service, 'execute_workspace_candidates', _fake_execute_workspace_candidates)
 
     result = service.run_live_trading_analysis(
         symbol='^NSEI',
@@ -101,7 +127,19 @@ def test_run_live_trading_analysis_forwards_recent_risk_controls(monkeypatch, tm
     assert context.fixed_cost_per_trade == 15.0
     assert context.max_daily_loss == 2500.0
     assert context.max_trades_per_day == 2
-    assert captured['paper_kwargs']['max_trades_per_day'] == 2
-    assert captured['paper_kwargs']['max_daily_loss'] == 2500.0
+    assert captured['workspace_args']['strategy'] == 'BTST'
+    assert captured['workspace_args']['symbol'] == '^NSEI'
+    assert captured['workspace_args']['row_count'] == 1
+    assert captured['workspace_kwargs']['max_trades_per_day'] == 2
+    assert captured['workspace_kwargs']['max_daily_loss'] == 2500.0
+    assert captured['workspace_kwargs']['execution_mode'] == 'PAPER'
     assert result['execution_summary']['mode'] == 'PAPER'
     assert result['signal_count'] == 1
+
+
+def test_run_live_trading_analysis_uses_workspace_gateway() -> None:
+    source = inspect.getsource(service.run_live_trading_analysis)
+
+    assert 'execute_workspace_candidates(' in source
+    assert 'build_execution_candidates(' not in source
+    assert 'execute_paper_trades(' not in source

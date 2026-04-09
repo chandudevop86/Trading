@@ -1,4 +1,4 @@
-﻿import hashlib
+import hashlib
 import os
 
 from fastapi import HTTPException, Request
@@ -9,6 +9,11 @@ from vinayak.db.session import build_session_factory, initialize_database
 
 COOKIE_NAME = 'vinayak_session'
 LEGACY_COOKIE_NAME = 'vinayak_admin_session'
+
+
+def auto_login_enabled() -> bool:
+    value = str(os.getenv('VINAYAK_AUTO_LOGIN', '') or '').strip().lower()
+    return value in {'1', 'true', 'yes', 'on'}
 
 
 def admin_username() -> str:
@@ -39,8 +44,30 @@ def _load_user_from_session_token(raw_token: str | None) -> AuthenticatedUser | 
         session.close()
 
 
+def _load_default_admin_user() -> AuthenticatedUser | None:
+    initialize_database()
+    session_factory = build_session_factory()
+    session = session_factory()
+    try:
+        service = UserAuthService(session)
+        record = service.ensure_default_admin()
+        return AuthenticatedUser(
+            id=record.id,
+            username=record.username,
+            role=record.role,
+            is_active=record.is_active,
+        )
+    finally:
+        session.close()
+
+
 def get_current_user(request: Request) -> AuthenticatedUser | None:
-    return _load_user_from_session_token(request.cookies.get(COOKIE_NAME))
+    user = _load_user_from_session_token(request.cookies.get(COOKIE_NAME))
+    if user is not None:
+        return user
+    if auto_login_enabled():
+        return _load_default_admin_user()
+    return None
 
 
 def is_authenticated(request: Request) -> bool:
@@ -59,4 +86,3 @@ def require_admin_session(request: Request) -> AuthenticatedUser:
     if str(user.role).upper() != ADMIN_ROLE:
         raise HTTPException(status_code=403, detail='Admin authentication required.')
     return user
-

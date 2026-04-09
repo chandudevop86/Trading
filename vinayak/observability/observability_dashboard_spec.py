@@ -106,6 +106,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       <section class=\"card\"><h2>System Health</h2><div id=\"systemHealth\"></div></section>
       <section class=\"card\"><h2>Data Health</h2><div id=\"dataHealth\"></div></section>
       <section class=\"card\"><h2>Strategy Health</h2><div id=\"strategyHealth\"></div></section>
+      <section class=\"card\"><h2>Latest Market Data</h2><div id=\"latestMarketData\"></div></section>
       <section class=\"card\"><h2>Execution Health</h2><div id=\"executionHealth\"></div></section>
       <section class=\"card\"><h2>Validation and Risk Health</h2><div id=\"validationRiskHealth\"></div></section>
       <section class=\"card\"><h2>Alerts and Recent Failures</h2><div id=\"alerts\"></div></section>
@@ -144,6 +145,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       renderCards('systemHealth', payload.system_health.cards);
       renderCards('dataHealth', payload.data_health.cards);
       renderCards('strategyHealth', payload.strategy_health.cards);
+      renderCards('latestMarketData', payload.latest_market_data);
       renderCards('executionHealth', payload.execution_health.cards);
       renderCards('validationRiskHealth', payload.validation_risk_health.cards);
       renderAlerts(payload.alerts_and_recent_failures.alerts, payload.alerts_and_recent_failures.recent_failures);
@@ -163,4 +165,6 @@ def build_observability_dashboard_html() -> str:
 
 
 __all__ = ['build_grafana_dashboard_spec', 'build_observability_dashboard_html', 'build_text_wireframe']
+
+
 

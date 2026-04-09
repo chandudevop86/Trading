@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import csv
 import os
+import time
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -16,6 +18,8 @@ from vinayak.execution.broker.dhan_client import DhanClient
 
 
 DEFAULT_PAPER_LOG_PATH = Path('app/vinayak/data/paper_trading_logs_all.csv')
+_VALIDATION_SNAPSHOT_TTL_SECONDS = 2.0
+_VALIDATION_SNAPSHOT_CACHE: dict[str, dict[str, Any]] = {}
 
 
 def _load_csv_rows(path: Path) -> list[dict[str, object]]:
@@ -28,8 +32,7 @@ def _load_csv_rows(path: Path) -> list[dict[str, object]]:
         return []
 
 
-def _validation_snapshot(path: Path) -> dict[str, object]:
-    rows = _load_csv_rows(path)
+def _build_validation_snapshot(rows: list[dict[str, object]]) -> dict[str, object]:
     if not rows:
         return {}
     summary = build_trade_evaluation_summary(rows, strategy_name='VINAYAK_PAPER')
@@ -71,6 +74,25 @@ def _validation_snapshot(path: Path) -> dict[str, object]:
     }
 
 
+def _validation_snapshot(path: Path) -> dict[str, object]:
+    if not path.exists() or path.stat().st_size == 0:
+        return {}
+    stat = path.stat()
+    cache_key = str(path.resolve())
+    signature = (stat.st_mtime_ns, stat.st_size)
+    now = time.monotonic()
+    cached = _VALIDATION_SNAPSHOT_CACHE.get(cache_key)
+    if cached and cached.get('signature') == signature and (now - float(cached.get('loaded_at', 0.0))) <= _VALIDATION_SNAPSHOT_TTL_SECONDS:
+        return dict(cached.get('value', {}))
+    value = _build_validation_snapshot(_load_csv_rows(path))
+    _VALIDATION_SNAPSHOT_CACHE[cache_key] = {
+        'signature': signature,
+        'loaded_at': now,
+        'value': value,
+    }
+    return dict(value)
+
+
 class DashboardSummaryService:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -103,7 +125,3 @@ class DashboardSummaryService:
             'recent_audit_failures': recent_audit_failures,
             'validation_summary': _validation_snapshot(DEFAULT_PAPER_LOG_PATH),
         }
-
-
-
-

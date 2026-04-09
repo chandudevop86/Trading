@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import types
 import unittest
 from pathlib import Path
@@ -51,7 +51,7 @@ class TestOperationalDaemon(unittest.TestCase):
         with patch('src.operational_daemon.fetch_ohlcv_data', return_value=candles):
             with patch('src.operational_daemon.run_strategy', return_value=trades):
                 with patch('src.operational_daemon.write_rows'):
-                    with patch('src.operational_daemon.build_execution_candidates', return_value=trades):
+                    with patch('src.operational_daemon.prepare_candidates_for_execution', return_value=trades):
                         with patch('src.operational_daemon.execute_paper_trades', return_value=execution_result):
                             with patch('src.operational_daemon.close_paper_trades'):
                                 with patch('src.operational_daemon.summarize_trade_log'):
@@ -68,3 +68,6 @@ class TestOperationalDaemon(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+

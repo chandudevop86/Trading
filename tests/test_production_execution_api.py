@@ -1,17 +1,21 @@
-import tempfile
+﻿import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
 
+import src.operational_daemon as operational_daemon
+import src.runtime_workflow_service as runtime_workflow_service
+import src.trading_workflows as trading_workflows
 from src.analytics.readiness_api import evaluate_readiness, summarize_validation_failures
 from src.data.cleaner import coerce_ohlcv
-from src.execution.contracts import normalize_candidate_contract, validate_candidate_contract
+from src.execution.contracts import CONTRACT_VERSION, normalize_candidate_contract, validate_candidate_contract
 from src.execution.guardrails import GuardConfig, check_all_guards
 from src.execution.paper_execution_service import CanonicalExecutionConfig, ExecutionAuditLogger, execute_candidate
 from src.execution.state import TradingState
 from src.execution_engine import execute_paper_trades
+from src.strategy_service import standardize_strategy_rows
 from src.trading_workflows import run_paper_workflow
 
 
@@ -20,6 +24,24 @@ class TestProductionExecutionApi(unittest.TestCase):
         now = pd.Timestamp.now().floor("min")
         return now.replace(hour=10, minute=minute, second=0, microsecond=0).strftime("%Y-%m-%d %H:%M:%S")
 
+    def test_strategy_standardization_emits_canonical_contract_shell(self):
+        rows = standardize_strategy_rows(
+            [{
+                "timestamp": self._current_ts(),
+                "side": "BUY",
+                "entry_price": 100.0,
+                "stop_loss": 99.0,
+                "target_price": 102.0,
+                "timeframe": "5m",
+            }],
+            strategy_name="Breakout",
+            symbol="NIFTY",
+        )
+        self.assertEqual(rows[0]["strategy_name"], "BREAKOUT")
+        self.assertTrue(str(rows[0]["zone_id"]).startswith("NIFTY_BREAKOUT_"))
+        self.assertEqual(rows[0]["validation_status"], "PENDING")
+        self.assertFalse(rows[0]["execution_allowed"])
+        self.assertEqual(rows[0]["contract_version"], CONTRACT_VERSION)
     def test_strategy_output_missing_zone_id_is_blocked_before_standardization(self):
         raw = {
             "symbol": "NIFTY",
@@ -57,7 +79,7 @@ class TestProductionExecutionApi(unittest.TestCase):
             "validation_score": 8.0,
             "validation_reasons": [],
             "execution_allowed": True,
-            "contract_version": "strict_trade_candidate_v1",
+            "contract_version": CONTRACT_VERSION,
         }
         result = check_all_guards(candidate, state, GuardConfig(stale_after_minutes=0))
         self.assertFalse(result.allowed)
@@ -83,7 +105,7 @@ class TestProductionExecutionApi(unittest.TestCase):
                     "validation_score": 5.0,
                     "validation_reasons": ["bad_rr"],
                     "execution_allowed": False,
-                    "contract_version": "strict_trade_candidate_v1",
+                    "contract_version": CONTRACT_VERSION,
                 }
             )
             decision = execute_candidate(candidate, state, CanonicalExecutionConfig(output_path=Path(td) / "executed.csv"), logger)
@@ -109,13 +131,30 @@ class TestProductionExecutionApi(unittest.TestCase):
                     "validation_score": 8.0,
                     "validation_reasons": [],
                     "execution_allowed": False,
-                    "contract_version": "strict_trade_candidate_v1",
+                    "contract_version": CONTRACT_VERSION,
                 }
             )
             result = execute_paper_trades([candidate], out)
             self.assertEqual(result.executed_count, 0)
             self.assertEqual(result.blocked_count, 1)
             self.assertEqual(result.blocked_rows[0]["blocked_reason"], "EXECUTION_NOT_ALLOWED")
+
+    def test_execute_paper_trades_blocks_legacy_candidate_without_required_schema(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "executed.csv"
+            legacy_candidate = {
+                "strategy": "BREAKOUT",
+                "symbol": "NIFTY",
+                "signal_time": self._current_ts(),
+                "side": "BUY",
+                "price": 100.0,
+                "quantity": 65,
+            }
+            result = execute_paper_trades([legacy_candidate], out)
+            self.assertEqual(result.executed_count, 0)
+            self.assertEqual(result.blocked_count, 1)
+            self.assertIn("MISSING_ZONE_ID", result.blocked_rows[0]["reason_codes"])
+            self.assertIn("MISSING_VALIDATION_STATUS", result.blocked_rows[0]["reason_codes"])
 
     def test_duplicate_zone_and_cooldown_are_blocked(self):
         state = TradingState.from_rows(
@@ -156,7 +195,7 @@ class TestProductionExecutionApi(unittest.TestCase):
                 "validation_score": 8.0,
                 "validation_reasons": [],
                 "execution_allowed": True,
-                "contract_version": "strict_trade_candidate_v1",
+                "contract_version": CONTRACT_VERSION,
             }
         )
         result = check_all_guards(candidate, state, GuardConfig(cooldown_minutes=15, stale_after_minutes=0))
@@ -183,7 +222,7 @@ class TestProductionExecutionApi(unittest.TestCase):
                 "validation_score": 8.0,
                 "validation_reasons": [],
                 "execution_allowed": True,
-                "contract_version": "strict_trade_candidate_v1",
+                "contract_version": CONTRACT_VERSION,
             }
         )
         result = check_all_guards(candidate, state, GuardConfig(max_daily_loss=500.0, stale_after_minutes=0))
@@ -210,7 +249,7 @@ class TestProductionExecutionApi(unittest.TestCase):
                     "validation_score": 8.0,
                     "validation_reasons": [],
                     "execution_allowed": True,
-                    "contract_version": "strict_trade_candidate_v1",
+                    "contract_version": CONTRACT_VERSION,
                 }
             )
             with patch("src.execution.paper_execution_service.run_canonical_paper_execution") as mock_run:
@@ -226,6 +265,29 @@ class TestProductionExecutionApi(unittest.TestCase):
                 mock_run.return_value = (_Result(), [], TradingState())
                 execute_paper_trades([strict_candidate], out)
             mock_run.assert_called_once()
+
+    def test_runtime_modules_import_guard_gateway_for_paper_execution(self):
+        self.assertEqual(runtime_workflow_service.execute_paper_trades.__module__, "src.execution.guards")
+        self.assertEqual(trading_workflows.execute_paper_trades.__module__, "src.execution.guards")
+        self.assertEqual(operational_daemon.execute_paper_trades.__module__, "src.execution.guards")
+
+    def test_execution_engine_wrapper_delegates_to_guard_gateway(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "executed.csv"
+            with patch("src.execution.guards.execute_paper_trades") as mock_gateway:
+                class _Result:
+                    rows = []
+                    blocked_rows = []
+                    executed_rows = []
+                    skipped_rows = []
+                    executed_count = 0
+                    blocked_count = 0
+                    skipped_count = 0
+                    duplicate_count = 0
+                    error_count = 0
+                mock_gateway.return_value = _Result()
+                execute_paper_trades([], out)
+            mock_gateway.assert_called_once()
 
     def test_run_paper_workflow_normalizes_and_executes_candidates(self):
         with tempfile.TemporaryDirectory() as td:
@@ -247,7 +309,7 @@ class TestProductionExecutionApi(unittest.TestCase):
                     "stop_loss": 100.5,
                     "target": 102.0,
                     "timeframe": "5m",
-                    "contract_version": "strict_trade_candidate_v1",
+                    "contract_version": CONTRACT_VERSION,
                 }
             ]
             with patch("src.execution.pipeline.validate_trade", return_value={"decision": "PASS", "score": 8.4, "reasons": [], "metrics": {}}):
@@ -269,10 +331,16 @@ class TestProductionExecutionApi(unittest.TestCase):
             ]
         )
         summary = evaluate_readiness(trades, rejects)
+        self.assertEqual(summary["verdict"], "NOT_READY")
         self.assertEqual(summary["readiness_decision"], "NOT_READY")
-        self.assertIn("INSUFFICIENT_TRADE_SAMPLE", summary["not_ready_reasons"])
+        self.assertIn("INSUFFICIENT_TRADE_SAMPLE", summary["reasons"])
+        self.assertIn("thresholds", summary)
+        self.assertIn("threshold_status", summary)
+        self.assertIn("failure_counts", summary)
+        self.assertEqual(summary["failure_counts"]["insufficient_trade_sample"], 1)
         top = summarize_validation_failures(rejects)
         self.assertEqual(top["bad_rr"], 2)
+        self.assertEqual(summary["validation_failure_summary"]["bad_rr"], 2)
 
     def test_clean_data_to_execution_logging_integration(self):
         with tempfile.TemporaryDirectory() as td:
@@ -294,7 +362,7 @@ class TestProductionExecutionApi(unittest.TestCase):
                 "stop_loss": float(cleaned.iloc[-1]["close"]) - 0.4,
                 "target": float(cleaned.iloc[-1]["close"]) + 0.8,
                 "timeframe": "5m",
-                "contract_version": "strict_trade_candidate_v1",
+                "contract_version": CONTRACT_VERSION,
             }]
             with patch("src.execution.pipeline.validate_trade", return_value={"decision": "PASS", "score": 8.8, "reasons": [], "metrics": {}}):
                 workflow = run_paper_workflow(rows, "Breakout", "NIFTY", candles=cleaned, output_path=Path(td) / "executed.csv")
@@ -305,4 +373,5 @@ class TestProductionExecutionApi(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 

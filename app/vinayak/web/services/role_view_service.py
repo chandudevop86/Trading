@@ -1,9 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import csv
 import json
+import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
@@ -20,6 +21,8 @@ DEFAULT_LOGS = {
     'rejections_log': Path('logs/rejections.log'),
     'errors_log': Path('logs/errors.log'),
 }
+_FILE_CACHE_TTL_SECONDS = 2.0
+_FILE_CACHE: dict[str, dict[str, Any]] = {}
 
 
 class RoleViewService:
@@ -188,32 +191,58 @@ class RoleViewService:
         if isinstance(cached, dict) and cached:
             return cached
         report_files = sorted(DEFAULT_REPORTS_DIR.glob('*live_analysis_result.json'), key=lambda path: path.stat().st_mtime, reverse=True)
-        for path in report_files:
-            try:
-                payload = json.loads(path.read_text(encoding='utf-8'))
-            except Exception:
-                continue
-            if isinstance(payload, dict):
-                return payload
-        return {}
+        latest_path = report_files[0] if report_files else None
+        if latest_path is None:
+            return {}
+        payload = self._read_json_file(latest_path)
+        return payload if isinstance(payload, dict) else {}
+
+    def _cache_key(self, path: Path, kind: str) -> str:
+        return f'{kind}:{path.as_posix()}'
+
+    def _read_cached_file(self, path: Path, *, kind: str, loader: Callable[[Path], Any], empty_value: Any) -> Any:
+        if not path.exists() or path.stat().st_size == 0:
+            return empty_value
+        stat = path.stat()
+        key = self._cache_key(path, kind)
+        now = time.monotonic()
+        cached = _FILE_CACHE.get(key)
+        signature = (stat.st_mtime_ns, stat.st_size)
+        if cached and cached.get('signature') == signature and (now - float(cached.get('loaded_at', 0.0))) <= _FILE_CACHE_TTL_SECONDS:
+            return cached.get('value', empty_value)
+        try:
+            value = loader(path)
+        except Exception:
+            value = empty_value
+        _FILE_CACHE[key] = {
+            'signature': signature,
+            'loaded_at': now,
+            'value': value,
+        }
+        return value
 
     def _read_csv_rows(self, path: Path) -> list[dict[str, Any]]:
-        if not path.exists() or path.stat().st_size == 0:
-            return []
-        try:
-            with path.open('r', encoding='utf-8', newline='') as handle:
+        def loader(target: Path) -> list[dict[str, Any]]:
+            with target.open('r', encoding='utf-8', newline='') as handle:
                 return [dict(row) for row in csv.DictReader(handle) if row]
-        except Exception:
-            return []
+
+        return self._read_cached_file(path, kind='csv', loader=loader, empty_value=[])
+
+    def _read_json_file(self, path: Path) -> Any:
+        def loader(target: Path) -> Any:
+            return json.loads(target.read_text(encoding='utf-8'))
+
+        return self._read_cached_file(path, kind='json', loader=loader, empty_value={})
 
     def _tail_text(self, path: Path, limit: int = 50) -> str:
         if not path.exists() or path.stat().st_size == 0:
             return 'No log entries yet.'
-        try:
-            rows = path.read_text(encoding='utf-8', errors='replace').splitlines()
-        except Exception as exc:
-            return f'Failed to read log: {exc}'
-        return '\n'.join(rows[-max(int(limit), 1):]) if rows else 'No log entries yet.'
+
+        def loader(target: Path) -> str:
+            rows = target.read_text(encoding='utf-8', errors='replace').splitlines()
+            return '\n'.join(rows[-max(int(limit), 1):]) if rows else 'No log entries yet.'
+
+        return self._read_cached_file(path, kind=f'log:{max(int(limit), 1)}', loader=loader, empty_value='No log entries yet.')
 
     def _safe_float(self, value: Any) -> float:
         try:
@@ -232,6 +261,3 @@ class RoleViewService:
 
 
 __all__ = ['RoleViewService']
-
-
-

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 
@@ -58,37 +58,35 @@ def build_grafana_dashboard_spec() -> dict:
     }
 
 
-def build_observability_dashboard_html() -> str:
-    grafana = json.dumps(build_grafana_dashboard_spec())
-    return f"""<!DOCTYPE html>
+_HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang=\"en\">
 <head>
   <meta charset=\"utf-8\" />
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
   <title>Vinayak Observability</title>
   <style>
-    :root {{ --bg:#07111d; --panel:#102338; --line:#28435f; --text:#eef4ff; --muted:#8ea6c7; --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; }}
-    * {{ box-sizing:border-box; }}
-    body {{ margin:0; font-family:Segoe UI, Arial, sans-serif; color:var(--text); background:linear-gradient(180deg,#0d2035 0%, #07111d 65%); }}
-    .shell {{ max-width:1500px; margin:0 auto; padding:22px; }}
-    .hero, .grid, .section-grid {{ display:grid; gap:14px; }}
-    .hero {{ grid-template-columns: 1.2fr .8fr; margin-bottom:14px; }}
-    .grid {{ grid-template-columns: repeat(6, minmax(0, 1fr)); margin-bottom:14px; }}
-    .section-grid {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
-    .card {{ background:linear-gradient(180deg,#102338,#0b1d30); border:1px solid var(--line); border-radius:18px; padding:16px; }}
-    h1,h2 {{ margin:0 0 10px; }}
-    .muted {{ color:var(--muted); }}
-    .label {{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }}
-    .value {{ font-size:26px; font-weight:800; margin-top:8px; }}
-    .pill {{ display:inline-flex; padding:5px 10px; border-radius:999px; font-size:12px; font-weight:800; }}
-    .green {{ background:rgba(34,197,94,.15); color:#bbf7d0; }}
-    .yellow {{ background:rgba(245,158,11,.15); color:#fde68a; }}
-    .red {{ background:rgba(239,68,68,.15); color:#fecaca; }}
-    table {{ width:100%; border-collapse:collapse; }}
-    th, td {{ padding:9px 8px; border-bottom:1px solid rgba(255,255,255,.08); font-size:13px; text-align:left; vertical-align:top; }}
-    th {{ color:var(--muted); text-transform:uppercase; font-size:11px; }}
-    pre {{ margin:0; white-space:pre-wrap; font-size:12px; color:var(--text); background:rgba(255,255,255,.03); border:1px solid var(--line); border-radius:12px; padding:12px; overflow:auto; max-height:220px; }}
-    @media (max-width: 1100px) {{ .hero, .grid, .section-grid {{ grid-template-columns:1fr; }} }}
+    :root { --bg:#07111d; --panel:#102338; --line:#28435f; --text:#eef4ff; --muted:#8ea6c7; --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Segoe UI, Arial, sans-serif; color:var(--text); background:linear-gradient(180deg,#0d2035 0%, #07111d 65%); }
+    .shell { max-width:1500px; margin:0 auto; padding:22px; }
+    .hero, .grid, .section-grid { display:grid; gap:14px; }
+    .hero { grid-template-columns: 1.2fr .8fr; margin-bottom:14px; }
+    .grid { grid-template-columns: repeat(6, minmax(0, 1fr)); margin-bottom:14px; }
+    .section-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card { background:linear-gradient(180deg,#102338,#0b1d30); border:1px solid var(--line); border-radius:18px; padding:16px; }
+    h1,h2 { margin:0 0 10px; }
+    .muted { color:var(--muted); }
+    .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+    .value { font-size:26px; font-weight:800; margin-top:8px; }
+    .pill { display:inline-flex; padding:5px 10px; border-radius:999px; font-size:12px; font-weight:800; }
+    .green { background:rgba(34,197,94,.15); color:#bbf7d0; }
+    .yellow { background:rgba(245,158,11,.15); color:#fde68a; }
+    .red { background:rgba(239,68,68,.15); color:#fecaca; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { padding:9px 8px; border-bottom:1px solid rgba(255,255,255,.08); font-size:13px; text-align:left; vertical-align:top; }
+    th { color:var(--muted); text-transform:uppercase; font-size:11px; }
+    pre { margin:0; white-space:pre-wrap; font-size:12px; color:var(--text); background:rgba(255,255,255,.03); border:1px solid var(--line); border-radius:12px; padding:12px; overflow:auto; max-height:220px; }
+    @media (max-width: 1100px) { .hero, .grid, .section-grid { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -100,7 +98,7 @@ def build_observability_dashboard_html() -> str:
       </section>
       <section class=\"card\">
         <div class=\"label\">Grafana Spec</div>
-        <pre id=\"grafanaSpec\">{grafana}</pre>
+        <pre id=\"grafanaSpec\">__GRAFANA_JSON__</pre>
       </section>
     </div>
     <div id=\"kpis\" class=\"grid\"></div>
@@ -118,26 +116,30 @@ def build_observability_dashboard_html() -> str:
     </div>
   </div>
   <script>
-    function renderCards(nodeId, items) {{
+    function renderCards(nodeId, items) {
       const node = document.getElementById(nodeId);
-      node.innerHTML = (items || []).map((item) => `<div style=\"padding:10px 0; border-bottom:1px solid rgba(255,255,255,.08);\"><div class=\"label\">${{item.label}}</div><div class=\"value\" style=\"font-size:18px;\">${{item.value}}</div></div>`).join('') || '<div class=\"muted\">No data.</div>';
-    }}
-    function renderKpis(items) {{
+      node.innerHTML = (items || []).map((item) => `<div style=\"padding:10px 0; border-bottom:1px solid rgba(255,255,255,.08);\"><div class=\"label\">${item.label}</div><div class=\"value\" style=\"font-size:18px;\">${item.value}</div></div>`).join('') || '<div class=\"muted\">No data.</div>';
+    }
+    function renderKpis(items) {
       const node = document.getElementById('kpis');
-      node.innerHTML = (items || []).map((item) => `<div class=\"card\"><div class=\"label\">${{item.name}}</div><div class=\"value\">${{item.value}}</div><div class=\"pill ${{item.color}}\">${{item.color.toUpperCase()}}</div></div>`).join('');
-    }}
-    function renderAlerts(alerts, failures) {{
+      node.innerHTML = (items || []).map((item) => `<div class=\"card\"><div class=\"label\">${item.name}</div><div class=\"value\">${item.value}</div><div class=\"pill ${item.color}\">${String(item.color || '').toUpperCase()}</div></div>`).join('');
+    }
+    function renderAlerts(alerts, failures) {
       const node = document.getElementById('alerts');
-      const alertHtml = (alerts || []).map((item) => `<div style=\"margin-bottom:8px;\"><span class=\"pill ${{item.severity}}\">${{item.severity.toUpperCase()}}</span> ${{item.name}} <span class=\"muted\">${{item.value}}</span></div>`).join('');
+      const alertHtml = (alerts || []).map((item) => `<div style=\"margin-bottom:8px;\"><span class=\"pill ${item.severity}\">${String(item.severity || '').toUpperCase()}</span> ${item.name} <span class=\"muted\">${item.value}</span></div>`).join('');
       node.innerHTML = alertHtml || '<div class=\"muted\">No active alerts.</div>';
       const failureNode = document.getElementById('recentFailures');
-      failureNode.innerHTML = `<table><thead><tr><th>Time</th><th>Component</th><th>Event</th><th>Message</th></tr></thead><tbody>${{(failures || []).map((row) => `<tr><td>${{row.timestamp || '-'}}<\/td><td>${{row.component || '-'}}<\/td><td>${{row.event_name || '-'}}<\/td><td>${{row.message || '-'}}<\/td><\/tr>`).join('')}}</tbody></table>`;
-    }}
-    function renderStages(stages) {{
-      const rows = Object.entries(stages || {{}});
-      document.getElementById('stages').innerHTML = `<table><thead><tr><th>Stage</th><th>Status</th><th>Duration</th><th>Last Success</th><th>Last Failure</th></tr></thead><tbody>${{rows.map(([name, value]) => `<tr><td>${{name}}<\/td><td><span class=\"pill ${{String(value.status || 'UNKNOWN').toLowerCase().includes('success') ? 'green' : String(value.status || 'UNKNOWN').toLowerCase().includes('fail') ? 'red' : 'yellow'}}\">${{value.status || 'UNKNOWN'}}<\/span><\/td><td>${{value.duration_seconds || 0}}<\/td><td>${{value.last_success || '-'}}<\/td><td>${{value.last_failure || '-'}}<\/td><\/tr>`).join('')}}</tbody></table>`;
+      failureNode.innerHTML = `<table><thead><tr><th>Time</th><th>Component</th><th>Event</th><th>Message</th></tr></thead><tbody>${(failures || []).map((row) => `<tr><td>${row.timestamp || '-'}</td><td>${row.component || '-'}</td><td>${row.event_name || '-'}</td><td>${row.message || '-'}</td></tr>`).join('')}</tbody></table>`;
     }
-    fetch('/dashboard/observability').then((r) => r.json()).then((payload) => {{
+    function renderStages(stages) {
+      const rows = Object.entries(stages || {});
+      document.getElementById('stages').innerHTML = `<table><thead><tr><th>Stage</th><th>Status</th><th>Duration</th><th>Last Success</th><th>Last Failure</th></tr></thead><tbody>${rows.map(([name, value]) => {
+        const status = String(value.status || 'UNKNOWN');
+        const color = status.toLowerCase().includes('success') ? 'green' : status.toLowerCase().includes('fail') ? 'red' : 'yellow';
+        return `<tr><td>${name}</td><td><span class=\"pill ${color}\">${status}</span></td><td>${value.duration_seconds || 0}</td><td>${value.last_success || '-'}</td><td>${value.last_failure || '-'}</td></tr>`;
+      }).join('')}</tbody></table>`;
+    }
+    fetch('/dashboard/observability').then((r) => r.json()).then((payload) => {
       renderKpis(payload.kpis);
       renderCards('systemHealth', payload.system_health.cards);
       renderCards('dataHealth', payload.data_health.cards);
@@ -146,12 +148,18 @@ def build_observability_dashboard_html() -> str:
       renderCards('validationRiskHealth', payload.validation_risk_health.cards);
       renderAlerts(payload.alerts_and_recent_failures.alerts, payload.alerts_and_recent_failures.recent_failures);
       renderStages(payload.stages);
-    }}).catch((error) => {{
-      document.getElementById('kpis').innerHTML = `<div class=\"card\">Failed to load observability payload: ${{error.message}}<\/div>`;
-    }});
+    }).catch((error) => {
+      document.getElementById('kpis').innerHTML = `<div class=\"card\">Failed to load observability payload: ${error.message}</div>`;
+    });
   </script>
 </body>
-</html>"""
+</html>
+"""
+
+
+def build_observability_dashboard_html() -> str:
+    grafana = json.dumps(build_grafana_dashboard_spec(), indent=2)
+    return _HTML_TEMPLATE.replace('__GRAFANA_JSON__', grafana)
 
 
 __all__ = ['build_grafana_dashboard_spec', 'build_observability_dashboard_html', 'build_text_wireframe']

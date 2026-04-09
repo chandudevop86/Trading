@@ -97,6 +97,17 @@ class TestDemandSupplyBot(unittest.TestCase):
         if afternoon_trades:
             self.assertEqual(afternoon_trades[0]['session_window'], 'AFTERNOON')
 
+    def test_prequalification_floor_filters_out_weaker_zones_before_entry(self):
+        candles = load_candles(self._buy_rows())
+        trades = generate_trades(
+            candles,
+            capital=100000,
+            risk_pct=0.01,
+            rr_ratio=2.0,
+            config=DemandSupplyConfig(min_zone_selection_score=4.6),
+        )
+
+        self.assertEqual(trades, [])
     def test_zone_scoring_exposes_weighted_components(self):
         candles = load_candles(self._buy_rows())
         zone = Zone(kind='demand', low=98.9, high=100.6, idx=1, reaction_strength=0.95)
@@ -113,4 +124,5 @@ class TestDemandSupplyBot(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 

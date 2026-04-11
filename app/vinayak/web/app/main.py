@@ -26,6 +26,15 @@ from vinayak.web.app.role_pages import (
 from vinayak.web.app.workspace_html import WORKSPACE_DOWNLOADS_HTML, WORKSPACE_HTML, WORKSPACE_REPORTS_HTML
 from vinayak.web.services.role_view_service import RoleViewService
 
+from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
+
+router = APIRouter()
+
+COOKIE_NAME = "..."
+LEGACY_COOKIE_NAME = "..."
+
+
 def _set_session_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         key=COOKIE_NAME,
@@ -35,6 +44,7 @@ def _set_session_cookie(response: Response, token: str) -> None:
         samesite="lax",
         path="/",
     )
+
 @router.post('/logout', response_model=None)
 def logout():
     response = RedirectResponse(url='/login', status_code=303)

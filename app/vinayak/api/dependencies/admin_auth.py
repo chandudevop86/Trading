@@ -63,7 +63,8 @@ def _load_default_admin_user() -> AuthenticatedUser | None:
 
 
 def get_current_user(request: Request) -> AuthenticatedUser | None:
-    user = _load_user_from_session_token(request.cookies.get(COOKIE_NAME))
+    raw_token = request.cookies.get(COOKIE_NAME) or request.cookies.get(LEGACY_COOKIE_NAME)
+    user = _load_user_from_session_token(raw_token)
     if user is not None:
         return user
     if auto_login_enabled():

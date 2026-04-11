@@ -35,7 +35,8 @@ def _set_session_cookie(response: Response, token: str) -> None:
         samesite="lax",
         path="/",
     )
-
+response.delete_cookie(COOKIE_NAME, path="/")
+response.delete_cookie(LEGACY_COOKIE_NAME, path="/")
 router = APIRouter(tags=['web'])
 
 HOME_HTML = """

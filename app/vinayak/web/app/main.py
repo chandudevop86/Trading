@@ -28,8 +28,6 @@ from vinayak.web.services.role_view_service import RoleViewService
 
 router = APIRouter(tags=['web'])
 
-COOKIE_NAME = 'vinayak_session'
-LEGACY_COOKIE_NAME = 'vinayak_admin_session'
 
 
 def _set_session_cookie(response: Response, token: str) -> None:

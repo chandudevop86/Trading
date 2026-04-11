@@ -26,13 +26,10 @@ from vinayak.web.app.role_pages import (
 from vinayak.web.app.workspace_html import WORKSPACE_DOWNLOADS_HTML, WORKSPACE_HTML, WORKSPACE_REPORTS_HTML
 from vinayak.web.services.role_view_service import RoleViewService
 
-from fastapi import APIRouter, Depends, Form, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+router = APIRouter(tags=['web'])
 
-router = APIRouter()
-
-COOKIE_NAME = "..."
-LEGACY_COOKIE_NAME = "..."
+COOKIE_NAME = 'vinayak_session'
+LEGACY_COOKIE_NAME = 'vinayak_admin_session'
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -52,7 +49,6 @@ def logout():
     response.delete_cookie(LEGACY_COOKIE_NAME, path="/")
     return response
 
-router = APIRouter(tags=['web'])
 
 HOME_HTML = """
 <!DOCTYPE html>

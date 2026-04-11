@@ -26,6 +26,15 @@ from vinayak.web.app.role_pages import (
 from vinayak.web.app.workspace_html import WORKSPACE_DOWNLOADS_HTML, WORKSPACE_HTML, WORKSPACE_REPORTS_HTML
 from vinayak.web.services.role_view_service import RoleViewService
 
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        path="/",
+    )
 
 router = APIRouter(tags=['web'])
 

@@ -35,12 +35,3 @@ app.include_router(strategies_router)
 app.include_router(catalog_router)
 app.include_router(outbox_router)
 app.include_router(web_router)
-def _set_session_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=token,
-        httponly=True,
-        secure=False,
-        samesite="lax",
-        path="/",
-    )

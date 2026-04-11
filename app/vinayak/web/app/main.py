@@ -51,8 +51,7 @@ def logout():
     response.delete_cookie(COOKIE_NAME, path="/")
     response.delete_cookie(LEGACY_COOKIE_NAME, path="/")
     return response
-response.delete_cookie(COOKIE_NAME, path="/")
-response.delete_cookie(LEGACY_COOKIE_NAME, path="/")
+
 router = APIRouter(tags=['web'])
 
 HOME_HTML = """

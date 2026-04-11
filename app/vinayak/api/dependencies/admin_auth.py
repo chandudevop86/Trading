@@ -5,6 +5,7 @@ from fastapi import HTTPException, Request
 
 from vinayak.auth.service import ADMIN_ROLE, AuthenticatedUser, UserAuthService
 from vinayak.db.session import build_session_factory
+from vinayak.db.session import initialize_database
 
 
 COOKIE_NAME = 'vinayak_session'

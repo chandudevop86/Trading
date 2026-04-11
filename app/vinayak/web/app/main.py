@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from fastapi import APIRouter, Depends, Form, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -26,8 +27,6 @@ from vinayak.web.app.workspace_html import WORKSPACE_DOWNLOADS_HTML, WORKSPACE_H
 from vinayak.web.services.role_view_service import RoleViewService
 
 router = APIRouter(tags=['web'])
-
-
 
 def _set_session_cookie(response: Response, token: str) -> None:
     response.set_cookie(

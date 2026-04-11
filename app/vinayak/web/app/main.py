@@ -35,6 +35,12 @@ def _set_session_cookie(response: Response, token: str) -> None:
         samesite="lax",
         path="/",
     )
+@router.post('/logout', response_model=None)
+def logout():
+    response = RedirectResponse(url='/login', status_code=303)
+    response.delete_cookie(COOKIE_NAME, path="/")
+    response.delete_cookie(LEGACY_COOKIE_NAME, path="/")
+    return response
 response.delete_cookie(COOKIE_NAME, path="/")
 response.delete_cookie(LEGACY_COOKIE_NAME, path="/")
 router = APIRouter(tags=['web'])

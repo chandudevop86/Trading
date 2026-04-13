@@ -30,15 +30,6 @@ router = APIRouter(tags=['web'])
 
 
 
-def _set_session_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        key=COOKIE_NAME,
-        value=token,
-        httponly=True,
-        secure=False,
-        samesite="lax",
-        path="/",
-    )
 
 
 

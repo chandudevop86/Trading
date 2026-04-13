@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse,JSONResponse
 from sqlalchemy.orm import Session
 
 from vinayak.api.dependencies.admin_auth import (
@@ -28,7 +28,18 @@ from vinayak.web.services.role_view_service import RoleViewService
 
 router = APIRouter(tags=['web'])
 
+router = APIRouter()
 
+@router.get('/admin/dashboard')
+def admin_dashboard_page(request: Request, db: Session = Depends(get_db)):
+    if not _admin_or_login(request):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Authentication required."}
+        )
+    service = RoleViewService(db)
+    payload = service.build_admin_dashboard()
+    return JSONResponse(content=payload)
 
 
 

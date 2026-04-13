@@ -310,32 +310,28 @@ def admin_console(request: Request, db: Session = Depends(get_db)) -> HTMLRespon
 
 @router.get('/admin/dashboard', response_class=HTMLResponse)
 def admin_dashboard_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if not _admin_or_login(request):
-    return _render_login('Admin sign in to access the dashboard.')#require_admin_session(request)
+    require_admin_session(request)
     service = RoleViewService(db)
     return HTMLResponse(render_admin_dashboard_page(service.build_admin_dashboard()))
 
 
 @router.get('/admin/validation', response_class=HTMLResponse)
 def admin_validation_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if not _admin_or_login(request):
-    return _render_login('Admin sign in to access the dashboard.')#require_admin_session(request)
+    require_admin_session(request)
     service = RoleViewService(db)
     return HTMLResponse(render_admin_validation_page(service.build_validation_page()))
 
 
 @router.get('/admin/execution', response_class=HTMLResponse)
 def admin_execution_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if not _admin_or_login(request):
-    return _render_login('Admin sign in to access the dashboard.')#require_admin_session(request)
+    require_admin_session(request)
     service = RoleViewService(db)
     return HTMLResponse(render_admin_execution_page(service.build_execution_page()))
 
 
 @router.get('/admin/logs', response_class=HTMLResponse)
 def admin_logs_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
-    if not _admin_or_login(request):
-    return _render_login('Admin sign in to access the dashboard.')#require_admin_session(request)
+    require_admin_session(request)
     service = RoleViewService(db)
     return HTMLResponse(render_admin_logs_page(service.build_logs_page()))
 
@@ -347,8 +343,7 @@ def admin_settings_page(
     created: str | None = Query(default=None),
     error: str | None = Query(default=None),
 ) -> HTMLResponse:
-    if not _admin_or_login(request):
-    return _render_login('Admin sign in to access the dashboard.')#require_admin_session(request)
+    require_admin_session(request)
     service = RoleViewService(db)
     payload = service.build_settings_page()
     if created:
@@ -368,8 +363,7 @@ def admin_create_user(
     role: str = Form('USER'),
     db: Session = Depends(get_db),
 ):
-   if not _admin_or_login(request):
-    return _render_login('Admin sign in to access the dashboard.')
+    require_admin_session(request)
     auth = UserAuthService(db)
     try:
         user = auth.create_user(username=username, password=password, role=role)

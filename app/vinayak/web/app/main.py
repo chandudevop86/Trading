@@ -27,9 +27,7 @@ from vinayak.web.app.workspace_html import WORKSPACE_DOWNLOADS_HTML, WORKSPACE_H
 from vinayak.web.services.role_view_service import RoleViewService
 
 router = APIRouter(tags=['web'])
-def session_token() -> str:
-    seed = f'{admin_username()}:{admin_password()}:{admin_secret()}'
-    return hashlib.sha256(seed.encode('utf-8')).hexdigest()
+
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -41,27 +39,7 @@ def _set_session_cookie(response: Response, token: str) -> None:
         samesite="lax",
         path="/",
     )
-##def login(
-  # username: str = Form(...),
-   #password: str = Form(...),
-   #db: Session = Depends(get_db),
-#:
- #  service = UserAuthService(db)
-  # user = service.authenticate_user(username, password)
-   #if user is None:
-    #   raise HTTPException(status_code=401, detail="Invalid credentials")
 
-#   token = service.create_session_for_user(user.id)
-
- #  response = RedirectResponse(url="/admin/dashboard", status_code=303)
-  # _set_session_cookie(response, token)
-   #return response
-@router.post('/logout', response_model=None)
-def logout():
-    response = RedirectResponse(url='/login', status_code=303)
-    response.delete_cookie(COOKIE_NAME, path="/")
-    response.delete_cookie(LEGACY_COOKIE_NAME, path="/")
-    return response
 
 
 HOME_HTML = """

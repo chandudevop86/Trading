@@ -26,20 +26,32 @@ from vinayak.web.app.role_pages import (
 from vinayak.web.app.workspace_html import WORKSPACE_DOWNLOADS_HTML, WORKSPACE_HTML, WORKSPACE_REPORTS_HTML
 from vinayak.web.services.role_view_service import RoleViewService
 
-router = APIRouter(tags=['web'])
+
 
 router = APIRouter()
 
+
 @router.get('/admin/dashboard')
-def admin_dashboard_page(request: Request, db: Session = Depends(get_db)):
+def admin_dashboard_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    format: str = Query(default="html"),
+):
     if not _admin_or_login(request):
-        return JSONResponse(
-            status_code=401,
-            content={"detail": "Authentication required."}
-        )
+        if format == "json":
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Authentication required."}
+            )
+        return _render_login('Admin sign in to access the dashboard.')
+
     service = RoleViewService(db)
     payload = service.build_admin_dashboard()
-    return JSONResponse(content=payload)
+
+    if format == "json":
+        return JSONResponse(content=payload)
+
+    return HTMLResponse(render_admin_dashboard_page(payload))
 
 
 

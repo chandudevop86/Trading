@@ -257,7 +257,8 @@ def test_admin_login_requires_explicit_admin_env_configuration(tmp_path: Path, m
             'password': 'vinayak-test-password',
         })
 
-        assert response.status_code == 500
+        assert response.status_code == 200
+        assert 'Admin authentication is not configured correctly.' in response.text
     finally:
         _cleanup_db()
 
@@ -274,6 +275,7 @@ def test_admin_login_rejects_placeholder_admin_env_configuration(tmp_path: Path,
             'password': 'change-me-in-production',
         })
 
-        assert response.status_code == 500
+        assert response.status_code == 200
+        assert 'Admin authentication is not configured correctly.' in response.text
     finally:
         _cleanup_db()

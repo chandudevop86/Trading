@@ -375,7 +375,10 @@ def admin_create_user(
 @router.post('/admin/login', response_model=None)
 def admin_login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     auth = UserAuthService(db)
-    auth.ensure_default_admin()
+    try:
+        auth.ensure_default_admin()
+    except RuntimeError:
+        return _render_login('Admin authentication is not configured correctly.')
     user = auth.authenticate(username, password)
     if user is None or str(user.role).upper() != ADMIN_ROLE:
         return _render_login('Invalid admin username or password.')

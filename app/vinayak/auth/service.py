@@ -18,7 +18,7 @@ USER_ROLE = 'USER'
 PASSWORD_ITERATIONS = 120000
 DISALLOWED_ADMIN_ENV_VALUES = {
     'VINAYAK_ADMIN_PASSWORD': {
-        'vinayak123',
+        'Vinayak@123',
         'change-me',
         'change-me-for-development',
         'change-me-in-uat',
@@ -117,19 +117,6 @@ class UserAuthService:
         expected_password = self.admin_password()
         existing = self.users.get_by_username(username)
         if existing is not None:
-            changed = False
-            if str(existing.role).upper() != ADMIN_ROLE:
-                existing.role = ADMIN_ROLE
-                changed = True
-            if not bool(existing.is_active):
-                existing.is_active = True
-                changed = True
-            if not self.verify_password(expected_password, existing.password_hash):
-                existing.password_hash = self.hash_password(expected_password)
-                changed = True
-            if changed:
-                self.session.commit()
-                self.session.refresh(existing)
             return existing
         record = self.users.create_user(
             username=username,
@@ -142,7 +129,6 @@ class UserAuthService:
         return record
 
     def authenticate(self, username: str, password: str) -> AuthenticatedUser | None:
-        self.ensure_default_admin()
         record = self.users.get_by_username(username)
         if record is None or not bool(record.is_active):
             return None
@@ -172,7 +158,6 @@ class UserAuthService:
         return record
 
     def list_users(self) -> list[dict[str, Any]]:
-        self.ensure_default_admin()
         return [
             {
                 'id': item.id,
@@ -185,7 +170,6 @@ class UserAuthService:
         ]
 
     def get_authenticated_user(self, token: str | None) -> AuthenticatedUser | None:
-        self.ensure_default_admin()
         raw = str(token or '').strip()
         if not raw or ':' not in raw:
             return None

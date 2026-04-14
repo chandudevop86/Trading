@@ -170,7 +170,7 @@ def test_admin_api_routes_use_same_cookie_session(tmp_path: Path) -> None:
         _cleanup_db()
 
 
-def test_admin_password_rotation_from_env_updates_bootstrap_admin(tmp_path: Path) -> None:
+def test_admin_password_rotation_from_env_does_not_overwrite_existing_admin(tmp_path: Path) -> None:
     _configure_db(tmp_path)
     os.environ['VINAYAK_ADMIN_PASSWORD'] = 'firstpass123'
     try:
@@ -189,20 +189,20 @@ def test_admin_password_rotation_from_env_updates_bootstrap_admin(tmp_path: Path
             'password': 'firstpass123',
         })
         assert old_login.status_code == 200
-        assert 'Invalid admin username or password.' in old_login.text
+        assert 'Admin Dashboard' in old_login.text
 
         new_login = fresh.post('/admin/login', data={
             'username': 'admin',
             'password': 'secondpass456',
         })
         assert new_login.status_code == 200
-        assert 'Admin Dashboard' in new_login.text
+        assert 'Invalid admin username or password.' in new_login.text
     finally:
         os.environ.pop('VINAYAK_ADMIN_PASSWORD', None)
         _cleanup_db()
 
 
-def test_password_rotation_invalidates_existing_admin_session(tmp_path: Path) -> None:
+def test_admin_env_rotation_does_not_invalidate_existing_admin_session(tmp_path: Path) -> None:
     _configure_db(tmp_path)
     os.environ['VINAYAK_ADMIN_PASSWORD'] = 'firstpass123'
     try:
@@ -217,14 +217,14 @@ def test_password_rotation_invalidates_existing_admin_session(tmp_path: Path) ->
         os.environ['VINAYAK_ADMIN_PASSWORD'] = 'secondpass456'
 
         stale_session = fresh.get('/dashboard/summary')
-        assert stale_session.status_code == 401
+        assert stale_session.status_code == 200
 
         relogin = fresh.post('/admin/login', data={
             'username': 'admin',
             'password': 'secondpass456',
         })
         assert relogin.status_code == 200
-        assert fresh.get('/dashboard/summary').status_code == 200
+        assert 'Invalid admin username or password.' in relogin.text
     finally:
         os.environ.pop('VINAYAK_ADMIN_PASSWORD', None)
         _cleanup_db()

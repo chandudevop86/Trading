@@ -1,0 +1,18 @@
+[Unit]
+Description=Vinayak Streamlit UI
+After=network.target vinayak-api.service
+Requires=vinayak-api.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/Trading
+EnvironmentFile=/root/Trading/infra/production/env/vinayak.production.env
+Environment=VINAYAK_API_BASE_URL=http://127.0.0.1/api
+ExecStart=/root/Trading/venv/bin/python -m streamlit run app/vinayak/ui/app.py --server.address 0.0.0.0 --server.port 8501
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

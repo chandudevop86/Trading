@@ -5,6 +5,7 @@ from datetime import UTC, datetime, time
 from decimal import Decimal
 from typing import Protocol
 
+from vinayak.cache.redis_client import RedisCache
 from vinayak.domain.models import ExecutionFailureReason, ExecutionMode, ExecutionRequest, ExecutionResult, ExecutionStatus
 
 
@@ -46,6 +47,72 @@ class InMemoryGuardStateStore:
     def get_decimal(self, key: str) -> Decimal | None:
         value = self._values.get(key)
         return Decimal(value) if value is not None else None
+
+
+class RedisGuardStateStore:
+    def __init__(self, cache: RedisCache) -> None:
+        self.cache = cache
+
+    @classmethod
+    def from_env(cls) -> 'RedisGuardStateStore':
+        return cls(RedisCache.from_env())
+
+    def acquire_lock(self, key: str, ttl_seconds: int) -> bool:
+        client = self.cache._get_client()
+        if client is None:
+            return False
+        try:
+            return bool(client.set(key, '1', ex=max(int(ttl_seconds), 1), nx=True))
+        except Exception:
+            return False
+
+    def release_lock(self, key: str) -> None:
+        client = self.cache._get_client()
+        if client is None:
+            return
+        try:
+            client.delete(key)
+        except Exception:
+            return
+
+    def exists(self, key: str) -> bool:
+        client = self.cache._get_client()
+        if client is None:
+            return False
+        try:
+            return bool(client.exists(key))
+        except Exception:
+            return False
+
+    def set(self, key: str, value: str, ttl_seconds: int) -> None:
+        client = self.cache._get_client()
+        if client is None:
+            return
+        try:
+            client.set(key, value, ex=max(int(ttl_seconds), 1))
+        except Exception:
+            return
+
+    def incr(self, key: str, ttl_seconds: int) -> int:
+        client = self.cache._get_client()
+        if client is None:
+            return 0
+        try:
+            value = int(client.incr(key))
+            client.expire(key, max(int(ttl_seconds), 1))
+            return value
+        except Exception:
+            return 0
+
+    def get_decimal(self, key: str) -> Decimal | None:
+        client = self.cache._get_client()
+        if client is None:
+            return None
+        try:
+            value = client.get(key)
+            return Decimal(str(value)) if value is not None else None
+        except Exception:
+            return None
 
 
 @dataclass(frozen=True, slots=True)

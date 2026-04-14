@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vinayak-api
+  namespace: vinayak
+spec:
+  selector:
+    app: vinayak-api
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vinayak-ui
+  namespace: vinayak
+spec:
+  selector:
+    app: vinayak-ui
+  ports:
+    - port: 8501
+      targetPort: 8501
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vinayak-redis
+  namespace: vinayak
+spec:
+  selector:
+    app: vinayak-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vinayak-postgres
+  namespace: vinayak
+spec:
+  selector:
+    app: vinayak-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432

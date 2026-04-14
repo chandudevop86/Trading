@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vinayak-postgres
+  namespace: vinayak
+spec:
+  serviceName: vinayak-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vinayak-postgres
+  template:
+    metadata:
+      labels:
+        app: vinayak-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: vinayak
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: vinayak-secrets
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vinayak-secrets
+                  key: postgres-password
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi

@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vinayak-ui
+  namespace: vinayak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vinayak-ui
+  template:
+    metadata:
+      labels:
+        app: vinayak-ui
+    spec:
+      containers:
+        - name: ui
+          image: vinayak/ui:latest
+          ports:
+            - containerPort: 8501
+          envFrom:
+            - configMapRef:
+                name: vinayak-config
+          readinessProbe:
+            tcpSocket:
+              port: 8501
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8501
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

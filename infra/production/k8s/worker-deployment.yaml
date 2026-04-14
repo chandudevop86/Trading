@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vinayak-worker
+  namespace: vinayak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vinayak-worker
+  template:
+    metadata:
+      labels:
+        app: vinayak-worker
+    spec:
+      containers:
+        - name: worker
+          image: vinayak/api:latest
+          command: ["python", "-m", "celery", "-A", "vinayak.worker", "worker", "--loglevel=INFO"]
+          envFrom:
+            - configMapRef:
+                name: vinayak-config
+            - secretRef:
+                name: vinayak-secrets
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"

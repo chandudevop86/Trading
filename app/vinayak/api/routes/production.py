@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
+from functools import lru_cache
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 from vinayak.api.dependencies.admin_auth import require_admin_session, require_user_session
+from vinayak.api.dependencies.db import get_db
 from vinayak.api.schemas.production import AdminAuditResponse, ExecutionSubmitResponse, SignalRunRequest, SignalRunResponse
 from vinayak.backtest.engine import BacktestEngine
+from vinayak.cache.redis_client import RedisCache
+from vinayak.db.repositories.production import SqlAlchemyAuditRepository, SqlAlchemyExecutionRepository
 from vinayak.domain.models import (
     AuditEvent,
     Candle,
@@ -18,7 +23,7 @@ from vinayak.domain.models import (
     StrategyConfig,
     Timeframe,
 )
-from vinayak.execution.guard import ExecutionGuard, InMemoryGuardStateStore
+from vinayak.execution.guard import ExecutionGuard, InMemoryGuardStateStore, RedisGuardStateStore
 from vinayak.execution.service import ProductionExecutionService
 from vinayak.market_data.providers.legacy_live_ohlcv import LegacyLiveOhlcvProvider
 from vinayak.market_data.providers.base import MarketDataRequest
@@ -59,20 +64,33 @@ class _MemoryAuditRepository:
         return list(self.events)
 
 
-_EXECUTION_REPOSITORY = _MemoryExecutionRepository()
 _AUDIT_REPOSITORY = _MemoryAuditRepository()
-_EXECUTION_GUARD = ExecutionGuard(InMemoryGuardStateStore())
-_EXECUTION_SERVICE = ProductionExecutionService(
-    execution_repository=_EXECUTION_REPOSITORY,
-    audit_repository=_AUDIT_REPOSITORY,
-    execution_guard=_EXECUTION_GUARD,
-)
 _MARKET_DATA_SERVICE = MarketDataService(
     provider=LegacyLiveOhlcvProvider(),
     cache_store=InMemoryCacheStore(),
 )
 _STRATEGY_RUNNER = StrategyRunnerService()
 _BACKTEST_ENGINE = BacktestEngine()
+
+
+@lru_cache(maxsize=1)
+def _execution_guard() -> ExecutionGuard:
+    redis_cache = RedisCache.from_env()
+    if redis_cache.is_configured():
+        return ExecutionGuard(RedisGuardStateStore(redis_cache))
+    return ExecutionGuard(InMemoryGuardStateStore())
+
+
+def _execution_service(db: Session) -> ProductionExecutionService:
+    return ProductionExecutionService(
+        execution_repository=SqlAlchemyExecutionRepository(db),
+        audit_repository=SqlAlchemyAuditRepository(db),
+        execution_guard=_execution_guard(),
+    )
+
+
+def _audit_reader(db: Session) -> SqlAlchemyAuditRepository:
+    return SqlAlchemyAuditRepository(db)
 
 
 def _timeframe(value: str) -> Timeframe:
@@ -123,26 +141,26 @@ def run_signals(request: SignalRunRequest) -> SignalRunResponse:
 
 
 @router.post('/execution/request', response_model=ExecutionSubmitResponse, dependencies=[Depends(require_admin_session)])
-def request_execution(request: ExecutionRequest) -> ExecutionSubmitResponse:
-    result = _EXECUTION_SERVICE.execute(request)
+def request_execution(request: ExecutionRequest, db: Session = Depends(get_db)) -> ExecutionSubmitResponse:
+    result = _execution_service(db).execute(request)
     return ExecutionSubmitResponse(result=result)
 
 
 @router.get('/admin/api/validation', response_model=AdminAuditResponse, dependencies=[Depends(require_admin_session)])
-def admin_validation_view() -> AdminAuditResponse:
-    service = AdminViewService(audit_reader=_AUDIT_REPOSITORY)
+def admin_validation_view(db: Session = Depends(get_db)) -> AdminAuditResponse:
+    service = AdminViewService(audit_reader=_audit_reader(db))
     return AdminAuditResponse(payload=service.validation_view())
 
 
 @router.get('/admin/api/execution', response_model=AdminAuditResponse, dependencies=[Depends(require_admin_session)])
-def admin_execution_view() -> AdminAuditResponse:
-    service = AdminViewService(audit_reader=_AUDIT_REPOSITORY)
+def admin_execution_view(db: Session = Depends(get_db)) -> AdminAuditResponse:
+    service = AdminViewService(audit_reader=_audit_reader(db))
     return AdminAuditResponse(payload=service.execution_view())
 
 
 @router.get('/admin/api/logs', response_model=AdminAuditResponse, dependencies=[Depends(require_admin_session)])
-def admin_logs_view() -> AdminAuditResponse:
-    service = AdminViewService(audit_reader=_AUDIT_REPOSITORY)
+def admin_logs_view(db: Session = Depends(get_db)) -> AdminAuditResponse:
+    service = AdminViewService(audit_reader=_audit_reader(db))
     payload = service.logs_view()
     payload['metrics'] = snapshot_metrics()
     return AdminAuditResponse(payload=payload)

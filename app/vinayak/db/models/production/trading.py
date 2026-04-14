@@ -75,7 +75,7 @@ class ExecutionRecordV2(Base):
     __tablename__ = 'executions_v2'
     __table_args__ = (
         UniqueConstraint('request_id', name='uq_executions_v2_request_id'),
-        Index('idx_executions_v2_status_mode', 'status', 'mode'),
+        Index('idx_executions_v2_status', 'status'),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

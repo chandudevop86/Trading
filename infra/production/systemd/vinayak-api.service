@@ -1,0 +1,16 @@
+[Unit]
+Description=Vinayak FastAPI service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/Trading
+EnvironmentFile=/root/Trading/infra/production/env/vinayak.production.env
+ExecStart=/root/Trading/venv/bin/python -m uvicorn app.vinayak.api.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vinayak-redis
+  namespace: vinayak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vinayak-redis
+  template:
+    metadata:
+      labels:
+        app: vinayak-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"

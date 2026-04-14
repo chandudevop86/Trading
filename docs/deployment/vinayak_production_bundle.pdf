@@ -1,0 +1,177 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 3 /Kids [3 0 R 4 0 R 5 0 R] >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R >> >> /Contents 7 0 R >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R >> >> /Contents 8 0 R >>
+endobj
+6 0 obj
+<< /Length 1544 >>
+stream
+BT
+/F1 10 Tf
+50 760 Td
+14 TL
+(# Vinayak Production Bundle) Tj
+T* () Tj
+T* (## Environment File) Tj
+T* (Path: `infra/production/env/vinayak.production.env.example`) Tj
+T* () Tj
+T* (```env) Tj
+T* (APP_ENV=prod) Tj
+T* (VINAYAK_DATABASE_URL=postgresql+psycopg://vinayak:REPLACE_DB_PASSWORD@postgres-host:5432/vinaya) Tj
+T* (k) Tj
+T* (REDIS_URL=redis://redis-host:6379/0) Tj
+T* (REDIS_DEFAULT_TTL_SECONDS=900) Tj
+T* (VINAYAK_ADMIN_USERNAME=admin) Tj
+T* (VINAYAK_ADMIN_PASSWORD=REPLACE_STRONG_ADMIN_PASSWORD) Tj
+T* (VINAYAK_ADMIN_SECRET=REPLACE_LONG_RANDOM_SECRET) Tj
+T* (VINAYAK_API_BASE_URL=http://127.0.0.1/api) Tj
+T* (MESSAGE_BUS_ENABLED=false) Tj
+T* (```) Tj
+T* () Tj
+T* (## API systemd Unit) Tj
+T* (Path: `infra/production/systemd/vinayak-api.service`) Tj
+T* () Tj
+T* (```ini) Tj
+T* ([Unit]) Tj
+T* (Description=Vinayak FastAPI service) Tj
+T* (After=network.target) Tj
+T* () Tj
+T* ([Service]) Tj
+T* (Type=simple) Tj
+T* (User=root) Tj
+T* (WorkingDirectory=/root/Trading) Tj
+T* (EnvironmentFile=/root/Trading/infra/production/env/vinayak.production.env) Tj
+T* (ExecStart=/root/Trading/venv/bin/python -m uvicorn app.vinayak.api.main:app --host 0.0.0.0) Tj
+T* (--port 8000) Tj
+T* (Restart=always) Tj
+T* (RestartSec=5) Tj
+T* (TimeoutStopSec=20) Tj
+T* () Tj
+T* ([Install]) Tj
+T* (WantedBy=multi-user.target) Tj
+T* (```) Tj
+T* () Tj
+T* (## UI systemd Unit) Tj
+T* (Path: `infra/production/systemd/vinayak-ui.service`) Tj
+T* () Tj
+T* (```ini) Tj
+T* ([Unit]) Tj
+T* (Description=Vinayak Streamlit UI) Tj
+T* (After=network.target vinayak-api.service) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Length 1554 >>
+stream
+BT
+/F1 10 Tf
+50 760 Td
+14 TL
+(Requires=vinayak-api.service) Tj
+T* () Tj
+T* ([Service]) Tj
+T* (Type=simple) Tj
+T* (User=root) Tj
+T* (WorkingDirectory=/root/Trading) Tj
+T* (EnvironmentFile=/root/Trading/infra/production/env/vinayak.production.env) Tj
+T* (Environment=VINAYAK_API_BASE_URL=http://127.0.0.1/api) Tj
+T* (ExecStart=/root/Trading/venv/bin/python -m streamlit run app/vinayak/ui/app.py) Tj
+T* (--server.address 0.0.0.0 --server.port 8501) Tj
+T* (Restart=always) Tj
+T* (RestartSec=5) Tj
+T* (TimeoutStopSec=20) Tj
+T* () Tj
+T* ([Install]) Tj
+T* (WantedBy=multi-user.target) Tj
+T* (```) Tj
+T* () Tj
+T* (## Nginx Reverse Proxy) Tj
+T* (Path: `infra/production/nginx/vinayak.conf`) Tj
+T* () Tj
+T* (```nginx) Tj
+T* (server {) Tj
+T* (    listen 80;) Tj
+T* (    server_name _;) Tj
+T* (    client_max_body_size 20m;) Tj
+T* () Tj
+T* (    proxy_http_version 1.1;) Tj
+T* (    proxy_set_header Host $host;) Tj
+T* (    proxy_set_header X-Real-IP $remote_addr;) Tj
+T* (    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;) Tj
+T* (    proxy_set_header X-Forwarded-Proto $scheme;) Tj
+T* () Tj
+T* (    location /api/ {) Tj
+T* (        proxy_pass http://127.0.0.1:8000/;) Tj
+T* (        proxy_read_timeout 120s;) Tj
+T* (    }) Tj
+T* () Tj
+T* (    location /health {) Tj
+T* (        proxy_pass http://127.0.0.1:8000/health;) Tj
+T* (        proxy_read_timeout 30s;) Tj
+T* (    }) Tj
+T* () Tj
+T* (    location /health/ready {) Tj
+T* (        proxy_pass http://127.0.0.1:8000/health/ready;) Tj
+T* (        proxy_read_timeout 30s;) Tj
+T* (    }) Tj
+T* () Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Length 555 >>
+stream
+BT
+/F1 10 Tf
+50 760 Td
+14 TL
+(    location /streamlit/ {) Tj
+T* (        proxy_pass http://127.0.0.1:8501/;) Tj
+T* (        proxy_set_header Upgrade $http_upgrade;) Tj
+T* (        proxy_set_header Connection "upgrade";) Tj
+T* (        proxy_read_timeout 86400;) Tj
+T* (    }) Tj
+T* () Tj
+T* (    location / {) Tj
+T* (        proxy_pass http://127.0.0.1:8501/;) Tj
+T* (        proxy_set_header Upgrade $http_upgrade;) Tj
+T* (        proxy_set_header Connection "upgrade";) Tj
+T* (        proxy_read_timeout 86400;) Tj
+T* (    }) Tj
+T* (}) Tj
+T* (```) Tj
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000127 00000 n 
+0000000253 00000 n 
+0000000379 00000 n 
+0000000505 00000 n 
+0000002101 00000 n 
+0000003707 00000 n 
+0000004313 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+4381
+%%EOF

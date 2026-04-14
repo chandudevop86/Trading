@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: vinayak
+      POSTGRES_USER: vinayak
+      POSTGRES_PASSWORD: vinayak_local_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/production/docker/Dockerfile.api
+    environment:
+      VINAYAK_DATABASE_URL: postgresql+psycopg://vinayak:vinayak_local_password@postgres:5432/vinayak
+      VINAYAK_REDIS_URL: redis://redis:6379/0
+      VINAYAK_ADMIN_USERNAME: admin
+      VINAYAK_ADMIN_PASSWORD: change-me-local
+      VINAYAK_ADMIN_SECRET: change-me-local-secret
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8000:8000"
+
+  ui:
+    build:
+      context: ../..
+      dockerfile: infra/production/docker/Dockerfile.ui
+    environment:
+      VINAYAK_API_BASE_URL: http://api:8000
+    depends_on:
+      - api
+    ports:
+      - "8501:8501"
+
+volumes:
+  postgres_data:

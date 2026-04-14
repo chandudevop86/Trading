@@ -11,6 +11,7 @@ from vinayak.db.models.execution import ExecutionRecord  # noqa: F401
 from vinayak.db.models.execution_audit_log import ExecutionAuditLogRecord  # noqa: F401
 from vinayak.db.models.reviewed_trade import ReviewedTradeRecord  # noqa: F401
 from vinayak.db.models.signal import SignalRecord  # noqa: F401
+from vinayak.db.models.user import UserRecord  # noqa: F401
 
 
 config = context.config

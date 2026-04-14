@@ -232,11 +232,17 @@ def login_page(request: Request) -> HTMLResponse:
 @router.post('/login', response_model=None)
 def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     auth = UserAuthService(db)
-    user = auth.authenticate(username, password)
+    try:
+        user = auth.authenticate(username, password)
+    except RuntimeError:
+        return _render_login('Authentication is not configured correctly.')
     if user is None:
         return _render_login('Invalid username or password.')
     response = RedirectResponse(url=_redirect_for_role(user.role), status_code=303)
-    _set_session_cookie(response, auth.create_session_token(user))
+    try:
+        _set_session_cookie(response, auth.create_session_token(user))
+    except RuntimeError:
+        return _render_login('Authentication is not configured correctly.')
     return response
 
 

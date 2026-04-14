@@ -6,6 +6,7 @@ from vinayak.api.routes.dashboard import router as dashboard_router
 from vinayak.api.routes.executions import router as executions_router
 from vinayak.api.routes.health import router as health_router
 from vinayak.api.routes.outbox import router as outbox_router
+from vinayak.api.routes.production import router as production_router
 from vinayak.api.routes.reviewed_trades import router as reviewed_trades_router
 from vinayak.api.routes.signals import router as signals_router
 from vinayak.api.routes.strategies import router as strategies_router
@@ -34,4 +35,5 @@ app.include_router(dashboard_router)
 app.include_router(strategies_router)
 app.include_router(catalog_router)
 app.include_router(outbox_router)
+app.include_router(production_router)
 app.include_router(web_router)

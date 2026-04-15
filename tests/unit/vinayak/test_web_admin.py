@@ -258,7 +258,10 @@ def test_admin_login_requires_explicit_admin_env_configuration(tmp_path: Path, m
         })
 
         assert response.status_code == 200
-        assert 'Admin authentication is not configured correctly.' in response.text
+        assert 'Admin authentication is not configured.' in response.text
+        assert 'VINAYAK_ADMIN_USERNAME' in response.text
+        assert 'VINAYAK_ADMIN_PASSWORD' in response.text
+        assert 'VINAYAK_ADMIN_SECRET' in response.text
     finally:
         _cleanup_db()
 
@@ -276,6 +279,9 @@ def test_admin_login_rejects_placeholder_admin_env_configuration(tmp_path: Path,
         })
 
         assert response.status_code == 200
-        assert 'Admin authentication is not configured correctly.' in response.text
+        assert 'Admin authentication is not configured.' in response.text
+        assert 'VINAYAK_ADMIN_USERNAME' in response.text
+        assert 'VINAYAK_ADMIN_PASSWORD' in response.text
+        assert 'VINAYAK_ADMIN_SECRET' in response.text
     finally:
         _cleanup_db()

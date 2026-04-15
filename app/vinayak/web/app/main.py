@@ -194,6 +194,15 @@ def _render_login(error_message: str | None = None) -> HTMLResponse:
     error_block = f'<div class="error">{error_message}</div>' if error_message else ''
     return HTMLResponse(LOGIN_HTML.replace('__ERROR_BLOCK__', error_block))
 
+
+def _auth_config_error_message(*, admin_only: bool) -> str:
+    prefix = 'Admin authentication' if admin_only else 'Authentication'
+    return (
+        f'{prefix} is not configured. '
+        'Set VINAYAK_ADMIN_USERNAME, VINAYAK_ADMIN_PASSWORD, and VINAYAK_ADMIN_SECRET '
+        'to real non-placeholder values and restart the app.'
+    )
+
 def _secure_cookies_enabled() -> bool:
     value = str(__import__('os').getenv('VINAYAK_SECURE_COOKIES', 'true') or 'true').strip().lower()
     return value not in {'0', 'false', 'no'}
@@ -235,14 +244,14 @@ def login(username: str = Form(...), password: str = Form(...), db: Session = De
     try:
         user = auth.authenticate(username, password)
     except RuntimeError:
-        return _render_login('Authentication is not configured correctly.')
+        return _render_login(_auth_config_error_message(admin_only=False))
     if user is None:
         return _render_login('Invalid username or password.')
     response = RedirectResponse(url=_redirect_for_role(user.role), status_code=303)
     try:
         _set_session_cookie(response, auth.create_session_token(user))
     except RuntimeError:
-        return _render_login('Authentication is not configured correctly.')
+        return _render_login(_auth_config_error_message(admin_only=False))
     return response
 
 
@@ -384,7 +393,7 @@ def admin_login(username: str = Form(...), password: str = Form(...), db: Sessio
     try:
         auth.ensure_default_admin()
     except RuntimeError:
-        return _render_login('Admin authentication is not configured correctly.')
+        return _render_login(_auth_config_error_message(admin_only=True))
     user = auth.authenticate(username, password)
     if user is None or str(user.role).upper() != ADMIN_ROLE:
         return _render_login('Invalid admin username or password.')

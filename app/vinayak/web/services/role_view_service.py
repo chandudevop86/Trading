@@ -11,6 +11,9 @@ from sqlalchemy.orm import Session
 from vinayak.api.services.dashboard_summary import DashboardSummaryService
 from vinayak.auth.service import UserAuthService
 from vinayak.cache.redis_client import RedisCache
+from vinayak.db.models.deferred_execution_job import DeferredExecutionJobRecord
+from vinayak.db.models.outbox_event import OutboxEventRecord
+from vinayak.observability.observability_metrics import get_observability_snapshot
 
 _REDIS_CACHE = RedisCache.from_env()
 
@@ -25,6 +28,7 @@ DEFAULT_LOGS = {
 }
 _FILE_CACHE_TTL_SECONDS = 2.0
 _FILE_CACHE: dict[str, dict[str, Any]] = {}
+_DEFERRED_EXECUTION_EVENT_NAME = 'analysis.execution.deferred'
 
 
 class RoleViewService:
@@ -97,10 +101,20 @@ class RoleViewService:
     def build_execution_page(self) -> dict[str, Any]:
         history = self.load_trade_history(limit=50)
         paper_summary = dict(self.load_latest_analysis().get('execution_summary', {}) or {})
+        snapshot = get_observability_snapshot()
+        deferred_execution_metrics = {
+            'enqueued_total': int(float(snapshot.get('metrics', {}).get('live_analysis_deferred_execution_enqueued_total', {}).get('value', 0) or 0)),
+            'attempt_total': int(float(snapshot.get('metrics', {}).get('deferred_execution_attempt_total', {}).get('value', 0) or 0)),
+            'success_total': int(float(snapshot.get('metrics', {}).get('deferred_execution_success_total', {}).get('value', 0) or 0)),
+            'failed_total': int(float(snapshot.get('metrics', {}).get('deferred_execution_failed_total', {}).get('value', 0) or 0)),
+            'last_status': str(snapshot.get('metrics', {}).get('deferred_execution_last_status', {}).get('value', '-') or '-'),
+        }
         return {
             'history': history,
             'paper_summary': paper_summary,
             'latest_signal': self.build_user_signal(),
+            'deferred_execution_metrics': deferred_execution_metrics,
+            'deferred_execution_jobs': self.load_deferred_execution_jobs(limit=20),
         }
 
     def build_logs_page(self) -> dict[str, Any]:
@@ -172,6 +186,50 @@ class RoleViewService:
             'validation_checks': validation_summary,
             'latest_errors': latest_errors[:10],
         }
+
+    def load_deferred_execution_jobs(self, limit: int = 20) -> list[dict[str, Any]]:
+        if self.session is None:
+            return []
+        rows = (
+            self.session.query(DeferredExecutionJobRecord)
+            .order_by(DeferredExecutionJobRecord.requested_at.desc(), DeferredExecutionJobRecord.id.desc())
+            .limit(max(int(limit), 1))
+            .all()
+        )
+        jobs: list[dict[str, Any]] = []
+        for row in rows:
+            payload: dict[str, Any] = {}
+            try:
+                loaded = json.loads(row.request_payload or '{}')
+                if isinstance(loaded, dict):
+                    payload = loaded
+            except Exception:
+                payload = {}
+            outbox_status = '-'
+            outbox_last_error = ''
+            if row.outbox_event_id:
+                outbox_record = self.session.get(OutboxEventRecord, int(row.outbox_event_id))
+                if outbox_record is not None:
+                    outbox_status = str(outbox_record.status or '')
+                    outbox_last_error = str(outbox_record.last_error or '')
+            jobs.append({
+                'id': row.id,
+                'status': str(row.status or ''),
+                'attempt_count': int(row.attempt_count or 0),
+                'requested_at': str(row.requested_at or ''),
+                'started_at': str(row.started_at or ''),
+                'finished_at': str(row.finished_at or ''),
+                'created_at': str(row.created_at or ''),
+                'last_error': str(row.error or ''),
+                'symbol': str(row.symbol or payload.get('symbol', '') or ''),
+                'strategy': str(row.strategy or payload.get('strategy', '') or ''),
+                'execution_mode': str(row.execution_mode or payload.get('execution_mode', '') or ''),
+                'signal_count': int(row.signal_count or len(list(payload.get('signals', []) or []))),
+                'outbox_event_id': row.outbox_event_id,
+                'outbox_status': outbox_status,
+                'outbox_last_error': outbox_last_error,
+            })
+        return jobs
 
     def load_trade_history(self, limit: int = 50) -> list[dict[str, Any]]:
         rows = self._read_csv_rows(DEFAULT_PAPER_LOG_PATH)

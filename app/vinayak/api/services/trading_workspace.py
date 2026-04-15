@@ -259,6 +259,13 @@ def _build_report_artifacts(result: dict[str, Any], *, summary_text: str | None 
     }
 
 
+def _empty_report_artifacts() -> dict[str, dict[str, str]]:
+    return {
+        'json_report': {'local_path': ''},
+        'summary_report': {'local_path': ''},
+    }
+
+
 def _validation_summary_from_rows(rows: list[dict[str, Any]], strategy: str) -> dict[str, Any]:
     if not rows:
         return {}
@@ -471,16 +478,29 @@ def run_live_trading_analysis(
     execution_type: str = 'NONE',
     lot_size: int = 0,
     lots: int = 0,
+    force_market_refresh: bool = False,
     security_map_path: str = 'data/dhan_security_map.csv',
     paper_log_path: str = str(DEFAULT_PAPER_LOG_PATH),
     live_log_path: str = str(DEFAULT_LIVE_LOG_PATH),
     db_session: Session | None = None,
+    persist_reports: bool = True,
+    publish_completion_event: bool = True,
+    deliver_telegram_inline: bool = True,
+    publish_alert_notifications: bool = True,
+    execute_inline: bool = True,
 ) -> dict[str, Any]:
     import time
     trace_id = f"{symbol}_{strategy}_{int(time.time())}"
     started = time.perf_counter()
     fetch_started = time.perf_counter()
-    live_rows = fetch_live_ohlcv(symbol=symbol, interval=interval, period=period, provider='DHAN', security_map_path=security_map_path, force_refresh=True)
+    live_rows = fetch_live_ohlcv(
+        symbol=symbol,
+        interval=interval,
+        period=period,
+        provider='DHAN',
+        security_map_path=security_map_path,
+        force_refresh=bool(force_market_refresh),
+    )
     record_stage('market_fetch', status='SUCCESS', duration_seconds=round(time.perf_counter() - fetch_started, 4), symbol=symbol, strategy=strategy, message='Live market rows fetched', trace_id=trace_id)
     prep_started = time.perf_counter()
     candles_df = prepare_trading_data(pd.DataFrame(live_rows))
@@ -547,20 +567,23 @@ def run_live_trading_analysis(
                 },
                 source='live_analysis',
             )
-            try:
-                telegram_payload = send_telegram_message(telegram_token, telegram_chat_id, message)
-                telegram_sent = True
-            except Exception as exc:
-                telegram_error = str(exc)
-                log_exception(
-                    component='trading_workspace',
-                    event_name='telegram_send_failed',
-                    exc=exc,
-                    symbol=symbol,
-                    strategy=strategy,
-                    message='Telegram delivery failed during live analysis',
-                    context_json={'message_preview': message[:200], 'signal_count': len(signal_rows)},
-                )
+            if deliver_telegram_inline:
+                try:
+                    telegram_payload = send_telegram_message(telegram_token, telegram_chat_id, message)
+                    telegram_sent = True
+                except Exception as exc:
+                    telegram_error = str(exc)
+                    log_exception(
+                        component='trading_workspace',
+                        event_name='telegram_send_failed',
+                        exc=exc,
+                        symbol=symbol,
+                        strategy=strategy,
+                        message='Telegram delivery failed during live analysis',
+                        context_json={'message_preview': message[:200], 'signal_count': len(signal_rows)},
+                    )
+            else:
+                telegram_payload = {'queued': True, 'channel': 'telegram'}
         except Exception as exc:
             telegram_error = str(exc)
             log_exception(
@@ -584,7 +607,7 @@ def run_live_trading_analysis(
         'duplicate_count': 0,
     }
     execution_rows: list[dict[str, Any]] = []
-    if auto_execute and execution_mode in {'PAPER', 'LIVE'} and signal_rows:
+    if auto_execute and execution_mode in {'PAPER', 'LIVE'} and signal_rows and execute_inline:
         _candidates, result = execute_workspace_candidates(
             strategy,
             symbol,
@@ -616,17 +639,31 @@ def run_live_trading_analysis(
             'duplicate_count': result.duplicate_count,
         }
         execution_rows = _normalize_rows(result.rows)
+    elif auto_execute and execution_mode in {'PAPER', 'LIVE'} and signal_rows and not execute_inline:
+        execution_note = (
+            f"{execution_note} " if execution_note else ''
+        ) + 'Auto execution deferred from the live-analysis critical path.'
+        execution_summary = {
+            'mode': execution_mode,
+            'executed_count': 0,
+            'blocked_count': 0,
+            'error_count': 0,
+            'skipped_count': len(signal_rows),
+            'duplicate_count': 0,
+        }
 
     record_stage('trade_build', status='SUCCESS', symbol=symbol, strategy=strategy, message='Trade rows built', trace_id=trace_id)
     validation_rows = execution_rows if execution_rows else signal_rows
     validation_summary = _validation_summary_from_rows(validation_rows, strategy)
     _update_observability_metrics_from_run(validation_rows, candles_df)
-    alert_notifications_sent = publish_active_alerts(
-        message_bus=message_bus,
-        telegram_token=telegram_token,
-        telegram_chat_id=telegram_chat_id,
-        source='live_analysis_alerting',
-    )
+    alert_notifications_sent = 0
+    if publish_alert_notifications:
+        alert_notifications_sent = publish_active_alerts(
+            message_bus=message_bus,
+            telegram_token=telegram_token,
+            telegram_chat_id=telegram_chat_id,
+            source='live_analysis_alerting',
+        )
 
     total_duration = round(time.perf_counter() - started, 4)
     set_metric('trading_cycle_duration_seconds', total_duration)
@@ -653,21 +690,26 @@ def run_live_trading_analysis(
         'system_status': validation_summary.get('system_status', 'NOT_READY'),
         'alert_notifications_sent': alert_notifications_sent,
     }
-    response['report_artifacts'] = _build_report_artifacts(response, summary_text=summary_text)
-    message_bus.publish(
-        EVENT_ANALYSIS_COMPLETED,
-        {
-            'symbol': symbol,
-            'strategy': strategy,
-            'interval': interval,
-            'period': period,
-            'signal_count': len(signal_rows),
-            'execution_mode': execution_mode,
-            'requested_execution_mode': requested_execution_mode,
-            'report_artifacts': response['report_artifacts'],
-        },
-        source='live_analysis',
-    )
+    if persist_reports:
+        response['report_artifacts'] = _build_report_artifacts(response, summary_text=summary_text)
+    else:
+        cache_json_artifact('latest_live_analysis', response)
+        response['report_artifacts'] = _empty_report_artifacts()
+    if publish_completion_event:
+        message_bus.publish(
+            EVENT_ANALYSIS_COMPLETED,
+            {
+                'symbol': symbol,
+                'strategy': strategy,
+                'interval': interval,
+                'period': period,
+                'signal_count': len(signal_rows),
+                'execution_mode': execution_mode,
+                'requested_execution_mode': requested_execution_mode,
+                'report_artifacts': response['report_artifacts'],
+            },
+            source='live_analysis',
+        )
     return response
 
 

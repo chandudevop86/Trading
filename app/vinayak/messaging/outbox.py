@@ -24,8 +24,8 @@ class OutboxService:
         self.session = session
         self.repository = OutboxRepository(session)
 
-    def enqueue(self, *, event_name: str, payload: dict[str, Any], source: str) -> None:
-        self.repository.enqueue_event(event_name=event_name, payload=payload, source=source)
+    def enqueue(self, *, event_name: str, payload: dict[str, Any], source: str) -> OutboxEventRecord:
+        record = self.repository.enqueue_event(event_name=event_name, payload=payload, source=source)
         increment_metric('outbox_enqueue_total', 1)
         log_event(
             component='outbox',
@@ -34,6 +34,7 @@ class OutboxService:
             message='Outbox event queued',
             context_json={'event_name': event_name, 'source': source},
         )
+        return record
 
     def list_events(self, *, status: str | None = None) -> list[OutboxEventRecord]:
         return self.repository.list_events(status=status)

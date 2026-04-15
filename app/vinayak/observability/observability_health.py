@@ -122,6 +122,10 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
     execution_failed = int(_safe_float(_metric(snapshot, 'execution_failed_total', 0)))
     execution_blocked = int(_safe_float(_metric(snapshot, 'execution_blocked_total', 0)))
     duplicate_execution_blocks = int(_safe_float(_metric(snapshot, 'duplicate_execution_block_total', 0)))
+    deferred_execution_enqueued = int(_safe_float(_metric(snapshot, 'live_analysis_deferred_execution_enqueued_total', 0)))
+    deferred_execution_attempts = int(_safe_float(_metric(snapshot, 'deferred_execution_attempt_total', 0)))
+    deferred_execution_success = int(_safe_float(_metric(snapshot, 'deferred_execution_success_total', 0)))
+    deferred_execution_failed = int(_safe_float(_metric(snapshot, 'deferred_execution_failed_total', 0)))
     live_analysis_jobs_pending = int(_safe_float(_metric(snapshot, 'live_analysis_jobs_pending', 0)))
     live_analysis_jobs_running = int(_safe_float(_metric(snapshot, 'live_analysis_jobs_running', 0)))
     live_analysis_jobs_oldest_pending_age_seconds = round(_safe_float(_metric(snapshot, 'live_analysis_jobs_oldest_pending_age_seconds', 0.0)), 2)
@@ -169,6 +173,7 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
         {'name': 'executed_paper_trades_today', 'value': executed_trades, 'color': _status_color(execution_status)},
         {'name': 'execution_failed_total', 'value': execution_failed, 'color': 'red' if execution_failed else 'green'},
         {'name': 'execution_blocked_total', 'value': execution_blocked, 'color': 'yellow' if execution_blocked else 'green'},
+        {'name': 'deferred_execution_failed_total', 'value': deferred_execution_failed, 'color': 'red' if deferred_execution_failed else 'green'},
         {'name': 'live_analysis_jobs_pending', 'value': live_analysis_jobs_pending, 'color': _status_color(queue_status)},
         {'name': 'live_analysis_jobs_running', 'value': live_analysis_jobs_running, 'color': 'blue' if live_analysis_jobs_running else 'green'},
         {'name': 'telegram_status', 'value': telegram_status, 'color': _status_color(telegram_status)},
@@ -221,6 +226,10 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
                 {'label': 'execution_failed_total', 'value': execution_failed},
                 {'label': 'execution_blocked_total', 'value': execution_blocked},
                 {'label': 'duplicate_execution_block_total', 'value': duplicate_execution_blocks},
+                {'label': 'live_analysis_deferred_execution_enqueued_total', 'value': deferred_execution_enqueued},
+                {'label': 'deferred_execution_attempt_total', 'value': deferred_execution_attempts},
+                {'label': 'deferred_execution_success_total', 'value': deferred_execution_success},
+                {'label': 'deferred_execution_failed_total', 'value': deferred_execution_failed},
                 {'label': 'paper_trades_executed_total', 'value': _metric(snapshot, 'paper_trades_executed_total', 0)},
                 {'label': 'paper_trade_rejections_total', 'value': _metric(snapshot, 'paper_trade_rejections_total', 0)},
                 {'label': 'duplicate_trade_blocks_total', 'value': _metric(snapshot, 'duplicate_trade_blocks_total', 0)},

@@ -280,6 +280,91 @@ def test_admin_jobs_page_renders_for_admin(tmp_path: Path) -> None:
         _cleanup_db()
 
 
+def test_admin_execution_page_shows_deferred_execution_outcomes(tmp_path: Path, monkeypatch) -> None:
+    _configure_db(tmp_path)
+    try:
+        class FakeRoleViewService:
+            def __init__(self, db) -> None:
+                self.db = db
+
+            def build_execution_page(self):
+                return {
+                    'history': [],
+                    'paper_summary': {'mode': 'PAPER', 'executed_count': 0, 'blocked_count': 0, 'duplicate_count': 0},
+                    'latest_signal': {'symbol': '^NSEI', 'status': 'BUY'},
+                    'deferred_execution_metrics': {
+                        'enqueued_total': 3,
+                        'attempt_total': 2,
+                        'success_total': 1,
+                        'failed_total': 1,
+                        'last_status': 'FAIL',
+                    },
+                    'deferred_execution_jobs': [
+                        {
+                            'id': 'deferred-job-11',
+                            'status': 'FAILED',
+                            'symbol': '^NSEI',
+                            'strategy': 'Breakout',
+                            'execution_mode': 'PAPER',
+                            'signal_count': 2,
+                            'attempt_count': 2,
+                            'outbox_status': 'FAILED',
+                            'last_error': 'worker boom',
+                        }
+                    ],
+                }
+
+        monkeypatch.setattr(web_main, 'RoleViewService', FakeRoleViewService)
+        fresh = TestClient(app, raise_server_exceptions=False)
+        fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
+        response = fresh.get('/admin/execution')
+        assert response.status_code == 200
+        assert 'Deferred Execution Outcomes' in response.text
+        assert 'Recent Deferred Execution Jobs' in response.text
+        assert 'Deferred Failed' in response.text
+        assert 'worker boom' in response.text
+        assert 'Breakout' in response.text
+        assert '/admin/execution/jobs/deferred-job-11/retry' in response.text
+    finally:
+        _cleanup_db()
+
+
+def test_admin_execution_retry_route_redirects_with_flash(tmp_path: Path, monkeypatch) -> None:
+    _configure_db(tmp_path)
+    try:
+        class FakeDeferredExecutionJobRepository:
+            def __init__(self, db) -> None:
+                self.db = db
+
+            def get_job(self, job_id: str):
+                assert job_id == 'deferred-job-11'
+                return type('DeferredJob', (), {'outbox_event_id': 11})()
+
+        class FakeOutboxService:
+            def __init__(self, db) -> None:
+                self.db = db
+
+            def get_event(self, event_id: int):
+                assert event_id == 11
+                return type('Event', (), {'event_name': 'analysis.execution.deferred'})()
+
+            def retry_event(self, event_id: int):
+                assert event_id == 11
+                return object()
+
+        monkeypatch.setattr(web_main, 'DeferredExecutionJobRepository', FakeDeferredExecutionJobRepository)
+        monkeypatch.setattr(web_main, 'OutboxService', FakeOutboxService)
+        fresh = TestClient(app, raise_server_exceptions=False)
+        fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
+
+        response = fresh.post('/admin/execution/jobs/deferred-job-11/retry', follow_redirects=False)
+
+        assert response.status_code == 303
+        assert 'created=Deferred%20execution%20job%20deferred-job-11%20queued%20for%20retry' in response.headers['location']
+    finally:
+        _cleanup_db()
+
+
 def test_admin_jobs_page_shows_selected_job_details_and_actions(tmp_path: Path, monkeypatch) -> None:
     _configure_db(tmp_path)
     try:

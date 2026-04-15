@@ -91,6 +91,7 @@ def test_observability_alerts_cover_execution_and_risk(tmp_path) -> None:
     set_metric('execution_failed_total', 1)
     set_metric('execution_blocked_total', 2)
     set_metric('duplicate_execution_block_total', 1)
+    set_metric('deferred_execution_failed_total', 1)
     set_metric('live_analysis_jobs_pending', 6)
     set_metric('live_analysis_jobs_oldest_pending_age_seconds', 95)
     increment_metric('live_analysis_job_recovered_total', 2)
@@ -103,6 +104,7 @@ def test_observability_alerts_cover_execution_and_risk(tmp_path) -> None:
     assert 'execution_failed_total increased' in names
     assert 'execution_blocked_total increased' in names
     assert 'duplicate_execution_block_total increased' in names
+    assert 'deferred_execution_failed_total increased' in names
     assert 'live_analysis_jobs_pending backlog high' in names
     assert 'live_analysis_jobs_oldest_pending_age_seconds too high' in names
     assert 'live_analysis_job_recovered_total increased' in names
@@ -111,6 +113,7 @@ def test_observability_alerts_cover_execution_and_risk(tmp_path) -> None:
 
     payload = build_observability_dashboard_payload()
     assert any(kpi['name'] == 'execution_failed_total' for kpi in payload['kpis'])
+    assert any(kpi['name'] == 'deferred_execution_failed_total' for kpi in payload['kpis'])
     assert payload['validation_risk_health']['status'] == 'FAIL'
 
 
@@ -152,6 +155,88 @@ def test_event_worker_uses_environment_telegram_target(monkeypatch) -> None:
     ))
 
     assert sent == {'token': 'env-token', 'chat_id': 'env-chat', 'message': 'hello'}
+
+
+def test_event_worker_handles_deferred_execution(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeSession:
+        def commit(self) -> None:
+            captured['committed'] = True
+
+        def rollback(self) -> None:
+            captured['rolled_back'] = True
+
+        def close(self) -> None:
+            captured['closed'] = True
+
+    class FakeDeferredExecutionJob:
+        def __init__(self) -> None:
+            self.id = 'deferred-job-1'
+
+    class FakeDeferredExecutionJobRepository:
+        def __init__(self, session) -> None:
+            self.session = session
+
+        def get_job(self, job_id: str):
+            assert job_id == 'deferred-job-1'
+            return FakeDeferredExecutionJob()
+
+        def mark_running(self, record):
+            captured['job_running'] = record.id
+            return record
+
+        def mark_succeeded(self, record, result_payload):
+            captured['job_succeeded'] = record.id
+            captured['job_result_payload'] = result_payload
+            return record
+
+    monkeypatch.setattr(event_worker, 'build_session_factory', lambda: (lambda: FakeSession()))
+    monkeypatch.setattr(event_worker, 'DeferredExecutionJobRepository', FakeDeferredExecutionJobRepository)
+    monkeypatch.setattr(
+        event_worker,
+        'execute_workspace_candidates',
+        lambda strategy, symbol, candles, signals, **kwargs: captured.update({
+            'strategy': strategy,
+            'symbol': symbol,
+            'candle_rows': len(candles),
+            'signal_rows': len(signals),
+            **kwargs,
+        }) or ([], object()),
+    )
+
+    event_worker._handle_event(event_worker.EventEnvelope(
+        name='analysis.execution.deferred',
+        payload={
+            'deferred_execution_job_id': 'deferred-job-1',
+            'strategy': 'Breakout',
+            'symbol': '^NSEI',
+            'execution_mode': 'PAPER',
+            'candles': [{'timestamp': '2026-04-15 09:15:00', 'open': 100.0, 'high': 101.0, 'low': 99.0, 'close': 100.5, 'volume': 1000}],
+            'signals': [{'symbol': '^NSEI', 'side': 'BUY', 'entry_price': 101.0}],
+            'paper_log_path': 'paper.csv',
+            'live_log_path': 'live.csv',
+            'capital': 100000,
+            'per_trade_risk_pct': 1,
+        },
+        emitted_at='2026-04-04T00:00:00Z',
+        source='test',
+    ))
+
+    assert captured['strategy'] == 'Breakout'
+    assert captured['symbol'] == '^NSEI'
+    assert captured['execution_mode'] == 'PAPER'
+    assert captured['paper_log_path'] == 'paper.csv'
+    assert captured['candle_rows'] == 1
+    assert captured['signal_rows'] == 1
+    assert captured['job_running'] == 'deferred-job-1'
+    assert captured['job_succeeded'] == 'deferred-job-1'
+    assert captured['committed'] is True
+    assert captured['closed'] is True
+    snapshot = get_observability_snapshot()
+    assert snapshot['metrics']['deferred_execution_attempt_total']['value'] == 1.0
+    assert snapshot['metrics']['deferred_execution_success_total']['value'] == 1.0
+    assert snapshot['metrics']['deferred_execution_last_status']['value'] == 'SUCCESS'
 
 
 def test_observability_payload_includes_latest_signal_and_execution_details(tmp_path) -> None:

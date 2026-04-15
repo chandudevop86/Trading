@@ -140,6 +140,7 @@ class LiveAnalysisRequest(BaseModel):
     interval: str = Field(default='5m')
     period: str = Field(default='1d')
     strategy: str = Field(default='Breakout')
+    force_market_refresh: bool = Field(default=False)
     capital: float = Field(default=100000.0, gt=0)
     risk_pct: float = Field(default=1.0, gt=0)
     rr_ratio: float = Field(default=2.0, gt=0)

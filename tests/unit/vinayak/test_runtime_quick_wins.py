@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vinayak.core.config import should_auto_initialize_database
+from vinayak.core.config import should_auto_initialize_database, should_enable_legacy_sync_live_analysis
 from vinayak.messaging import bus as bus_module
 from vinayak.messaging.bus import KafkaMessageBus, RabbitMqMessageBus
 
@@ -14,6 +14,21 @@ def test_should_auto_initialize_database_enabled_for_dev_and_sqlite() -> None:
 def test_should_auto_initialize_database_disabled_for_nonlocal_managed_db() -> None:
     assert should_auto_initialize_database(env='production', provider='postgresql') is False
     assert should_auto_initialize_database(env='uat', provider='mysql') is False
+
+
+def test_should_enable_legacy_sync_live_analysis_defaults_to_local_only(monkeypatch) -> None:
+    monkeypatch.delenv('VINAYAK_ENABLE_SYNC_LIVE_ANALYSIS', raising=False)
+    assert should_enable_legacy_sync_live_analysis(env='development') is True
+    assert should_enable_legacy_sync_live_analysis(env='test') is True
+    assert should_enable_legacy_sync_live_analysis(env='production') is False
+
+
+def test_should_enable_legacy_sync_live_analysis_respects_override(monkeypatch) -> None:
+    monkeypatch.setenv('VINAYAK_ENABLE_SYNC_LIVE_ANALYSIS', 'true')
+    assert should_enable_legacy_sync_live_analysis(env='production') is True
+
+    monkeypatch.setenv('VINAYAK_ENABLE_SYNC_LIVE_ANALYSIS', 'false')
+    assert should_enable_legacy_sync_live_analysis(env='development') is False
 
 
 def test_rabbitmq_message_bus_reuses_connection_for_publish(monkeypatch) -> None:

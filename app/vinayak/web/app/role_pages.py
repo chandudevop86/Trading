@@ -293,22 +293,54 @@ def render_admin_execution_page(payload: dict[str, Any]) -> str:
     summary = dict(payload.get('paper_summary', {}) or {})
     signal = dict(payload.get('latest_signal', {}) or {})
     rows = list(payload.get('history', []) or [])
+    deferred_metrics = dict(payload.get('deferred_execution_metrics', {}) or {})
+    deferred_jobs = list(payload.get('deferred_execution_jobs', []) or [])
+    flash_message = str(payload.get('flash_message', '') or '')
+    flash_tone = str(payload.get('flash_tone', 'good') or 'good')
+    flash_html = f'<div class="pill {flash_tone}" style="margin:16px 0;">{html.escape(flash_message)}</div>' if flash_message else ''
     row_html = ''.join(
         f"<tr><td>{html.escape(str(row.get('symbol', '-')))}</td><td>{html.escape(str(row.get('side', '-')))}</td><td>{html.escape(str(row.get('quantity', '-')))}</td><td>{html.escape(str(row.get('lots', '-')))}</td><td>{html.escape(str(row.get('entry_price', row.get('price', '-'))))}</td><td>{html.escape(str(row.get('execution_status', row.get('status', '-'))))}</td><td>{html.escape(str(row.get('pnl', '-')))}</td><td>{html.escape(str(row.get('executed_at_utc', row.get('signal_time', '-'))))}</td></tr>"
         for row in rows[:25]
     ) or '<tr><td colspan="8">No paper executions yet.</td></tr>'
+    deferred_row_html = ''.join(
+        (
+            f"<tr><td>{html.escape(str(row.get('id', '-')))}</td><td>{html.escape(str(row.get('status', '-')))}</td><td>{html.escape(str(row.get('symbol', '-')))}</td><td>{html.escape(str(row.get('strategy', '-')))}</td><td>{html.escape(str(row.get('execution_mode', '-')))}</td><td>{html.escape(str(row.get('signal_count', 0)))}</td><td>{html.escape(str(row.get('attempt_count', 0)))}</td><td>{html.escape(str(row.get('outbox_status', '-')))}</td><td>{html.escape(str(row.get('last_error', row.get('outbox_last_error', '-'))))}</td><td>"
+            + (
+                f"<form method=\"post\" action=\"/admin/execution/jobs/{html.escape(str(row.get('id', '-')))}/retry\"><button class=\"button\" type=\"submit\">Retry</button></form>"
+                if str(row.get('status', '')).upper() == 'FAILED'
+                else '-'
+            )
+            + "</td></tr>"
+        )
+        for row in deferred_jobs[:20]
+    ) or '<tr><td colspan="10">No deferred execution jobs yet.</td></tr>'
     body = f"""
     <section class=\"card\"><div class=\"eyebrow\">Execution</div><h1>Execution Health</h1><p class=\"muted\">Admin-only execution tracking and paper trade verification.</p></section>
+    {flash_html}
     <div class=\"grid\" style=\"margin-top:16px;\">
       {_metric('Mode', summary.get('mode', 'PAPER'), 'good')}
       {_metric('Executed Count', summary.get('executed_count', 0), 'good')}
       {_metric('Blocked Count', summary.get('blocked_count', 0), 'warn' if int(summary.get('blocked_count', 0) or 0) else 'good')}
       {_metric('Duplicate Count', summary.get('duplicate_count', 0), 'warn' if int(summary.get('duplicate_count', 0) or 0) else 'good')}
     </div>
+    <div class=\"grid\">
+      {_metric('Deferred Enqueued', deferred_metrics.get('enqueued_total', 0), 'good' if int(deferred_metrics.get('enqueued_total', 0) or 0) else 'warn')}
+      {_metric('Deferred Attempted', deferred_metrics.get('attempt_total', 0), 'good' if int(deferred_metrics.get('attempt_total', 0) or 0) else 'warn')}
+      {_metric('Deferred Succeeded', deferred_metrics.get('success_total', 0), 'good' if int(deferred_metrics.get('success_total', 0) or 0) else 'warn')}
+      {_metric('Deferred Failed', deferred_metrics.get('failed_total', 0), 'bad' if int(deferred_metrics.get('failed_total', 0) or 0) else 'good')}
+    </div>
     <div class=\"split\">
       <section class=\"card\"><h2>Execution Summary</h2><pre>{html.escape(json.dumps(summary, indent=2))}</pre></section>
       <section class=\"card\"><h2>Latest User Signal</h2><pre>{html.escape(json.dumps(signal, indent=2))}</pre></section>
     </div>
+    <section class=\"card\"><h2>Deferred Execution Outcomes</h2><table><tbody>
+      <tr><th>Last Worker Status</th><td>{html.escape(str(deferred_metrics.get('last_status', '-')))}</td></tr>
+      <tr><th>Enqueued Events</th><td>{html.escape(str(deferred_metrics.get('enqueued_total', 0)))}</td></tr>
+      <tr><th>Worker Attempts</th><td>{html.escape(str(deferred_metrics.get('attempt_total', 0)))}</td></tr>
+      <tr><th>Worker Success</th><td>{html.escape(str(deferred_metrics.get('success_total', 0)))}</td></tr>
+      <tr><th>Worker Failures</th><td>{html.escape(str(deferred_metrics.get('failed_total', 0)))}</td></tr>
+    </tbody></table></section>
+    <section class=\"card\" style=\"margin-top:16px;\"><h2>Recent Deferred Execution Jobs</h2><p class=\"muted\">These rows show async follow-on execution jobs emitted after background live-analysis jobs complete, with worker and outbox state together.</p><table><thead><tr><th>ID</th><th>Job Status</th><th>Symbol</th><th>Strategy</th><th>Mode</th><th>Signals</th><th>Attempts</th><th>Outbox</th><th>Last Error</th><th>Action</th></tr></thead><tbody>{deferred_row_html}</tbody></table></section>
     <section class=\"card\"><h2>Recent Paper Trades</h2><p class=\"muted\">Quantity is executable units, not lots. Lots are shown separately.</p><table><thead><tr><th>Symbol</th><th>Side</th><th>Quantity</th><th>Lots</th><th>Entry</th><th>Status</th><th>PnL</th><th>Time</th></tr></thead><tbody>{row_html}</tbody></table></section>
     """
     actions = '<a class="button" href="/workspace">Workspace</a><form method="post" action="/admin/logout" style="display:inline;"><button class="button primary" type="submit">Logout</button></form>'

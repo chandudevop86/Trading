@@ -6,10 +6,15 @@ from uuid import uuid4
 
 from vinayak.api.schemas.strategy import LiveAnalysisRequest
 from vinayak.api.services.trading_workspace import run_live_trading_analysis
+from vinayak.db.repositories.deferred_execution_job_repository import DeferredExecutionJobRepository
 from vinayak.db.repositories.live_analysis_job_repository import LiveAnalysisJobRepository
 from vinayak.db.session import build_session_factory
+from vinayak.messaging.events import EVENT_DEFERRED_EXECUTION_REQUESTED
+from vinayak.messaging.outbox import OutboxService
 from vinayak.observability.observability_logger import log_exception
 from vinayak.observability.observability_metrics import increment_metric, set_metric
+
+QUEUE_METRICS_REFRESH_MIN_INTERVAL_SECONDS = 2.0
 
 
 def _utc_text(value: datetime | None) -> str | None:
@@ -47,15 +52,57 @@ def _serialize_job(record, repo: LiveAnalysisJobRepository, *, deduplicated: boo
     }
 
 
+def _build_deferred_execution_payload(request_payload: dict[str, Any], result: dict[str, Any]) -> dict[str, Any] | None:
+    execution_summary = dict(result.get('execution_summary', {}) or {})
+    execution_mode = str(execution_summary.get('mode', '') or '').strip().upper()
+    signal_rows = list(result.get('signals', []) or [])
+    candle_rows = list(result.get('candles', []) or [])
+    if str(request_payload.get('auto_execute', False)).strip().lower() not in {'1', 'true', 'yes', 'on'}:
+        return None
+    if execution_mode not in {'PAPER', 'LIVE'}:
+        return None
+    if not signal_rows or not candle_rows:
+        return None
+    return {
+        'symbol': str(request_payload.get('symbol', result.get('symbol', '')) or result.get('symbol', '')),
+        'strategy': str(request_payload.get('strategy', result.get('strategy', '')) or result.get('strategy', '')),
+        'execution_mode': execution_mode,
+        'candles': candle_rows,
+        'signals': signal_rows,
+        'paper_log_path': str(request_payload.get('paper_log_path', 'app/vinayak/data/paper_trading_logs_all.csv') or 'app/vinayak/data/paper_trading_logs_all.csv'),
+        'live_log_path': str(request_payload.get('live_log_path', 'app/vinayak/data/live_trading_logs_all.csv') or 'app/vinayak/data/live_trading_logs_all.csv'),
+        'capital': request_payload.get('capital'),
+        'per_trade_risk_pct': request_payload.get('risk_pct'),
+        'max_trades_per_day': request_payload.get('max_trades_per_day'),
+        'max_daily_loss': request_payload.get('max_daily_loss'),
+        'max_position_value': request_payload.get('max_position_value'),
+        'max_open_positions': request_payload.get('max_open_positions'),
+        'max_symbol_exposure_pct': request_payload.get('max_symbol_exposure_pct'),
+        'max_portfolio_exposure_pct': request_payload.get('max_portfolio_exposure_pct'),
+        'max_open_risk_pct': request_payload.get('max_open_risk_pct'),
+        'kill_switch_enabled': bool(request_payload.get('kill_switch_enabled', False)),
+        'security_map_path': str(request_payload.get('security_map_path', 'data/dhan_security_map.csv') or 'data/dhan_security_map.csv'),
+        'requested_execution_type': str(request_payload.get('execution_type', 'NONE') or 'NONE'),
+        'analysis_generated_at': str(result.get('generated_at', '') or ''),
+    }
+
+
 class LiveAnalysisJobService:
     def __init__(self, session_factory=None) -> None:
         self._session_factory = session_factory or build_session_factory()
+        self._queue_metrics_last_refreshed_at: datetime | None = None
 
-    def _refresh_queue_metrics(self, repo: LiveAnalysisJobRepository) -> None:
+    def _refresh_queue_metrics(self, repo: LiveAnalysisJobRepository, *, force: bool = False) -> None:
+        now = datetime.now(UTC)
+        if not force and self._queue_metrics_last_refreshed_at is not None:
+            elapsed_seconds = (now - self._queue_metrics_last_refreshed_at).total_seconds()
+            if elapsed_seconds < QUEUE_METRICS_REFRESH_MIN_INTERVAL_SECONDS:
+                return
         metrics = repo.queue_metrics()
         set_metric('live_analysis_jobs_pending', int(metrics['pending_count']))
         set_metric('live_analysis_jobs_running', int(metrics['running_count']))
         set_metric('live_analysis_jobs_oldest_pending_age_seconds', float(metrics['oldest_pending_age_seconds']))
+        self._queue_metrics_last_refreshed_at = now
 
     def submit(self, request: LiveAnalysisRequest) -> dict[str, Any]:
         payload = request.model_dump()
@@ -66,7 +113,7 @@ class LiveAnalysisJobService:
             existing = repo.find_active_job_by_key(dedup_key)
             if existing is not None:
                 increment_metric('live_analysis_job_deduplicated_total', 1)
-                self._refresh_queue_metrics(repo)
+                self._refresh_queue_metrics(repo, force=True)
                 return _serialize_job(existing, repo, deduplicated=True)
 
             record = repo.create_job(
@@ -81,7 +128,7 @@ class LiveAnalysisJobService:
             session.commit()
             session.refresh(record)
             increment_metric('live_analysis_job_enqueued_total', 1)
-            self._refresh_queue_metrics(repo)
+            self._refresh_queue_metrics(repo, force=True)
             return _serialize_job(record, repo)
         finally:
             session.close()
@@ -115,7 +162,7 @@ class LiveAnalysisJobService:
             repo.retry_job(record)
             session.commit()
             increment_metric('live_analysis_job_retried_total', 1)
-            self._refresh_queue_metrics(repo)
+            self._refresh_queue_metrics(repo, force=True)
             return _serialize_job(record, repo)
         finally:
             session.close()
@@ -132,7 +179,7 @@ class LiveAnalysisJobService:
             repo.cancel_job(record)
             session.commit()
             increment_metric('live_analysis_job_cancelled_total', 1)
-            self._refresh_queue_metrics(repo)
+            self._refresh_queue_metrics(repo, force=True)
             return _serialize_job(record, repo)
         finally:
             session.close()
@@ -145,7 +192,7 @@ class LiveAnalysisJobService:
             increment_metric('live_analysis_job_recovered_total', recovered)
         record = repo.claim_next_pending_job()
         if record is None:
-            self._refresh_queue_metrics(repo)
+            self._refresh_queue_metrics(repo, force=True)
             session.close()
             return False
         session.commit()
@@ -158,6 +205,7 @@ class LiveAnalysisJobService:
                 interval=str(payload.get('interval', '5m') or '5m'),
                 period=str(payload.get('period', '1d') or '1d'),
                 strategy=str(payload.get('strategy', 'Breakout') or 'Breakout'),
+                force_market_refresh=bool(payload.get('force_market_refresh', False)),
                 capital=float(payload.get('capital', 100000.0) or 100000.0),
                 risk_pct=float(payload.get('risk_pct', 1.0) or 1.0),
                 rr_ratio=float(payload.get('rr_ratio', 2.0) or 2.0),
@@ -192,6 +240,11 @@ class LiveAnalysisJobService:
                 max_open_risk_pct=payload.get('max_open_risk_pct'),
                 kill_switch_enabled=bool(payload.get('kill_switch_enabled', False)),
                 db_session=session,
+                persist_reports=False,
+                publish_completion_event=False,
+                deliver_telegram_inline=False,
+                publish_alert_notifications=False,
+                execute_inline=False,
             )
         except Exception as exc:
             log_exception(
@@ -209,7 +262,28 @@ class LiveAnalysisJobService:
             self._refresh_queue_metrics(repo)
             session.close()
             return True
+        deferred_execution_payload = _build_deferred_execution_payload(payload, result)
         repo.mark_succeeded(record, result)
+        if deferred_execution_payload is not None:
+            deferred_repo = DeferredExecutionJobRepository(session)
+            deferred_job = deferred_repo.create_job(
+                job_id=str(uuid4()),
+                source_job_id=record.id,
+                symbol=str(deferred_execution_payload.get('symbol', '') or ''),
+                strategy=str(deferred_execution_payload.get('strategy', '') or ''),
+                execution_mode=str(deferred_execution_payload.get('execution_mode', '') or ''),
+                signal_count=len(list(deferred_execution_payload.get('signals', []) or [])),
+                request_payload=deferred_execution_payload,
+            )
+            deferred_execution_payload['deferred_execution_job_id'] = deferred_job.id
+            outbox = OutboxService(session)
+            outbox_event = outbox.enqueue(
+                event_name=EVENT_DEFERRED_EXECUTION_REQUESTED,
+                payload=deferred_execution_payload,
+                source='live_analysis_jobs',
+            )
+            deferred_repo.attach_outbox_event(deferred_job, outbox_event_id=outbox_event.id)
+            increment_metric('live_analysis_deferred_execution_enqueued_total', 1)
         session.commit()
         increment_metric('live_analysis_job_succeeded_total', 1)
         self._refresh_queue_metrics(repo)

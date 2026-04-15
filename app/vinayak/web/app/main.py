@@ -12,6 +12,8 @@ from vinayak.api.dependencies.admin_auth import (
 )
 from vinayak.api.dependencies.db import get_db
 from vinayak.auth.service import ADMIN_ROLE, UserAuthService
+from vinayak.db.repositories.deferred_execution_job_repository import DeferredExecutionJobRepository
+from vinayak.messaging.outbox import OutboxService
 from vinayak.observability.observability_dashboard_spec import build_observability_dashboard_html
 from vinayak.web.app.role_pages import (
     render_admin_dashboard_page,
@@ -343,7 +345,36 @@ def admin_validation_page(request: Request, db: Session = Depends(get_db)) -> HT
 def admin_execution_page(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     require_admin_session(request)
     service = RoleViewService(db)
-    return HTMLResponse(render_admin_execution_page(service.build_execution_page()))
+    payload = service.build_execution_page()
+    created = request.query_params.get('created')
+    error = request.query_params.get('error')
+    if created:
+        payload['flash_message'] = created
+        payload['flash_tone'] = 'good'
+    if error:
+        payload['flash_message'] = error
+        payload['flash_tone'] = 'bad'
+    return HTMLResponse(render_admin_execution_page(payload))
+
+
+@router.post('/admin/execution/jobs/{job_id}/retry', response_model=None)
+def admin_retry_deferred_execution_event(request: Request, job_id: str, db: Session = Depends(get_db)):
+    require_admin_session(request)
+    deferred_job = DeferredExecutionJobRepository(db).get_job(job_id)
+    if deferred_job is None:
+        return RedirectResponse(url=f'/admin/execution?error=Deferred%20execution%20job%20{job_id}%20was%20not%20found', status_code=303)
+    if not deferred_job.outbox_event_id:
+        return RedirectResponse(url=f'/admin/execution?error=Deferred%20execution%20job%20{job_id}%20has%20no%20linked%20outbox%20event', status_code=303)
+    service = OutboxService(db)
+    event_id = int(deferred_job.outbox_event_id)
+    record = service.get_event(event_id)
+    if record is None or str(record.event_name or '') != 'analysis.execution.deferred':
+        return RedirectResponse(url=f'/admin/execution?error=Deferred%20execution%20event%20{event_id}%20was%20not%20found', status_code=303)
+    try:
+        service.retry_event(event_id)
+    except ValueError as exc:
+        return RedirectResponse(url=f'/admin/execution?error={str(exc)}', status_code=303)
+    return RedirectResponse(url=f'/admin/execution?created=Deferred%20execution%20job%20{job_id}%20queued%20for%20retry', status_code=303)
 
 
 @router.get('/admin/jobs', response_class=HTMLResponse)

@@ -46,6 +46,7 @@ class FakeRepository:
     def __init__(self, session: FakeSession) -> None:
         self.session = session
         self.requeued = 0
+        self.queue_metrics_calls = 0
 
     def create_job(self, **kwargs):
         record = FakeRecord(
@@ -89,6 +90,7 @@ class FakeRepository:
         return 0
 
     def queue_metrics(self):
+        self.queue_metrics_calls += 1
         pending = sum(1 for record in self.session.store.values() if record.status == 'PENDING')
         running = sum(1 for record in self.session.store.values() if record.status == 'RUNNING')
         return {
@@ -132,6 +134,27 @@ class FakeRepository:
         }
 
 
+class FakeDeferredExecutionJobRecord:
+    def __init__(self, job_id: str) -> None:
+        self.id = job_id
+        self.outbox_event_id = None
+
+
+class FakeDeferredExecutionJobRepository:
+    def __init__(self, session) -> None:
+        self.session = session
+        self.created_jobs: list[FakeDeferredExecutionJobRecord] = []
+
+    def create_job(self, **kwargs):
+        record = FakeDeferredExecutionJobRecord(kwargs['job_id'])
+        self.created_jobs.append(record)
+        return record
+
+    def attach_outbox_event(self, record, *, outbox_event_id: int):
+        record.outbox_event_id = outbox_event_id
+        return record
+
+
 def test_live_analysis_job_service_enqueues_pending_job(monkeypatch) -> None:
     store: dict[str, FakeRecord] = {}
     monkeypatch.setattr(jobs_module, 'LiveAnalysisJobRepository', FakeRepository)
@@ -161,10 +184,11 @@ def test_live_analysis_job_service_deduplicates_active_job(monkeypatch) -> None:
 def test_live_analysis_job_service_processes_next_pending_job(monkeypatch) -> None:
     store: dict[str, FakeRecord] = {}
     monkeypatch.setattr(jobs_module, 'LiveAnalysisJobRepository', FakeRepository)
+    captured: dict[str, object] = {}
     monkeypatch.setattr(
         jobs_module,
         'run_live_trading_analysis',
-        lambda **kwargs: {
+        lambda **kwargs: captured.update(kwargs) or {
             'generated_at': '2026-04-15T10:00:00Z',
             'signal_count': 2,
             'candle_count': 3,
@@ -181,6 +205,100 @@ def test_live_analysis_job_service_processes_next_pending_job(monkeypatch) -> No
     assert stored is not None
     assert stored['status'] == 'SUCCEEDED'
     assert stored['signal_count'] == 2
+    assert captured['force_market_refresh'] is False
+    assert captured['persist_reports'] is False
+    assert captured['publish_completion_event'] is False
+    assert captured['deliver_telegram_inline'] is False
+    assert captured['publish_alert_notifications'] is False
+    assert captured['execute_inline'] is False
+
+
+def test_live_analysis_job_service_can_force_market_refresh(monkeypatch) -> None:
+    store: dict[str, FakeRecord] = {}
+    captured: dict[str, object] = {}
+
+    class ForceRefreshRepository(FakeRepository):
+        def parse_request_payload(self, record: FakeRecord):
+            payload = super().parse_request_payload(record)
+            payload['force_market_refresh'] = True
+            return payload
+
+    monkeypatch.setattr(jobs_module, 'LiveAnalysisJobRepository', ForceRefreshRepository)
+    monkeypatch.setattr(
+        jobs_module,
+        'run_live_trading_analysis',
+        lambda **kwargs: captured.update(kwargs) or {
+            'generated_at': '2026-04-15T10:00:00Z',
+            'signal_count': 1,
+            'candle_count': 1,
+        },
+    )
+
+    service = LiveAnalysisJobService(session_factory=lambda: FakeSession(store))
+    service.submit(LiveAnalysisRequest(symbol='^NSEI', interval='5m', period='1d', strategy='Breakout'))
+
+    processed = service.process_next_pending_job()
+
+    assert processed is True
+    assert captured['force_market_refresh'] is True
+
+
+def test_live_analysis_job_service_enqueues_deferred_execution_event(monkeypatch) -> None:
+    store: dict[str, FakeRecord] = {}
+    captured: dict[str, object] = {}
+    queued_events: list[tuple[str, dict[str, object], str]] = []
+
+    class DeferredExecutionRepository(FakeRepository):
+        def parse_request_payload(self, record: FakeRecord):
+            payload = super().parse_request_payload(record)
+            payload.update({
+                'auto_execute': True,
+                'execution_type': 'PAPER',
+                'paper_log_path': 'paper.csv',
+                'live_log_path': 'live.csv',
+            })
+            return payload
+
+    class FakeOutboxService:
+        def __init__(self, session) -> None:
+            self.session = session
+
+        def enqueue(self, *, event_name: str, payload: dict[str, object], source: str):
+            queued_events.append((event_name, payload, source))
+            return type('OutboxEvent', (), {'id': 41})()
+
+    monkeypatch.setattr(jobs_module, 'LiveAnalysisJobRepository', DeferredExecutionRepository)
+    monkeypatch.setattr(jobs_module, 'DeferredExecutionJobRepository', FakeDeferredExecutionJobRepository)
+    monkeypatch.setattr(jobs_module, 'OutboxService', FakeOutboxService)
+    monkeypatch.setattr(
+        jobs_module,
+        'run_live_trading_analysis',
+        lambda **kwargs: captured.update(kwargs) or {
+            'generated_at': '2026-04-15T10:00:00Z',
+            'signal_count': 1,
+            'candle_count': 2,
+            'symbol': '^NSEI',
+            'strategy': 'Breakout',
+            'signals': [{'symbol': '^NSEI', 'side': 'BUY', 'entry_price': 101.0}],
+            'candles': [{'timestamp': '2026-04-15 09:15:00', 'open': 100.0, 'high': 101.0, 'low': 99.0, 'close': 100.5, 'volume': 1000}],
+            'execution_summary': {'mode': 'PAPER'},
+        },
+    )
+
+    service = LiveAnalysisJobService(session_factory=lambda: FakeSession(store))
+    service.submit(LiveAnalysisRequest(symbol='^NSEI', interval='5m', period='1d', strategy='Breakout'))
+
+    processed = service.process_next_pending_job()
+
+    assert processed is True
+    assert captured['execute_inline'] is False
+    assert len(queued_events) == 1
+    event_name, payload, source = queued_events[0]
+    assert event_name == jobs_module.EVENT_DEFERRED_EXECUTION_REQUESTED
+    assert payload['deferred_execution_job_id']
+    assert payload['execution_mode'] == 'PAPER'
+    assert payload['paper_log_path'] == 'paper.csv'
+    assert source == 'live_analysis_jobs'
 
 
 def test_live_analysis_job_service_requeues_stale_jobs_before_claim(monkeypatch) -> None:
@@ -228,3 +346,61 @@ def test_live_analysis_job_service_lists_and_allows_retry_cancel(monkeypatch) ->
     assert listed[0]['status'] == 'FAILED'
     assert retried['status'] == 'PENDING'
     assert cancelled['status'] == 'CANCELLED'
+
+
+def test_live_analysis_job_service_throttles_non_forced_queue_metric_refresh(monkeypatch) -> None:
+    store: dict[str, FakeRecord] = {}
+    created_repositories: list[FakeRepository] = []
+
+    class TrackingRepository(FakeRepository):
+        def __init__(self, session: FakeSession) -> None:
+            super().__init__(session)
+            created_repositories.append(self)
+
+    monkeypatch.setattr(jobs_module, 'LiveAnalysisJobRepository', TrackingRepository)
+    monkeypatch.setattr(
+        jobs_module,
+        'run_live_trading_analysis',
+        lambda **kwargs: {
+            'generated_at': '2026-04-15T10:00:00Z',
+            'signal_count': 2,
+            'candle_count': 3,
+        },
+    )
+
+    service = LiveAnalysisJobService(session_factory=lambda: FakeSession(store))
+    service.submit(LiveAnalysisRequest(symbol='^NSEI', interval='5m', period='1d', strategy='Breakout'))
+
+    first_repo = created_repositories[-1]
+    assert first_repo.queue_metrics_calls == 1
+
+    service.process_next_pending_job()
+    second_repo = created_repositories[-1]
+    assert second_repo.queue_metrics_calls == 1
+
+
+def test_live_analysis_job_service_forces_queue_metric_refresh_for_operator_actions(monkeypatch) -> None:
+    store: dict[str, FakeRecord] = {}
+    created_repositories: list[FakeRepository] = []
+
+    class TrackingRepository(FakeRepository):
+        def __init__(self, session: FakeSession) -> None:
+            super().__init__(session)
+            created_repositories.append(self)
+
+    monkeypatch.setattr(jobs_module, 'LiveAnalysisJobRepository', TrackingRepository)
+
+    service = LiveAnalysisJobService(session_factory=lambda: FakeSession(store))
+    first = service.submit(LiveAnalysisRequest(symbol='^NSEI', interval='5m', period='1d', strategy='Breakout'))
+    record = store[first['job_id']]
+    record.status = 'FAILED'
+    record.error = 'boom'
+
+    service.retry_job(first['job_id'])
+    retried_repo = created_repositories[-1]
+    assert retried_repo.queue_metrics_calls == 1
+
+    record.status = 'RUNNING'
+    service.cancel_job(first['job_id'])
+    cancelled_repo = created_repositories[-1]
+    assert cancelled_repo.queue_metrics_calls == 1

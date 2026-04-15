@@ -45,6 +45,7 @@ class AppSettings:
     mongo: MongoSettings
     redis: RedisSettings
     message_bus: MessageBusSettings
+    legacy_sync_live_analysis_enabled: bool
 
 
 def _load_environment_files() -> None:
@@ -87,12 +88,25 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def _bool_env(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return str(value).strip().lower() not in {'0', 'false', 'no', 'off'}
+
+
 def should_auto_initialize_database(*, env: str | None = None, provider: str | None = None) -> bool:
     resolved_env = str(env or os.getenv('APP_ENV', 'dev') or 'dev').strip().lower()
     resolved_provider = str(provider or get_settings().sql.provider or '').strip().lower()
     if resolved_env in {'local', 'dev', 'development', 'test'}:
         return True
     return resolved_provider == 'sqlite'
+
+
+def should_enable_legacy_sync_live_analysis(*, env: str | None = None) -> bool:
+    resolved_env = str(env or os.getenv('APP_ENV', 'dev') or 'dev').strip().lower()
+    default_enabled = resolved_env in {'local', 'dev', 'development', 'test'}
+    return _bool_env('VINAYAK_ENABLE_SYNC_LIVE_ANALYSIS', default_enabled)
 
 
 @lru_cache(maxsize=1)
@@ -125,6 +139,7 @@ def get_settings() -> AppSettings:
             topic_prefix=str(os.getenv('MESSAGE_BUS_TOPIC_PREFIX', 'vinayak') or 'vinayak').strip(),
             enabled=str(os.getenv('MESSAGE_BUS_ENABLED', 'true') or 'true').strip().lower() not in {'0', 'false', 'no'},
         ),
+        legacy_sync_live_analysis_enabled=should_enable_legacy_sync_live_analysis(),
     )
 
 

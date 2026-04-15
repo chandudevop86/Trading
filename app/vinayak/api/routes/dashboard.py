@@ -26,6 +26,7 @@ from vinayak.api.services.dashboard_summary import DashboardSummaryService
 from vinayak.api.services.live_analysis_jobs import get_live_analysis_job_service
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
 from vinayak.api.services.trading_workspace import refresh_market_data_snapshot, run_live_trading_analysis
+from vinayak.core.config import get_settings
 from vinayak.observability.observability_health import build_observability_dashboard_payload
 from vinayak.web.services.role_view_service import RoleViewService
 
@@ -96,6 +97,13 @@ def get_dashboard_candles(
         provider='DHAN',
         force_refresh=refresh,
     )
+    return LiveOhlcvResponse(
+        symbol=symbol,
+        interval=interval,
+        period=period,
+        total=len(rows),
+        candles=[LiveOhlcvRowResponse(**row) for row in rows],
+    )
 
 
 def _to_live_analysis_job_response(job: dict) -> LiveAnalysisJobResponse:
@@ -114,13 +122,10 @@ def _to_live_analysis_job_response(job: dict) -> LiveAnalysisJobResponse:
         signal_count=int(job.get('signal_count', 0) or 0),
         candle_count=int(job.get('candle_count', 0) or 0),
     )
-    return LiveOhlcvResponse(
-        symbol=symbol,
-        interval=interval,
-        period=period,
-        total=len(rows),
-        candles=[LiveOhlcvRowResponse(**row) for row in rows],
-    )
+
+
+def _legacy_sync_live_analysis_enabled() -> bool:
+    return bool(get_settings().legacy_sync_live_analysis_enabled)
 
 
 @router.get('/live-analysis/latest', response_model=LiveAnalysisResponse | None)
@@ -194,13 +199,25 @@ def cancel_live_analysis_job(job_id: str) -> LiveAnalysisJobActionResponse:
     )
 
 
-@router.post('/live-analysis', response_model=LiveAnalysisResponse)
-def post_live_analysis(request: LiveAnalysisRequest, db: Session = Depends(get_db)) -> LiveAnalysisResponse:
+@router.post('/live-analysis', response_model=LiveAnalysisResponse | LiveAnalysisJobAcceptedResponse)
+def post_live_analysis(
+    request: LiveAnalysisRequest,
+    db: Session = Depends(get_db),
+) -> LiveAnalysisResponse | LiveAnalysisJobAcceptedResponse:
+    if not _legacy_sync_live_analysis_enabled():
+        job = get_live_analysis_job_service().submit(request)
+        poll_url = f"/dashboard/live-analysis/jobs/{job['job_id']}"
+        return LiveAnalysisJobAcceptedResponse(
+            job=_to_live_analysis_job_response(job),
+            poll_url=poll_url,
+            latest_result_url='/dashboard/live-analysis/latest',
+        )
     result = run_live_trading_analysis(
         symbol=request.symbol,
         interval=request.interval,
         period=request.period,
         strategy=request.strategy,
+        force_market_refresh=request.force_market_refresh,
         capital=request.capital,
         risk_pct=request.risk_pct,
         rr_ratio=request.rr_ratio,

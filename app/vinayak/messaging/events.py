@@ -7,6 +7,7 @@ EVENT_TRADE_EXECUTED = 'trade.executed'
 EVENT_TRADE_EXITED = 'trade.exited'
 EVENT_NOTIFICATION_REQUESTED = 'notification.requested'
 EVENT_ANALYSIS_COMPLETED = 'analysis.completed'
+EVENT_DEFERRED_EXECUTION_REQUESTED = 'analysis.execution.deferred'
 
 # Backward-compatible aliases for older imports and outbox consumers.
 EVENT_TRADE_REVIEWED = EVENT_REVIEWED_TRADE_CREATED
@@ -22,5 +23,6 @@ __all__ = [
     'EVENT_TRADE_EXITED',
     'EVENT_NOTIFICATION_REQUESTED',
     'EVENT_ANALYSIS_COMPLETED',
+    'EVENT_DEFERRED_EXECUTION_REQUESTED',
 ]
 

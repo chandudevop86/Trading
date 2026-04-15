@@ -104,6 +104,7 @@ def test_dashboard_market_heartbeat_refreshes_snapshot(monkeypatch) -> None:
 def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> None:
     _login_admin()
     captured: dict[str, object] = {}
+    monkeypatch.setattr(dashboard_route, '_legacy_sync_live_analysis_enabled', lambda: True)
 
     def _fake_run_live_trading_analysis(**kwargs):
         captured.update(kwargs)
@@ -215,6 +216,7 @@ def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> N
     assert body['signals'][0]['option_strike'] == '100CE'
     assert body['execution_summary']['mode'] == 'NONE'
     assert body['report_artifacts']['json_report']['local_path'].endswith('mock.json')
+    assert captured['force_market_refresh'] is True
     assert captured['entry_cutoff_hhmm'] == '11:30'
     assert captured['cost_bps'] == 12.5
     assert captured['fixed_cost_per_trade'] == 15
@@ -226,6 +228,55 @@ def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> N
     assert captured['max_portfolio_exposure_pct'] == 35
     assert captured['max_open_risk_pct'] == 5
     assert captured['kill_switch_enabled'] is True
+
+
+def test_dashboard_live_analysis_route_queues_job_when_sync_mode_disabled(monkeypatch) -> None:
+    _login_admin()
+    monkeypatch.setattr(dashboard_route, '_legacy_sync_live_analysis_enabled', lambda: False)
+
+    class FakeJobService:
+        def submit(self, request):
+            assert request.symbol == '^NSEI'
+            return {
+                'job_id': 'job-sync-disabled',
+                'status': 'PENDING',
+                'symbol': request.symbol,
+                'interval': request.interval,
+                'period': request.period,
+                'strategy': request.strategy,
+                'requested_at': '2026-04-15T09:00:00Z',
+                'started_at': None,
+                'finished_at': None,
+                'error': None,
+                'deduplicated': False,
+                'signal_count': 0,
+                'candle_count': 0,
+                'result': None,
+            }
+
+    monkeypatch.setattr(dashboard_route, 'get_live_analysis_job_service', lambda: FakeJobService())
+    monkeypatch.setattr(
+        dashboard_route,
+        'run_live_trading_analysis',
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError('sync analysis path should not run')),
+    )
+
+    response = client.post('/dashboard/live-analysis', json={
+        'symbol': '^NSEI',
+        'interval': '5m',
+        'period': '1d',
+        'strategy': 'Breakout',
+        'force_market_refresh': True,
+        'capital': 100000,
+        'risk_pct': 1,
+        'rr_ratio': 2,
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['job']['job_id'] == 'job-sync-disabled'
+    assert body['job']['status'] == 'PENDING'
+    assert body['poll_url'] == '/dashboard/live-analysis/jobs/job-sync-disabled'
 
 
 def test_dashboard_live_analysis_job_route_accepts_background_run(monkeypatch) -> None:

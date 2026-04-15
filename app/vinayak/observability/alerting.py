@@ -41,6 +41,7 @@ def build_active_alerts(snapshot: dict[str, Any] | None = None) -> list[AlertRec
     execution_failed = int(_safe_float(_metric(snapshot, 'execution_failed_total', 0)))
     execution_blocked = int(_safe_float(_metric(snapshot, 'execution_blocked_total', 0)))
     duplicate_execution_blocks = int(_safe_float(_metric(snapshot, 'duplicate_execution_block_total', 0)))
+    deferred_execution_failed = int(_safe_float(_metric(snapshot, 'deferred_execution_failed_total', 0)))
     live_analysis_jobs_pending = int(_safe_float(_metric(snapshot, 'live_analysis_jobs_pending', 0)))
     live_analysis_jobs_oldest_pending_age_seconds = round(_safe_float(_metric(snapshot, 'live_analysis_jobs_oldest_pending_age_seconds', 0.0)), 2)
     live_analysis_job_recovered_total = int(_safe_float(_metric(snapshot, 'live_analysis_job_recovered_total', 0)))
@@ -77,6 +78,8 @@ def build_active_alerts(snapshot: dict[str, Any] | None = None) -> list[AlertRec
         alerts.append({'name': 'execution_blocked_total increased', 'severity': 'yellow', 'value': execution_blocked, 'metric': 'execution_blocked_total'})
     if duplicate_execution_blocks > 0:
         alerts.append({'name': 'duplicate_execution_block_total increased', 'severity': 'yellow', 'value': duplicate_execution_blocks, 'metric': 'duplicate_execution_block_total'})
+    if deferred_execution_failed > 0:
+        alerts.append({'name': 'deferred_execution_failed_total increased', 'severity': 'red', 'value': deferred_execution_failed, 'metric': 'deferred_execution_failed_total'})
     if live_analysis_jobs_pending >= 5:
         alerts.append({'name': 'live_analysis_jobs_pending backlog high', 'severity': 'yellow', 'value': live_analysis_jobs_pending, 'metric': 'live_analysis_jobs_pending'})
     if live_analysis_jobs_oldest_pending_age_seconds > 60:

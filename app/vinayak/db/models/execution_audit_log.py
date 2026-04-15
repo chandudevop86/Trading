@@ -12,9 +12,17 @@ class ExecutionAuditLogRecord(Base):
     __tablename__ = 'execution_audit_logs'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    execution_id: Mapped[int] = mapped_column(Integer, ForeignKey('executions.id'), nullable=False)
+    execution_id: Mapped[int | None] = mapped_column(Integer, ForeignKey('executions.id'), nullable=True)
     broker: Mapped[str] = mapped_column(String(40), nullable=False)
     request_payload: Mapped[str] = mapped_column(Text, nullable=False)
     response_payload: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    event_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    old_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    new_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    actor: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), nullable=False)

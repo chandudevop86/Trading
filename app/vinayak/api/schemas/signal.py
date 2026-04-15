@@ -71,11 +71,19 @@ class ExecutionListResponse(BaseModel):
 
 class ExecutionAuditLogResponse(BaseModel):
     id: int
-    execution_id: int
+    execution_id: int | None
     broker: str
     request_payload: str
     response_payload: str | None
     status: str
+    entity_type: str | None = None
+    entity_id: int | None = None
+    event_name: str | None = None
+    old_status: str | None = None
+    new_status: str | None = None
+    actor: str | None = None
+    reason: str | None = None
+    metadata_json: str | None = None
     created_at: datetime
 
 

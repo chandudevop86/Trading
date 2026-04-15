@@ -8,11 +8,13 @@ from sqlalchemy.orm import Session
 from vinayak.db.models.reviewed_trade import ReviewedTradeRecord
 from vinayak.db.repositories.reviewed_trade_repository import ReviewedTradeRepository
 from vinayak.db.repositories.signal_repository import SignalRepository
+from vinayak.domain.statuses import ReviewedTradeStatus, WorkflowActor
 from vinayak.messaging.events import (
     EVENT_REVIEWED_TRADE_CREATED,
     EVENT_REVIEWED_TRADE_STATUS_UPDATED,
 )
 from vinayak.messaging.outbox import OutboxService
+from vinayak.services.trade_execution_workflow import TradeExecutionWorkflowService
 
 
 @dataclass(slots=True)
@@ -54,6 +56,11 @@ class ReviewedTradeService:
         )
         self.signal_repository = signal_repository or SignalRepository(session)
         self.outbox = outbox or OutboxService(session)
+        self.workflow = TradeExecutionWorkflowService(
+            session,
+            reviewed_trade_repository=self.reviewed_trade_repository,
+            outbox=self.outbox,
+        )
 
     def list_reviewed_trades(self) -> list[ReviewedTradeRecord]:
         return self.reviewed_trade_repository.list_reviewed_trades()
@@ -97,16 +104,36 @@ class ReviewedTradeService:
             raise ValueError(f"Reviewed trade {command.reviewed_trade_id} was not found.")
 
         status = str(command.status or "").upper().strip()
-        if status not in {"REVIEWED", "APPROVED", "REJECTED", "EXECUTED"}:
-            raise ValueError(f"Unsupported reviewed trade status: {command.status}")
+        try:
+            target_status = ReviewedTradeStatus(status)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported reviewed trade status: {command.status}") from exc
 
-        updated = self.reviewed_trade_repository.update_reviewed_trade(
-            record,
-            status=status,
-            notes=command.notes,
-            quantity=command.quantity,
-            lots=command.lots,
-        )
+        if target_status == ReviewedTradeStatus.APPROVED:
+            updated = self.workflow.approve_reviewed_trade(
+                record,
+                actor=WorkflowActor.REVIEW_SERVICE.value,
+                reason=command.notes,
+                notes=command.notes,
+                quantity=command.quantity,
+                lots=command.lots,
+            )
+        elif target_status == ReviewedTradeStatus.REJECTED:
+            updated = self.workflow.reject_reviewed_trade(
+                record,
+                actor=WorkflowActor.REVIEW_SERVICE.value,
+                reason=command.notes,
+                notes=command.notes,
+            )
+        else:
+            updated = self.workflow.transition_reviewed_trade(
+                record,
+                target_status,
+                context=None,
+                notes=command.notes,
+                quantity=command.quantity,
+                lots=command.lots,
+            )
         self._enqueue_reviewed_status_updated_event(updated)
         self.session.commit()
         self.session.refresh(updated)
@@ -123,10 +150,11 @@ class ReviewedTradeService:
         if record is None:
             raise ValueError(f"Reviewed trade {reviewed_trade_id} was not found.")
 
-        updated = self.reviewed_trade_repository.update_reviewed_trade(
+        updated = self.workflow.transition_reviewed_trade(
             record,
-            status="EXECUTED",
+            ReviewedTradeStatus.EXECUTED,
             notes=notes if notes is not None else record.notes,
+            context=None,
         )
         self._enqueue_reviewed_status_updated_event(updated)
         if auto_commit:
@@ -239,8 +267,10 @@ class ReviewedTradeService:
             )
 
         status = str(command.status or "REVIEWED").upper().strip()
-        if status not in {"REVIEWED", "APPROVED", "REJECTED", "EXECUTED"}:
-            raise ValueError(f"Unsupported reviewed trade status: {command.status}")
+        try:
+            ReviewedTradeStatus(status)
+        except ValueError as exc:
+            raise ValueError(f"Unsupported reviewed trade status: {command.status}") from exc
 
         return {
             "signal_id": command.signal_id,

@@ -48,6 +48,14 @@ def list_execution_audit_logs(db: Session = Depends(get_db)) -> ExecutionAuditLo
             request_payload=record.request_payload,
             response_payload=record.response_payload,
             status=record.status,
+            entity_type=record.entity_type,
+            entity_id=record.entity_id,
+            event_name=record.event_name,
+            old_status=record.old_status,
+            new_status=record.new_status,
+            actor=record.actor,
+            reason=record.reason,
+            metadata_json=record.metadata_json,
             created_at=record.created_at,
         )
         for record in records
@@ -69,6 +77,14 @@ def list_execution_audit_logs_for_execution(execution_id: int, db: Session = Dep
             request_payload=record.request_payload,
             response_payload=record.response_payload,
             status=record.status,
+            entity_type=record.entity_type,
+            entity_id=record.entity_id,
+            event_name=record.event_name,
+            old_status=record.old_status,
+            new_status=record.new_status,
+            actor=record.actor,
+            reason=record.reason,
+            metadata_json=record.metadata_json,
             created_at=record.created_at,
         )
         for record in records

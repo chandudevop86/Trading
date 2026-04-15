@@ -1,8 +1,11 @@
 from vinayak.domain.exceptions import (
     DataNormalizationError,
+    DuplicateExecutionRequestError,
     DomainValidationError,
+    InvalidStatusTransitionError,
     MissingRequiredColumnError,
     TimestampParseError,
+    WorkflowError,
 )
 from vinayak.domain.models import (
     AuditEvent,
@@ -27,6 +30,16 @@ from vinayak.domain.models import (
     TradeSignalType,
     ValidationResult,
 )
+from vinayak.domain.statuses import (
+    ExecutionLifecycleStatus,
+    ReviewedTradeStatus,
+    WorkflowActor,
+)
+from vinayak.domain.transitions import (
+    REVIEWED_TRADE_ALLOWED_TRANSITIONS,
+    can_transition_reviewed_trade,
+    validate_reviewed_trade_transition,
+)
 
 __all__ = [
     'AuditEvent',
@@ -36,16 +49,21 @@ __all__ = [
     'Candle',
     'CandleBatch',
     'DataNormalizationError',
+    'DuplicateExecutionRequestError',
     'DomainValidationError',
     'ExecutionFailureReason',
+    'ExecutionLifecycleStatus',
     'ExecutionMode',
     'ExecutionRequest',
     'ExecutionResult',
     'ExecutionSide',
     'ExecutionStatus',
+    'InvalidStatusTransitionError',
     'MissingRequiredColumnError',
     'PositionSnapshot',
+    'REVIEWED_TRADE_ALLOWED_TRANSITIONS',
     'RiskConfig',
+    'ReviewedTradeStatus',
     'StrategyConfig',
     'StrategySignalBatch',
     'Timeframe',
@@ -54,4 +72,8 @@ __all__ = [
     'TradeSignalStatus',
     'TradeSignalType',
     'ValidationResult',
+    'WorkflowActor',
+    'WorkflowError',
+    'can_transition_reviewed_trade',
+    'validate_reviewed_trade_transition',
 ]

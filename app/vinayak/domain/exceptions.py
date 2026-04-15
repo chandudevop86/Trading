@@ -15,3 +15,15 @@ class MissingRequiredColumnError(DataNormalizationError):
 
 class TimestampParseError(DataNormalizationError):
     """Raised when timestamps cannot be parsed into UTC-safe values."""
+
+
+class WorkflowError(DomainValidationError):
+    """Base class for workflow/lifecycle validation failures."""
+
+
+class InvalidStatusTransitionError(WorkflowError):
+    """Raised when a lifecycle transition violates the allowed state machine."""
+
+
+class DuplicateExecutionRequestError(WorkflowError):
+    """Raised when a duplicate execution request is detected before persistence."""

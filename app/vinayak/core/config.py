@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+except Exception:  # pragma: no cover - optional import safety during partial environments
+    load_dotenv = None
+
 
 @dataclass(frozen=True)
 class SqlSettings:
@@ -42,6 +47,21 @@ class AppSettings:
     message_bus: MessageBusSettings
 
 
+def _load_environment_files() -> None:
+    if load_dotenv is None:
+        return
+
+    base_dir = Path(__file__).resolve().parents[1]
+    repo_root = base_dir.parents[1]
+    candidate_paths = (
+        repo_root / '.env',
+        base_dir / '.env',
+    )
+    for path in candidate_paths:
+        if path.exists():
+            load_dotenv(path, override=False)
+
+
 def _default_sqlite_url() -> str:
     default_path = Path(__file__).resolve().parents[1] / 'data' / 'vinayak.db'
     return f"sqlite:///{default_path.as_posix()}"
@@ -69,6 +89,7 @@ def _int_env(name: str, default: int) -> int:
 
 @lru_cache(maxsize=1)
 def get_settings() -> AppSettings:
+    _load_environment_files()
     sql_url = str(os.getenv('VINAYAK_DATABASE_URL', _default_sqlite_url()) or _default_sqlite_url()).strip()
     bus_backend = str(os.getenv('MESSAGE_BUS_BACKEND', 'rabbitmq') or 'rabbitmq').strip().lower()
     bus_url = str(

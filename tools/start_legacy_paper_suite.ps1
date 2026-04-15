@@ -4,7 +4,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-Set-Location 'F:\Trading'
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $repoRoot
 $env:MARKET_DATA_PROVIDER = 'YAHOO'
 $env:TRADING_BROKER_MODE = 'PAPER'
 $env:LIVE_TRADING_ENABLED = 'false'
@@ -30,7 +31,7 @@ function Get-DotEnvValue {
     return ''
 }
 
-$dotenvPath = 'F:\Trading\.env'
+$dotenvPath = Join-Path $repoRoot '.env'
 $telegramToken = ''
 if (-not [string]::IsNullOrWhiteSpace($env:TELEGRAM_BOT_TOKEN)) {
     $telegramToken = $env:TELEGRAM_BOT_TOKEN.Trim()

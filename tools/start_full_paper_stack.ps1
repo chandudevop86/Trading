@@ -5,14 +5,15 @@
 )
 
 $ErrorActionPreference = 'Stop'
-Set-Location 'F:\Trading'
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $repoRoot
 
-$legacyCommand = "Set-Location 'F:\Trading'; & 'F:\Trading\tools\start_legacy_paper_suite.ps1'"
+$legacyCommand = "Set-Location '$repoRoot'; & '$repoRoot\tools\start_legacy_paper_suite.ps1'"
 if ($Once) {
     $legacyCommand += ' -Once'
 }
 
-$uiCommand = "Set-Location 'F:\Trading'; & 'F:\Trading\tools\start_trading_ui_suite.ps1' -StreamlitPort $StreamlitPort -VinayakPort $VinayakPort"
+$uiCommand = "Set-Location '$repoRoot'; & '$repoRoot\tools\start_trading_ui_suite.ps1' -StreamlitPort $StreamlitPort -VinayakPort $VinayakPort"
 
 Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $legacyCommand)
 Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoExit', '-Command', $uiCommand)

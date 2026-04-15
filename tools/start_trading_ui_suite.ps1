@@ -4,15 +4,16 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-Set-Location 'F:\Trading'
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $repoRoot
 
 $legacyUiCommand = @(
-    'Set-Location ''F:\Trading'''
+    ("Set-Location '{0}'" -f $repoRoot)
     ('py -3 -m streamlit run src\Trading.py --server.port {0}' -f $StreamlitPort)
 ) -join '; '
 
 $vinayakApiCommand = @(
-    'Set-Location ''F:\Trading'''
+    ("Set-Location '{0}'" -f $repoRoot)
     ('py -3 -m uvicorn app.main:app --host 0.0.0.0 --port {0}' -f $VinayakPort)
 ) -join '; '
 

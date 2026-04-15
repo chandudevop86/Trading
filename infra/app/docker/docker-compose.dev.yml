@@ -8,6 +8,7 @@ services:
     container_name: vinayak-api-dev
     env_file:
       - ../env/dev.env.example
+      - ../../../app/vinayak/.env
     environment:
       APP_ENV: development
       APP_HOST: 0.0.0.0

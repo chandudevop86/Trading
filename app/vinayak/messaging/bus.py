@@ -59,28 +59,59 @@ class RabbitMqMessageBus(MessageBus):
     def __init__(self, url: str, topic_prefix: str) -> None:
         self.url = url
         self.topic_prefix = topic_prefix
+        self._connection = None
+        self._channel = None
 
     def _routing_key(self, name: str) -> str:
         return f'{self.topic_prefix}.{name}'
+
+    def _get_channel(self):
+        if pika is None or not self.url:
+            return None
+        try:
+            if self._connection is not None and self._channel is not None and self._connection.is_open and self._channel.is_open:
+                return self._channel
+        except Exception:
+            self._connection = None
+            self._channel = None
+
+        params = pika.URLParameters(self.url)
+        self._connection = pika.BlockingConnection(params)
+        self._channel = self._connection.channel()
+        self._channel.exchange_declare(exchange=self.topic_prefix, exchange_type='topic', durable=True)
+        return self._channel
+
+    def _close_publish_resources(self) -> None:
+        try:
+            if self._channel is not None and self._channel.is_open:
+                self._channel.close()
+        except Exception:
+            pass
+        try:
+            if self._connection is not None and self._connection.is_open:
+                self._connection.close()
+        except Exception:
+            pass
+        self._channel = None
+        self._connection = None
 
     def publish(self, name: str, payload: dict[str, Any], *, source: str) -> bool:
         if pika is None or not self.url:
             return False
         envelope = EventEnvelope(name=name, payload=payload, emitted_at=_now(), source=source)
         try:
-            params = pika.URLParameters(self.url)
-            connection = pika.BlockingConnection(params)
-            channel = connection.channel()
-            channel.exchange_declare(exchange=self.topic_prefix, exchange_type='topic', durable=True)
+            channel = self._get_channel()
+            if channel is None:
+                return False
             channel.basic_publish(
                 exchange=self.topic_prefix,
                 routing_key=self._routing_key(name),
                 body=json.dumps(envelope.__dict__).encode('utf-8'),
                 properties=pika.BasicProperties(content_type='application/json', delivery_mode=2),
             )
-            connection.close()
             return True
         except Exception:
+            self._close_publish_resources()
             return False
 
     def consume(self, handler: Callable[[EventEnvelope], None]) -> None:
@@ -122,24 +153,40 @@ class KafkaMessageBus(MessageBus):
     def __init__(self, url: str, topic_prefix: str) -> None:
         self.url = url
         self.topic_prefix = topic_prefix
+        self._producer = None
 
     def _topic(self, name: str) -> str:
         return f'{self.topic_prefix}.{name}'
+
+    def _get_producer(self):
+        if KafkaProducer is None or not self.url:
+            return None
+        if self._producer is not None:
+            return self._producer
+        self._producer = KafkaProducer(
+            bootstrap_servers=[self.url],
+            value_serializer=lambda value: json.dumps(value).encode('utf-8'),
+        )
+        return self._producer
 
     def publish(self, name: str, payload: dict[str, Any], *, source: str) -> bool:
         if KafkaProducer is None or not self.url:
             return False
         envelope = EventEnvelope(name=name, payload=payload, emitted_at=_now(), source=source)
         try:
-            producer = KafkaProducer(
-                bootstrap_servers=[self.url],
-                value_serializer=lambda value: json.dumps(value).encode('utf-8'),
-            )
+            producer = self._get_producer()
+            if producer is None:
+                return False
             producer.send(self._topic(name), envelope.__dict__).get(timeout=5)
             producer.flush()
-            producer.close()
             return True
         except Exception:
+            try:
+                if self._producer is not None:
+                    self._producer.close()
+            except Exception:
+                pass
+            self._producer = None
             return False
 
     def consume(self, handler: Callable[[EventEnvelope], None]) -> None:
@@ -160,6 +207,7 @@ class ActiveMqMessageBus(MessageBus):
     def __init__(self, url: str, topic_prefix: str) -> None:
         self.url = url
         self.topic_prefix = topic_prefix
+        self._client = None
 
     def _destination(self, name: str) -> str:
         return f'/topic/{self.topic_prefix}.{name}'
@@ -167,6 +215,11 @@ class ActiveMqMessageBus(MessageBus):
     def _connection(self):
         if stomp is None or not self.url:
             return None
+        try:
+            if self._client is not None and self._client.is_connected():
+                return self._client
+        except Exception:
+            self._client = None
         parsed = urlparse(self.url)
         host = parsed.hostname or 'localhost'
         port = parsed.port or 61613
@@ -174,6 +227,7 @@ class ActiveMqMessageBus(MessageBus):
         username = parsed.username or 'admin'
         password = parsed.password or 'admin'
         conn.connect(login=username, passcode=password, wait=True)
+        self._client = conn
         return conn
 
     def publish(self, name: str, payload: dict[str, Any], *, source: str) -> bool:
@@ -183,13 +237,13 @@ class ActiveMqMessageBus(MessageBus):
         envelope = EventEnvelope(name=name, payload=payload, emitted_at=_now(), source=source)
         try:
             conn.send(destination=self._destination(name), body=json.dumps(envelope.__dict__), headers={'persistent': 'true'})
-            conn.disconnect()
             return True
         except Exception:
             try:
                 conn.disconnect()
             except Exception:
                 pass
+            self._client = None
             return False
 
     def consume(self, handler: Callable[[EventEnvelope], None]) -> None:
@@ -200,7 +254,6 @@ class ActiveMqMessageBus(MessageBus):
         if conn is None:
             return {'status': 'disabled', 'engine': 'activemq'}
         try:
-            conn.disconnect()
             return {'status': 'ok', 'engine': 'activemq'}
         except Exception as exc:
             return {'status': 'error', 'engine': 'activemq', 'detail': str(exc)}

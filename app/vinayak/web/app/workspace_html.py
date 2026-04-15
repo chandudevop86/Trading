@@ -290,6 +290,22 @@ WORKSPACE_HTML = _page(
       return await response.json();
     }
 
+    async function pollAnalysisJob(pollUrl) {
+      const timeoutAt = Date.now() + 180000;
+      while (Date.now() < timeoutAt) {
+        const payload = await getJson(pollUrl);
+        const status = payload.job?.status || 'PENDING';
+        if (status === 'SUCCEEDED' && payload.result) {
+          return payload.result;
+        }
+        if (status === 'FAILED') {
+          throw new Error(payload.job?.error || 'Live analysis job failed.');
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+      }
+      throw new Error('Live analysis is still running. Check the latest run in a moment.');
+    }
+
     function payload() {
       return {
         symbol: document.getElementById('symbol').value,
@@ -398,12 +414,20 @@ WORKSPACE_HTML = _page(
     }
 
     document.getElementById('runAnalysisBtn').addEventListener('click', async () => {
+      const button = document.getElementById('runAnalysisBtn');
       try {
-        const result = await postJson('/dashboard/live-analysis', payload());
+        button.disabled = true;
+        button.textContent = 'Running...';
+        flash('Live analysis queued. Gathering data in the background...');
+        const job = await postJson('/dashboard/live-analysis/jobs', payload());
+        const result = await pollAnalysisJob(job.poll_url);
         renderResult(result);
         flash('Live analysis completed.');
       } catch (error) {
         flash(error.message, 'bad');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Run Live Analysis';
       }
     });
 

@@ -122,6 +122,10 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
     execution_failed = int(_safe_float(_metric(snapshot, 'execution_failed_total', 0)))
     execution_blocked = int(_safe_float(_metric(snapshot, 'execution_blocked_total', 0)))
     duplicate_execution_blocks = int(_safe_float(_metric(snapshot, 'duplicate_execution_block_total', 0)))
+    live_analysis_jobs_pending = int(_safe_float(_metric(snapshot, 'live_analysis_jobs_pending', 0)))
+    live_analysis_jobs_running = int(_safe_float(_metric(snapshot, 'live_analysis_jobs_running', 0)))
+    live_analysis_jobs_oldest_pending_age_seconds = round(_safe_float(_metric(snapshot, 'live_analysis_jobs_oldest_pending_age_seconds', 0.0)), 2)
+    live_analysis_job_recovered_total = int(_safe_float(_metric(snapshot, 'live_analysis_job_recovered_total', 0)))
     kill_switch_active = bool(_safe_float(_metric(snapshot, 'portfolio_kill_switch_active', 0)))
     daily_loss_limit = round(abs(_safe_float(_metric(snapshot, 'portfolio_daily_loss_limit', 0.0))), 2)
     per_trade_risk_pct = round(_safe_float(_metric(snapshot, 'portfolio_per_trade_risk_pct', 0.0)), 4)
@@ -133,6 +137,7 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
     market_status = 'FRESH' if latest_dt is not None and data_delay <= 180 else 'STALE'
     signal_status = 'PASS' if total_signals == 0 or valid_signals >= max(1, total_signals // 2) else 'WARN'
     execution_status = 'OK' if execution_failed == 0 and execution_blocked == 0 else 'WARN' if execution_success > 0 else 'FAIL'
+    queue_status = 'OK' if live_analysis_jobs_pending == 0 and live_analysis_jobs_oldest_pending_age_seconds <= 30 else 'WARN' if live_analysis_jobs_pending <= 5 else 'FAIL'
     telegram_status = 'OK' if telegram_last and telegram_failures == 0 else 'WARN' if telegram_failures > 0 else 'IDLE'
     risk_status = 'FAIL' if kill_switch_active or (daily_loss_limit > 0 and pnl_today <= -daily_loss_limit) else 'WARN' if per_trade_risk_pct > 0 or max_trades_per_day > 0 else 'OK'
 
@@ -164,6 +169,8 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
         {'name': 'executed_paper_trades_today', 'value': executed_trades, 'color': _status_color(execution_status)},
         {'name': 'execution_failed_total', 'value': execution_failed, 'color': 'red' if execution_failed else 'green'},
         {'name': 'execution_blocked_total', 'value': execution_blocked, 'color': 'yellow' if execution_blocked else 'green'},
+        {'name': 'live_analysis_jobs_pending', 'value': live_analysis_jobs_pending, 'color': _status_color(queue_status)},
+        {'name': 'live_analysis_jobs_running', 'value': live_analysis_jobs_running, 'color': 'blue' if live_analysis_jobs_running else 'green'},
         {'name': 'telegram_status', 'value': telegram_status, 'color': _status_color(telegram_status)},
         {'name': 'pnl_today', 'value': pnl_today, 'color': 'green' if pnl_today >= 0 else 'red'},
         {'name': 'kill_switch_active', 'value': kill_switch_active, 'color': 'red' if kill_switch_active else 'green'},
@@ -217,6 +224,16 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
                 {'label': 'paper_trades_executed_total', 'value': _metric(snapshot, 'paper_trades_executed_total', 0)},
                 {'label': 'paper_trade_rejections_total', 'value': _metric(snapshot, 'paper_trade_rejections_total', 0)},
                 {'label': 'duplicate_trade_blocks_total', 'value': _metric(snapshot, 'duplicate_trade_blocks_total', 0)},
+            ],
+        },
+        'queue_health': {
+            'status': queue_status,
+            'color': _status_color(queue_status),
+            'cards': [
+                {'label': 'live_analysis_jobs_pending', 'value': live_analysis_jobs_pending},
+                {'label': 'live_analysis_jobs_running', 'value': live_analysis_jobs_running},
+                {'label': 'live_analysis_jobs_oldest_pending_age_seconds', 'value': live_analysis_jobs_oldest_pending_age_seconds},
+                {'label': 'live_analysis_job_recovered_total', 'value': live_analysis_job_recovered_total},
             ],
         },
         'latest_market_data': _build_detail_cards(

@@ -93,12 +93,13 @@ def _metric(label: str, value: object, tone: str = 'good') -> str:
     )
 
 
-def render_role_page(*, title: str, role: str, active_path: str, body: str, top_actions: str = '') -> str:
+def render_role_page(*, title: str, role: str, active_path: str, body: str, top_actions: str = '', head_extra: str = '') -> str:
     if role == 'Admin':
         tabs = ''.join([
             _tab('/admin/dashboard', 'Dashboard', active_path == 'dashboard'),
             _tab('/admin/validation', 'Validation', active_path == 'validation'),
             _tab('/admin/execution', 'Execution', active_path == 'execution'),
+            _tab('/admin/jobs', 'Jobs', active_path == 'jobs'),
             _tab('/admin/logs', 'Logs', active_path == 'logs'),
             _tab('/admin/settings', 'Settings', active_path == 'settings'),
         ])
@@ -114,6 +115,7 @@ def render_role_page(*, title: str, role: str, active_path: str, body: str, top_
   <meta charset=\"utf-8\" />
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
   <title>{html.escape(title)}</title>
+  {head_extra}
   {ROLE_PAGE_CSS}
 </head>
 <body>
@@ -313,6 +315,128 @@ def render_admin_execution_page(payload: dict[str, Any]) -> str:
     return render_role_page(title='Vinayak Admin Execution', role='Admin', active_path='execution', body=body, top_actions=actions)
 
 
+def render_admin_jobs_page(payload: dict[str, Any]) -> str:
+    jobs = list(payload.get('jobs', []) or [])
+    selected_job = dict(payload.get('selected_job', {}) or {})
+    flash_message = str(payload.get('flash_message', '') or '')
+    flash_tone = str(payload.get('flash_tone', 'good') or 'good')
+    selected_status_filter = str(payload.get('status_filter', '') or '').upper()
+    refresh_seconds = int(payload.get('refresh_seconds', 0) or 0)
+    flash_html = f'<div class="pill {flash_tone}" style="margin-bottom:12px;">{html.escape(flash_message)}</div>' if flash_message else ''
+    selected_job_id = str(selected_job.get('job_id', '') or '')
+    status_options = ''.join(
+        f'<option value="{html.escape(value)}"{" selected" if selected_status_filter == value else ""}>{html.escape(label)}</option>'
+        for value, label in [
+            ('', 'All Statuses'),
+            ('PENDING', 'Pending'),
+            ('RUNNING', 'Running'),
+            ('FAILED', 'Failed'),
+            ('SUCCEEDED', 'Succeeded'),
+            ('CANCELLED', 'Cancelled'),
+        ]
+    )
+    refresh_options = ''.join(
+        f'<option value="{value}"{" selected" if refresh_seconds == value else ""}>{label}</option>'
+        for value, label in [
+            (0, 'Off'),
+            (5, '5s'),
+            (15, '15s'),
+            (30, '30s'),
+        ]
+    )
+    filter_form = f"""
+    <form method="get" action="/admin/jobs" class="subnav" style="margin:12px 0 0;">
+      <input type="hidden" name="job_id" value="{html.escape(selected_job_id)}" />
+      <label class="metric-label" for="status" style="margin:0;">Status</label>
+      <select id="status" name="status" style="min-height:42px; padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:rgba(255,255,255,0.03); color:var(--text);">{status_options}</select>
+      <label class="metric-label" for="refresh_seconds" style="margin:0;">Auto Refresh</label>
+      <select id="refresh_seconds" name="refresh_seconds" style="min-height:42px; padding:10px 12px; border-radius:12px; border:1px solid var(--line); background:rgba(255,255,255,0.03); color:var(--text);">{refresh_options}</select>
+      <button class="button" type="submit">Apply</button>
+    </form>
+    """
+    row_html = ''.join(
+        f"<tr><td><a class=\"button\" href=\"/admin/jobs?job_id={html.escape(str(row.get('job_id', '-')))}\">{html.escape(str(row.get('job_id', '-')))}</a></td><td>{html.escape(str(row.get('status', '-')))}</td><td>{html.escape(str(row.get('symbol', '-')))}</td><td>{html.escape(str(row.get('strategy', '-')))}</td><td>{html.escape(str(row.get('requested_at', '-')))}</td><td>{html.escape(str(row.get('finished_at', '-')))}</td><td>{html.escape(str(row.get('error', '-')))}</td></tr>"
+        for row in jobs
+    ) or '<tr><td colspan="7">No live analysis jobs found.</td></tr>'
+    selected_status = str(selected_job.get('status', '') or '').upper()
+    selected_result = selected_job.get('result')
+    selected_request = {
+        key: value
+        for key, value in selected_job.items()
+        if key not in {
+            'job_id',
+            'status',
+            'requested_at',
+            'started_at',
+            'finished_at',
+            'error',
+            'deduplicated',
+            'signal_count',
+            'candle_count',
+            'result',
+        }
+    }
+    retry_form = ''
+    cancel_form = ''
+    if selected_job_id and selected_status in {'FAILED', 'CANCELLED'}:
+        retry_form = f'<form method="post" action="/admin/jobs/{html.escape(selected_job_id)}/retry" style="display:inline;"><button class="button primary" type="submit">Retry Job</button></form>'
+    if selected_job_id and selected_status in {'PENDING', 'RUNNING'}:
+        cancel_form = f'<form method="post" action="/admin/jobs/{html.escape(selected_job_id)}/cancel" style="display:inline;"><button class="button" type="submit">Cancel Job</button></form>'
+    detail_html = '<p class="muted">Select a job to inspect its request/result payload and available actions.</p>'
+    if selected_job:
+        detail_html = f"""
+        {flash_html}
+        <table><tbody>
+          <tr><th>Job ID</th><td>{html.escape(selected_job_id or '-')}</td></tr>
+          <tr><th>Status</th><td>{html.escape(selected_status or '-')}</td></tr>
+          <tr><th>Symbol</th><td>{html.escape(str(selected_job.get('symbol', '-')))}</td></tr>
+          <tr><th>Strategy</th><td>{html.escape(str(selected_job.get('strategy', '-')))}</td></tr>
+          <tr><th>Requested</th><td>{html.escape(str(selected_job.get('requested_at', '-')))}</td></tr>
+          <tr><th>Started</th><td>{html.escape(str(selected_job.get('started_at', '-')))}</td></tr>
+          <tr><th>Finished</th><td>{html.escape(str(selected_job.get('finished_at', '-')))}</td></tr>
+          <tr><th>Error</th><td>{html.escape(str(selected_job.get('error', '-')))}</td></tr>
+        </tbody></table>
+        <div class="subnav" style="margin-top:12px;">{retry_form}{cancel_form}</div>
+        <div class="split" style="margin-top:16px;">
+          <section class="card">
+            <h3>Request Payload</h3>
+            <pre>{html.escape(json.dumps(selected_request, indent=2))}</pre>
+          </section>
+          <section class="card">
+            <h3>Result Payload</h3>
+            <pre>{html.escape(json.dumps(selected_result, indent=2) if isinstance(selected_result, dict) else 'No result payload yet.')}</pre>
+          </section>
+        </div>
+        <section class="card" style="margin-top:16px;">
+          <h3>Error Detail</h3>
+          <pre>{html.escape(str(selected_job.get('error', 'No error recorded.')))}</pre>
+        </section>
+        """
+    body = f"""
+    <section class=\"card\"><div class=\"eyebrow\">Jobs</div><h1>Live Analysis Jobs</h1><p class=\"muted\">Operator view for queued, running, failed, and completed live-analysis work.</p></section>
+    <div class=\"grid\" style=\"margin-top:16px;\">
+      {_metric('Total Jobs', payload.get('total', 0), 'good')}
+      {_metric('Pending', payload.get('pending_count', 0), 'warn' if int(payload.get('pending_count', 0) or 0) else 'good')}
+      {_metric('Running', payload.get('running_count', 0), 'good' if int(payload.get('running_count', 0) or 0) else 'warn')}
+      {_metric('Failed', payload.get('failed_count', 0), 'bad' if int(payload.get('failed_count', 0) or 0) else 'good')}
+    </div>
+    <section class=\"card\"><h2>Recent Jobs</h2><p class=\"muted\">Use the status filter and optional auto refresh while monitoring the queue.</p>{filter_form}
+      <table><thead><tr><th>Job ID</th><th>Status</th><th>Symbol</th><th>Strategy</th><th>Requested</th><th>Finished</th><th>Error</th></tr></thead><tbody>{row_html}</tbody></table>
+    </section>
+    <div class=\"split\" style=\"margin-top:16px;\">
+      <section class=\"card\"><h2>Operator API</h2><ul>
+        <li><code>GET /dashboard/live-analysis/jobs</code> lists recent jobs.</li>
+        <li><code>POST /dashboard/live-analysis/jobs/&lt;job_id&gt;/retry</code> retries failed or cancelled jobs.</li>
+        <li><code>POST /dashboard/live-analysis/jobs/&lt;job_id&gt;/cancel</code> cancels pending or running jobs.</li>
+      </ul></section>
+      <section class=\"card\"><h2>Selected Job</h2>{detail_html}</section>
+    </div>
+    """
+    actions = '<a class="button" href="/workspace">Workspace</a><a class="button" href="/dashboard/live-analysis/jobs">Jobs API</a><form method="post" action="/admin/logout" style="display:inline;"><button class="button primary" type="submit">Logout</button></form>'
+    head_extra = f'<meta http-equiv="refresh" content="{refresh_seconds}">' if refresh_seconds > 0 else ''
+    return render_role_page(title='Vinayak Admin Jobs', role='Admin', active_path='jobs', body=body, top_actions=actions, head_extra=head_extra)
+
+
 def render_admin_logs_page(payload: dict[str, Any]) -> str:
     logs = dict(payload.get('logs', {}) or {})
     body = f"""
@@ -380,6 +504,7 @@ def render_admin_settings_page(payload: dict[str, Any]) -> str:
 __all__ = [
     'render_admin_dashboard_page',
     'render_admin_execution_page',
+    'render_admin_jobs_page',
     'render_admin_logs_page',
     'render_admin_settings_page',
     'render_admin_validation_page',

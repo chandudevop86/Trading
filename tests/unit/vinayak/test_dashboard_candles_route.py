@@ -49,6 +49,22 @@ def test_dashboard_candles_route_returns_live_rows(monkeypatch) -> None:
     assert body['total'] == 1
     assert body['candles'][0]['source'] == 'YAHOO_DOWNLOAD'
     assert captured['provider'] == 'DHAN'
+    assert captured['force_refresh'] is False
+
+
+def test_dashboard_candles_route_supports_explicit_refresh(monkeypatch) -> None:
+    _login_admin()
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        dashboard_route,
+        'fetch_live_ohlcv',
+        lambda symbol, interval, period, **kwargs: captured.update(kwargs) or [],
+    )
+
+    response = client.get('/dashboard/candles?symbol=^NSEI&interval=5m&period=1d&refresh=true')
+
+    assert response.status_code == 200
+    assert captured['provider'] == 'DHAN'
     assert captured['force_refresh'] is True
 
 
@@ -210,6 +226,185 @@ def test_dashboard_live_analysis_route_returns_strategy_output(monkeypatch) -> N
     assert captured['max_portfolio_exposure_pct'] == 35
     assert captured['max_open_risk_pct'] == 5
     assert captured['kill_switch_enabled'] is True
+
+
+def test_dashboard_live_analysis_job_route_accepts_background_run(monkeypatch) -> None:
+    _login_admin()
+
+    class FakeJobService:
+        def submit(self, request):
+            assert request.symbol == '^NSEI'
+            return {
+                'job_id': 'job-123',
+                'status': 'PENDING',
+                'symbol': request.symbol,
+                'interval': request.interval,
+                'period': request.period,
+                'strategy': request.strategy,
+                'requested_at': '2026-04-15T09:00:00Z',
+                'started_at': None,
+                'finished_at': None,
+                'error': None,
+                'deduplicated': False,
+                'signal_count': 0,
+                'candle_count': 0,
+                'result': None,
+            }
+
+    monkeypatch.setattr(dashboard_route, 'get_live_analysis_job_service', lambda: FakeJobService())
+
+    response = client.post('/dashboard/live-analysis/jobs', json={
+        'symbol': '^NSEI',
+        'interval': '5m',
+        'period': '1d',
+        'strategy': 'Breakout',
+        'capital': 100000,
+        'risk_pct': 1,
+        'rr_ratio': 2,
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['job']['job_id'] == 'job-123'
+    assert body['job']['status'] == 'PENDING'
+    assert body['poll_url'] == '/dashboard/live-analysis/jobs/job-123'
+    assert body['latest_result_url'] == '/dashboard/live-analysis/latest'
+
+
+def test_dashboard_live_analysis_job_status_route_returns_completed_result(monkeypatch) -> None:
+    _login_admin()
+
+    class FakeJobService:
+        def get(self, job_id: str):
+            assert job_id == 'job-123'
+            return {
+                'job_id': job_id,
+                'status': 'SUCCEEDED',
+                'symbol': '^NSEI',
+                'interval': '5m',
+                'period': '1d',
+                'strategy': 'Breakout',
+                'requested_at': '2026-04-15T09:00:00Z',
+                'started_at': '2026-04-15T09:00:01Z',
+                'finished_at': '2026-04-15T09:00:04Z',
+                'error': None,
+                'deduplicated': False,
+                'signal_count': 1,
+                'candle_count': 2,
+                'result': {
+                    'symbol': '^NSEI',
+                    'interval': '5m',
+                    'period': '1d',
+                    'strategy': 'Breakout',
+                    'generated_at': '2026-03-24T06:00:00Z',
+                    'candle_count': 2,
+                    'signal_count': 1,
+                    'side_counts': {'BUY': 1},
+                    'telegram_sent': False,
+                    'telegram_error': '',
+                    'telegram_payload': {},
+                    'execution_summary': {
+                        'mode': 'NONE',
+                        'executed_count': 0,
+                        'blocked_count': 0,
+                        'error_count': 0,
+                        'skipped_count': 0,
+                        'duplicate_count': 0,
+                    },
+                    'execution_rows': [],
+                    'report_artifacts': {
+                        'json_report': {'local_path': 'vinayak/data/reports/mock.json'},
+                        'summary_report': {'local_path': 'vinayak/data/reports/mock.txt'},
+                    },
+                    'candles': [],
+                    'signals': [],
+                },
+            }
+
+    monkeypatch.setattr(dashboard_route, 'get_live_analysis_job_service', lambda: FakeJobService())
+
+    response = client.get('/dashboard/live-analysis/jobs/job-123')
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body['job']['status'] == 'SUCCEEDED'
+    assert body['result']['strategy'] == 'Breakout'
+    assert body['result']['signal_count'] == 1
+
+
+def test_dashboard_live_analysis_job_list_and_actions(monkeypatch) -> None:
+    _login_admin()
+
+    class FakeJobService:
+        def list_jobs(self, *, limit: int = 25, status: str | None = None):
+            assert limit == 10
+            assert status == 'FAILED'
+            return [{
+                'job_id': 'job-1',
+                'status': 'FAILED',
+                'symbol': '^NSEI',
+                'interval': '5m',
+                'period': '1d',
+                'strategy': 'Breakout',
+                'requested_at': '2026-04-15T09:00:00Z',
+                'started_at': '2026-04-15T09:00:01Z',
+                'finished_at': '2026-04-15T09:00:05Z',
+                'error': 'boom',
+                'deduplicated': False,
+                'signal_count': 0,
+                'candle_count': 0,
+            }]
+
+        def retry_job(self, job_id: str):
+            assert job_id == 'job-1'
+            return {
+                'job_id': job_id,
+                'status': 'PENDING',
+                'symbol': '^NSEI',
+                'interval': '5m',
+                'period': '1d',
+                'strategy': 'Breakout',
+                'requested_at': '2026-04-15T09:00:00Z',
+                'started_at': None,
+                'finished_at': None,
+                'error': None,
+                'deduplicated': False,
+                'signal_count': 0,
+                'candle_count': 0,
+            }
+
+        def cancel_job(self, job_id: str):
+            assert job_id == 'job-2'
+            return {
+                'job_id': job_id,
+                'status': 'CANCELLED',
+                'symbol': '^NSEI',
+                'interval': '5m',
+                'period': '1d',
+                'strategy': 'Breakout',
+                'requested_at': '2026-04-15T09:10:00Z',
+                'started_at': '2026-04-15T09:10:01Z',
+                'finished_at': '2026-04-15T09:10:02Z',
+                'error': 'Cancelled by operator.',
+                'deduplicated': False,
+                'signal_count': 0,
+                'candle_count': 0,
+            }
+
+    monkeypatch.setattr(dashboard_route, 'get_live_analysis_job_service', lambda: FakeJobService())
+
+    listed = client.get('/dashboard/live-analysis/jobs?limit=10&status=FAILED')
+    assert listed.status_code == 200
+    assert listed.json()['total'] == 1
+    assert listed.json()['jobs'][0]['status'] == 'FAILED'
+
+    retried = client.post('/dashboard/live-analysis/jobs/job-1/retry')
+    assert retried.status_code == 200
+    assert retried.json()['job']['status'] == 'PENDING'
+
+    cancelled = client.post('/dashboard/live-analysis/jobs/job-2/cancel')
+    assert cancelled.status_code == 200
+    assert cancelled.json()['job']['status'] == 'CANCELLED'
 
 
 

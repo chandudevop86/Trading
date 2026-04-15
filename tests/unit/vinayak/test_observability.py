@@ -63,13 +63,20 @@ def test_observability_logger_and_health_payload(tmp_path) -> None:
     increment_metric('zones_accepted_total', 4)
     increment_metric('zones_rejected_total', 1)
     set_metric('zone_score_avg', 7.8)
+    set_metric('live_analysis_jobs_pending', 2)
+    set_metric('live_analysis_jobs_running', 1)
+    set_metric('live_analysis_jobs_oldest_pending_age_seconds', 18.5)
+    increment_metric('live_analysis_job_recovered_total', 1)
     record_stage('validation', status='SUCCESS', duration_seconds=0.42, symbol='^NSEI', strategy='Breakout', message='Validation passed')
     log_event(component='validation_engine', event_name='trade_validation', symbol='^NSEI', strategy='Breakout', severity='WARNING', message='One trade rejected', context_json={'reason': 'bad_rr'})
 
     payload = build_observability_dashboard_payload()
     assert payload['system_health']['status'] in {'UP', 'DEGRADED'}
     assert any(kpi['name'] == 'pnl_today' for kpi in payload['kpis'])
+    assert any(kpi['name'] == 'live_analysis_jobs_pending' for kpi in payload['kpis'])
     assert payload['strategy_health']['cards'][0]['label'] == 'zones_detected_total'
+    assert payload['queue_health']['cards'][0]['label'] == 'live_analysis_jobs_pending'
+    assert payload['queue_health']['cards'][2]['value'] == 18.5
     assert len(tail_events(5)) >= 1
 
 
@@ -84,6 +91,9 @@ def test_observability_alerts_cover_execution_and_risk(tmp_path) -> None:
     set_metric('execution_failed_total', 1)
     set_metric('execution_blocked_total', 2)
     set_metric('duplicate_execution_block_total', 1)
+    set_metric('live_analysis_jobs_pending', 6)
+    set_metric('live_analysis_jobs_oldest_pending_age_seconds', 95)
+    increment_metric('live_analysis_job_recovered_total', 2)
     set_metric('portfolio_kill_switch_active', 1)
     set_metric('portfolio_daily_loss_limit', 500.0)
     set_metric('pnl_today', -650.0)
@@ -93,6 +103,9 @@ def test_observability_alerts_cover_execution_and_risk(tmp_path) -> None:
     assert 'execution_failed_total increased' in names
     assert 'execution_blocked_total increased' in names
     assert 'duplicate_execution_block_total increased' in names
+    assert 'live_analysis_jobs_pending backlog high' in names
+    assert 'live_analysis_jobs_oldest_pending_age_seconds too high' in names
+    assert 'live_analysis_job_recovered_total increased' in names
     assert 'portfolio_kill_switch_active is enabled' in names
     assert 'pnl_today breached portfolio_daily_loss_limit' in names
 

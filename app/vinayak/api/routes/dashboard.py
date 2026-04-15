@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from vinayak.api.dependencies.admin_auth import require_admin_session
 from vinayak.api.dependencies.db import get_db
 from vinayak.api.schemas.signal import (
     DashboardSummaryResponse,
+    LiveAnalysisJobAcceptedResponse,
+    LiveAnalysisJobActionResponse,
+    LiveAnalysisJobListResponse,
+    LiveAnalysisJobResponse,
+    LiveAnalysisJobStatusResponse,
     LiveAnalysisExecutionRow,
     LiveAnalysisExecutionSummary,
     LiveAnalysisReportArtifacts,
@@ -18,6 +23,7 @@ from vinayak.api.schemas.signal import (
 )
 from vinayak.api.schemas.strategy import LiveAnalysisRequest
 from vinayak.api.services.dashboard_summary import DashboardSummaryService
+from vinayak.api.services.live_analysis_jobs import get_live_analysis_job_service
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
 from vinayak.api.services.trading_workspace import refresh_market_data_snapshot, run_live_trading_analysis
 from vinayak.observability.observability_health import build_observability_dashboard_payload
@@ -81,8 +87,33 @@ def get_dashboard_candles(
     symbol: str = Query(default='^NSEI', min_length=1),
     interval: str = Query(default='1m', min_length=1),
     period: str = Query(default='1d', min_length=1),
+    refresh: bool = Query(default=False),
 ) -> LiveOhlcvResponse:
-    rows = fetch_live_ohlcv(symbol=symbol, interval=interval, period=period, provider='DHAN', force_refresh=True)
+    rows = fetch_live_ohlcv(
+        symbol=symbol,
+        interval=interval,
+        period=period,
+        provider='DHAN',
+        force_refresh=refresh,
+    )
+
+
+def _to_live_analysis_job_response(job: dict) -> LiveAnalysisJobResponse:
+    return LiveAnalysisJobResponse(
+        job_id=job['job_id'],
+        status=job['status'],
+        symbol=job['symbol'],
+        interval=job['interval'],
+        period=job['period'],
+        strategy=job['strategy'],
+        requested_at=job['requested_at'],
+        started_at=job.get('started_at'),
+        finished_at=job.get('finished_at'),
+        error=job.get('error'),
+        deduplicated=bool(job.get('deduplicated', False)),
+        signal_count=int(job.get('signal_count', 0) or 0),
+        candle_count=int(job.get('candle_count', 0) or 0),
+    )
     return LiveOhlcvResponse(
         symbol=symbol,
         interval=interval,
@@ -98,6 +129,69 @@ def get_latest_live_analysis(db: Session = Depends(get_db)) -> LiveAnalysisRespo
     if not result:
         return None
     return _to_live_analysis_response(result)
+
+
+@router.post('/live-analysis/jobs', response_model=LiveAnalysisJobAcceptedResponse)
+def create_live_analysis_job(request: LiveAnalysisRequest) -> LiveAnalysisJobAcceptedResponse:
+    job = get_live_analysis_job_service().submit(request)
+    poll_url = f"/dashboard/live-analysis/jobs/{job['job_id']}"
+    return LiveAnalysisJobAcceptedResponse(
+        job=_to_live_analysis_job_response(job),
+        poll_url=poll_url,
+        latest_result_url='/dashboard/live-analysis/latest',
+    )
+
+
+@router.get('/live-analysis/jobs', response_model=LiveAnalysisJobListResponse)
+def list_live_analysis_jobs(
+    limit: int = Query(default=25, ge=1, le=200),
+    status: str | None = Query(default=None),
+) -> LiveAnalysisJobListResponse:
+    jobs = get_live_analysis_job_service().list_jobs(limit=limit, status=status)
+    return LiveAnalysisJobListResponse(
+        total=len(jobs),
+        jobs=[_to_live_analysis_job_response(job) for job in jobs],
+    )
+
+
+@router.get('/live-analysis/jobs/{job_id}', response_model=LiveAnalysisJobStatusResponse)
+def get_live_analysis_job(job_id: str) -> LiveAnalysisJobStatusResponse:
+    job = get_live_analysis_job_service().get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail='Live analysis job not found.')
+    result = job.get('result')
+    return LiveAnalysisJobStatusResponse(
+        job=_to_live_analysis_job_response(job),
+        result=_to_live_analysis_response(result) if isinstance(result, dict) and result else None,
+    )
+
+
+@router.post('/live-analysis/jobs/{job_id}/retry', response_model=LiveAnalysisJobActionResponse)
+def retry_live_analysis_job(job_id: str) -> LiveAnalysisJobActionResponse:
+    try:
+        job = get_live_analysis_job_service().retry_job(job_id)
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if 'not found' in message.lower() else 422
+        raise HTTPException(status_code=status_code, detail=message) from exc
+    return LiveAnalysisJobActionResponse(
+        job=_to_live_analysis_job_response(job),
+        message=f'Live analysis job {job_id} queued for retry.',
+    )
+
+
+@router.post('/live-analysis/jobs/{job_id}/cancel', response_model=LiveAnalysisJobActionResponse)
+def cancel_live_analysis_job(job_id: str) -> LiveAnalysisJobActionResponse:
+    try:
+        job = get_live_analysis_job_service().cancel_job(job_id)
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if 'not found' in message.lower() else 422
+        raise HTTPException(status_code=status_code, detail=message) from exc
+    return LiveAnalysisJobActionResponse(
+        job=_to_live_analysis_job_response(job),
+        message=f'Live analysis job {job_id} cancelled.',
+    )
 
 
 @router.post('/live-analysis', response_model=LiveAnalysisResponse)

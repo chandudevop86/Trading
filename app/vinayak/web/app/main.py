@@ -16,6 +16,7 @@ from vinayak.observability.observability_dashboard_spec import build_observabili
 from vinayak.web.app.role_pages import (
     render_admin_dashboard_page,
     render_admin_execution_page,
+    render_admin_jobs_page,
     render_admin_logs_page,
     render_admin_settings_page,
     render_admin_validation_page,
@@ -25,6 +26,7 @@ from vinayak.web.app.role_pages import (
 )
 from vinayak.web.app.workspace_html import WORKSPACE_DOWNLOADS_HTML, WORKSPACE_HTML, WORKSPACE_REPORTS_HTML
 from vinayak.web.services.role_view_service import RoleViewService
+from vinayak.api.services.live_analysis_jobs import get_live_analysis_job_service
 
 
 
@@ -342,6 +344,62 @@ def admin_execution_page(request: Request, db: Session = Depends(get_db)) -> HTM
     require_admin_session(request)
     service = RoleViewService(db)
     return HTMLResponse(render_admin_execution_page(service.build_execution_page()))
+
+
+@router.get('/admin/jobs', response_class=HTMLResponse)
+def admin_jobs_page(
+    request: Request,
+    job_id: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    refresh_seconds: int = Query(default=0, ge=0, le=300),
+    created: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> HTMLResponse:
+    require_admin_session(request)
+    service = get_live_analysis_job_service()
+    jobs = service.list_jobs(limit=25, status=status)
+    selected_job = None
+    if job_id:
+        selected_job = service.get(job_id)
+    if selected_job is None and jobs:
+        selected_job = jobs[0]
+    payload = {
+        'total': len(jobs),
+        'jobs': jobs,
+        'selected_job': selected_job,
+        'status_filter': str(status or '').upper(),
+        'refresh_seconds': int(refresh_seconds),
+        'pending_count': sum(1 for item in jobs if str(item.get('status', '')).upper() == 'PENDING'),
+        'running_count': sum(1 for item in jobs if str(item.get('status', '')).upper() == 'RUNNING'),
+        'failed_count': sum(1 for item in jobs if str(item.get('status', '')).upper() == 'FAILED'),
+    }
+    if created:
+        payload['flash_message'] = created
+        payload['flash_tone'] = 'good'
+    if error:
+        payload['flash_message'] = error
+        payload['flash_tone'] = 'bad'
+    return HTMLResponse(render_admin_jobs_page(payload))
+
+
+@router.post('/admin/jobs/{job_id}/retry', response_model=None)
+def admin_retry_job(request: Request, job_id: str):
+    require_admin_session(request)
+    try:
+        get_live_analysis_job_service().retry_job(job_id)
+    except ValueError as exc:
+        return RedirectResponse(url=f'/admin/jobs?job_id={job_id}&error={str(exc)}', status_code=303)
+    return RedirectResponse(url=f'/admin/jobs?job_id={job_id}&created=Job%20{job_id}%20queued%20for%20retry', status_code=303)
+
+
+@router.post('/admin/jobs/{job_id}/cancel', response_model=None)
+def admin_cancel_job(request: Request, job_id: str):
+    require_admin_session(request)
+    try:
+        get_live_analysis_job_service().cancel_job(job_id)
+    except ValueError as exc:
+        return RedirectResponse(url=f'/admin/jobs?job_id={job_id}&error={str(exc)}', status_code=303)
+    return RedirectResponse(url=f'/admin/jobs?job_id={job_id}&created=Job%20{job_id}%20cancelled', status_code=303)
 
 
 @router.get('/admin/logs', response_class=HTMLResponse)

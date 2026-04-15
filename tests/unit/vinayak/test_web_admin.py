@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from vinayak.api.main import app
 from vinayak.core.config import reset_settings_cache
 from vinayak.db.session import reset_database_state
+from vinayak.web.app import main as web_main
 
 
 def _configure_db(tmp_path: Path) -> None:
@@ -262,6 +263,90 @@ def test_admin_login_requires_explicit_admin_env_configuration(tmp_path: Path, m
         assert 'VINAYAK_ADMIN_USERNAME' in response.text
         assert 'VINAYAK_ADMIN_PASSWORD' in response.text
         assert 'VINAYAK_ADMIN_SECRET' in response.text
+    finally:
+        _cleanup_db()
+
+
+def test_admin_jobs_page_renders_for_admin(tmp_path: Path) -> None:
+    _configure_db(tmp_path)
+    try:
+        fresh = TestClient(app, raise_server_exceptions=False)
+        fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
+        response = fresh.get('/admin/jobs')
+        assert response.status_code == 200
+        assert 'Live Analysis Jobs' in response.text
+        assert '/dashboard/live-analysis/jobs' in response.text
+    finally:
+        _cleanup_db()
+
+
+def test_admin_jobs_page_shows_selected_job_details_and_actions(tmp_path: Path, monkeypatch) -> None:
+    _configure_db(tmp_path)
+    try:
+        class FakeJobService:
+            def list_jobs(self, limit: int = 25, status: str | None = None):
+                assert status == 'FAILED'
+                return [{
+                    'job_id': 'job-1',
+                    'status': 'FAILED',
+                    'symbol': '^NSEI',
+                    'interval': '5m',
+                    'period': '1d',
+                    'strategy': 'Breakout',
+                    'requested_at': '2026-04-15T09:00:00Z',
+                    'started_at': '2026-04-15T09:00:01Z',
+                    'finished_at': '2026-04-15T09:00:05Z',
+                    'error': 'boom',
+                    'result': {'signal_count': 0, 'candle_count': 0},
+                    'execution_type': 'NONE',
+                }]
+
+            def get(self, job_id: str):
+                assert job_id == 'job-1'
+                return self.list_jobs()[0]
+
+        monkeypatch.setattr(web_main, 'get_live_analysis_job_service', lambda: FakeJobService())
+        fresh = TestClient(app, raise_server_exceptions=False)
+        fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
+        response = fresh.get('/admin/jobs?job_id=job-1&status=FAILED&refresh_seconds=15')
+        assert response.status_code == 200
+        assert 'Selected Job' in response.text
+        assert 'Retry Job' in response.text
+        assert 'Auto Refresh' in response.text
+        assert 'Status' in response.text
+        assert 'Request Payload' in response.text
+        assert 'Result Payload' in response.text
+        assert 'Error Detail' in response.text
+        assert 'execution_type' in response.text
+        assert 'http-equiv="refresh"' in response.text
+        assert 'job-1' in response.text
+    finally:
+        _cleanup_db()
+
+
+def test_admin_job_retry_and_cancel_routes_redirect_with_flash(tmp_path: Path, monkeypatch) -> None:
+    _configure_db(tmp_path)
+    try:
+        class FakeJobService:
+            def retry_job(self, job_id: str):
+                assert job_id == 'job-1'
+                return {'job_id': job_id, 'status': 'PENDING'}
+
+            def cancel_job(self, job_id: str):
+                assert job_id == 'job-2'
+                return {'job_id': job_id, 'status': 'CANCELLED'}
+
+        monkeypatch.setattr(web_main, 'get_live_analysis_job_service', lambda: FakeJobService())
+        fresh = TestClient(app, raise_server_exceptions=False)
+        fresh.post('/admin/login', data={'username': 'admin', 'password': 'vinayak-test-password'})
+
+        retried = fresh.post('/admin/jobs/job-1/retry', follow_redirects=False)
+        cancelled = fresh.post('/admin/jobs/job-2/cancel', follow_redirects=False)
+
+        assert retried.status_code == 303
+        assert 'created=Job%20job-1%20queued%20for%20retry' in retried.headers['location']
+        assert cancelled.status_code == 303
+        assert 'created=Job%20job-2%20cancelled' in cancelled.headers['location']
     finally:
         _cleanup_db()
 

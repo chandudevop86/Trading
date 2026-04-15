@@ -61,6 +61,7 @@ def reset_database_state(database_url: str | None = None) -> None:
 def initialize_database(database_url: str | None = None) -> None:
     from vinayak.db.models.execution import ExecutionRecord  # noqa: F401
     from vinayak.db.models.execution_audit_log import ExecutionAuditLogRecord  # noqa: F401
+    from vinayak.db.models.live_analysis_job import LiveAnalysisJobRecord  # noqa: F401
     from vinayak.db.models.outbox_event import OutboxEventRecord  # noqa: F401
     from vinayak.db.models.production import (  # noqa: F401
         AuditLogRecord,

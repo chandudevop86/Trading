@@ -41,6 +41,9 @@ def build_active_alerts(snapshot: dict[str, Any] | None = None) -> list[AlertRec
     execution_failed = int(_safe_float(_metric(snapshot, 'execution_failed_total', 0)))
     execution_blocked = int(_safe_float(_metric(snapshot, 'execution_blocked_total', 0)))
     duplicate_execution_blocks = int(_safe_float(_metric(snapshot, 'duplicate_execution_block_total', 0)))
+    live_analysis_jobs_pending = int(_safe_float(_metric(snapshot, 'live_analysis_jobs_pending', 0)))
+    live_analysis_jobs_oldest_pending_age_seconds = round(_safe_float(_metric(snapshot, 'live_analysis_jobs_oldest_pending_age_seconds', 0.0)), 2)
+    live_analysis_job_recovered_total = int(_safe_float(_metric(snapshot, 'live_analysis_job_recovered_total', 0)))
     kill_switch_active = bool(_safe_float(_metric(snapshot, 'portfolio_kill_switch_active', 0)))
     pnl_today = round(_safe_float(_metric(snapshot, 'pnl_today', 0.0)), 2)
     daily_loss_limit = abs(_safe_float(_metric(snapshot, 'portfolio_daily_loss_limit', 0.0)))
@@ -74,6 +77,12 @@ def build_active_alerts(snapshot: dict[str, Any] | None = None) -> list[AlertRec
         alerts.append({'name': 'execution_blocked_total increased', 'severity': 'yellow', 'value': execution_blocked, 'metric': 'execution_blocked_total'})
     if duplicate_execution_blocks > 0:
         alerts.append({'name': 'duplicate_execution_block_total increased', 'severity': 'yellow', 'value': duplicate_execution_blocks, 'metric': 'duplicate_execution_block_total'})
+    if live_analysis_jobs_pending >= 5:
+        alerts.append({'name': 'live_analysis_jobs_pending backlog high', 'severity': 'yellow', 'value': live_analysis_jobs_pending, 'metric': 'live_analysis_jobs_pending'})
+    if live_analysis_jobs_oldest_pending_age_seconds > 60:
+        alerts.append({'name': 'live_analysis_jobs_oldest_pending_age_seconds too high', 'severity': 'red', 'value': live_analysis_jobs_oldest_pending_age_seconds, 'metric': 'live_analysis_jobs_oldest_pending_age_seconds'})
+    if live_analysis_job_recovered_total > 0:
+        alerts.append({'name': 'live_analysis_job_recovered_total increased', 'severity': 'blue', 'value': live_analysis_job_recovered_total, 'metric': 'live_analysis_job_recovered_total'})
     if kill_switch_active:
         alerts.append({'name': 'portfolio_kill_switch_active is enabled', 'severity': 'red', 'value': 1, 'metric': 'portfolio_kill_switch_active'})
     if daily_loss_limit > 0 and pnl_today <= -daily_loss_limit:

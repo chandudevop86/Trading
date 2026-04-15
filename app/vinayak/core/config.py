@@ -87,6 +87,14 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def should_auto_initialize_database(*, env: str | None = None, provider: str | None = None) -> bool:
+    resolved_env = str(env or os.getenv('APP_ENV', 'dev') or 'dev').strip().lower()
+    resolved_provider = str(provider or get_settings().sql.provider or '').strip().lower()
+    if resolved_env in {'local', 'dev', 'development', 'test'}:
+        return True
+    return resolved_provider == 'sqlite'
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> AppSettings:
     _load_environment_files()

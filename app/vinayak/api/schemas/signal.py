@@ -203,6 +203,43 @@ class LiveAnalysisResponse(BaseModel):
     alert_notifications_sent: int = 0
 
 
+class LiveAnalysisJobResponse(BaseModel):
+    job_id: str
+    status: str
+    symbol: str
+    interval: str
+    period: str
+    strategy: str
+    requested_at: str
+    started_at: str | None = None
+    finished_at: str | None = None
+    error: str | None = None
+    deduplicated: bool = False
+    signal_count: int = 0
+    candle_count: int = 0
+
+
+class LiveAnalysisJobAcceptedResponse(BaseModel):
+    job: LiveAnalysisJobResponse
+    poll_url: str
+    latest_result_url: str
+
+
+class LiveAnalysisJobStatusResponse(BaseModel):
+    job: LiveAnalysisJobResponse
+    result: LiveAnalysisResponse | None = None
+
+
+class LiveAnalysisJobListResponse(BaseModel):
+    total: int
+    jobs: list[LiveAnalysisJobResponse]
+
+
+class LiveAnalysisJobActionResponse(BaseModel):
+    job: LiveAnalysisJobResponse
+    message: str
+
+
 
 
 

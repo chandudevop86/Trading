@@ -117,6 +117,17 @@ class UserAuthService:
         expected_password = self.admin_password()
         existing = self.users.get_by_username(username)
         if existing is not None:
+            if self._should_sync_default_admin_credentials() and (
+                not self.verify_password(expected_password, existing.password_hash)
+                or str(existing.role).upper() != ADMIN_ROLE
+                or not bool(existing.is_active)
+            ):
+                existing.password_hash = self.hash_password(expected_password)
+                existing.role = ADMIN_ROLE
+                existing.is_active = True
+                self.session.add(existing)
+                self.session.commit()
+                self.session.refresh(existing)
             return existing
         record = self.users.create_user(
             username=username,
@@ -127,6 +138,14 @@ class UserAuthService:
         self.session.commit()
         self.session.refresh(record)
         return record
+
+    @staticmethod
+    def _should_sync_default_admin_credentials() -> bool:
+        env = str(os.getenv('APP_ENV', 'dev') or 'dev').strip().lower()
+        if env in {'dev', 'development', 'test'}:
+            return True
+        flag = str(os.getenv('VINAYAK_SYNC_ADMIN_FROM_ENV', '') or '').strip().lower()
+        return flag in {'1', 'true', 'yes', 'on'}
 
     def authenticate(self, username: str, password: str) -> AuthenticatedUser | None:
         record = self.users.get_by_username(username)

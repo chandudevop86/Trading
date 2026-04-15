@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
@@ -21,9 +22,22 @@ def get_database_provider() -> str:
     return get_settings().sql.provider
 
 
+def _ensure_sqlite_parent_dir(url: str) -> None:
+    if not str(url or '').startswith('sqlite:///'):
+        return
+    raw_path = str(url).replace('sqlite:///', '', 1).strip()
+    if not raw_path:
+        return
+    db_path = Path(raw_path)
+    parent = db_path.parent
+    if parent and not parent.exists():
+        parent.mkdir(parents=True, exist_ok=True)
+
+
 @lru_cache(maxsize=8)
 def get_engine(database_url: str | None = None) -> Engine:
     url = database_url or get_database_url()
+    _ensure_sqlite_parent_dir(url)
     connect_args = {'check_same_thread': False} if url.startswith('sqlite') else {}
     return create_engine(url, future=True, connect_args=connect_args, pool_pre_ping=not url.startswith('sqlite'))
 

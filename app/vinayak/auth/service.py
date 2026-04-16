@@ -18,7 +18,7 @@ USER_ROLE = 'USER'
 PASSWORD_ITERATIONS = 120000
 DISALLOWED_ADMIN_ENV_VALUES = {
     'VINAYAK_ADMIN_PASSWORD': {
-        'Vinayak@123',
+        'vinayak123',
         'change-me',
         'change-me-for-development',
         'change-me-in-uat',

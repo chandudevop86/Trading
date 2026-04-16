@@ -1,0 +1,46 @@
+oversized_patch_added_lines: 500
+oversized_patch_file_count: 20
+require_tests_for_python_changes: true
+timeout_required_modules:
+  - requests
+  - httpx
+max_timeoutless_calls_per_file: 0
+risk_thresholds:
+  low_max: 20
+  moderate_max: 45
+  high_max: 70
+  critical_max: 100
+rules:
+  forbidden_imports:
+    "app/vinayak/api/routes/":
+      - sqlalchemy
+      - requests
+      - httpx
+    "app/vinayak/web/app/":
+      - sqlalchemy
+      - requests
+      - httpx
+    "app/vinayak/ui/":
+      - sqlalchemy
+      - requests
+      - httpx
+  protected_files:
+    - app/vinayak/auth/service.py
+    - app/vinayak/execution/gateway.py
+    - app/vinayak/api/services/strategy_workflow.py
+  required_tests:
+    "app/vinayak/execution/":
+      - tests/unit/vinayak/test_execution_gateway.py
+    "app/vinayak/api/services/":
+      - tests/unit/vinayak/test_trading_workspace.py
+    "app/vinayak/strategies/":
+      - tests/unit/vinayak/test_demand_supply_strategy.py
+  required_reviewers:
+    "app/vinayak/auth/":
+      - security-reviewer
+    "app/vinayak/execution/":
+      - trading-platform-owner
+  critical_modules:
+    - app/vinayak/auth/
+    - app/vinayak/execution/
+    - app/vinayak/api/services/

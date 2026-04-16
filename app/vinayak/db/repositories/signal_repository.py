@@ -30,3 +30,6 @@ class SignalRepository:
 
     def list_signals(self) -> list[SignalRecord]:
         return list(self.session.query(SignalRecord).order_by(SignalRecord.id.desc()).all())
+
+    def get_latest_signal(self) -> SignalRecord | None:
+        return self.session.query(SignalRecord).order_by(SignalRecord.signal_time.desc(), SignalRecord.id.desc()).first()

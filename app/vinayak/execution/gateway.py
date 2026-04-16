@@ -10,12 +10,21 @@ from sqlalchemy.orm import Session
 
 import pandas as pd
 
+from vinayak.db.repositories.execution_state_repository import ExecutionStateRepository
+from vinayak.db.repositories.signal_repository import SignalRepository
 from vinayak.execution.commands import ExecutionCreateCommand
+from vinayak.execution.guards import (
+    WorkspaceGuardContext,
+    evaluate_cooldown_guard,
+    evaluate_duplicate_guard,
+    evaluate_portfolio_guard,
+    evaluate_session_guard,
+)
 from vinayak.execution.reviewed_trade_service import ReviewedTradeCreateCommand, ReviewedTradeService
-from vinayak.execution.risk_engine import PortfolioRiskConfig, allocate_position_size
 from vinayak.execution.service import ExecutionService
 from vinayak.observability.observability_logger import log_event
 from vinayak.observability.observability_metrics import increment_metric, record_stage, set_metric
+from vinayak.strategies.common.base import StrategySignal
 from vinayak.validation.engine import CleanerConfig, _latest_metrics, coerce_ohlcv, validate_trade
 
 
@@ -232,6 +241,8 @@ def _guard_reasons(
     historical_rows: list[dict[str, Any]],
     batch_keys: set[str],
     *,
+    execution_mode: str,
+    state_repository: ExecutionStateRepository,
     capital: float | None,
     per_trade_risk_pct: float | None,
     max_trades_per_day: int | None,
@@ -242,13 +253,10 @@ def _guard_reasons(
     max_portfolio_exposure_pct: float | None,
     max_open_risk_pct: float | None,
     kill_switch_enabled: bool,
-    historical_keys: set[str] | None = None,
     cooldown_minutes: int = _DEFAULT_COOLDOWN_MINUTES,
 ) -> tuple[list[str], str, dict[str, Any], dict[str, Any]]:
     reasons: list[str] = []
     signal_time = _parse_timestamp(candidate.get("signal_time") or candidate.get("timestamp"))
-    if signal_time is None:
-        reasons.append("MISSING_TIMESTAMP")
     if candidate.get("validation_status") != "PASS":
         reasons.append("VALIDATION_STATUS_FAIL")
     if not _coerce_execution_allowed(candidate.get("execution_allowed"), validation_status=str(candidate.get("validation_status") or "").upper(), validation_reasons=_normalize_validation_reasons(candidate.get("validation_reasons", []))):
@@ -265,50 +273,71 @@ def _guard_reasons(
         reasons.append("INVALID_SIDE")
 
     unique_key = _trade_unique_key(candidate)
-    resolved_historical_keys = historical_keys if historical_keys is not None else _historical_trade_keys(historical_rows)
-    if unique_key in resolved_historical_keys or unique_key in batch_keys:
-        reasons.append("DUPLICATE_TRADE")
-
-    if signal_time is not None:
-        if signal_time.time() < _DEFAULT_SESSION_START or signal_time.time() > _DEFAULT_SESSION_END:
-            reasons.append("OUTSIDE_SESSION")
-        today_rows = [row for row in historical_rows if (_parse_timestamp(row.get("signal_time") or row.get("timestamp") or row.get("entry_time")) or signal_time).date() == signal_time.date()]
-        executed_today = [row for row in today_rows if str(row.get("execution_status") or row.get("status") or row.get("trade_status") or "").upper() in _EXECUTED_STATUSES]
-        if max_trades_per_day and max_trades_per_day > 0 and len(executed_today) >= int(max_trades_per_day):
-            reasons.append("MAX_TRADES_PER_DAY")
-        realized_pnl = sum(_safe_float(row.get("pnl", 0.0)) for row in today_rows)
-        if max_daily_loss and float(max_daily_loss) > 0 and realized_pnl <= -abs(float(max_daily_loss)):
-            reasons.append("MAX_DAILY_LOSS")
-        if _has_active_trade(historical_rows):
-            reasons.append("ACTIVE_TRADE_EXISTS")
-        recent_times = _executed_trade_times(historical_rows, signal_time)
-        if recent_times and cooldown_minutes > 0:
-            delta_seconds = (signal_time - max(recent_times)).total_seconds()
-            if delta_seconds < cooldown_minutes * 60:
-                reasons.append("COOLDOWN_ACTIVE")
-
-    risk_config = PortfolioRiskConfig(
-        capital=max(_safe_float(capital, 0.0), 0.0),
-        per_trade_risk_pct=per_trade_risk_pct,
-        max_position_value=max_position_value,
-        max_open_positions=max_open_positions,
-        max_symbol_exposure_pct=max_symbol_exposure_pct,
-        max_portfolio_exposure_pct=max_portfolio_exposure_pct,
-        max_open_risk_pct=max_open_risk_pct,
-        kill_switch_enabled=kill_switch_enabled,
-    )
-    allocation = allocate_position_size(candidate, historical_rows, risk_config)
     adjusted_candidate = dict(candidate)
-    adjusted_candidate['quantity'] = int(allocation.quantity)
-    if allocation.adjustment_reasons:
-        adjusted_candidate['allocation_adjustment_reasons'] = list(allocation.adjustment_reasons)
-    reasons.extend(allocation.block_reasons)
+    risk_snapshot: dict[str, Any] = {}
+    if signal_time is None:
+        reasons.append("MISSING_TIMESTAMP")
+    else:
+        guard_context = WorkspaceGuardContext(
+            candidate=candidate,
+            signal_time=signal_time,
+            execution_mode=execution_mode,
+            batch_keys=batch_keys,
+            current_batch_rows=historical_rows,
+            state_repository=state_repository,
+            trade_key=unique_key,
+            capital=capital,
+            per_trade_risk_pct=per_trade_risk_pct,
+            max_trades_per_day=max_trades_per_day,
+            max_daily_loss=max_daily_loss,
+            max_position_value=max_position_value,
+            max_open_positions=max_open_positions,
+            max_symbol_exposure_pct=max_symbol_exposure_pct,
+            max_portfolio_exposure_pct=max_portfolio_exposure_pct,
+            max_open_risk_pct=max_open_risk_pct,
+            kill_switch_enabled=kill_switch_enabled,
+            cooldown_minutes=cooldown_minutes,
+            bucket_minutes=_DEFAULT_BUCKET_MINUTES,
+        )
+        reasons.extend(evaluate_duplicate_guard(guard_context).reasons)
+        reasons.extend(evaluate_session_guard(guard_context).reasons)
+        reasons.extend(evaluate_cooldown_guard(guard_context).reasons)
+        portfolio_result = evaluate_portfolio_guard(guard_context)
+        reasons.extend(portfolio_result.reasons)
+        adjusted_candidate = portfolio_result.candidate or adjusted_candidate
+        risk_snapshot = dict(portfolio_result.risk_snapshot)
 
     deduped: list[str] = []
     for reason in reasons:
         if reason and reason not in deduped:
             deduped.append(reason)
-    return deduped, unique_key, dict(allocation.snapshot), adjusted_candidate
+    return deduped, unique_key, risk_snapshot, adjusted_candidate
+
+
+def _persist_signal_record(candidate: dict[str, Any], *, signal_repository: SignalRepository) -> int | None:
+    signal_time = _parse_timestamp(candidate.get("signal_time") or candidate.get("timestamp") or candidate.get("entry_time"))
+    if signal_time is None:
+        return None
+    signal = StrategySignal(
+        strategy_name=str(candidate.get("strategy_name") or candidate.get("strategy") or ""),
+        symbol=str(candidate.get("symbol") or ""),
+        side=str(candidate.get("side") or ""),
+        entry_price=_safe_float(candidate.get("entry_price")),
+        stop_loss=_safe_float(candidate.get("stop_loss")),
+        target_price=_safe_float(candidate.get("target_price")),
+        signal_time=signal_time,
+        quantity=max(_safe_int(candidate.get("quantity")), 0),
+        trade_id=str(candidate.get("trade_id") or ""),
+        zone_id=str(candidate.get("zone_id") or ""),
+        setup_type=str(candidate.get("setup_type") or ""),
+        timeframe=str(candidate.get("timeframe") or ""),
+        validation_status=str(candidate.get("validation_status") or ""),
+        validation_score=_safe_float(candidate.get("validation_score")),
+        validation_reasons=list(candidate.get("validation_reasons", [])) if isinstance(candidate.get("validation_reasons"), list) else [],
+        execution_allowed=bool(candidate.get("execution_allowed")),
+    )
+    record = signal_repository.create_signal(signal, status="NEW")
+    return int(record.id)
 
 
 def prepare_workspace_candidates(
@@ -388,7 +417,6 @@ def execute_workspace_candidates(
     mode = str(execution_mode or 'NONE').upper()
     output_path = Path(str(live_log_path if mode == 'LIVE' else paper_log_path))
     historical_rows = _existing_rows(output_path)
-    historical_keys = _historical_trade_keys(historical_rows)
     batch_keys: set[str] = set()
     result = WorkspaceExecutionResult()
     rows_to_write: list[dict[str, Any]] = []
@@ -400,14 +428,18 @@ def execute_workspace_candidates(
         )
     execution_service = ExecutionService(db_session)
     reviewed_trade_service = ReviewedTradeService(db_session)
+    signal_repository = SignalRepository(db_session)
+    state_repository = ExecutionStateRepository(db_session)
     live_kwargs = dict(resolve_live_kwargs(security_map_path) if resolve_live_kwargs is not None and mode == 'LIVE' else {})
     broker_name = str(live_kwargs.get('broker_name', 'SIM' if mode != 'LIVE' else 'DHAN'))
 
     for candidate in candidates:
         reasons, unique_key, risk_snapshot, adjusted_candidate = _guard_reasons(
             candidate,
-            historical_rows + rows_to_write,
+            rows_to_write,
             batch_keys,
+            execution_mode=mode,
+            state_repository=state_repository,
             capital=capital,
             per_trade_risk_pct=per_trade_risk_pct,
             max_trades_per_day=max_trades_per_day,
@@ -418,7 +450,6 @@ def execute_workspace_candidates(
             max_portfolio_exposure_pct=max_portfolio_exposure_pct,
             max_open_risk_pct=max_open_risk_pct,
             kill_switch_enabled=kill_switch_enabled,
-            historical_keys=historical_keys,
         )
         row = dict(adjusted_candidate)
         row['trade_key'] = unique_key
@@ -488,8 +519,11 @@ def execute_workspace_candidates(
                 batch_keys.add(unique_key)
                 continue
 
+            signal_id = _persist_signal_record(row, signal_repository=signal_repository)
+            row['signal_id'] = signal_id
             reviewed_trade = reviewed_trade_service.create_reviewed_trade(
                 ReviewedTradeCreateCommand(
+                    signal_id=signal_id,
                     strategy_name=str(row.get('strategy_name') or strategy),
                     symbol=str(row.get('symbol') or symbol),
                     side=str(row.get('side') or ''),
@@ -506,6 +540,7 @@ def execute_workspace_candidates(
             command = ExecutionCreateCommand(
                 mode=mode,
                 broker=broker_name,
+                signal_id=signal_id,
                 reviewed_trade_id=reviewed_trade.id,
                 status='FILLED',
                 executed_price=_safe_float(row.get('entry_price')),

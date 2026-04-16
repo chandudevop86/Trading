@@ -1,34 +1,56 @@
 from __future__ import annotations
 
-from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+from sqlalchemy.orm import Session
 
 try:
     import pandas as pd  # type: ignore
 except Exception:  # pragma: no cover
     pd = None  # type: ignore
 
+from vinayak.api.services.analysis_service import (
+    attach_indicator_trade_levels as analysis_attach_indicator_trade_levels,
+    attach_lots as analysis_attach_lots,
+    attach_option_metrics as analysis_attach_option_metrics,
+    build_analysis,
+    normalize_rows as analysis_normalize_rows,
+    resolve_workspace_auto_execution_mode as analysis_resolve_workspace_auto_execution_mode,
+    validation_summary_from_rows as analysis_validation_summary_from_rows,
+)
 from vinayak.api.services.data_preparation import prepare_trading_data as canonical_prepare_trading_data
+from vinayak.api.services.execution_coordinator import coordinate_workspace_execution
+from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
+from vinayak.api.services.market_data_service import (
+    data_status as market_data_status,
+    df_to_candles as market_df_to_candles,
+    prepare_trading_data as market_prepare_trading_data,
+    recent_market_snapshot as market_recent_market_snapshot,
+    refresh_market_data_snapshot as market_refresh_market_data_snapshot,
+    update_observability_metrics_from_run as market_update_observability_metrics_from_run,
+)
+from vinayak.api.services.notification_service import dispatch_signal_summary
+from vinayak.api.services.report_service import (
+    build_report_artifacts as report_build_artifacts,
+    empty_report_artifacts as report_empty_artifacts,
+)
+from vinayak.api.services.report_storage import cache_json_artifact, store_json_report, store_text_report
 from vinayak.api.services.strategy_workflow import Candle, StrategyContext, run_strategy_workflow
 from vinayak.api.services.strike_selector import attach_option_strikes
 from vinayak.analytics.readiness import evaluate_readiness
-from vinayak.metrics import run_full_metrics_engine
-from vinayak.notifications.telegram.service import build_trade_summary, send_telegram_message
-from vinayak.validation.trade_evaluation import build_trade_evaluation_summary
-from vinayak.observability.alerting import publish_active_alerts
-from vinayak.observability.observability_logger import log_event, log_exception
-from vinayak.observability.observability_metrics import get_observability_snapshot, record_stage, set_metric
-from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
 from vinayak.execution.gateway import execute_workspace_candidates
 from vinayak.legacy.market_data import load_legacy_security_map
 from vinayak.legacy.options import build_legacy_option_metrics_map, extract_legacy_option_records, fetch_legacy_option_chain, normalize_legacy_index_symbol
-from vinayak.api.services.report_storage import cache_json_artifact, store_json_report, store_text_report
 from vinayak.messaging.bus import build_message_bus
-from vinayak.messaging.events import EVENT_ANALYSIS_COMPLETED, EVENT_NOTIFICATION_REQUESTED
-
-
+from vinayak.messaging.events import EVENT_ANALYSIS_COMPLETED
+from vinayak.metrics import run_full_metrics_engine
+from vinayak.notifications.telegram.service import build_trade_summary, send_telegram_message
+from vinayak.observability.alerting import publish_active_alerts
+from vinayak.observability.observability_logger import log_event, log_exception
+from vinayak.observability.observability_metrics import get_observability_snapshot, record_stage, set_metric
+from vinayak.validation.trade_evaluation import build_trade_evaluation_summary
 
 if pd is None:  # pragma: no cover
     raise ModuleNotFoundError('pandas is required for trading workspace integration')
@@ -40,46 +62,14 @@ MARKET_HEARTBEAT_MIN_REFRESH_SECONDS = 300
 MARKET_HEARTBEAT_MAX_ROWS = 120
 
 def _resolve_workspace_auto_execution_mode(requested_execution_type: str, auto_execute: bool) -> tuple[str, str]:
-    requested = str(requested_execution_type or 'NONE').strip().upper()
-    if not auto_execute:
-        return requested, ''
-    if requested == 'LIVE':
-        return 'PAPER', 'Auto-execute forced to PAPER mode. Live entry and exit require an explicit manual route.'
-    if requested == 'PAPER':
-        return 'PAPER', 'Auto-execute is operating in PAPER mode.'
-    return requested, ''
+    return analysis_resolve_workspace_auto_execution_mode(requested_execution_type, auto_execute)
 
 
 def prepare_trading_data(df: pd.DataFrame) -> pd.DataFrame:
-    if df is None or df.empty:
-        return pd.DataFrame(columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    return canonical_prepare_trading_data(df, include_derived=False)
+    return market_prepare_trading_data(df, canonical_prepare_trading_data_fn=canonical_prepare_trading_data)
 
 def df_to_candles(df: pd.DataFrame) -> list[Candle]:
-    candles: list[Candle] = []
-    for row in df.itertuples(index=False):
-        ts = getattr(row, 'timestamp', None)
-        if ts is None:
-            continue
-        if isinstance(ts, pd.Timestamp):
-            ts_dt = ts.to_pydatetime()
-        else:
-            ts_dt = pd.to_datetime(ts, errors='coerce')
-            if pd.isna(ts_dt):
-                continue
-            ts_dt = ts_dt.to_pydatetime()
-        candles.append(
-            Candle(
-                timestamp=ts_dt,
-                open=float(getattr(row, 'open', 0.0) or 0.0),
-                high=float(getattr(row, 'high', 0.0) or 0.0),
-                low=float(getattr(row, 'low', 0.0) or 0.0),
-                close=float(getattr(row, 'close', 0.0) or 0.0),
-                volume=float(getattr(row, 'volume', 0.0) or 0.0),
-            )
-        )
-    candles.sort(key=lambda item: item.timestamp)
-    return candles
+    return market_df_to_candles(df, candle_cls=Candle)
 
 
 def _format_expiry(expiry: object) -> str:
@@ -107,134 +97,27 @@ def _estimate_weekly_expiry(symbol: str, now: datetime | None = None) -> str:
 
 
 def attach_indicator_trade_levels(rows: list[dict[str, object]], rr_ratio: float, trailing_sl_pct: float) -> list[dict[str, object]]:
-    out: list[dict[str, object]] = []
-    sl_frac = max(0.0, float(trailing_sl_pct) / 100.0)
-    if sl_frac <= 0:
-        sl_frac = 0.002
-    for item in rows:
-        row = dict(item)
-        side = str(row.get('side', '') or '').upper()
-        try:
-            entry = float(row.get('close', row.get('price', row.get('entry_price', 0.0))) or 0.0)
-        except Exception:
-            entry = 0.0
-        if entry > 0 and side in {'BUY', 'SELL'}:
-            row['entry_price'] = round(entry, 2)
-            if side == 'BUY':
-                sl = entry * (1.0 - sl_frac)
-                tp = entry + (entry - sl) * float(rr_ratio)
-            else:
-                sl = entry * (1.0 + sl_frac)
-                tp = entry - (sl - entry) * float(rr_ratio)
-            row['stop_loss'] = round(sl, 2)
-            row['target_price'] = round(tp, 2)
-        if 'timestamp' in row:
-            row['timestamp'] = str(row['timestamp'])
-        out.append(row)
-    return out
+    return analysis_attach_indicator_trade_levels(rows, rr_ratio, trailing_sl_pct)
 
 
 def attach_option_metrics(rows: list[dict[str, object]], symbol: str, fetch_option_metrics: bool) -> list[dict[str, object]]:
-    if not rows:
-        return rows
-
-    metrics_map: dict[tuple[int, str], dict[str, object]] = {}
-    status = 'DISABLED'
-    if fetch_option_metrics and fetch_legacy_option_chain and extract_legacy_option_records and build_legacy_option_metrics_map and normalize_legacy_index_symbol:
-        try:
-            payload = fetch_legacy_option_chain(normalize_legacy_index_symbol(symbol), timeout=10.0)
-            metrics_map = build_legacy_option_metrics_map(extract_legacy_option_records(payload))
-            status = 'FETCH_OK'
-        except Exception:
-            metrics_map = {}
-            status = 'FETCH_FAILED'
-
-    enriched: list[dict[str, object]] = []
-    any_nse_match = False
-    any_estimated_expiry = False
-    for item in rows:
-        row = dict(item)
-        strike_raw = row.get('strike_price', row.get('option_strike', ''))
-        option_type = str(row.get('option_type', '') or '').upper()
-        try:
-            strike = int(float(strike_raw))
-        except Exception:
-            strike = 0
-
-        metrics = metrics_map.get((strike, option_type), {}) if strike and option_type else {}
-        if isinstance(metrics, dict) and metrics:
-            row.update(metrics)
-            any_nse_match = True
-            if metrics.get('option_expiry'):
-                row['option_expiry_source'] = 'NSE'
-
-        if not row.get('option_expiry') and row.get('option_strike'):
-            est = _estimate_weekly_expiry(symbol)
-            if est:
-                row['option_expiry'] = est
-                row['option_expiry_source'] = 'ESTIMATED'
-                any_estimated_expiry = True
-
-        if row.get('option_expiry'):
-            row['option_expiry'] = _format_expiry(row.get('option_expiry'))
-        enriched.append(row)
-
-    final_status = status
-    if any_estimated_expiry and not any_nse_match:
-        final_status = 'ESTIMATED_EXPIRY_ONLY'
-    elif status == 'FETCH_OK' and not any_nse_match:
-        final_status = 'NO_MATCH'
-    elif status == 'FETCH_OK' and any_nse_match:
-        final_status = 'NSE_OK'
-
-    for row in enriched:
-        row['_option_metrics_status'] = final_status
-    return enriched
+    return analysis_attach_option_metrics(
+        rows,
+        symbol=symbol,
+        fetch_option_metrics=fetch_option_metrics,
+        fetch_legacy_option_chain_fn=fetch_legacy_option_chain,
+        extract_legacy_option_records_fn=extract_legacy_option_records,
+        build_legacy_option_metrics_map_fn=build_legacy_option_metrics_map,
+        normalize_legacy_index_symbol_fn=normalize_legacy_index_symbol,
+    )
 
 
 def attach_lots(rows: list[dict[str, object]], lot_size: int, lots: int) -> list[dict[str, object]]:
-    lot_size = int(lot_size) if lot_size and int(lot_size) > 0 else 0
-    lots = int(lots) if lots and int(lots) > 0 else 0
-    if lot_size <= 0 or lots <= 0:
-        return rows
-
-    qty = lot_size * lots
-    out: list[dict[str, object]] = []
-    for item in rows:
-        row = dict(item)
-        row['lots'] = lots
-        row['quantity'] = qty
-        try:
-            ltp = float(row.get('option_ltp', 0) or 0)
-        except Exception:
-            ltp = 0.0
-        if ltp > 0:
-            row['order_value'] = round(ltp * qty, 2)
-        out.append(row)
-    return out
+    return analysis_attach_lots(rows, lot_size=lot_size, lots=lots)
 
 
 def _normalize_rows(rows: list[dict[str, object]]) -> list[dict[str, Any]]:
-    normalized: list[dict[str, Any]] = []
-    for row in rows:
-        item = dict(row)
-        for key in ['entry_price', 'stop_loss', 'target_price', 'spot_price', 'option_ltp', 'option_oi', 'option_vol', 'option_iv', 'order_value', 'price', 'share_price']:
-            try:
-                if key in item and item[key] is not None and str(item[key]).strip() != '':
-                    item[key] = float(item[key])
-            except Exception:
-                pass
-        for key in ['trade_no', 'strike_price', 'quantity', 'lots']:
-            try:
-                if key in item and item[key] is not None and str(item[key]).strip() != '':
-                    item[key] = int(float(item[key]))
-            except Exception:
-                pass
-        for key in ['timestamp', 'entry_time', 'signal_time', 'executed_at_utc', 'option_expiry']:
-            if key in item and item[key] is not None:
-                item[key] = str(item[key])
-        normalized.append(item)
-    return normalized
+    return analysis_normalize_rows(rows)
 
 
 def _resolve_live_execution_kwargs(security_map_path: str) -> dict[str, object]:
@@ -248,76 +131,26 @@ def _resolve_live_execution_kwargs(security_map_path: str) -> dict[str, object]:
 
 
 def _build_report_artifacts(result: dict[str, Any], *, summary_text: str | None = None) -> dict[str, dict[str, str]]:
-    trace_rows = result.get('execution_rows') or result.get('signals') or []
-    resolved_summary_text = summary_text if summary_text is not None else (build_trade_summary(trace_rows) if trace_rows else 'No signals generated for this run.')
-    json_artifact = store_json_report('live_analysis_result', result)
-    summary_artifact = store_text_report('live_analysis_summary', resolved_summary_text, extension='txt', content_type='text/plain')
-    cache_json_artifact('latest_live_analysis', result)
-    return {
-        'json_report': json_artifact,
-        'summary_report': summary_artifact,
-    }
+    return report_build_artifacts(
+        result,
+        summary_text=summary_text,
+        build_trade_summary_fn=build_trade_summary,
+        store_json_report_fn=store_json_report,
+        store_text_report_fn=store_text_report,
+        cache_json_artifact_fn=cache_json_artifact,
+    )
 
 
 def _empty_report_artifacts() -> dict[str, dict[str, str]]:
-    return {
-        'json_report': {'local_path': ''},
-        'summary_report': {'local_path': ''},
-    }
+    return report_empty_artifacts()
 
 
 def _validation_summary_from_rows(rows: list[dict[str, Any]], strategy: str) -> dict[str, Any]:
-    if not rows:
-        return {}
-    summary = build_trade_evaluation_summary(rows, strategy_name=str(strategy or 'VINAYAK'))
-    readiness = evaluate_readiness(rows, rows, trade_summary=summary)
-    return {
-        'clean_trades': summary.get('clean_trades', summary.get('closed_trades', 0)),
-        'expectancy_per_trade': summary.get('expectancy_per_trade', 0.0),
-        'expectancy_stability_score': summary.get('expectancy_stability_score', 0.0),
-        'profit_factor': summary.get('profit_factor', 0.0),
-        'profit_factor_stability_score': summary.get('profit_factor_stability_score', 0.0),
-        'max_drawdown_pct': summary.get('max_drawdown_pct', 0.0),
-        'recovery_factor': summary.get('recovery_factor', 0.0),
-        'pass_fail_status': summary.get('pass_fail_status', 'NEED_MORE_DATA'),
-        'confidence_label': summary.get('confidence_label', 'NEED_MORE_DATA'),
-        'paper_readiness_summary': summary.get('paper_readiness_summary', ''),
-        'go_live_status': summary.get('go_live_status', 'PAPER_ONLY'),
-        'promotion_status': summary.get('promotion_status', 'RESEARCH_ONLY'),
-        'warnings': summary.get('warnings', []),
-        'pass_fail_reasons': summary.get('pass_fail_reasons', []),
-        'system_status': readiness.get('verdict', 'NOT_READY'),
-        'readiness_reasons': readiness.get('reasons', []),
-        'validation_pass_rate': readiness.get('validation_pass_rate', 0.0),
-        'top_rejection_reasons': readiness.get('top_rejection_reasons', {}),
-        'clean_trade_metrics_only': readiness.get('clean_trade_metrics_only', False),
-        'clean_trade_count': readiness.get('clean_trade_count', 0),
-        'edge_proof_status': readiness.get('edge_proof_status', 'PAPER_ONLY'),
-        'readiness_summary': readiness.get('readiness_summary', ''),
-        'edge_report': readiness.get('edge_report', {}),
-        'regime_report': readiness.get('regime_report', {}),
-        'walkforward_report': readiness.get('walkforward_report', {}),
-        'regime_consistency_score': readiness.get('regime_consistency_score', 0.0),
-        'regime_consistency_label': readiness.get('regime_consistency_label', 'DEPENDENT'),
-        'dominant_regime': readiness.get('dominant_regime', 'none'),
-        'weakest_regime': readiness.get('weakest_regime', 'none'),
-        'walkforward_windows': readiness.get('walkforward_windows', 0),
-        'oos_status': readiness.get('oos_status', 'OOS_NEED_MORE_DATA'),
-        'oos_pass_rate': readiness.get('oos_pass_rate', 0.0),
-        'overfit_risk_score': readiness.get('overfit_risk_score', 10.0),
-        'overfit_risk_label': readiness.get('overfit_risk_label', 'HIGH'),
-    }
+    return analysis_validation_summary_from_rows(rows, strategy=strategy)
 
 
 def _data_status(candles: pd.DataFrame) -> dict[str, Any]:
-    report = dict(getattr(candles, 'attrs', {}).get('cleaning_report', {}) or {})
-    return {
-        'status': 'VALID' if not candles.empty else 'INVALID',
-        'rows': int(len(candles)),
-        'latest_timestamp': report.get('latest_timestamp', str(candles.iloc[-1]['timestamp']) if not candles.empty else ''),
-        'duplicates_removed': int(report.get('duplicates_removed', 0) or 0),
-        'columns': list(report.get('columns', list(candles.columns))),
-    }
+    return market_data_status(candles)
 
 
 def _parse_iso_datetime(value: object) -> datetime | None:
@@ -338,66 +171,19 @@ def _parse_iso_datetime(value: object) -> datetime | None:
 
 
 def _recent_market_snapshot(interval: str, *, max_age_seconds: int = MARKET_HEARTBEAT_MIN_REFRESH_SECONDS) -> dict[str, Any] | None:
-    snapshot = get_observability_snapshot()
-    metrics = dict(snapshot.get('metrics', {}) or {})
-    latest_metric = dict(metrics.get('latest_data_timestamp', {}) or {})
-    latest_timestamp = str(latest_metric.get('value', '') or '').strip()
-    if not latest_timestamp:
-        return None
-
-    market_data_delay = float(metrics.get('market_data_delay_seconds', {}).get('value', 0.0) or 0.0)
-    updated_at = _parse_iso_datetime(latest_metric.get('updated_at'))
-    is_recent = market_data_delay <= float(max_age_seconds)
-    if not is_recent and updated_at is not None:
-        is_recent = (datetime.now(UTC) - updated_at).total_seconds() <= max_age_seconds
-    if not is_recent:
-        return None
-
-    rows_loaded = metrics.get('market_data_rows_loaded_total', {}).get('value', 0)
-    return {
-        'candles': [],
-        'candle_count': 0,
-        'data_status': {
-            'status': 'VALID',
-            'rows': int(rows_loaded or 0),
-            'latest_timestamp': latest_timestamp,
-            'duplicates_removed': int(metrics.get('market_data_duplicates_total', {}).get('value', 0) or 0),
-            'provider': '',
-            'source': 'OBSERVABILITY_CACHE',
-            'latest_interval': interval,
-            'market_data_delay_seconds': market_data_delay,
-            'refresh_mode': 'CACHE_HIT',
-        },
-    }
+    return market_recent_market_snapshot(
+        interval,
+        get_observability_snapshot_fn=get_observability_snapshot,
+        max_age_seconds=max_age_seconds,
+    )
 
 def _update_observability_metrics_from_run(rows: list[dict[str, Any]], candles: pd.DataFrame) -> None:
-    if candles is not None and not candles.empty:
-        latest_timestamp = str(candles.iloc[-1]['timestamp'])
-        set_metric('latest_data_timestamp', latest_timestamp)
-        set_metric('market_data_rows_loaded_total', int(len(candles)))
-        latest_dt = pd.to_datetime(candles.iloc[-1]['timestamp'], errors='coerce', utc=True)
-        if not pd.isna(latest_dt):
-            delay_seconds = max(0.0, (datetime.now(UTC) - latest_dt.to_pydatetime()).total_seconds())
-            set_metric('market_data_delay_seconds', round(delay_seconds, 2))
-        cleaning_report = dict(getattr(candles, 'attrs', {}).get('cleaning_report', {}) or {})
-        set_metric('market_data_duplicates_total', int(cleaning_report.get('duplicates_removed', 0) or 0))
-        set_metric('market_data_nulls_total', int(cleaning_report.get('null_rows_removed', 0) or 0))
-        set_metric('schema_validation_failures_total', int(len(cleaning_report.get('issues', []) or [])))
-    if not rows:
-        set_metric('rolling_win_rate', 0.0)
-        set_metric('rolling_expectancy', 0.0)
-        set_metric('pnl_today', 0.0)
-        return
-    metrics = run_full_metrics_engine(rows, candles=candles)
-    performance = dict(metrics.get('performance', {}) or {})
-    execution = dict(metrics.get('execution', {}) or {})
-    validation = dict(metrics.get('validation', {}) or {})
-    set_metric('rolling_win_rate', round(float(performance.get('win_rate', 0.0)) * 100.0, 2))
-    set_metric('rolling_expectancy', round(float(performance.get('expectancy', 0.0)), 4))
-    set_metric('pnl_today', round(float(performance.get('net_profit', 0.0)), 2))
-    set_metric('execution_success_rate', round(float(execution.get('execution_success_rate', 0.0)), 4))
-    set_metric('validation_pass_rate', round(float(validation.get('validation_pass_rate', 0.0)), 4))
-    set_metric('high_quality_setup_rate', round(float(validation.get('high_quality_setup_rate', 0.0)), 4))
+    market_update_observability_metrics_from_run(
+        rows,
+        candles,
+        run_full_metrics_engine_fn=run_full_metrics_engine,
+        set_metric_fn=set_metric,
+    )
 
 def refresh_market_data_snapshot(
     *,
@@ -406,41 +192,18 @@ def refresh_market_data_snapshot(
     period: str,
     security_map_path: str = 'data/dhan_security_map.csv',
 ) -> dict[str, Any]:
-    recent_snapshot = _recent_market_snapshot(interval)
-    if recent_snapshot is not None:
-        return {
-            'symbol': symbol,
-            'interval': interval,
-            'period': period,
-            **recent_snapshot,
-        }
-
-    live_rows = fetch_live_ohlcv(
+    return market_refresh_market_data_snapshot(
         symbol=symbol,
         interval=interval,
         period=period,
-        provider='DHAN',
         security_map_path=security_map_path,
-        force_refresh=False,
+        fetch_live_ohlcv_fn=fetch_live_ohlcv,
+        prepare_trading_data_fn=prepare_trading_data,
+        normalize_rows_fn=_normalize_rows,
+        recent_market_snapshot_fn=_recent_market_snapshot,
+        update_observability_metrics_from_run_fn=_update_observability_metrics_from_run,
+        data_status_fn=_data_status,
     )
-    live_rows = list(live_rows[-MARKET_HEARTBEAT_MAX_ROWS:])
-    candles_df = prepare_trading_data(pd.DataFrame(live_rows))
-    _update_observability_metrics_from_run([], candles_df)
-    normalized_rows = _normalize_rows(live_rows)
-    return {
-        'symbol': symbol,
-        'interval': interval,
-        'period': period,
-        'candles': normalized_rows,
-        'candle_count': len(normalized_rows),
-        'data_status': {
-            **_data_status(candles_df),
-            'provider': str((live_rows[-1] if live_rows else {}).get('provider', '') or ''),
-            'source': str((live_rows[-1] if live_rows else {}).get('source', '') or ''),
-            'latest_interval': str((live_rows[-1] if live_rows else {}).get('interval', interval) or interval),
-            'refresh_mode': 'FETCHED',
-        },
-    }
 
 def run_live_trading_analysis(
     *,
@@ -519,7 +282,7 @@ def run_live_trading_analysis(
         strike_step=int(strike_step),
         moneyness=str(moneyness),
         strike_steps=int(strike_steps),
-        fetch_option_metrics=False,
+        fetch_option_metrics=bool(fetch_option_metrics),
         mtf_ema_period=int(mtf_ema_period),
         mtf_setup_mode=str(mtf_setup_mode),
         mtf_retest_strength=bool(mtf_retest_strength),
@@ -537,123 +300,66 @@ def run_live_trading_analysis(
         kill_switch_enabled=kill_switch_enabled,
     )
     strategy_started = time.perf_counter()
-    signal_rows = run_strategy_workflow(
-        context,
+    analysis_result = build_analysis(
+        context=context,
+        run_strategy_workflow_fn=run_strategy_workflow,
         attach_levels_fn=attach_indicator_trade_levels,
         attach_option_strikes_fn=attach_option_strikes,
-        attach_option_metrics_fn=lambda rows, **kwargs: rows,
+        attach_option_metrics_fn=attach_option_metrics,
+        attach_lots_fn=attach_lots,
+        lot_size=lot_size,
+        lots=lots,
     )
+    signal_rows = list(analysis_result['signals'])
     record_stage('zone_detection', status='SUCCESS', duration_seconds=round(time.perf_counter() - strategy_started, 4), symbol=symbol, strategy=strategy, message='Strategy workflow completed', trace_id=trace_id)
-    signal_rows = attach_option_metrics(signal_rows, symbol=symbol, fetch_option_metrics=fetch_option_metrics)
-    signal_rows = attach_lots(signal_rows, lot_size=lot_size, lots=lots)
-    signal_rows = _normalize_rows(signal_rows)
-    side_counts = Counter(str(row.get('side', '') or '').upper() for row in signal_rows if row.get('side'))
 
     message_bus = build_message_bus()
-    telegram_sent = False
-    telegram_error = ''
-    telegram_payload: dict[str, Any] | None = None
-    summary_text = build_trade_summary(signal_rows) if signal_rows else 'No signals generated for this run.'
-    if send_telegram and signal_rows:
-        try:
-            message = summary_text
-            message_bus.publish(
-                EVENT_NOTIFICATION_REQUESTED,
-                {
-                    'channel': 'telegram',
-                    'message': message,
-                    'symbol': symbol,
-                    'strategy': strategy,
-                },
-                source='live_analysis',
-            )
-            if deliver_telegram_inline:
-                try:
-                    telegram_payload = send_telegram_message(telegram_token, telegram_chat_id, message)
-                    telegram_sent = True
-                except Exception as exc:
-                    telegram_error = str(exc)
-                    log_exception(
-                        component='trading_workspace',
-                        event_name='telegram_send_failed',
-                        exc=exc,
-                        symbol=symbol,
-                        strategy=strategy,
-                        message='Telegram delivery failed during live analysis',
-                        context_json={'message_preview': message[:200], 'signal_count': len(signal_rows)},
-                    )
-            else:
-                telegram_payload = {'queued': True, 'channel': 'telegram'}
-        except Exception as exc:
-            telegram_error = str(exc)
-            log_exception(
-                component='trading_workspace',
-                event_name='telegram_summary_failed',
-                exc=exc,
-                symbol=symbol,
-                strategy=strategy,
-                message='Telegram summary generation failed during live analysis',
-                context_json={'signal_count': len(signal_rows)},
-            )
+    notification_result = dispatch_signal_summary(
+        send_telegram=send_telegram,
+        signal_rows=signal_rows,
+        symbol=symbol,
+        strategy=strategy,
+        telegram_token=telegram_token,
+        telegram_chat_id=telegram_chat_id,
+        deliver_telegram_inline=deliver_telegram_inline,
+        build_trade_summary_fn=build_trade_summary,
+        send_telegram_message_fn=send_telegram_message,
+        log_exception_fn=log_exception,
+        message_bus=message_bus,
+    )
 
     requested_execution_mode = str(execution_type or 'NONE').upper()
     execution_mode, execution_note = _resolve_workspace_auto_execution_mode(requested_execution_mode, auto_execute)
-    execution_summary: dict[str, Any] = {
-        'mode': execution_mode,
-        'executed_count': 0,
-        'blocked_count': 0,
-        'error_count': 0,
-        'skipped_count': 0,
-        'duplicate_count': 0,
-    }
-    execution_rows: list[dict[str, Any]] = []
-    if auto_execute and execution_mode in {'PAPER', 'LIVE'} and signal_rows and execute_inline:
-        _candidates, result = execute_workspace_candidates(
-            strategy,
-            symbol,
-            candles_df,
-            signal_rows,
-            execution_mode=execution_mode,
-            paper_log_path=str(paper_log_path),
-            live_log_path=str(live_log_path),
-            capital=capital,
-            per_trade_risk_pct=risk_pct,
-            max_trades_per_day=max_trades_per_day,
-            max_daily_loss=max_daily_loss,
-            max_position_value=max_position_value,
-            max_open_positions=max_open_positions,
-            max_symbol_exposure_pct=max_symbol_exposure_pct,
-            max_portfolio_exposure_pct=max_portfolio_exposure_pct,
-            max_open_risk_pct=max_open_risk_pct,
-            kill_switch_enabled=kill_switch_enabled,
-            security_map_path=str(security_map_path),
-            resolve_live_kwargs=_resolve_live_execution_kwargs,
-            db_session=db_session,
-        )
-        execution_summary = {
-            'mode': execution_mode,
-            'executed_count': result.executed_count,
-            'blocked_count': result.blocked_count,
-            'error_count': result.error_count,
-            'skipped_count': result.skipped_count,
-            'duplicate_count': result.duplicate_count,
-        }
-        execution_rows = _normalize_rows(result.rows)
-    elif auto_execute and execution_mode in {'PAPER', 'LIVE'} and signal_rows and not execute_inline:
-        execution_note = (
-            f"{execution_note} " if execution_note else ''
-        ) + 'Auto execution deferred from the live-analysis critical path.'
-        execution_summary = {
-            'mode': execution_mode,
-            'executed_count': 0,
-            'blocked_count': 0,
-            'error_count': 0,
-            'skipped_count': len(signal_rows),
-            'duplicate_count': 0,
-        }
+    execution_result = coordinate_workspace_execution(
+        auto_execute=auto_execute,
+        execution_mode=execution_mode,
+        execution_note=execution_note,
+        signal_rows=signal_rows,
+        execute_inline=execute_inline,
+        strategy=strategy,
+        symbol=symbol,
+        candles_df=candles_df,
+        paper_log_path=paper_log_path,
+        live_log_path=live_log_path,
+        capital=capital,
+        risk_pct=risk_pct,
+        max_trades_per_day=max_trades_per_day,
+        max_daily_loss=max_daily_loss,
+        max_position_value=max_position_value,
+        max_open_positions=max_open_positions,
+        max_symbol_exposure_pct=max_symbol_exposure_pct,
+        max_portfolio_exposure_pct=max_portfolio_exposure_pct,
+        max_open_risk_pct=max_open_risk_pct,
+        kill_switch_enabled=kill_switch_enabled,
+        security_map_path=security_map_path,
+        db_session=db_session,
+        execute_workspace_candidates_fn=execute_workspace_candidates,
+        normalize_rows_fn=_normalize_rows,
+        resolve_live_kwargs_fn=_resolve_live_execution_kwargs,
+    )
 
     record_stage('trade_build', status='SUCCESS', symbol=symbol, strategy=strategy, message='Trade rows built', trace_id=trace_id)
-    validation_rows = execution_rows if execution_rows else signal_rows
+    validation_rows = execution_result['execution_rows'] if execution_result['execution_rows'] else signal_rows
     validation_summary = _validation_summary_from_rows(validation_rows, strategy)
     _update_observability_metrics_from_run(validation_rows, candles_df)
     alert_notifications_sent = 0
@@ -667,7 +373,7 @@ def run_live_trading_analysis(
 
     total_duration = round(time.perf_counter() - started, 4)
     set_metric('trading_cycle_duration_seconds', total_duration)
-    log_event(component='trading_workspace', event_name='live_analysis_run', symbol=symbol, strategy=strategy, severity='INFO', message='Live analysis run completed', context_json={'signal_count': len(signal_rows), 'execution_rows': len(execution_rows), 'duration_seconds': total_duration, 'trace_id': trace_id})
+    log_event(component='trading_workspace', event_name='live_analysis_run', symbol=symbol, strategy=strategy, severity='INFO', message='Live analysis run completed', context_json={'signal_count': len(signal_rows), 'execution_rows': len(execution_result['execution_rows']), 'duration_seconds': total_duration, 'trace_id': trace_id})
     response: dict[str, Any] = {
         'symbol': symbol,
         'interval': interval,
@@ -675,23 +381,23 @@ def run_live_trading_analysis(
         'strategy': strategy,
         'candle_count': len(live_rows),
         'signal_count': len(signal_rows),
-        'side_counts': dict(side_counts),
+        'side_counts': analysis_result['side_counts'],
         'candles': _normalize_rows(live_rows),
         'signals': signal_rows,
         'generated_at': datetime.now(UTC).strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'telegram_sent': telegram_sent,
-        'telegram_error': telegram_error,
-        'telegram_payload': telegram_payload or {},
-        'execution_note': execution_note,
-        'execution_summary': execution_summary,
-        'execution_rows': execution_rows,
+        'telegram_sent': notification_result['telegram_sent'],
+        'telegram_error': notification_result['telegram_error'],
+        'telegram_payload': notification_result['telegram_payload'],
+        'execution_note': execution_result['execution_note'],
+        'execution_summary': execution_result['execution_summary'],
+        'execution_rows': execution_result['execution_rows'],
         'validation_summary': validation_summary,
         'data_status': {**_data_status(candles_df), 'provider': str((live_rows[-1] if live_rows else {}).get('provider', '') or ''), 'source': str((live_rows[-1] if live_rows else {}).get('source', '') or ''), 'latest_interval': str((live_rows[-1] if live_rows else {}).get('interval', interval) or interval)},
         'system_status': validation_summary.get('system_status', 'NOT_READY'),
         'alert_notifications_sent': alert_notifications_sent,
     }
     if persist_reports:
-        response['report_artifacts'] = _build_report_artifacts(response, summary_text=summary_text)
+        response['report_artifacts'] = _build_report_artifacts(response)
     else:
         cache_json_artifact('latest_live_analysis', response)
         response['report_artifacts'] = _empty_report_artifacts()

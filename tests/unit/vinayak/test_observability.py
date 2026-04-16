@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 
+from vinayak.observability import observability_health as health
 from vinayak.observability.alerting import build_active_alerts, publish_active_alerts
 from vinayak.observability.observability_dashboard_spec import (
     build_grafana_dashboard_spec,
@@ -305,6 +306,56 @@ def test_observability_payload_includes_latest_signal_and_execution_details(tmp_
     assert latest_execution['option_strike'] == '24500CE'
     assert latest_market_data['provider'] == 'DHAN'
     assert latest_market_data['source'] == 'DHAN_HISTORICAL'
+
+
+def test_observability_payload_prefers_canonical_state_over_artifact_fallback(tmp_path, monkeypatch) -> None:
+    os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path / 'observability')
+    os.environ['REPORTS_DIR'] = str(tmp_path / 'reports')
+    reset_observability_state()
+
+    reports_dir = tmp_path / 'reports'
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / '20260403_210000_live_analysis_result.json').write_text(
+        '''
+{
+  "signals": [{"symbol": "ARTIFACT", "side": "SELL", "entry_price": 88.0}],
+  "execution_rows": [{"trade_id": "artifact-trade", "execution_status": "FILLED", "price": 88.0}]
+}
+'''.strip(),
+        encoding='utf-8',
+    )
+
+    monkeypatch.setattr(
+        health,
+        '_load_latest_canonical_state',
+        lambda: (
+            {
+                'symbol': 'CANONICAL',
+                'side': 'BUY',
+                'entry_price': 101.5,
+                'stop_loss': 99.5,
+                'target_price': 105.5,
+                'option_strike': '24500CE',
+            },
+            {
+                'trade_id': 'db-trade',
+                'side': 'BUY',
+                'execution_status': 'ACCEPTED',
+                'broker_name': 'PAPER',
+                'price': 101.5,
+                'reason': 'repository',
+            },
+        ),
+    )
+
+    payload = build_observability_dashboard_payload()
+    latest_signal = {item['label']: item['value'] for item in payload['latest_signal']}
+    latest_execution = {item['label']: item['value'] for item in payload['latest_execution']}
+
+    assert latest_signal['symbol'] == 'CANONICAL'
+    assert latest_signal['side'] == 'BUY'
+    assert latest_execution['trade_id'] == 'db-trade'
+    assert latest_execution['execution_status'] == 'ACCEPTED'
 
 
 def test_dashboard_spec_outputs_are_readable() -> None:

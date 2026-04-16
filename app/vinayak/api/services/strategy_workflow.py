@@ -3,7 +3,9 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Literal
 
-from vinayak.execution.contracts import normalize_candidate_contract
+from vinayak.core.statuses import ValidationStatus
+from vinayak.execution.contracts import normalize_candidate_contract, validate_candidate_contract
+from vinayak.observability.observability_logger import log_event
 from vinayak.strategies.amd.service import ConfluenceConfig, run_amd_strategy as run_native_amd_strategy
 from vinayak.strategies.breakout.service import Candle, run_breakout_strategy as run_native_breakout_strategy
 from vinayak.strategies.btst.service import BtstConfig, run_btst_strategy as run_native_btst_strategy
@@ -167,7 +169,7 @@ def standardize_strategy_rows(rows: list[dict[str, object]], *, strategy_name: s
         item['strategy_name'] = str(item.get('strategy_name') or canonical_strategy)
         item['setup_type'] = str(item.get('setup_type') or item.get('zone_type') or canonical_strategy)
         item['timeframe'] = str(item.get('timeframe') or item.get('interval') or '')
-        item['validation_status'] = str(item.get('validation_status') or 'PENDING').upper()
+        item['validation_status'] = str(item.get('validation_status') or ValidationStatus.PENDING).upper()
         item['validation_score'] = round(_safe_float(item.get('validation_score', item.get('score', 0.0))) or 0.0, 2)
         item['validation_reasons'] = list(item.get('validation_reasons', [])) if isinstance(item.get('validation_reasons', []), list) else []
         item['execution_allowed'] = bool(item.get('execution_allowed', False))
@@ -177,6 +179,39 @@ def standardize_strategy_rows(rows: list[dict[str, object]], *, strategy_name: s
         item['risk_per_unit'] = round(risk_per_unit, 4)
         standardized.append(normalize_candidate_contract(item, symbol=symbol, strategy_name=strategy_name, timeframe=item['timeframe']))
     return standardized
+
+
+def validate_strategy_output_rows(
+    rows: list[dict[str, object]],
+    *,
+    strategy_name: str,
+    symbol: str,
+) -> list[dict[str, object]]:
+    valid_rows: list[dict[str, object]] = []
+    invalid_rows: list[dict[str, object]] = []
+    for row in rows:
+        is_valid, reasons, normalized = validate_candidate_contract(dict(row))
+        if is_valid:
+            valid_rows.append(normalized)
+            continue
+        invalid_rows.append({
+            "trade_id": normalized.get("trade_id", ""),
+            "symbol": normalized.get("symbol", symbol),
+            "strategy_name": normalized.get("strategy_name", strategy_name),
+            "reasons": list(reasons),
+            "normalized": dict(normalized),
+        })
+    if invalid_rows:
+        log_event(
+            component="strategy_workflow",
+            event_name="invalid_strategy_candidates_filtered",
+            symbol=symbol,
+            strategy=strategy_name,
+            severity="WARNING",
+            message="Filtered invalid strategy candidate rows before downstream execution.",
+            context_json={"invalid_rows": invalid_rows, "invalid_count": len(invalid_rows)},
+        )
+    return valid_rows
 
 
 def contextless_strategy_name(rows: list[dict[str, object]], default: str) -> str:
@@ -341,7 +376,8 @@ def generate_strategy_rows(context: StrategyContext, **dependency_overrides: Cal
     definition = get_strategy_definition(strategy_name)
     dependencies = StrategyDependencies(**{key: value for key, value in dependency_overrides.items() if key in StrategyDependencies.__dataclass_fields__})
     rows = definition.runner(context, dependencies)
-    return standardize_strategy_rows(rows, strategy_name=strategy_name, symbol=context.symbol)
+    standardized = standardize_strategy_rows(rows, strategy_name=strategy_name, symbol=context.symbol)
+    return validate_strategy_output_rows(standardized, strategy_name=strategy_name, symbol=context.symbol)
 
 
 def run_strategy_workflow(

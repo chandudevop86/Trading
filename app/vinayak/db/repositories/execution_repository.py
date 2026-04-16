@@ -115,3 +115,10 @@ class ExecutionRepository:
 
     def list_executions(self) -> list[ExecutionRecord]:
         return list(self.session.query(ExecutionRecord).order_by(ExecutionRecord.id.desc()).all())
+
+    def get_latest_execution(self) -> ExecutionRecord | None:
+        return (
+            self.session.query(ExecutionRecord)
+            .order_by(ExecutionRecord.executed_at.desc().nullslast(), ExecutionRecord.id.desc())
+            .first()
+        )

@@ -8,6 +8,9 @@ import os
 import time
 
 from vinayak.cache.redis_client import RedisCache
+from vinayak.db.repositories.execution_repository import ExecutionRepository
+from vinayak.db.repositories.signal_repository import SignalRepository
+from vinayak.db.session import build_session_factory
 from vinayak.observability.alerting import build_active_alerts
 from vinayak.observability.observability_logger import tail_events
 from vinayak.observability.observability_metrics import get_observability_snapshot
@@ -99,6 +102,37 @@ def _build_detail_cards(row: dict[str, Any], fields: list[tuple[str, str]]) -> l
     return cards
 
 
+def _load_latest_canonical_state() -> tuple[dict[str, Any], dict[str, Any]]:
+    try:
+        session = build_session_factory()()
+    except Exception:
+        return {}, {}
+    try:
+        latest_signal_record = SignalRepository(session).get_latest_signal()
+        latest_execution_record = ExecutionRepository(session).get_latest_execution()
+        latest_signal = {}
+        latest_execution = {}
+        if latest_signal_record is not None:
+            latest_signal = {
+                'symbol': latest_signal_record.symbol,
+                'side': latest_signal_record.side,
+                'entry_price': latest_signal_record.entry_price,
+                'stop_loss': latest_signal_record.stop_loss,
+                'target_price': latest_signal_record.target_price,
+                'timestamp': latest_signal_record.signal_time.strftime('%Y-%m-%d %H:%M:%S') if latest_signal_record.signal_time else '',
+            }
+        if latest_execution_record is not None:
+            latest_execution = {
+                'execution_status': str(latest_execution_record.status or ''),
+                'broker_name': str(latest_execution_record.broker or ''),
+                'price': _safe_float(latest_execution_record.executed_price, 0.0),
+                'reason': str(latest_execution_record.notes or ''),
+            }
+        return latest_signal, latest_execution
+    finally:
+        session.close()
+
+
 def build_observability_dashboard_payload() -> dict[str, Any]:
     snapshot = get_observability_snapshot()
     metrics = snapshot.get('metrics', {})
@@ -148,8 +182,9 @@ def build_observability_dashboard_payload() -> dict[str, Any]:
     recent_failures = tail_events(12, severities={'WARNING', 'ERROR', 'CRITICAL'})
     stages = snapshot.get('stages', {})
     latest_analysis = _load_latest_analysis()
-    latest_signal = dict((latest_analysis.get('signals') or [{}])[-1] if latest_analysis.get('signals') else {})
-    latest_execution = dict((latest_analysis.get('execution_rows') or [{}])[-1] if latest_analysis.get('execution_rows') else {})
+    canonical_signal, canonical_execution = _load_latest_canonical_state()
+    latest_signal = dict(canonical_signal or ((latest_analysis.get('signals') or [{}])[-1] if latest_analysis.get('signals') else {}))
+    latest_execution = dict(canonical_execution or ((latest_analysis.get('execution_rows') or [{}])[-1] if latest_analysis.get('execution_rows') else {}))
     latest_candle = dict((latest_analysis.get('candles') or [{}])[-1] if latest_analysis.get('candles') else {})
     latest_data_status = dict(latest_analysis.get('data_status', {}) or {})
 

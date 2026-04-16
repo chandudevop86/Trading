@@ -186,21 +186,25 @@ def test_execute_workspace_candidates_blocks_live_without_manual_review(tmp_path
 def test_execute_workspace_candidates_blocks_duplicate_trade(tmp_path: Path) -> None:
     session = _build_db_session(tmp_path)
     try:
-        paper_log = tmp_path / "paper.csv"
-        paper_log.write_text(
-            "symbol,signal_time,side,setup_type,execution_status,trade_status,entry_price,stop_loss,target_price,quantity\n"
-            "NIFTY,2026-04-02 09:20:00,BUY,DBR,FILLED,EXECUTED,101,99.5,104,10\n",
-            encoding="utf-8",
-        )
-
         with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+            execute_workspace_candidates(
+                "DEMAND_SUPPLY",
+                "NIFTY",
+                _candles(),
+                [_candidate()],
+                execution_mode="PAPER",
+                paper_log_path=str(tmp_path / "paper.csv"),
+                live_log_path=str(tmp_path / "live.csv"),
+                capital=100000,
+                db_session=session,
+            )
             candidates, result = execute_workspace_candidates(
                 "DEMAND_SUPPLY",
                 "NIFTY",
                 _candles(),
                 [_candidate()],
                 execution_mode="PAPER",
-                paper_log_path=str(paper_log),
+                paper_log_path=str(tmp_path / "paper.csv"),
                 live_log_path=str(tmp_path / "live.csv"),
                 capital=100000,
                 db_session=session,
@@ -218,21 +222,25 @@ def test_execute_workspace_candidates_blocks_duplicate_trade(tmp_path: Path) -> 
 def test_execute_workspace_candidates_blocks_cooldown(tmp_path: Path) -> None:
     session = _build_db_session(tmp_path)
     try:
-        paper_log = tmp_path / "paper.csv"
-        paper_log.write_text(
-            "symbol,signal_time,side,setup_type,execution_status,trade_status,entry_price,stop_loss,target_price,quantity\n"
-            "NIFTY,2026-04-02 09:20:00,SELL,RBD,FILLED,EXECUTED,101,102.5,98,10\n",
-            encoding="utf-8",
-        )
-
         with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+            execute_workspace_candidates(
+                "DEMAND_SUPPLY",
+                "NIFTY",
+                _candles(),
+                [{**_candidate(), "side": "SELL", "timestamp": "2026-04-02 09:20:00", "trade_id": "TRADE-SELL-1"}],
+                execution_mode="PAPER",
+                paper_log_path=str(tmp_path / "paper.csv"),
+                live_log_path=str(tmp_path / "live.csv"),
+                capital=100000,
+                db_session=session,
+            )
             _candidates, result = execute_workspace_candidates(
                 "DEMAND_SUPPLY",
                 "NIFTY",
                 _candles(),
                 [{**_candidate(), "timestamp": "2026-04-02 09:30:00"}],
                 execution_mode="PAPER",
-                paper_log_path=str(paper_log),
+                paper_log_path=str(tmp_path / "paper.csv"),
                 live_log_path=str(tmp_path / "live.csv"),
                 capital=100000,
                 db_session=session,
@@ -248,21 +256,25 @@ def test_execute_workspace_candidates_blocks_cooldown(tmp_path: Path) -> None:
 def test_execute_workspace_candidates_blocks_when_active_trade_exists(tmp_path: Path) -> None:
     session = _build_db_session(tmp_path)
     try:
-        paper_log = tmp_path / "paper.csv"
-        paper_log.write_text(
-            "symbol,signal_time,side,setup_type,execution_status,trade_status,entry_price,stop_loss,target_price,quantity\n"
-            "NIFTY,2026-04-02 09:05:00,BUY,DBR,FILLED,OPEN,101,99.5,104,10\n",
-            encoding="utf-8",
-        )
-
         with patch("vinayak.execution.gateway.validate_trade", return_value=_pass_validation()):
+            execute_workspace_candidates(
+                "DEMAND_SUPPLY",
+                "NIFTY",
+                _candles(),
+                [{**_candidate(), "timestamp": "2026-04-02 09:20:00", "trade_id": "TRADE-OPEN-1"}],
+                execution_mode="PAPER",
+                paper_log_path=str(tmp_path / "paper.csv"),
+                live_log_path=str(tmp_path / "live.csv"),
+                capital=100000,
+                db_session=session,
+            )
             _candidates, result = execute_workspace_candidates(
                 "DEMAND_SUPPLY",
                 "NIFTY",
                 _candles(),
                 [{**_candidate(), "timestamp": "2026-04-02 10:00:00"}],
                 execution_mode="PAPER",
-                paper_log_path=str(paper_log),
+                paper_log_path=str(tmp_path / "paper.csv"),
                 live_log_path=str(tmp_path / "live.csv"),
                 capital=100000,
                 db_session=session,

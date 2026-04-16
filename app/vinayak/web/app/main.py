@@ -47,7 +47,7 @@ def admin_dashboard_page(
                 status_code=401,
                 content={"detail": "Authentication required."}
             )
-        return _render_login('Admin sign in to access the dashboard.')
+        return _render_login('Admin sign in to access the dashboard.', form_action='/admin/login')
 
     service = RoleViewService(db)
     payload = service.build_admin_dashboard()
@@ -181,7 +181,7 @@ LOGIN_HTML = """
     <h1>Vinayak Login</h1>
     <p>Sign in with an admin or user account. Admins go to the operations console. Users go to the signal view.</p>
     __ERROR_BLOCK__
-    <form method="post" action="/login">
+    <form method="post" action="__FORM_ACTION__">
       <label for="username">Username</label>
       <input id="username" name="username" type="text" autocomplete="username" required />
       <label for="password">Password</label>
@@ -194,9 +194,13 @@ LOGIN_HTML = """
 """
 
 
-def _render_login(error_message: str | None = None) -> HTMLResponse:
+def _render_login(error_message: str | None = None, *, form_action: str = '/login') -> HTMLResponse:
     error_block = f'<div class="error">{error_message}</div>' if error_message else ''
-    return HTMLResponse(LOGIN_HTML.replace('__ERROR_BLOCK__', error_block))
+    return HTMLResponse(
+        LOGIN_HTML
+        .replace('__ERROR_BLOCK__', error_block)
+        .replace('__FORM_ACTION__', form_action)
+    )
 
 
 def _auth_config_error_message(*, admin_only: bool) -> str:
@@ -294,35 +298,35 @@ def user_trade_history_page(request: Request, db: Session = Depends(get_db)) -> 
 @router.get('/workspace', response_class=HTMLResponse)
 def live_workspace(request: Request) -> HTMLResponse:
     if not _admin_or_login(request):
-        return _render_login('Admin login required for the workspace.')
+        return _render_login('Admin login required for the workspace.', form_action='/admin/login')
     return HTMLResponse(WORKSPACE_HTML)
 
 
 @router.get('/workspace/observability', response_class=HTMLResponse)
 def observability_page(request: Request) -> HTMLResponse:
     if not _admin_or_login(request):
-        return _render_login('Admin login required for observability.')
+        return _render_login('Admin login required for observability.', form_action='/admin/login')
     return HTMLResponse(build_observability_dashboard_html())
 
 
 @router.get('/workspace/reports', response_class=HTMLResponse)
 def live_workspace_reports(request: Request) -> HTMLResponse:
     if not _admin_or_login(request):
-        return _render_login('Admin login required for reports.')
+        return _render_login('Admin login required for reports.', form_action='/admin/login')
     return HTMLResponse(WORKSPACE_REPORTS_HTML)
 
 
 @router.get('/workspace/downloads', response_class=HTMLResponse)
 def live_workspace_downloads(request: Request) -> HTMLResponse:
     if not _admin_or_login(request):
-        return _render_login('Admin login required for downloads.')
+        return _render_login('Admin login required for downloads.', form_action='/admin/login')
     return HTMLResponse(WORKSPACE_DOWNLOADS_HTML)
 
 
 @router.get('/admin', response_class=HTMLResponse)
 def admin_console(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
     if not _admin_or_login(request):
-        return _render_login('Admin sign in to access the operations console.')
+        return _render_login('Admin sign in to access the operations console.', form_action='/admin/login')
     service = RoleViewService(db)
     return HTMLResponse(render_admin_dashboard_page(service.build_admin_dashboard()))
 
@@ -482,10 +486,10 @@ def admin_login(username: str = Form(...), password: str = Form(...), db: Sessio
     try:
         auth.ensure_default_admin()
     except RuntimeError:
-        return _render_login(_auth_config_error_message(admin_only=True))
+        return _render_login(_auth_config_error_message(admin_only=True), form_action='/admin/login')
     user = auth.authenticate(username, password)
     if user is None or str(user.role).upper() != ADMIN_ROLE:
-        return _render_login('Invalid admin username or password.')
+        return _render_login('Invalid admin username or password.', form_action='/admin/login')
     response = RedirectResponse(url='/admin/dashboard', status_code=303)
     _set_session_cookie(response, auth.create_session_token(user))
     return response

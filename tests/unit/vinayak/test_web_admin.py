@@ -46,6 +46,17 @@ def test_admin_console_requires_login_and_then_renders_dashboard(tmp_path: Path)
         _cleanup_db()
 
 
+def test_admin_console_login_form_posts_to_admin_login(tmp_path: Path) -> None:
+    _configure_db(tmp_path)
+    try:
+        fresh = TestClient(app, raise_server_exceptions=False)
+        login_page = fresh.get('/admin')
+        assert login_page.status_code == 200
+        assert 'action="/admin/login"' in login_page.text
+    finally:
+        _cleanup_db()
+
+
 def test_workspace_requires_login_and_then_renders(tmp_path: Path) -> None:
     _configure_db(tmp_path)
     try:

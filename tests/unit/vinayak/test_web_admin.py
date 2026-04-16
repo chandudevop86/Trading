@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from vinayak.api.main import app
+from vinayak.auth.service import UserAuthService
 from vinayak.core.config import reset_settings_cache
 from vinayak.db.session import reset_database_state
 from vinayak.web.app import main as web_main
@@ -276,6 +277,25 @@ def test_admin_login_requires_explicit_admin_env_configuration(tmp_path: Path, m
         assert 'VINAYAK_ADMIN_SECRET' in response.text
     finally:
         _cleanup_db()
+
+
+def test_bundled_admin_defaults_are_not_blocked_placeholders() -> None:
+    env_text = Path('D:/Trading/app/vinayak/.env.example').read_text(encoding='utf-8')
+    values: dict[str, str] = {}
+    for line in env_text.splitlines():
+        if '=' not in line or line.strip().startswith('#'):
+            continue
+        key, value = line.split('=', 1)
+        values[key.strip()] = value.strip()
+
+    assert not UserAuthService._is_disallowed_admin_env_value(
+        'VINAYAK_ADMIN_PASSWORD',
+        values['VINAYAK_ADMIN_PASSWORD'],
+    )
+    assert not UserAuthService._is_disallowed_admin_env_value(
+        'VINAYAK_ADMIN_SECRET',
+        values['VINAYAK_ADMIN_SECRET'],
+    )
 
 
 def test_admin_jobs_page_renders_for_admin(tmp_path: Path) -> None:

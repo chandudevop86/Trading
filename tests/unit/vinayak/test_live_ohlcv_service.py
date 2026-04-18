@@ -57,7 +57,6 @@ def test_fetch_live_ohlcv_reads_from_redis_before_yahoo(monkeypatch) -> None:
 
     monkeypatch.setattr(service, 'RedisCache', type('RedisCacheStub', (), {'from_env': staticmethod(lambda: cache)}))
     monkeypatch.setattr(service, 'yf', stub)
-    monkeypatch.setattr(service, 'canonical_fetch_live_ohlcv', None)
 
     result = service.fetch_live_ohlcv('^NSEI', '1m', '1d', provider='YAHOO')
 
@@ -90,19 +89,18 @@ def test_fetch_live_ohlcv_uses_redis_latest_on_download_failure(monkeypatch) -> 
 
     monkeypatch.setattr(service, 'RedisCache', type('RedisCacheStub', (), {'from_env': staticmethod(lambda: cache)}))
     monkeypatch.setattr(service, 'yf', _StubYF(error=RuntimeError('timeout')))
-    monkeypatch.setattr(service, 'canonical_fetch_live_ohlcv', None)
 
     result = service.fetch_live_ohlcv('^NSEI', '5m', '1d', provider='YAHOO', use_cache=True)
 
     assert result == latest_rows
 
 
-def test_fetch_live_ohlcv_uses_canonical_dhan_provider(monkeypatch, tmp_path: Path) -> None:
+def test_fetch_live_ohlcv_uses_app_dhan_provider(monkeypatch, tmp_path: Path) -> None:
     captured: dict[str, object] = {}
     security_map_path = tmp_path / 'dhan_security_map.csv'
     security_map_path.write_text('alias,security_id\n^NSEI,IDXNIFTY\n', encoding='utf-8')
 
-    def _fake_canonical(symbol, interval, period, **kwargs):
+    def _fake_dhan_fetch(symbol, interval, period, **kwargs):
         captured['symbol'] = symbol
         captured['interval'] = interval
         captured['period'] = period
@@ -124,8 +122,8 @@ def test_fetch_live_ohlcv_uses_canonical_dhan_provider(monkeypatch, tmp_path: Pa
             }
         ]
 
-    monkeypatch.setattr(service, 'canonical_fetch_live_ohlcv', _fake_canonical)
-    monkeypatch.setattr(service, 'load_security_map', lambda path: {'mock': 'map'})
+    monkeypatch.setattr(service, 'fetch_dhan_ohlcv', _fake_dhan_fetch)
+    monkeypatch.setattr(service, '_load_security_map_cached', lambda path: {'mock': 'map'})
 
     rows = service.fetch_live_ohlcv(
         '^NSEI',
@@ -137,7 +135,6 @@ def test_fetch_live_ohlcv_uses_canonical_dhan_provider(monkeypatch, tmp_path: Pa
     )
 
     assert rows[0]['provider'] == 'DHAN'
-    assert captured['kwargs']['provider'] == 'DHAN'
     assert captured['kwargs']['force_refresh'] is True
     assert captured['kwargs']['security_map'] == {'mock': 'map'}
 

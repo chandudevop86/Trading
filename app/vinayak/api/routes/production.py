@@ -24,9 +24,9 @@ from vinayak.domain.models import (
     Timeframe,
 )
 from vinayak.execution.guard import ExecutionGuard, InMemoryGuardStateStore, RedisGuardStateStore
-from vinayak.execution.service import ProductionExecutionService
-from vinayak.market_data.providers.legacy_live_ohlcv import LegacyLiveOhlcvProvider
+from vinayak.execution.canonical_service import ProductionExecutionService
 from vinayak.market_data.providers.base import MarketDataRequest
+from vinayak.market_data.providers.runtime_live_ohlcv import RuntimeLiveOhlcvProvider
 from vinayak.market_data.service import InMemoryCacheStore, MarketDataService
 from vinayak.observability.prometheus import snapshot_metrics
 from vinayak.services.admin_views import AdminViewService
@@ -66,7 +66,7 @@ class _MemoryAuditRepository:
 
 _AUDIT_REPOSITORY = _MemoryAuditRepository()
 _MARKET_DATA_SERVICE = MarketDataService(
-    provider=LegacyLiveOhlcvProvider(),
+    provider=RuntimeLiveOhlcvProvider(),
     cache_store=InMemoryCacheStore(),
 )
 _STRATEGY_RUNNER = StrategyRunnerService()

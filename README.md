@@ -1,9 +1,8 @@
 # Trading Platform Workspace
 
-This repository now carries both:
+This repository now supports one runtime surface:
 
-- the legacy monolithic runtime under `src/`
-- the separated Vinayak application tier under `app/vinayak/`
+- the application tier under `app/`
 
 The practical repo layout is now:
 
@@ -13,40 +12,28 @@ web/      -> web-tier delivery assets such as nginx config
 infra/    -> deployment and operations assets
 docs/     -> architecture and runbooks
 tests/    -> unit and integration test suites
-src/      -> legacy runtime kept for controlled migration
+src/      -> deprecated legacy source retained only for migration/reference
 ```
 
 ## Start Here
 
 Current-state docs are split by purpose:
-- Local/operator guidance: `docs/legacy_local_ops.md`
-- Deployment boundaries and limits: `docs/legacy_deployment_limits.md`
+- Local/operator guidance: `docs/active_code_surface.md`
 - Migration direction and guardrails: `docs/migration_notes.md`
-- Active supported runtime surface: `docs/active_code_surface.md`
+- Migration inventory report: `docs/src_to_app_migration_report.md`
 - Experimental/reference surfaces: `src/EXPERIMENTAL_SURFACE.md`, `src/_archive/README.md`, `snapshots/README.md`
 
-## Supported Legacy Entrypoints
-
-- `streamlit run src/Trading.py`
-- `tools/run_app.ps1`
-- `py -3 -m src.breakout_bot ...`
-- `py -3 -m src.auto_run ...`
-- `py -3 -m src.auto_backtest ...`
-- `py -3 -m src.dhan_example ...`
-- `py -3 -m src.dhan_account ...`
-
-## Vinayak App Tier Entrypoint
+## Supported Entrypoint
 
 - `py -3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000`
 
-Legacy imports such as `vinayak.api.main` are kept working through a compatibility shim while the repo settles into the new structure.
+`app.main:app` is the supported runtime entrypoint. Legacy `src/*` entrypoints are deprecated and should not be used for new operations, automation, or deployment.
 
-## Generic Rules Utilities
+## Migration Status
 
-- `py -3 -m src.main --input data/input.csv --rules data/rules.yaml --output data/output.csv`
-- `py -3 -m src.nifty50 --snapshot-output data/nifty50_snapshot.csv --rules data/nifty50_rules.yaml --scored-output data/nifty50_scored.csv`
-- `py -3 -m src.nifty_options --input data/nifty_options_chain_sample.csv --rules data/nifty_options_rules.yaml --output data/nifty_options_scored.csv`
-- `py -3 -m src.nifty_futures --symbol NIFTY --snapshot-output data/nifty_futures_snapshot.csv --rules data/nifty_futures_rules.yaml --scored-output data/nifty_futures_scored.csv`
+- Runtime entrypoint: `app.main:app`
+- Active application package: `app/vinayak/`
+- Legacy `src/`: deprecated and being retired behind explicit migration work only
 
 ## Quick Setup
 

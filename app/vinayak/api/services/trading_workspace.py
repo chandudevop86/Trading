@@ -40,9 +40,9 @@ from vinayak.api.services.report_storage import cache_json_artifact, store_json_
 from vinayak.api.services.strategy_workflow import Candle, StrategyContext, run_strategy_workflow
 from vinayak.api.services.strike_selector import attach_option_strikes
 from vinayak.analytics.readiness import evaluate_readiness
+from vinayak.execution.broker.payload_builder import load_security_map
 from vinayak.execution.gateway import execute_workspace_candidates
-from vinayak.legacy.market_data import load_legacy_security_map
-from vinayak.legacy.options import build_legacy_option_metrics_map, extract_legacy_option_records, fetch_legacy_option_chain, normalize_legacy_index_symbol
+from vinayak.infrastructure.market_data.option_chain import build_metrics_map, extract_option_records, fetch_option_chain, normalize_index_symbol
 from vinayak.messaging.bus import build_message_bus
 from vinayak.messaging.events import EVENT_ANALYSIS_COMPLETED
 from vinayak.metrics import run_full_metrics_engine
@@ -105,10 +105,10 @@ def attach_option_metrics(rows: list[dict[str, object]], symbol: str, fetch_opti
         rows,
         symbol=symbol,
         fetch_option_metrics=fetch_option_metrics,
-        fetch_legacy_option_chain_fn=fetch_legacy_option_chain,
-        extract_legacy_option_records_fn=extract_legacy_option_records,
-        build_legacy_option_metrics_map_fn=build_legacy_option_metrics_map,
-        normalize_legacy_index_symbol_fn=normalize_legacy_index_symbol,
+        fetch_legacy_option_chain_fn=fetch_option_chain,
+        extract_legacy_option_records_fn=extract_option_records,
+        build_legacy_option_metrics_map_fn=build_metrics_map,
+        normalize_legacy_index_symbol_fn=normalize_index_symbol,
     )
 
 
@@ -122,11 +122,10 @@ def _normalize_rows(rows: list[dict[str, object]]) -> list[dict[str, Any]]:
 
 def _resolve_live_execution_kwargs(security_map_path: str) -> dict[str, object]:
     security_map: dict[str, dict[str, str]] = {}
-    if load_legacy_security_map is not None:
-        try:
-            security_map = load_legacy_security_map(Path(str(security_map_path)))
-        except Exception:
-            security_map = {}
+    try:
+        security_map = load_security_map(Path(str(security_map_path)))
+    except Exception:
+        security_map = {}
     return {'broker_name': 'DHAN', 'security_map': security_map}
 
 

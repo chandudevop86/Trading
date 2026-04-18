@@ -63,3 +63,66 @@ class DhanClient:
         if 'broker_reference' not in response:
             response['broker_reference'] = str(response.get('orderId') or response.get('order_id') or '')
         return response
+
+    @classmethod
+    def from_env(cls) -> 'DhanClient':
+        return cls(
+            os.getenv('DHAN_CLIENT_ID'),
+            os.getenv('DHAN_ACCESS_TOKEN'),
+            base_url=os.getenv('DHAN_BASE_URL'),
+            timeout=int(os.getenv('DHAN_TIMEOUT', '30')),
+        )
+
+    def get_historical_data(
+        self,
+        *,
+        security_id: str | int,
+        exchange_segment: str,
+        instrument: str,
+        from_date: str,
+        to_date: str,
+        expiry_code: int = 0,
+        oi: bool = False,
+    ) -> dict[str, object]:
+        if not self.is_ready():
+            raise DhanClientConfigError('Dhan credentials are missing.')
+        return self._request(
+            'POST',
+            '/charts/historical',
+            {
+                'securityId': str(security_id),
+                'exchangeSegment': str(exchange_segment).upper(),
+                'instrument': str(instrument).upper(),
+                'expiryCode': int(expiry_code),
+                'oi': bool(oi),
+                'fromDate': str(from_date),
+                'toDate': str(to_date),
+            },
+        )
+
+    def get_intraday_data(
+        self,
+        *,
+        security_id: str | int,
+        exchange_segment: str,
+        instrument: str,
+        interval: int,
+        from_date: str,
+        to_date: str,
+        oi: bool = False,
+    ) -> dict[str, object]:
+        if not self.is_ready():
+            raise DhanClientConfigError('Dhan credentials are missing.')
+        return self._request(
+            'POST',
+            '/charts/intraday',
+            {
+                'securityId': str(security_id),
+                'exchangeSegment': str(exchange_segment).upper(),
+                'instrument': str(instrument).upper(),
+                'interval': int(interval),
+                'oi': bool(oi),
+                'fromDate': str(from_date),
+                'toDate': str(to_date),
+            },
+        )

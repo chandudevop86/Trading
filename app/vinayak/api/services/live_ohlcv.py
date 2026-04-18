@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 import csv
 import os
 import re
+from zoneinfo import ZoneInfo
 
 from vinayak.cache.redis_client import RedisCache, build_cache_key
-from vinayak.legacy.market_data import fetch_legacy_live_ohlcv as canonical_fetch_live_ohlcv, load_legacy_security_map as load_security_map
+from vinayak.execution.broker.dhan_client import DhanClient
+from vinayak.infrastructure.market_data.dhan_security_map import (
+    find_cash_instrument,
+    load_security_map,
+    normalize_trading_symbol,
+)
 
 try:
     import yfinance as yf  # type: ignore
@@ -27,9 +33,42 @@ DEFAULT_FALLBACK_PATHS = [
     Path('data/live_ohlcv.csv'),
 ]
 REDIS_CANDLE_TTL_SECONDS = 900
+INTRADAY_MAX_DAYS = 89
 _PERIOD_RE = re.compile(r'^(?P<count>\d+)(?P<unit>m[oo]?|d|wk|w|y)$', re.IGNORECASE)
 _REDIS_CACHE = RedisCache.from_env()
 _SECURITY_MAP_CACHE: dict[str, dict[str, Any]] = {}
+YAHOO_SYMBOL_ALIASES = {
+    '^NSEI': '^NSEI',
+    'NSEI': '^NSEI',
+    'NIFTY': '^NSEI',
+    'NIFTY50': '^NSEI',
+    'NIFTY 50': '^NSEI',
+    '^NSEBANK': '^NSEBANK',
+    'NSEBANK': '^NSEBANK',
+    'BANKNIFTY': '^NSEBANK',
+    'NIFTYBANK': '^NSEBANK',
+    'NIFTY BANK': '^NSEBANK',
+}
+try:
+    IST = ZoneInfo('Asia/Kolkata')
+except Exception:
+    IST = timezone(timedelta(hours=5, minutes=30))
+_INTERVAL_ALIASES: dict[str, tuple[str, int, int | None]] = {
+    '1m': ('intraday', 1, None),
+    '2m': ('intraday', 1, 2),
+    '5m': ('intraday', 5, None),
+    '15m': ('intraday', 15, None),
+    '25m': ('intraday', 25, None),
+    '30m': ('intraday', 15, 30),
+    '60m': ('intraday', 60, None),
+    '1h': ('intraday', 60, None),
+    '90m': ('intraday', 15, 90),
+    '1d': ('daily', 1, None),
+    '5d': ('daily', 1, 5),
+    '1wk': ('daily', 1, -1),
+    '1mo': ('daily', 1, -2),
+    '3mo': ('daily', 1, -3),
+}
 
 
 def _sanitize_key(text: object) -> str:
@@ -38,7 +77,7 @@ def _sanitize_key(text: object) -> str:
 
 
 def _period_to_range(period: str) -> tuple[datetime, datetime]:
-    end_dt = datetime.now(UTC)
+    end_dt = datetime.now(IST)
     text = str(period or '1d').strip().lower()
     match = _PERIOD_RE.match(text)
     if not match:
@@ -57,6 +96,15 @@ def _period_to_range(period: str) -> tuple[datetime, datetime]:
     else:
         delta = timedelta(days=1)
     return end_dt - delta, end_dt
+
+
+def _normalize_yahoo_symbol(symbol: str) -> str:
+    raw = str(symbol or '').strip()
+    upper = raw.upper()
+    compact = re.sub(r'[^A-Z0-9^]', '', upper)
+    if upper in YAHOO_SYMBOL_ALIASES:
+        return YAHOO_SYMBOL_ALIASES[upper]
+    return YAHOO_SYMBOL_ALIASES.get(compact, raw)
 
 
 def build_candle_cache_path(
@@ -137,6 +185,49 @@ def _normalize_frame(df: Any, *, symbol: str, interval: str) -> list[dict[str, A
             }
         )
     return rows
+
+
+def _build_normalized_candle(
+    *,
+    timestamp: object,
+    open_price: object,
+    high_price: object,
+    low_price: object,
+    close_price: object,
+    volume: object,
+    interval: str = '',
+    provider: str = '',
+    symbol: str = '',
+    source: str = '',
+    exchange_segment: str = '',
+    security_id: str = '',
+    instrument: str = '',
+    open_interest: object = 0,
+    is_closed: bool = True,
+) -> dict[str, Any]:
+    if isinstance(timestamp, datetime):
+        timestamp_text = timestamp.astimezone(UTC).strftime('%Y-%m-%d %H:%M:%S')
+    else:
+        timestamp_text = str(timestamp)
+    close_value = float(close_price or 0.0)
+    return {
+        'timestamp': timestamp_text,
+        'open': float(open_price or 0.0),
+        'high': float(high_price or 0.0),
+        'low': float(low_price or 0.0),
+        'close': close_value,
+        'volume': int(float(volume or 0)),
+        'price': close_value,
+        'interval': interval,
+        'provider': str(provider or '').upper(),
+        'symbol': str(symbol or ''),
+        'source': str(source or '').upper(),
+        'exchange_segment': str(exchange_segment or '').upper(),
+        'security_id': str(security_id or ''),
+        'instrument': str(instrument or '').upper(),
+        'open_interest': int(float(open_interest or 0)),
+        'is_closed': bool(is_closed),
+    }
 
 
 def read_candle_cache(path: Path) -> list[dict[str, Any]]:
@@ -270,6 +361,277 @@ def _load_security_map_cached(path: Path) -> dict[str, Any] | None:
     return value
 
 
+def _resolve_dhan_instrument(symbol: str, security_map: dict[str, Any] | None = None) -> dict[str, str]:
+    record = find_cash_instrument(security_map, symbol)
+    if not record:
+        normalized = normalize_trading_symbol(symbol)
+        raise ValueError(f'No Dhan cash instrument found for {symbol or normalized}')
+
+    security_id = str(record.get('security_id', '') or '').strip()
+    exchange_segment = str(record.get('exchange_segment', '') or '').strip().upper()
+    instrument = str(record.get('instrument_type', '') or record.get('instrument_name', '') or '').strip().upper()
+    if not security_id or not exchange_segment or not instrument:
+        raise ValueError(f'Incomplete Dhan instrument mapping for {symbol}')
+    return {
+        'security_id': security_id,
+        'exchange_segment': exchange_segment,
+        'instrument': instrument,
+    }
+
+
+def _format_dhan_date(dt: datetime) -> str:
+    return dt.astimezone(IST).strftime('%Y-%m-%d')
+
+
+def _format_dhan_timestamp(dt: datetime) -> str:
+    return dt.astimezone(IST).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _normalize_dhan_epoch_timestamp(value: object) -> str:
+    epoch = int(value)
+    return datetime.fromtimestamp(epoch, tz=UTC).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _validate_dhan_ohlcv_rows(payload: dict[str, Any], *, symbol: str, interval: str, source: str) -> None:
+    opens = payload.get('open') if isinstance(payload, dict) else None
+    highs = payload.get('high') if isinstance(payload, dict) else None
+    lows = payload.get('low') if isinstance(payload, dict) else None
+    closes = payload.get('close') if isinstance(payload, dict) else None
+    volumes = payload.get('volume') if isinstance(payload, dict) else None
+    timestamps = payload.get('timestamp') if isinstance(payload, dict) else None
+    if not all(isinstance(series, list) for series in (opens, highs, lows, closes, volumes, timestamps)):
+        raise ValueError(f'Dhan candle payload missing OHLCV arrays for {symbol} {interval} ({source})')
+    expected_length = len(timestamps)
+    for series_name, series in (('open', opens), ('high', highs), ('low', lows), ('close', closes), ('volume', volumes)):
+        if len(series) != expected_length:
+            raise ValueError(f'Dhan candle validation failed for {symbol} {interval} ({source}): {series_name} length mismatch.')
+
+
+def _dhan_payload_to_rows(
+    payload: dict[str, Any],
+    *,
+    symbol: str,
+    interval: str,
+    exchange_segment: str,
+    security_id: str,
+    instrument: str,
+    source: str,
+) -> list[dict[str, Any]]:
+    opens = payload.get('open') or []
+    highs = payload.get('high') or []
+    lows = payload.get('low') or []
+    closes = payload.get('close') or []
+    volumes = payload.get('volume') or []
+    timestamps = payload.get('timestamp') or []
+    open_interest = payload.get('open_interest') if isinstance(payload.get('open_interest'), list) else []
+
+    rows: list[dict[str, Any]] = []
+    for i, ts in enumerate(timestamps):
+        if i >= len(opens) or i >= len(highs) or i >= len(lows) or i >= len(closes) or i >= len(volumes):
+            break
+        rows.append(
+            _build_normalized_candle(
+                timestamp=_normalize_dhan_epoch_timestamp(ts),
+                open_price=opens[i],
+                high_price=highs[i],
+                low_price=lows[i],
+                close_price=closes[i],
+                volume=volumes[i],
+                interval=interval,
+                provider='DHAN',
+                symbol=symbol,
+                source=source,
+                exchange_segment=exchange_segment,
+                security_id=security_id,
+                instrument=instrument,
+                open_interest=open_interest[i] if i < len(open_interest) else 0,
+                is_closed=True,
+            )
+        )
+    return rows
+
+
+def _dedupe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        timestamp = str(row.get('timestamp', '') or '')
+        if timestamp:
+            deduped[timestamp] = row
+    return [deduped[key] for key in sorted(deduped.keys())]
+
+
+def _floor_bucket(dt: datetime, minutes: int) -> datetime:
+    minute = (dt.minute // minutes) * minutes
+    return dt.replace(minute=minute, second=0, microsecond=0)
+
+
+def _aggregate_minute_rows(rows: list[dict[str, Any]], target_minutes: int) -> list[dict[str, Any]]:
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        dt = datetime.strptime(str(row['timestamp']), '%Y-%m-%d %H:%M:%S').replace(tzinfo=UTC)
+        bucket = _floor_bucket(dt, target_minutes).strftime('%Y-%m-%d %H:%M:%S')
+        buckets.setdefault(bucket, []).append(row)
+
+    aggregated: list[dict[str, Any]] = []
+    for bucket in sorted(buckets.keys()):
+        chunk = buckets[bucket]
+        aggregated.append(
+            _build_normalized_candle(
+                timestamp=bucket,
+                open_price=chunk[0]['open'],
+                high_price=max(float(item['high']) for item in chunk),
+                low_price=min(float(item['low']) for item in chunk),
+                close_price=chunk[-1]['close'],
+                volume=sum(int(float(item.get('volume', 0) or 0)) for item in chunk),
+                interval=f'{target_minutes}m',
+                provider=chunk[-1].get('provider', ''),
+                symbol=chunk[-1].get('symbol', ''),
+                source=chunk[-1].get('source', ''),
+                exchange_segment=chunk[-1].get('exchange_segment', ''),
+                security_id=chunk[-1].get('security_id', ''),
+                instrument=chunk[-1].get('instrument', ''),
+                open_interest=chunk[-1].get('open_interest', 0),
+                is_closed=True,
+            )
+        )
+    return aggregated
+
+
+def _aggregate_daily_rows(rows: list[dict[str, Any]], mode: int, output_interval: str) -> list[dict[str, Any]]:
+    parsed = [{**row, '_dt': datetime.strptime(str(row['timestamp']), '%Y-%m-%d %H:%M:%S').replace(tzinfo=UTC)} for row in rows]
+    parsed.sort(key=lambda item: item['_dt'])
+    buckets: dict[str, list[dict[str, Any]]] = {}
+
+    for index, row in enumerate(parsed):
+        dt = row['_dt']
+        if mode == 5:
+            bucket = f'{index // 5:08d}'
+        elif mode == -1:
+            iso_year, iso_week, _ = dt.isocalendar()
+            bucket = f'{iso_year}-W{iso_week:02d}'
+        elif mode == -2:
+            bucket = f'{dt.year}-{dt.month:02d}'
+        elif mode == -3:
+            quarter = ((dt.month - 1) // 3) + 1
+            bucket = f'{dt.year}-Q{quarter}'
+        else:
+            bucket = dt.strftime('%Y-%m-%d')
+        buckets.setdefault(bucket, []).append(row)
+
+    aggregated: list[dict[str, Any]] = []
+    for bucket in sorted(buckets.keys()):
+        chunk = buckets[bucket]
+        aggregated.append(
+            _build_normalized_candle(
+                timestamp=chunk[0]['_dt'],
+                open_price=chunk[0]['open'],
+                high_price=max(float(item['high']) for item in chunk),
+                low_price=min(float(item['low']) for item in chunk),
+                close_price=chunk[-1]['close'],
+                volume=sum(int(float(item.get('volume', 0) or 0)) for item in chunk),
+                interval=output_interval,
+                provider=chunk[-1].get('provider', ''),
+                symbol=chunk[-1].get('symbol', ''),
+                source=chunk[-1].get('source', ''),
+                exchange_segment=chunk[-1].get('exchange_segment', ''),
+                security_id=chunk[-1].get('security_id', ''),
+                instrument=chunk[-1].get('instrument', ''),
+                open_interest=chunk[-1].get('open_interest', 0),
+                is_closed=True,
+            )
+        )
+    return aggregated
+
+
+def fetch_dhan_ohlcv(
+    symbol: str,
+    interval: str,
+    period: str,
+    *,
+    security_map: dict[str, Any] | None = None,
+    broker_client: object | None = None,
+    use_cache: bool = True,
+    force_refresh: bool = False,
+    cache_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    mode, base_interval, aggregate_to = _INTERVAL_ALIASES.get(interval, ('intraday', 5, None))
+    instrument = _resolve_dhan_instrument(symbol, security_map=security_map)
+    start_dt, end_dt = _period_to_range(period)
+    cache_path = build_candle_cache_path(
+        provider='DHAN',
+        symbol=symbol,
+        interval=interval,
+        start_dt=start_dt.astimezone(UTC),
+        end_dt=end_dt.astimezone(UTC),
+        cache_dir=cache_dir,
+    )
+
+    if use_cache and not force_refresh:
+        cached_rows = read_candle_cache(cache_path)
+        if cached_rows:
+            return cached_rows
+
+    client = broker_client if broker_client is not None else DhanClient.from_env()
+    rows: list[dict[str, Any]] = []
+    if mode == 'daily':
+        payload = client.get_historical_data(
+            security_id=instrument['security_id'],
+            exchange_segment=instrument['exchange_segment'],
+            instrument=instrument['instrument'],
+            from_date=_format_dhan_date(start_dt),
+            to_date=_format_dhan_date(end_dt + timedelta(days=1)),
+            oi=False,
+        )
+        _validate_dhan_ohlcv_rows(payload, symbol=symbol, interval='1d', source='DHAN_HISTORICAL')
+        rows = _dhan_payload_to_rows(
+            payload,
+            symbol=symbol,
+            interval='1d',
+            exchange_segment=instrument['exchange_segment'],
+            security_id=instrument['security_id'],
+            instrument=instrument['instrument'],
+            source='DHAN_HISTORICAL',
+        )
+    else:
+        cursor = start_dt
+        while cursor < end_dt:
+            chunk_end = min(cursor + timedelta(days=INTRADAY_MAX_DAYS), end_dt)
+            payload = client.get_intraday_data(
+                security_id=instrument['security_id'],
+                exchange_segment=instrument['exchange_segment'],
+                instrument=instrument['instrument'],
+                interval=base_interval,
+                from_date=_format_dhan_timestamp(cursor),
+                to_date=_format_dhan_timestamp(chunk_end),
+                oi=False,
+            )
+            _validate_dhan_ohlcv_rows(payload, symbol=symbol, interval=f'{base_interval}m', source='DHAN_HISTORICAL')
+            rows.extend(
+                _dhan_payload_to_rows(
+                    payload,
+                    symbol=symbol,
+                    interval=f'{base_interval}m',
+                    exchange_segment=instrument['exchange_segment'],
+                    security_id=instrument['security_id'],
+                    instrument=instrument['instrument'],
+                    source='DHAN_HISTORICAL',
+                )
+            )
+            if chunk_end <= cursor:
+                break
+            cursor = chunk_end
+
+    rows = _dedupe_rows(rows)
+    if aggregate_to:
+        rows = _aggregate_daily_rows(rows, aggregate_to, interval) if mode == 'daily' else _aggregate_minute_rows(rows, aggregate_to)
+    else:
+        rows = [dict(row, interval=interval) for row in rows]
+
+    if use_cache and rows:
+        write_candle_cache(cache_path, rows)
+    return rows
+
+
 def fetch_live_ohlcv(
     symbol: str,
     interval: str = '1m',
@@ -283,28 +645,20 @@ def fetch_live_ohlcv(
     cache_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     selected_provider = str(provider or os.getenv('VINAYAK_MARKET_DATA_PROVIDER', os.getenv('MARKET_DATA_PROVIDER', 'AUTO')) or 'AUTO').strip().upper()
-    if canonical_fetch_live_ohlcv is not None:
-        security_map: dict[str, Any] | None = None
-        if selected_provider in {'DHAN', 'AUTO'}:
-            resolved_map_path = Path(str(security_map_path or os.getenv('DHAN_SECURITY_MAP', 'app/vinayak/data/dhan_security_map.csv')))
-            security_map = _load_security_map_cached(resolved_map_path)
-        if selected_provider in {'DHAN', 'AUTO', 'YAHOO'}:
-            try:
-                rows = canonical_fetch_live_ohlcv(
-                    symbol,
-                    interval,
-                    period,
-                    provider=selected_provider,
-                    security_map=security_map,
-                    use_cache=use_cache,
-                    force_refresh=force_refresh,
-                    cache_dir=cache_dir,
-                )
-                if rows:
-                    return rows
-            except Exception:
-                if selected_provider == 'DHAN':
-                    raise
+    security_map: dict[str, Any] | None = None
+    if selected_provider in {'DHAN', 'AUTO'}:
+        resolved_map_path = Path(str(security_map_path or os.getenv('DHAN_SECURITY_MAP', 'app/vinayak/data/dhan_security_map.csv')))
+        security_map = _load_security_map_cached(resolved_map_path)
+        if selected_provider == 'DHAN':
+            return fetch_dhan_ohlcv(
+                symbol,
+                interval,
+                period,
+                security_map=security_map,
+                use_cache=use_cache,
+                force_refresh=force_refresh,
+                cache_dir=cache_dir,
+            )
     if yf is None:
         raise ModuleNotFoundError('yfinance is required for fetch_live_ohlcv (pip install yfinance)')
 
@@ -347,7 +701,7 @@ def fetch_live_ohlcv(
 
     try:
         df = yf.download(
-            tickers=symbol,
+            tickers=_normalize_yahoo_symbol(symbol),
             interval=interval,
             period=period,
             auto_adjust=False,
@@ -356,6 +710,16 @@ def fetch_live_ohlcv(
             timeout=timeout,
         )
     except Exception:
+        if selected_provider == 'AUTO':
+            return fetch_dhan_ohlcv(
+                symbol,
+                interval,
+                period,
+                security_map=security_map,
+                use_cache=use_cache,
+                force_refresh=force_refresh,
+                cache_dir=cache_dir,
+            )
         if stale_rows:
             return stale_rows
         csv_fallback_rows = _read_fallback_ohlcv(fallback_path)
@@ -370,6 +734,16 @@ def fetch_live_ohlcv(
         _write_redis_rows(latest_redis_key, rows)
     if rows:
         return rows
+    if selected_provider == 'AUTO':
+        return fetch_dhan_ohlcv(
+            symbol,
+            interval,
+            period,
+            security_map=security_map,
+            use_cache=use_cache,
+            force_refresh=force_refresh,
+            cache_dir=cache_dir,
+        )
     if stale_rows:
         return stale_rows
     return _read_fallback_ohlcv(fallback_path)

@@ -15,7 +15,7 @@ from vinayak.domain.models import (
     TradeSignalType,
 )
 from vinayak.execution.guard import ExecutionGuard, InMemoryGuardStateStore
-from vinayak.execution.service import ProductionExecutionService
+from vinayak.execution.canonical_service import ProductionExecutionService
 
 
 @dataclass

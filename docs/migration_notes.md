@@ -1,39 +1,40 @@
 # Migration Notes
 
-Scope: pointers for future migration work without redefining the current legacy operating surface.
+Scope: migrate supported runtime behavior from `src/` into `app/` and retire `src/` from operator-facing runtime paths.
 
 ## Current Baseline
 
-The maintained legacy product is the `src/` monolith and its active operator/runtime entrypoints.
-Migration work should preserve that baseline while reducing coupling and operational ambiguity.
+- Supported runtime entrypoint: `app.main:app`
+- Active application package: `app/vinayak/`
+- Legacy `src/`: deprecated and retained only while specific behavior is being migrated or verified
 
 ## Current Refactor Direction
 
-The codebase is being separated by domain:
-- market/data helpers
-- strategies and routing
-- execution workflows
-- reporting/summary helpers
-- UI/presentation helpers
-
-Recent examples include:
-- `src/trading_runtime_service.py`
-- `src/trading_ui_service.py`
-- `src/market_data_service.py`
-- `src/reporting_service.py`
-- `src/runtime_file_service.py`
+The migration is converging on one canonical application path:
+- market data through app-owned fetch and normalization services
+- validation and execution through one reviewed-trade and execution workflow
+- observability from repository-backed and app-owned services
+- route handlers as thin orchestration surfaces only
 
 ## Migration Guardrails
 
-- Do not expand the active legacy runtime surface while migrating.
-- Do not point operators to `snapshots/`, `src/_archive/`, or compatibility wrappers.
-- Keep current-state docs aligned with the supported legacy entrypoints.
-- Treat rewrite or next-generation directions as separate from the maintained legacy runtime.
+- Do not reintroduce `src.*` imports into active runtime files under `app/`
+- Do not use `sys.path` mutation or repo-root import hacks in supported entrypoints
+- Keep `app.main:app` as the only supported runtime start target
+- Keep live execution guarded and explicit while consolidating execution paths
+- Prefer typed app services and repositories over dict-heavy legacy coupling
+
+## Current Stage
+
+This migration pass:
+- removes the `app.main` path hack
+- moves active live-OHLCV fetching and Dhan security-map handling onto app-owned modules
+- moves active OHLCV normalization and option-chain helpers onto app-owned infrastructure modules
+- updates operator docs so `app/` is the primary code surface
 
 ## Related Context Docs
 
-- `docs/legacy_scope.md`
-- `docs/legacy_src_contracts.md`
-- `docs/legacy_src_gap_analysis.md`
+- `docs/active_code_surface.md`
+- `docs/src_to_app_migration_report.md`
 - `docs/monolith_to_microservices_migration_report.md`
 - `docs/trading_platform_transformation_proposal.md`

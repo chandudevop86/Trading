@@ -5,13 +5,13 @@ from datetime import UTC, datetime
 import pandas as pd
 
 from vinayak.api.services.live_ohlcv import fetch_live_ohlcv
-from vinayak.market_data.providers.base import MarketDataProvider, MarketDataRequest, ProviderResult
+from vinayak.market_data.providers.base import MarketDataRequest, ProviderResult
 
 
-class LegacyLiveOhlcvProvider:
-    """Compatibility provider retained for migration-only references."""
+class RuntimeLiveOhlcvProvider:
+    """App-owned live OHLCV provider for the supported runtime surface."""
 
-    name = 'LEGACY_LIVE_OHLCV'
+    name = 'RUNTIME_LIVE_OHLCV'
 
     def fetch(self, request: MarketDataRequest) -> ProviderResult:
         rows = fetch_live_ohlcv(
@@ -21,9 +21,8 @@ class LegacyLiveOhlcvProvider:
             provider=request.provider,
             force_refresh=True,
         )
-        frame = pd.DataFrame(rows)
         return ProviderResult(
-            frame=frame,
+            frame=pd.DataFrame(rows),
             fetched_at=datetime.now(UTC),
             provider=self.name,
             cache_hit=False,

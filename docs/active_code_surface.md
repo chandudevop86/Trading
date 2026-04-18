@@ -1,29 +1,25 @@
 # Active Code Surface
 
-Supported current-state legacy operator surface:
-- UI: `streamlit run src/Trading.py`
-- Local launcher: `tools/run_app.ps1`
-- Docker local profile: `deploy/docker/Dockerfile` and `deploy/docker/docker-compose.yml`
-- Batch/operator CLIs under active support: `src.auto_run`, `src.auto_backtest`, `src.breakout_bot`, `src.dhan_example`, `src.dhan_account`
+Supported runtime and operator surface:
+- API runtime: `py -3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000`
+- Application package: `app/vinayak/`
+- Docker API runtime: `infra/app/docker/Dockerfile`
+- Production systemd runtime: `infra/production/systemd/vinayak-api.service`
 
-Compatibility-supported but not primary operator surface:
-- `src.btst_bot` -> prefer `py -3 -m src.auto_backtest`
+Supported code boundaries:
+- API: `app/vinayak/api/`
+- Application orchestration and services: `app/vinayak/api/services/`, `app/vinayak/services/`, `app/vinayak/execution/`, `app/vinayak/market_data/`
+- Persistence and infrastructure: `app/vinayak/db/`, `app/vinayak/cache/`, `app/vinayak/messaging/`, `app/vinayak/observability/`, `app/vinayak/infrastructure/`
 
-Deprecated legacy operator surface:
-- `src.main` -> use `tools/run_auto_backtest.ps1`
-- `src.nifty50` -> use `tools/run_auto_backtest.ps1`
-- `src.nifty_options` -> use `streamlit run src/Trading.py`
-- `src.nifty_futures` -> use `streamlit run src/Trading.py`
-- `src.reconcile_live` -> use `py -3 -m src.auto_run`
-- `src.reconcile_positions` -> use `py -3 -m src.auto_run`
-
-Use compatibility-supported entrypoints only to preserve older scripts or operator habits. New automation and new documentation should target the active surface first. Deprecated entrypoints should be removed from operator usage entirely.
+Deprecated runtime surface:
+- `src/` entrypoints and operators
+- `streamlit run src/Trading.py`
+- `py -3 -m src.auto_run`
+- `py -3 -m src.auto_backtest`
 
 Reference-only surfaces that are not supported runtime or deployment targets:
-- `src/breakout_app.py` compatibility wrapper
-- backup/temp files documented in `src/EXPERIMENTAL_SURFACE.md`
 - `src/_archive/`
 - `snapshots/`
-- rewrite/parallel platform surfaces outside the supported legacy runtime boundary
+- backup/temp files documented in `src/EXPERIMENTAL_SURFACE.md`
 
-If a file or directory is not listed above as an active surface or compatibility-supported surface, do not treat it as an approved operator or deployment target.
+If a file or directory is not listed above as an active surface, do not treat it as an approved operator or deployment target.

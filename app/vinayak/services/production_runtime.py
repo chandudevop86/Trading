@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Application service for production signal orchestration."""
 
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from vinayak.domain.models import Candle, CandleBatch, RiskConfig, StrategyConfig, StrategySignalBatch, Timeframe
@@ -16,9 +17,12 @@ class ProductionSignalService:
         *,
         market_data_service: MarketDataService,
         strategy_runner: StrategyRunnerService,
+        result_ttl_seconds: int = 15,
     ) -> None:
         self.market_data_service = market_data_service
         self.strategy_runner = strategy_runner
+        self.result_ttl_seconds = max(int(result_ttl_seconds), 0)
+        self._result_cache: dict[tuple[object, ...], tuple[datetime, CandleBatch, StrategySignalBatch]] = {}
 
     def run_signals(
         self,
@@ -32,6 +36,20 @@ class ProductionSignalService:
         max_trades_per_day: int,
         cooldown_minutes: int,
     ) -> tuple[CandleBatch, StrategySignalBatch]:
+        cache_key = (
+            str(symbol).upper(),
+            str(timeframe),
+            int(lookback),
+            str(strategy).upper(),
+            str(risk_per_trade_pct),
+            str(max_daily_loss_pct),
+            int(max_trades_per_day),
+            int(cooldown_minutes),
+        )
+        cached = self._get_cached_result(cache_key)
+        if cached is not None:
+            return cached
+
         provider_result = self.market_data_service.fetch_candles(
             MarketDataRequest(symbol=symbol, timeframe=timeframe, lookback=lookback)
         )
@@ -62,6 +80,7 @@ class ProductionSignalService:
             ),
         )
         signal_batch = self.strategy_runner.run(candle_batch, strategy_config)
+        self._store_cached_result(cache_key, candle_batch, signal_batch)
         return candle_batch, signal_batch
 
     def _timeframe(self, value: str) -> Timeframe:
@@ -74,6 +93,30 @@ class ProductionSignalService:
             "1d": Timeframe.D1,
         }
         return mapping[value]
+
+    def _get_cached_result(self, cache_key: tuple[object, ...]) -> tuple[CandleBatch, StrategySignalBatch] | None:
+        cached = self._result_cache.get(cache_key)
+        if cached is None:
+            return None
+        expires_at, candle_batch, signal_batch = cached
+        if expires_at <= datetime.now(UTC):
+            self._result_cache.pop(cache_key, None)
+            return None
+        return candle_batch, signal_batch
+
+    def _store_cached_result(
+        self,
+        cache_key: tuple[object, ...],
+        candle_batch: CandleBatch,
+        signal_batch: StrategySignalBatch,
+    ) -> None:
+        if self.result_ttl_seconds <= 0:
+            return
+        self._result_cache[cache_key] = (
+            datetime.now(UTC) + timedelta(seconds=self.result_ttl_seconds),
+            candle_batch,
+            signal_batch,
+        )
 
 
 __all__ = ["ProductionSignalService"]

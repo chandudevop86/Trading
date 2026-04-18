@@ -247,7 +247,7 @@ def run_live_trading_analysis(
     db_session: Session | None = None,
     persist_reports: bool = True,
     publish_completion_event: bool = True,
-    deliver_telegram_inline: bool = True,
+    deliver_telegram_inline: bool = False,
     publish_alert_notifications: bool = True,
     execute_inline: bool = True,
 ) -> dict[str, Any]:

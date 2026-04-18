@@ -55,7 +55,7 @@ def test_fetch_live_ohlcv_reads_from_redis_before_yahoo(monkeypatch) -> None:
     )
     stub = _StubYF(error=RuntimeError('network should not be used'))
 
-    monkeypatch.setattr(service, 'RedisCache', type('RedisCacheStub', (), {'from_env': staticmethod(lambda: cache)}))
+    monkeypatch.setattr(service, '_REDIS_CACHE', cache)
     monkeypatch.setattr(service, 'yf', stub)
 
     result = service.fetch_live_ohlcv('^NSEI', '1m', '1d', provider='YAHOO')
@@ -87,7 +87,7 @@ def test_fetch_live_ohlcv_uses_redis_latest_on_download_failure(monkeypatch) -> 
         }
     )
 
-    monkeypatch.setattr(service, 'RedisCache', type('RedisCacheStub', (), {'from_env': staticmethod(lambda: cache)}))
+    monkeypatch.setattr(service, '_REDIS_CACHE', cache)
     monkeypatch.setattr(service, 'yf', _StubYF(error=RuntimeError('timeout')))
 
     result = service.fetch_live_ohlcv('^NSEI', '5m', '1d', provider='YAHOO', use_cache=True)
@@ -137,6 +137,51 @@ def test_fetch_live_ohlcv_uses_app_dhan_provider(monkeypatch, tmp_path: Path) ->
     assert rows[0]['provider'] == 'DHAN'
     assert captured['kwargs']['force_refresh'] is True
     assert captured['kwargs']['security_map'] == {'mock': 'map'}
+
+
+def test_fetch_dhan_ohlcv_uses_latest_cache_when_broker_fails(monkeypatch, tmp_path: Path) -> None:
+    latest_rows = [
+        {
+            'timestamp': '2026-04-03 09:20:00',
+            'open': 100.0,
+            'high': 101.0,
+            'low': 99.5,
+            'close': 100.8,
+            'volume': 1200,
+            'price': 100.8,
+            'interval': '5m',
+            'provider': 'DHAN',
+            'symbol': '^NSEI',
+            'source': 'DHAN_HISTORICAL',
+            'is_closed': True,
+        }
+    ]
+
+    class _FailingDhanClient:
+        def get_intraday_data(self, **kwargs):
+            raise RuntimeError('broker timeout')
+
+    monkeypatch.setattr(
+        service,
+        '_REDIS_CACHE',
+        _StubCache({service._redis_latest_key('DHAN', '^NSEI', '5m'): latest_rows}),
+    )
+    monkeypatch.setattr(service, 'read_latest_candle_cache', lambda **kwargs: latest_rows)
+    monkeypatch.setattr(service, '_resolve_dhan_instrument', lambda symbol, security_map=None: {
+        'security_id': 'IDXNIFTY',
+        'exchange_segment': 'NSE_EQ',
+        'instrument': 'INDEX',
+    })
+
+    rows = service.fetch_dhan_ohlcv(
+        '^NSEI',
+        '5m',
+        '1d',
+        broker_client=_FailingDhanClient(),
+        cache_dir=tmp_path,
+    )
+
+    assert rows == latest_rows
 
 
 def test_write_csv_creates_output(tmp_path) -> None:

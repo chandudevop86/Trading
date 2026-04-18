@@ -13,8 +13,10 @@ from vinayak.services.production_runtime import ProductionSignalService
 @dataclass
 class _StubMarketDataService:
     frame: pd.DataFrame
+    calls: int = 0
 
     def fetch_candles(self, request):
+        self.calls += 1
         return type("ProviderResult", (), {"frame": self.frame})()
 
 
@@ -55,3 +57,42 @@ def test_production_signal_service_builds_domain_batches() -> None:
     assert len(candle_batch.candles) == 2
     assert candle_batch.candles[0].timestamp.tzinfo == UTC
     assert signal_batch.signals == ()
+
+
+def test_production_signal_service_caches_identical_requests() -> None:
+    frame = pd.DataFrame(
+        [
+            {"timestamp": pd.Timestamp("2026-01-01T09:15:00Z"), "open": 100, "high": 101, "low": 99, "close": 100.5, "volume": 10},
+            {"timestamp": pd.Timestamp("2026-01-01T09:20:00Z"), "open": 100.5, "high": 102, "low": 100, "close": 101.5, "volume": 12},
+        ]
+    )
+    market_data = _StubMarketDataService(frame=frame)
+    service = ProductionSignalService(
+        market_data_service=market_data,  # type: ignore[arg-type]
+        strategy_runner=_StubStrategyRunner(),  # type: ignore[arg-type]
+        result_ttl_seconds=30,
+    )
+
+    first = service.run_signals(
+        symbol="NIFTY",
+        timeframe="5m",
+        lookback=2,
+        strategy="BREAKOUT",
+        risk_per_trade_pct=Decimal("1"),
+        max_daily_loss_pct=Decimal("3"),
+        max_trades_per_day=5,
+        cooldown_minutes=15,
+    )
+    second = service.run_signals(
+        symbol="NIFTY",
+        timeframe="5m",
+        lookback=2,
+        strategy="BREAKOUT",
+        risk_per_trade_pct=Decimal("1"),
+        max_daily_loss_pct=Decimal("3"),
+        max_trades_per_day=5,
+        cooldown_minutes=15,
+    )
+
+    assert market_data.calls == 1
+    assert first == second

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
+from threading import Lock
+from time import monotonic
 
 from fastapi import APIRouter
 from sqlalchemy import text
@@ -15,6 +18,9 @@ from vinayak.messaging.bus import build_message_bus
 
 
 _REDIS_CACHE = RedisCache.from_env()
+_READY_CACHE_LOCK = Lock()
+_READY_CACHE_PAYLOAD: dict[str, object] | None = None
+_READY_CACHE_EXPIRES_AT = 0.0
 
 router = APIRouter(prefix='/health', tags=['health'])
 
@@ -78,18 +84,22 @@ def _redis_check() -> dict[str, str]:
     except Exception:
         return {'status': 'error', 'engine': 'redis'}
 
-@router.get('')
-def health() -> dict[str, str]:
-    return {'status': 'ok'}
+
+def _health_ready_cache_ttl_seconds() -> float:
+    try:
+        return max(float(os.getenv('VINAYAK_HEALTH_READY_CACHE_TTL_SECONDS', '5')), 0.0)
+    except Exception:
+        return 5.0
 
 
-@router.get('/live')
-def health_live() -> dict[str, str]:
-    return {'status': 'ok'}
+def _reset_health_ready_cache() -> None:
+    global _READY_CACHE_PAYLOAD, _READY_CACHE_EXPIRES_AT
+    with _READY_CACHE_LOCK:
+        _READY_CACHE_PAYLOAD = None
+        _READY_CACHE_EXPIRES_AT = 0.0
 
 
-@router.get('/ready')
-def health_ready() -> dict[str, object]:
+def _build_health_ready_payload() -> dict[str, object]:
     settings = get_settings()
     database_status, database_url = _database_check()
     broker = _broker_check()
@@ -117,4 +127,33 @@ def health_ready() -> dict[str, object]:
             'message_bus_backend': settings.message_bus.backend,
         },
     }
+
+
+def _cached_health_ready_payload() -> dict[str, object]:
+    global _READY_CACHE_PAYLOAD, _READY_CACHE_EXPIRES_AT
+    ttl_seconds = _health_ready_cache_ttl_seconds()
+    now = monotonic()
+    with _READY_CACHE_LOCK:
+        if ttl_seconds > 0 and _READY_CACHE_PAYLOAD is not None and now < _READY_CACHE_EXPIRES_AT:
+            return deepcopy(_READY_CACHE_PAYLOAD)
+
+    payload = _build_health_ready_payload()
+    with _READY_CACHE_LOCK:
+        _READY_CACHE_PAYLOAD = deepcopy(payload)
+        _READY_CACHE_EXPIRES_AT = now + ttl_seconds
+    return payload
+
+@router.get('')
+def health() -> dict[str, str]:
+    return {'status': 'ok'}
+
+
+@router.get('/live')
+def health_live() -> dict[str, str]:
+    return {'status': 'ok'}
+
+
+@router.get('/ready')
+def health_ready() -> dict[str, object]:
+    return _cached_health_ready_payload()
 

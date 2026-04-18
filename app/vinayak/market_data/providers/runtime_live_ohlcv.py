@@ -19,7 +19,6 @@ class RuntimeLiveOhlcvProvider:
             interval=request.timeframe,
             period='1d',
             provider=request.provider,
-            force_refresh=True,
         )
         return ProviderResult(
             frame=pd.DataFrame(rows),

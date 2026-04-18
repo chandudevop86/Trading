@@ -557,6 +557,8 @@ def fetch_dhan_ohlcv(
     mode, base_interval, aggregate_to = _INTERVAL_ALIASES.get(interval, ('intraday', 5, None))
     instrument = _resolve_dhan_instrument(symbol, security_map=security_map)
     start_dt, end_dt = _period_to_range(period)
+    exact_redis_key = _redis_exact_key('DHAN', symbol, interval, period)
+    latest_redis_key = _redis_latest_key('DHAN', symbol, interval)
     cache_path = build_candle_cache_path(
         provider='DHAN',
         symbol=symbol,
@@ -565,61 +567,79 @@ def fetch_dhan_ohlcv(
         end_dt=end_dt.astimezone(UTC),
         cache_dir=cache_dir,
     )
+    stale_rows = _read_redis_rows(latest_redis_key) if use_cache else []
+    if not stale_rows and use_cache:
+        stale_rows = read_latest_candle_cache(
+            provider='DHAN',
+            symbol=symbol,
+            interval=interval,
+            cache_dir=cache_dir,
+        )
 
     if use_cache and not force_refresh:
+        cached_rows = _read_redis_rows(exact_redis_key)
+        if cached_rows:
+            return cached_rows
         cached_rows = read_candle_cache(cache_path)
         if cached_rows:
+            _write_redis_rows(exact_redis_key, cached_rows)
+            _write_redis_rows(latest_redis_key, cached_rows)
             return cached_rows
 
     client = broker_client if broker_client is not None else DhanClient.from_env()
     rows: list[dict[str, Any]] = []
-    if mode == 'daily':
-        payload = client.get_historical_data(
-            security_id=instrument['security_id'],
-            exchange_segment=instrument['exchange_segment'],
-            instrument=instrument['instrument'],
-            from_date=_format_dhan_date(start_dt),
-            to_date=_format_dhan_date(end_dt + timedelta(days=1)),
-            oi=False,
-        )
-        _validate_dhan_ohlcv_rows(payload, symbol=symbol, interval='1d', source='DHAN_HISTORICAL')
-        rows = _dhan_payload_to_rows(
-            payload,
-            symbol=symbol,
-            interval='1d',
-            exchange_segment=instrument['exchange_segment'],
-            security_id=instrument['security_id'],
-            instrument=instrument['instrument'],
-            source='DHAN_HISTORICAL',
-        )
-    else:
-        cursor = start_dt
-        while cursor < end_dt:
-            chunk_end = min(cursor + timedelta(days=INTRADAY_MAX_DAYS), end_dt)
-            payload = client.get_intraday_data(
+    try:
+        if mode == 'daily':
+            payload = client.get_historical_data(
                 security_id=instrument['security_id'],
                 exchange_segment=instrument['exchange_segment'],
                 instrument=instrument['instrument'],
-                interval=base_interval,
-                from_date=_format_dhan_timestamp(cursor),
-                to_date=_format_dhan_timestamp(chunk_end),
+                from_date=_format_dhan_date(start_dt),
+                to_date=_format_dhan_date(end_dt + timedelta(days=1)),
                 oi=False,
             )
-            _validate_dhan_ohlcv_rows(payload, symbol=symbol, interval=f'{base_interval}m', source='DHAN_HISTORICAL')
-            rows.extend(
-                _dhan_payload_to_rows(
-                    payload,
-                    symbol=symbol,
-                    interval=f'{base_interval}m',
-                    exchange_segment=instrument['exchange_segment'],
-                    security_id=instrument['security_id'],
-                    instrument=instrument['instrument'],
-                    source='DHAN_HISTORICAL',
-                )
+            _validate_dhan_ohlcv_rows(payload, symbol=symbol, interval='1d', source='DHAN_HISTORICAL')
+            rows = _dhan_payload_to_rows(
+                payload,
+                symbol=symbol,
+                interval='1d',
+                exchange_segment=instrument['exchange_segment'],
+                security_id=instrument['security_id'],
+                instrument=instrument['instrument'],
+                source='DHAN_HISTORICAL',
             )
-            if chunk_end <= cursor:
-                break
-            cursor = chunk_end
+        else:
+            cursor = start_dt
+            while cursor < end_dt:
+                chunk_end = min(cursor + timedelta(days=INTRADAY_MAX_DAYS), end_dt)
+                payload = client.get_intraday_data(
+                    security_id=instrument['security_id'],
+                    exchange_segment=instrument['exchange_segment'],
+                    instrument=instrument['instrument'],
+                    interval=base_interval,
+                    from_date=_format_dhan_timestamp(cursor),
+                    to_date=_format_dhan_timestamp(chunk_end),
+                    oi=False,
+                )
+                _validate_dhan_ohlcv_rows(payload, symbol=symbol, interval=f'{base_interval}m', source='DHAN_HISTORICAL')
+                rows.extend(
+                    _dhan_payload_to_rows(
+                        payload,
+                        symbol=symbol,
+                        interval=f'{base_interval}m',
+                        exchange_segment=instrument['exchange_segment'],
+                        security_id=instrument['security_id'],
+                        instrument=instrument['instrument'],
+                        source='DHAN_HISTORICAL',
+                    )
+                )
+                if chunk_end <= cursor:
+                    break
+                cursor = chunk_end
+    except Exception:
+        if stale_rows:
+            return stale_rows
+        raise
 
     rows = _dedupe_rows(rows)
     if aggregate_to:
@@ -629,6 +649,8 @@ def fetch_dhan_ohlcv(
 
     if use_cache and rows:
         write_candle_cache(cache_path, rows)
+        _write_redis_rows(exact_redis_key, rows)
+        _write_redis_rows(latest_redis_key, rows)
     return rows
 
 

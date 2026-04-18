@@ -15,6 +15,21 @@ from vinayak.messaging.outbox import dispatch_pending_outbox_events
 from vinayak.observability.observability_metrics import get_metric, reset_observability_state
 
 
+class _StubBus:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+
+    def publish(self, name, payload, *, source):
+        self.calls.append((name, payload, source))
+        if not self.responses:
+            return True
+        response = self.responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return bool(response)
+
+
 def test_reviewed_trade_creation_enqueues_outbox_event(tmp_path: Path) -> None:
     db_path = tmp_path / 'vinayak_outbox_reviewed_trade.db'
     os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
@@ -205,6 +220,113 @@ def test_outbox_failure_backoff_increases_with_attempt_count(tmp_path: Path) -> 
         session.refresh(event)
         assert event.attempt_count == 2
         assert event.available_at > first_available_at
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    os.environ.pop('MESSAGE_BUS_ENABLED', None)
+    os.environ.pop('VINAYAK_OBSERVABILITY_DIR', None)
+    reset_settings_cache()
+    reset_database_state()
+
+
+def test_dispatch_marks_outbox_published_when_bus_publish_succeeds(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_outbox_publish_success.db'
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    os.environ['MESSAGE_BUS_ENABLED'] = 'true'
+    os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path / 'observability')
+    reset_settings_cache()
+    reset_database_state()
+    reset_observability_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        service = ReviewedTradeService(session)
+        service.create_reviewed_trade(
+            ReviewedTradeCreateCommand(
+                strategy_name='Breakout',
+                symbol='^NSEI',
+                side='BUY',
+                entry_price=100.0,
+                stop_loss=99.0,
+                target_price=102.0,
+            )
+        )
+
+    stub_bus = _StubBus([True])
+    with session_factory() as session:
+        session: Session
+        from unittest.mock import patch
+
+        with patch('vinayak.messaging.outbox.build_message_bus', return_value=stub_bus):
+            result = dispatch_pending_outbox_events(session)
+        assert result.published_count == 1
+        event = session.query(OutboxEventRecord).one()
+        assert event.status == 'PUBLISHED'
+        assert event.published_at is not None
+        assert event.last_error is None
+        assert len(stub_bus.calls) == 1
+        assert float(get_metric('outbox_dispatch_published_total', 0)) >= 1.0
+
+    os.environ.pop('VINAYAK_DATABASE_URL', None)
+    os.environ.pop('MESSAGE_BUS_ENABLED', None)
+    os.environ.pop('VINAYAK_OBSERVABILITY_DIR', None)
+    reset_settings_cache()
+    reset_database_state()
+
+
+def test_dispatch_retries_failed_outbox_event_and_publishes_on_next_success(tmp_path: Path) -> None:
+    db_path = tmp_path / 'vinayak_outbox_retry_success.db'
+    os.environ['VINAYAK_DATABASE_URL'] = f"sqlite:///{db_path.as_posix()}"
+    os.environ['MESSAGE_BUS_ENABLED'] = 'true'
+    os.environ['VINAYAK_OBSERVABILITY_DIR'] = str(tmp_path / 'observability')
+    reset_settings_cache()
+    reset_database_state()
+    reset_observability_state()
+    initialize_database()
+
+    session_factory = build_session_factory()
+    with session_factory() as session:
+        session: Session
+        service = ReviewedTradeService(session)
+        service.create_reviewed_trade(
+            ReviewedTradeCreateCommand(
+                strategy_name='Breakout',
+                symbol='^NSEI',
+                side='BUY',
+                entry_price=100.0,
+                stop_loss=99.0,
+                target_price=102.0,
+            )
+        )
+
+    first_bus = _StubBus([RuntimeError('bus unavailable')])
+    with session_factory() as session:
+        session: Session
+        from unittest.mock import patch
+
+        with patch('vinayak.messaging.outbox.build_message_bus', return_value=first_bus):
+            first = dispatch_pending_outbox_events(session)
+        assert first.failed_count == 1
+        event = session.query(OutboxEventRecord).one()
+        assert event.status == 'FAILED'
+        assert event.attempt_count == 1
+        event.available_at = event.created_at
+        session.commit()
+
+    second_bus = _StubBus([True])
+    with session_factory() as session:
+        session: Session
+        from unittest.mock import patch
+
+        with patch('vinayak.messaging.outbox.build_message_bus', return_value=second_bus):
+            second = dispatch_pending_outbox_events(session)
+        assert second.published_count == 1
+        event = session.query(OutboxEventRecord).one()
+        assert event.status == 'PUBLISHED'
+        assert event.attempt_count == 1
+        assert event.last_error is None
+        assert len(second_bus.calls) == 1
 
     os.environ.pop('VINAYAK_DATABASE_URL', None)
     os.environ.pop('MESSAGE_BUS_ENABLED', None)

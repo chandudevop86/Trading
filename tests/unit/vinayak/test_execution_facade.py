@@ -51,14 +51,19 @@ class _StubExecutionRecord:
 @dataclass
 class _StubExecutionService:
     records: list[object]
-    created_command: ExecutionCreateCommand | None = None
 
     def list_executions(self):
         return list(self.records)
 
-    def create_execution(self, command):
+
+@dataclass
+class _StubReviewedTradeExecutionWorkflow:
+    record: _StubExecutionRecord
+    created_command: ExecutionCreateCommand | None = None
+
+    def execute(self, command):
         self.created_command = command
-        return _StubExecutionRecord()
+        return self.record
 
 
 @dataclass
@@ -133,11 +138,11 @@ def test_execution_facade_routes_domain_execution_through_canonical_service(tmp_
 def test_execution_facade_exposes_explicit_reviewed_trade_execution_method(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv('VINAYAK_OBSERVABILITY_DIR', str(tmp_path / 'observability'))
     reset_observability_state()
-    execution_service = _StubExecutionService(records=[])
+    workflow = _StubReviewedTradeExecutionWorkflow(record=_StubExecutionRecord())
     facade = ExecutionFacade(
         session=None,  # type: ignore[arg-type]
         execution_guard=None,  # type: ignore[arg-type]
-        execution_service=execution_service,  # type: ignore[arg-type]
+        execution_service=_StubExecutionService(records=[]),  # type: ignore[arg-type]
         reviewed_trade_service=_StubReviewedTradeService(records=[]),  # type: ignore[arg-type]
         canonical_service=_StubCanonicalService(
             response=ExecutionResult(
@@ -150,12 +155,13 @@ def test_execution_facade_exposes_explicit_reviewed_trade_execution_method(tmp_p
             )
         ),  # type: ignore[arg-type]
         read_repository=_StubReadRepository(),
+        reviewed_trade_execution_workflow=workflow,  # type: ignore[arg-type]
     )
     command = ExecutionCreateCommand(mode='PAPER', broker='SIM', reviewed_trade_id=1)
 
     returned = facade.submit_reviewed_trade_execution(command)
 
-    assert execution_service.created_command == command
+    assert workflow.created_command == command
     assert returned.id == 1
     assert float(get_metric('reviewed_trade_execution_submit_total', 0)) >= 1.0
     assert float(get_metric('reviewed_trade_execution_latency_ms', 0)) >= 0.0

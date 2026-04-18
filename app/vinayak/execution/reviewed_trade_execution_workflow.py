@@ -6,6 +6,8 @@ from decimal import Decimal
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
+from sqlalchemy.exc import IntegrityError
+
 from vinayak.core.config import get_settings
 from vinayak.db.models.execution import ExecutionRecord
 from vinayak.db.repositories.production import ProductionReadRepository, SqlAlchemyAuditRepository, SqlAlchemyExecutionRepository
@@ -158,41 +160,70 @@ class ReviewedTradeExecutionWorkflow:
             realized_pnl = self.read_repository.total_realized_pnl()
         except Exception:
             realized_pnl = Decimal('0')
-        result = self.canonical_service.execute(request, daily_realized_pnl=realized_pnl)
-        record = self.execution_service.execution_repository.create_execution(
-            signal_id=signal_id,
-            reviewed_trade_id=reviewed_trade.id,
-            mode=mode,
-            broker=str(getattr(bridge.last_adapter_result, 'broker', None) or broker),
-            status=self._legacy_status(result, bridge.last_adapter_result, requested_status),
-            executed_price=(bridge.last_adapter_result.executed_price if bridge.last_adapter_result else None) or (float(command.executed_price) if command.executed_price is not None else float(reviewed_trade.entry_price) if str(self._legacy_status(result, bridge.last_adapter_result, requested_status)).upper() in _SUCCESS_STATUSES else None),
-            executed_at=getattr(bridge.last_adapter_result, 'executed_at', None) or result.processed_at,
-            broker_reference=getattr(bridge.last_adapter_result, 'broker_reference', None) or result.order_reference,
-            notes=str(getattr(bridge.last_adapter_result, 'notes', None) or result.message or ''),
-        )
-        if mode == 'LIVE' and bridge.last_adapter_result and bridge.last_adapter_result.audit_request_payload is not None:
-            self.execution_service.execution_audit_log_repository.create_audit_log(
-                execution_id=record.id,
-                broker=str(bridge.last_adapter_result.broker or broker),
-                request_payload=bridge.last_adapter_result.audit_request_payload,
-                response_payload=bridge.last_adapter_result.audit_response_payload,
-                status=str(bridge.last_adapter_result.status or record.status),
-                entity_type='execution',
-                entity_id=record.id,
-                event_name='broker.adapter.audit',
+        try:
+            result = self.canonical_service.execute(request, daily_realized_pnl=realized_pnl)
+            record = self.execution_service.execution_repository.create_execution(
+                signal_id=signal_id,
+                reviewed_trade_id=reviewed_trade.id,
+                mode=mode,
+                broker=str(getattr(bridge.last_adapter_result, 'broker', None) or broker),
+                status=self._legacy_status(result, bridge.last_adapter_result, requested_status),
+                executed_price=(bridge.last_adapter_result.executed_price if bridge.last_adapter_result else None) or (float(command.executed_price) if command.executed_price is not None else float(reviewed_trade.entry_price) if str(self._legacy_status(result, bridge.last_adapter_result, requested_status)).upper() in _SUCCESS_STATUSES else None),
+                executed_at=getattr(bridge.last_adapter_result, 'executed_at', None) or result.processed_at,
+                broker_reference=getattr(bridge.last_adapter_result, 'broker_reference', None) or result.order_reference,
+                notes=str(getattr(bridge.last_adapter_result, 'notes', None) or result.message or ''),
             )
-        self.execution_service.workflow.complete_execution(reviewed_trade, record, actor=WorkflowActor.EXECUTION_WORKFLOW.value, reason=str(getattr(bridge.last_adapter_result, 'notes', '') or result.message or ''), metadata=dict(command.metadata or {}))
-        status_upper = str(record.status or '').upper()
-        if status_upper in _SUCCESS_STATUSES:
-            increment_metric('execution_success_total', 1)
-        elif status_upper in _BLOCKED_STATUSES:
+            if mode == 'LIVE' and bridge.last_adapter_result and bridge.last_adapter_result.audit_request_payload is not None:
+                self.execution_service.execution_audit_log_repository.create_audit_log(
+                    execution_id=record.id,
+                    broker=str(bridge.last_adapter_result.broker or broker),
+                    request_payload=bridge.last_adapter_result.audit_request_payload,
+                    response_payload=bridge.last_adapter_result.audit_response_payload,
+                    status=str(bridge.last_adapter_result.status or record.status),
+                    entity_type='execution',
+                    entity_id=record.id,
+                    event_name='broker.adapter.audit',
+                )
+            self.execution_service.workflow.complete_execution(reviewed_trade, record, actor=WorkflowActor.EXECUTION_WORKFLOW.value, reason=str(getattr(bridge.last_adapter_result, 'notes', '') or result.message or ''), metadata=dict(command.metadata or {}))
+            status_upper = str(record.status or '').upper()
+            if status_upper in _SUCCESS_STATUSES:
+                increment_metric('execution_success_total', 1)
+            elif status_upper in _BLOCKED_STATUSES:
+                increment_metric('execution_blocked_total', 1)
+            else:
+                increment_metric('execution_failed_total', 1)
+            log_event(component='reviewed_trade_execution_workflow', event_name='execution_result', symbol=trade_symbol, strategy=trade_strategy, severity='INFO' if status_upper in _SUCCESS_STATUSES else 'WARNING', message='Reviewed-trade execution completed through canonical workflow', context_json={'execution_id': record.id, 'mode': record.mode, 'status': record.status, 'reviewed_trade_id': record.reviewed_trade_id, 'signal_id': record.signal_id})
+            self.session.commit()
+            self.session.refresh(record)
+            return record
+        except IntegrityError as exc:
+            self.session.rollback()
             increment_metric('execution_blocked_total', 1)
-        else:
-            increment_metric('execution_failed_total', 1)
-        log_event(component='reviewed_trade_execution_workflow', event_name='execution_result', symbol=trade_symbol, strategy=trade_strategy, severity='INFO' if status_upper in _SUCCESS_STATUSES else 'WARNING', message='Reviewed-trade execution completed through canonical workflow', context_json={'execution_id': record.id, 'mode': record.mode, 'status': record.status, 'reviewed_trade_id': record.reviewed_trade_id, 'signal_id': record.signal_id})
-        self.session.commit()
-        self.session.refresh(record)
-        return record
+            increment_metric('duplicate_execution_block_total', 1)
+            duplicate_reason, duplicate_message = self.execution_service._map_duplicate_integrity_error(
+                exc,
+                mode=mode,
+                broker=broker,
+                reviewed_trade_id=command.reviewed_trade_id,
+                signal_id=signal_id,
+                broker_reference=getattr(bridge.last_adapter_result, 'broker_reference', None),
+            )
+            self.execution_service._log_blocked_execution(
+                reason=duplicate_reason,
+                mode=mode,
+                broker=broker,
+                reviewed_trade_id=command.reviewed_trade_id,
+                signal_id=signal_id,
+                broker_reference=getattr(bridge.last_adapter_result, 'broker_reference', None),
+                symbol=trade_symbol,
+                strategy=trade_strategy,
+                trade_id=command.trade_id,
+                message='Duplicate execution blocked by database constraint',
+            )
+            raise ValueError(duplicate_message) from exc
+        except Exception:
+            self.session.rollback()
+            raise
 
     def _build_request(self, command: ExecutionCreateCommand, reviewed_trade: Any, signal: Any | None, mode: str) -> ExecutionRequest:
         generated_at = self._aware(getattr(signal, 'signal_time', None) or getattr(reviewed_trade, 'created_at', None) or datetime.now(UTC))

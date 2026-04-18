@@ -1,3 +1,4 @@
+# Optional legacy UI image: app.main:app is the supported production runtime.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1

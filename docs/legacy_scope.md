@@ -1,3 +1,5 @@
+> Archived reference: this document describes deprecated `src/`-era surfaces and is not an active operator guide. Use `README.md`, `DEPLOYMENT.md`, `RUNBOOK.md`, and `docs/active_code_surface.md` for the supported FastAPI runtime.
+
 ﻿# Legacy Product Scope
 
 Date: 2026-03-26

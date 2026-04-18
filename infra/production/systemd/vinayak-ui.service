@@ -1,3 +1,4 @@
+# Optional legacy UI surface: FastAPI app.main:app is the supported runtime. Keep this unit disabled unless the Streamlit UI is intentionally required.
 [Unit]
 Description=Vinayak Streamlit UI
 After=network.target vinayak-api.service

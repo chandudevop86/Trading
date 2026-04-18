@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass, field
-from datetime import datetime, time
+from datetime import UTC, datetime, time
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +12,15 @@ from sqlalchemy.orm import Session
 import pandas as pd
 
 from vinayak.db.repositories.execution_state_repository import ExecutionStateRepository
-from vinayak.db.repositories.signal_repository import SignalRepository
-from vinayak.execution.commands import ExecutionCreateCommand
+from vinayak.domain.models import (
+    ExecutionMode,
+    ExecutionRequest,
+    ExecutionSide,
+    RiskConfig,
+    Timeframe,
+    TradeSignal,
+    TradeSignalType,
+)
 from vinayak.execution.guards import (
     WorkspaceGuardContext,
     evaluate_cooldown_guard,
@@ -20,11 +28,9 @@ from vinayak.execution.guards import (
     evaluate_portfolio_guard,
     evaluate_session_guard,
 )
-from vinayak.execution.reviewed_trade_service import ReviewedTradeCreateCommand, ReviewedTradeService
-from vinayak.execution.service import ExecutionService
+from vinayak.execution.runtime import build_execution_facade
 from vinayak.observability.observability_logger import log_event
 from vinayak.observability.observability_metrics import increment_metric, record_stage, set_metric
-from vinayak.strategies.common.base import StrategySignal
 from vinayak.validation.engine import CleanerConfig, _latest_metrics, coerce_ohlcv, validate_trade
 
 
@@ -314,30 +320,88 @@ def _guard_reasons(
     return deduped, unique_key, risk_snapshot, adjusted_candidate
 
 
-def _persist_signal_record(candidate: dict[str, Any], *, signal_repository: SignalRepository) -> int | None:
+def _domain_timeframe(value: Any) -> Timeframe:
+    mapping = {
+        "1m": Timeframe.M1,
+        "5m": Timeframe.M5,
+        "15m": Timeframe.M15,
+        "30m": Timeframe.M30,
+        "1h": Timeframe.H1,
+        "1d": Timeframe.D1,
+    }
+    return mapping.get(str(value or "").strip().lower(), Timeframe.M5)
+
+
+def _execution_mode(value: str) -> ExecutionMode:
+    return ExecutionMode.LIVE if str(value or "").upper() == "LIVE" else ExecutionMode.PAPER
+
+
+def _execution_side(value: Any) -> ExecutionSide:
+    return ExecutionSide.SELL if str(value or "").upper() == "SELL" else ExecutionSide.BUY
+
+
+def _build_workspace_execution_request(
+    candidate: dict[str, Any],
+    *,
+    execution_mode: str,
+    capital: float | None,
+    per_trade_risk_pct: float | None,
+    max_trades_per_day: int | None,
+    max_daily_loss: float | None,
+    cooldown_minutes: int = _DEFAULT_COOLDOWN_MINUTES,
+) -> ExecutionRequest:
     signal_time = _parse_timestamp(candidate.get("signal_time") or candidate.get("timestamp") or candidate.get("entry_time"))
     if signal_time is None:
-        return None
-    signal = StrategySignal(
-        strategy_name=str(candidate.get("strategy_name") or candidate.get("strategy") or ""),
-        symbol=str(candidate.get("symbol") or ""),
-        side=str(candidate.get("side") or ""),
-        entry_price=_safe_float(candidate.get("entry_price")),
-        stop_loss=_safe_float(candidate.get("stop_loss")),
-        target_price=_safe_float(candidate.get("target_price")),
-        signal_time=signal_time,
-        quantity=max(_safe_int(candidate.get("quantity")), 0),
-        trade_id=str(candidate.get("trade_id") or ""),
-        zone_id=str(candidate.get("zone_id") or ""),
-        setup_type=str(candidate.get("setup_type") or ""),
-        timeframe=str(candidate.get("timeframe") or ""),
-        validation_status=str(candidate.get("validation_status") or ""),
-        validation_score=_safe_float(candidate.get("validation_score")),
-        validation_reasons=list(candidate.get("validation_reasons", [])) if isinstance(candidate.get("validation_reasons"), list) else [],
-        execution_allowed=bool(candidate.get("execution_allowed")),
+        raise ValueError("Workspace execution candidate is missing a valid timestamp.")
+    generated_at = signal_time.replace(tzinfo=UTC) if signal_time.tzinfo is None else signal_time.astimezone(UTC)
+    symbol = str(candidate.get("symbol") or "UNKNOWN").strip().upper() or "UNKNOWN"
+    strategy_name = str(candidate.get("strategy_name") or candidate.get("strategy") or "UNKNOWN").strip().upper() or "UNKNOWN"
+    trade_id = str(candidate.get("trade_id") or candidate.get("zone_id") or f"{symbol}-{generated_at:%Y%m%d%H%M%S}")
+    account_id = f"workspace:{symbol}"
+    idempotency_key = f"{account_id}:{trade_id}:{str(execution_mode or '').upper()}"
+    max_daily_loss_pct = Decimal("3")
+    if capital and capital > 0 and max_daily_loss is not None:
+        computed = Decimal(str(round((float(max_daily_loss) / float(capital)) * 100.0, 4)))
+        max_daily_loss_pct = computed if computed > 0 else Decimal("0.0001")
+    risk = RiskConfig(
+        risk_per_trade_pct=Decimal(str(per_trade_risk_pct if per_trade_risk_pct is not None else 1)),
+        max_daily_loss_pct=max_daily_loss_pct,
+        max_trades_per_day=int(max_trades_per_day or 5),
+        cooldown_minutes=int(cooldown_minutes),
+        allow_live_trading=str(execution_mode or "").upper() == "LIVE",
+        live_unlock_token_required=True,
     )
-    record = signal_repository.create_signal(signal, status="NEW")
-    return int(record.id)
+    signal = TradeSignal(
+        idempotency_key=idempotency_key,
+        strategy_name=strategy_name,
+        symbol=symbol,
+        timeframe=_domain_timeframe(candidate.get("timeframe") or candidate.get("interval")),
+        signal_type=TradeSignalType.ENTRY,
+        generated_at=generated_at,
+        candle_timestamp=generated_at,
+        side=_execution_side(candidate.get("side")),
+        entry_price=Decimal(str(_safe_float(candidate.get("entry_price")))),
+        stop_loss=Decimal(str(_safe_float(candidate.get("stop_loss")))),
+        target_price=Decimal(str(_safe_float(candidate.get("target_price")))),
+        quantity=Decimal(str(max(_safe_int(candidate.get("quantity")), 1))),
+        confidence=Decimal("0.8"),
+        rationale=str(candidate.get("setup_type") or candidate.get("strategy_name") or "workspace_candidate"),
+        metadata={
+            "trade_id": trade_id,
+            "zone_id": str(candidate.get("zone_id") or ""),
+            "validation_status": str(candidate.get("validation_status") or ""),
+            "validation_score": _safe_float(candidate.get("validation_score")),
+            "validation_reasons": list(candidate.get("validation_reasons", [])) if isinstance(candidate.get("validation_reasons"), list) else [],
+        },
+    )
+    return ExecutionRequest(
+        idempotency_key=idempotency_key,
+        requested_at=generated_at,
+        mode=_execution_mode(execution_mode),
+        signal=signal,
+        risk=risk,
+        account_id=account_id,
+    )
 
 
 def prepare_workspace_candidates(
@@ -423,12 +487,10 @@ def execute_workspace_candidates(
 
     if db_session is None:
         raise ValueError(
-            'Workspace execution requires a database-backed ExecutionService. '
-            'Pass db_session and use ExecutionService.create_execution().'
+            'Workspace execution requires a database-backed execution facade. '
+            'Pass db_session and use build_execution_facade(session).'
         )
-    execution_service = ExecutionService(db_session)
-    reviewed_trade_service = ReviewedTradeService(db_session)
-    signal_repository = SignalRepository(db_session)
+    execution_facade = build_execution_facade(db_session)
     state_repository = ExecutionStateRepository(db_session)
     live_kwargs = dict(resolve_live_kwargs(security_map_path) if resolve_live_kwargs is not None and mode == 'LIVE' else {})
     broker_name = str(live_kwargs.get('broker_name', 'SIM' if mode != 'LIVE' else 'DHAN'))
@@ -490,83 +552,42 @@ def execute_workspace_candidates(
             continue
 
         try:
-            if mode == 'LIVE':
-                live_reasons = ['LIVE_REQUIRES_APPROVED_REVIEWED_TRADE']
-                row['execution_status'] = 'BLOCKED'
-                row['trade_status'] = 'BLOCKED'
-                row['reason'] = ', '.join(live_reasons)
-                row['blocked_reason'] = row['reason']
-                row['duplicate_reason'] = ''
-                row['reason_codes'] = list(dict.fromkeys(list(row.get('reason_codes', [])) + live_reasons))
-                result.rows.append(row)
-                result.blocked_rows.append(row)
-                result.blocked_count += 1
-                increment_metric('risk_guard_blocks_total', 1)
-                log_event(
-                    component='execution_gateway',
-                    event_name='trade_execution_requires_review',
-                    symbol=row.get('symbol', ''),
-                    strategy=row.get('strategy_name', ''),
-                    severity='WARNING',
-                    message='Live trade blocked until an approved reviewed trade exists.',
-                    context_json={
-                        'reasons': live_reasons,
-                        'trade_id': row.get('trade_id', ''),
-                        'mode': mode,
-                    },
-                )
-                rows_to_write.append(row)
-                batch_keys.add(unique_key)
-                continue
-
-            signal_id = _persist_signal_record(row, signal_repository=signal_repository)
-            row['signal_id'] = signal_id
-            reviewed_trade = reviewed_trade_service.create_reviewed_trade(
-                ReviewedTradeCreateCommand(
-                    signal_id=signal_id,
-                    strategy_name=str(row.get('strategy_name') or strategy),
-                    symbol=str(row.get('symbol') or symbol),
-                    side=str(row.get('side') or ''),
-                    entry_price=_safe_float(row.get('entry_price')),
-                    stop_loss=_safe_float(row.get('stop_loss')),
-                    target_price=_safe_float(row.get('target_price')),
-                    quantity=max(_safe_int(row.get('quantity')), 1),
-                    lots=max(_safe_int(row.get('lots', 1)), 1),
-                    status='APPROVED',
-                    notes='Auto-approved paper execution candidate from workspace gateway.',
-                )
+            execution_request = _build_workspace_execution_request(
+                row,
+                execution_mode=mode,
+                capital=capital,
+                per_trade_risk_pct=per_trade_risk_pct,
+                max_trades_per_day=max_trades_per_day,
+                max_daily_loss=max_daily_loss,
             )
-            row['reviewed_trade_id'] = reviewed_trade.id
-            command = ExecutionCreateCommand(
-                mode=mode,
-                broker=broker_name,
-                signal_id=signal_id,
-                reviewed_trade_id=reviewed_trade.id,
-                status='FILLED',
-                executed_price=_safe_float(row.get('entry_price')),
-            )
-            record = execution_service.create_execution(command)
-            row['execution_id'] = record.id
-            row['execution_status'] = str(record.status or 'FILLED').upper()
-            row['trade_status'] = 'EXECUTED' if row['execution_status'] in _EXECUTED_STATUSES else row['execution_status']
-            row['broker_name'] = str(record.broker)
-            row['broker_reference'] = str(record.broker_reference or '')
-            row['price'] = _safe_float(record.executed_price, _safe_float(row.get('entry_price')))
-            row['executed_at_utc'] = record.executed_at.isoformat() if record.executed_at is not None else ''
-            row['reason'] = str(record.notes or '')
-            row['duplicate_reason'] = ''
-            if row['execution_status'] in _EXECUTED_STATUSES:
+            row['request_id'] = str(execution_request.request_id)
+            row['signal_id'] = str(execution_request.signal.signal_id)
+            execution_result = execution_facade.execute_request(execution_request)
+            row['execution_id'] = str(execution_result.execution_id)
+            row['execution_status'] = str(execution_result.status.value or 'REJECTED').upper()
+            row['trade_status'] = 'EXECUTED' if row['execution_status'] == 'EXECUTED' else row['execution_status']
+            row['broker_name'] = broker_name
+            row['broker_reference'] = str(execution_result.order_reference or '')
+            row['price'] = _safe_float(row.get('entry_price'))
+            row['executed_at_utc'] = execution_result.processed_at.isoformat() if execution_result.processed_at is not None else ''
+            row['reason'] = str(execution_result.message or '')
+            row['duplicate_reason'] = 'DUPLICATE_TRADE' if row['execution_status'] == 'REJECTED' and 'duplicate' in str(execution_result.message or '').lower() else ''
+            if mode == 'LIVE' and row['execution_status'] == 'REJECTED':
+                row['reason'] = 'LIVE_REQUIRES_APPROVED_REVIEWED_TRADE'
+                row['reason_codes'] = list(dict.fromkeys(list(row.get('reason_codes', [])) + ['LIVE_REQUIRES_APPROVED_REVIEWED_TRADE']))
+            if row['execution_status'] == 'EXECUTED':
                 result.executed_rows.append(row)
                 result.executed_count += 1
                 increment_metric('paper_trades_executed_total', 1 if mode == 'PAPER' else 0)
                 set_metric('executed_paper_trades_today', result.executed_count if mode == 'PAPER' else 0)
-                log_event(component='execution_gateway', event_name='trade_execution_success', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='INFO', message='Trade executed', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', ''), 'reviewed_trade_id': reviewed_trade.id})
+                log_event(component='execution_gateway', event_name='trade_execution_success', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='INFO', message='Trade executed', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', '')})
             else:
+                row['blocked_reason'] = row['reason']
                 result.blocked_rows.append(row)
                 result.blocked_count += 1
                 increment_metric('paper_trade_rejections_total', 1 if mode == 'PAPER' else 0)
                 increment_metric('paper_trade_expected_blocks_total', 1 if mode == 'PAPER' else 0)
-                log_event(component='execution_gateway', event_name='trade_execution_nonfill', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade did not reach executed state', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', ''), 'reviewed_trade_id': reviewed_trade.id})
+                log_event(component='execution_gateway', event_name='trade_execution_nonfill', symbol=row.get('symbol', ''), strategy=row.get('strategy_name', ''), severity='WARNING', message='Trade did not reach executed state', context_json={'trade_id': row.get('trade_id', ''), 'mode': mode, 'status': row.get('execution_status', ''), 'reason': row.get('reason', '')})
             result.rows.append(row)
             rows_to_write.append(row)
             batch_keys.add(unique_key)

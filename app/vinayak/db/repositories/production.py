@@ -46,6 +46,27 @@ class SqlAlchemyExecutionRepository(ExecutionRepositoryPort):
 
     def save_request(self, request: ExecutionRequest) -> None:
         self.session.merge(
+            SignalRecordV2(
+                id=str(request.signal.signal_id),
+                strategy_run_id=None,
+                idempotency_key=request.signal.idempotency_key,
+                strategy_name=request.signal.strategy_name,
+                symbol=request.signal.symbol,
+                timeframe=request.signal.timeframe.value,
+                signal_type=request.signal.signal_type.value,
+                status=request.signal.status.value,
+                side=request.signal.side.value if request.signal.side is not None else None,
+                entry_price=float(request.signal.entry_price) if request.signal.entry_price is not None else None,
+                stop_loss=float(request.signal.stop_loss) if request.signal.stop_loss is not None else None,
+                target_price=float(request.signal.target_price) if request.signal.target_price is not None else None,
+                quantity=float(request.signal.quantity) if request.signal.quantity is not None else None,
+                confidence=float(request.signal.confidence),
+                rationale=request.signal.rationale,
+                generated_at=request.signal.generated_at,
+                candle_timestamp=request.signal.candle_timestamp,
+            )
+        )
+        self.session.merge(
             ExecutionRequestRecord(
                 id=str(request.request_id),
                 signal_id=str(request.signal.signal_id),

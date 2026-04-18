@@ -128,7 +128,7 @@ def test_execute_workspace_candidates_requires_db_session(tmp_path: Path) -> Non
         )
         raise AssertionError('expected ValueError when db_session is missing')
     except ValueError as exc:
-        assert 'ExecutionService.create_execution' in str(exc)
+        assert 'build_execution_facade(session)' in str(exc)
 
 
 def test_execute_workspace_candidates_creates_reviewed_trade_and_executes(tmp_path: Path) -> None:
@@ -149,8 +149,7 @@ def test_execute_workspace_candidates_creates_reviewed_trade_and_executes(tmp_pa
 
         assert len(candidates) == 1
         assert result.executed_count == 1
-        assert result.rows[0]["execution_status"] == "FILLED"
-        assert result.rows[0]["reviewed_trade_id"] is not None
+        assert result.rows[0]["execution_status"] == "EXECUTED"
         assert result.rows[0]["execution_id"] is not None
     finally:
         _cleanup_db_session(session)
@@ -175,10 +174,9 @@ def test_execute_workspace_candidates_blocks_live_without_manual_review(tmp_path
         assert len(candidates) == 1
         assert result.executed_count == 0
         assert result.blocked_count == 1
-        assert result.rows[0]["execution_status"] == "BLOCKED"
-        assert "LIVE_REQUIRES_APPROVED_REVIEWED_TRADE" in result.rows[0]["reason"]
-        assert result.rows[0].get("reviewed_trade_id") in {None, ''}
-        assert result.rows[0].get("execution_id") in {None, ''}
+        assert result.rows[0]["execution_status"] == "REJECTED"
+        assert result.rows[0]["reason"] == "LIVE_REQUIRES_APPROVED_REVIEWED_TRADE"
+        assert result.rows[0].get("execution_id") not in {None, ''}
     finally:
         _cleanup_db_session(session)
 

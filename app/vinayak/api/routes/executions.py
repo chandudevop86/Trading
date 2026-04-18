@@ -8,16 +8,20 @@ from vinayak.api.dependencies.db import get_db
 from vinayak.api.schemas.signal import ExecutionAuditLogListResponse, ExecutionAuditLogResponse, ExecutionListResponse, ExecutionResponse
 from vinayak.api.schemas.strategy import ExecutionCreateRequest
 from vinayak.db.repositories.execution_audit_log_repository import ExecutionAuditLogRepository
-from vinayak.execution.service import ExecutionCreateCommand, ExecutionService
+from vinayak.execution.commands import ExecutionCreateCommand
+from vinayak.execution.runtime import build_execution_facade
 
 
 router = APIRouter(prefix='/executions', tags=['executions'], dependencies=[Depends(require_admin_session)])
 
 
+def _execution_facade(db: Session):
+    return build_execution_facade(db)
+
+
 @router.get('', response_model=ExecutionListResponse)
 def list_executions(db: Session = Depends(get_db)) -> ExecutionListResponse:
-    service = ExecutionService(db)
-    records = service.list_executions()
+    records = _execution_facade(db).list_executions()
     executions = [
         ExecutionResponse(
             id=record.id,
@@ -94,9 +98,8 @@ def list_execution_audit_logs_for_execution(execution_id: int, db: Session = Dep
 
 @router.post('', response_model=ExecutionResponse)
 def create_execution(request: ExecutionCreateRequest, db: Session = Depends(get_db)) -> ExecutionResponse:
-    service = ExecutionService(db)
     try:
-        record = service.create_execution(
+        record = _execution_facade(db).create_execution(
             ExecutionCreateCommand(
                 signal_id=request.signal_id,
                 reviewed_trade_id=request.reviewed_trade_id,

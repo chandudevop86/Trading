@@ -3,14 +3,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
-
-import pandas as pd
 from fastapi.testclient import TestClient
 
 from vinayak.api.dependencies.admin_auth import require_admin_session, require_user_session
 from vinayak.api.main import app
 from vinayak.api.routes import production
 from vinayak.domain.models import (
+    Candle,
+    CandleBatch,
     ExecutionFailureReason,
     ExecutionMode,
     ExecutionRequest,
@@ -46,17 +46,28 @@ def _build_signal() -> TradeSignal:
 
 def test_signals_run_endpoint_returns_batch(monkeypatch) -> None:
     app.dependency_overrides[require_user_session] = lambda: {'username': 'user'}
-    frame = pd.DataFrame(
-        [
-            {'timestamp': pd.Timestamp('2026-01-01T09:15:00Z'), 'open': 100, 'high': 101, 'low': 99, 'close': 100.5, 'volume': 10},
-            {'timestamp': pd.Timestamp('2026-01-01T09:20:00Z'), 'open': 100.5, 'high': 102, 'low': 100, 'close': 101.5, 'volume': 12},
-        ]
-    )
-    monkeypatch.setattr(production._MARKET_DATA_SERVICE, 'fetch_candles', lambda request: SimpleNamespace(frame=frame))
     monkeypatch.setattr(
-        production._STRATEGY_RUNNER,
-        'run',
-        lambda candles, config: StrategySignalBatch(generated_at=datetime.now(UTC), signals=(_build_signal(),)),
+        production._SIGNAL_SERVICE,
+        'run_signals',
+        lambda **kwargs: (
+            CandleBatch(
+                symbol='NIFTY',
+                timeframe=Timeframe.M5,
+                candles=(
+                    Candle(
+                        symbol='NIFTY',
+                        timeframe=Timeframe.M5,
+                        timestamp=datetime.now(UTC),
+                        open=Decimal('100'),
+                        high=Decimal('101'),
+                        low=Decimal('99'),
+                        close=Decimal('100.5'),
+                        volume=Decimal('10'),
+                    ),
+                ),
+            ),
+            StrategySignalBatch(generated_at=datetime.now(UTC), signals=(_build_signal(),)),
+        ),
     )
 
     with TestClient(app) as client:
@@ -92,8 +103,8 @@ def test_execution_request_endpoint_uses_execution_service(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         production,
-        '_execution_service',
-        lambda db: SimpleNamespace(execute=lambda request: result),
+        '_execution_facade',
+        lambda db: SimpleNamespace(execute_request=lambda request: result),
     )
 
     payload = ExecutionRequest(

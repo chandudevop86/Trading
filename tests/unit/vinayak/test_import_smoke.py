@@ -7,10 +7,9 @@ from vinayak.execution import gateway as execution_gateway
 
 
 def test_execution_service_import_smoke() -> None:
-    module = importlib.import_module('vinayak.execution.service')
+    module = importlib.import_module('vinayak.execution.facade')
 
-    assert hasattr(module, 'ExecutionService')
-    assert hasattr(module, 'ExecutionCreateCommand')
+    assert hasattr(module, 'ExecutionFacade')
 
 
 
@@ -49,17 +48,17 @@ def test_repo_has_no_stale_execution_event_imports() -> None:
 
 
 
-def test_execution_route_uses_execution_service_boundary() -> None:
+def test_execution_route_uses_execution_facade_boundary() -> None:
     source = inspect.getsource(executions_route.create_execution)
 
-    assert 'ExecutionService(db)' in source
-    assert 'service.create_execution(' in source
+    assert '_execution_facade(db)' in source
+    assert '.create_execution(' in source
 
 
 
-def test_workspace_gateway_uses_execution_service_create_execution() -> None:
+def test_workspace_gateway_uses_execution_facade_execute_request() -> None:
     source = inspect.getsource(execution_gateway.execute_workspace_candidates)
 
-    assert 'execution_service = ExecutionService(db_session)' in source
-    assert 'execution_service.create_execution(command)' in source
+    assert 'execution_facade = build_execution_facade(db_session)' in source
+    assert 'execution_facade.execute_request(execution_request)' in source
 

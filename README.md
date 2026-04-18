@@ -21,6 +21,8 @@ Current-state docs are split by purpose:
 - Local/operator guidance: `docs/active_code_surface.md`
 - Migration direction and guardrails: `docs/migration_notes.md`
 - Migration inventory report: `docs/src_to_app_migration_report.md`
+- Deployment flow: `DEPLOYMENT.md`
+- Rollback flow: `ROLLBACK.md`
 - Experimental/reference surfaces: `src/EXPERIMENTAL_SURFACE.md`, `src/_archive/README.md`, `snapshots/README.md`
 
 ## Supported Entrypoint
@@ -40,5 +42,5 @@ Current-state docs are split by purpose:
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r app/vinayak/requirements.txt
 ```

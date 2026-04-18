@@ -75,11 +75,14 @@ app/
 - Replaced trading-workspace live security-map loading with the app execution payload loader.
 - Moved active OHLCV preprocessing onto `app/vinayak/infrastructure/market_data/processing.py`.
 - Moved active NSE option-chain parsing and metrics mapping onto `app/vinayak/infrastructure/market_data/option_chain.py`.
-- Updated docs so `app/` is the active code surface and `src/` is marked deprecated.
+- Routed reviewed-trade and execution APIs through one `ExecutionFacade` surface.
+- Added request-id middleware and structured request logging for the supported FastAPI runtime.
+- Tightened canonical execution transaction boundaries so request, result, and audit persistence commit together.
+- Updated Docker and CI to target `app.main:app` and the FastAPI test surface.
 
 ## Remaining Gaps
 
-- Production execution still exposes both `ExecutionService` and `ProductionExecutionService`.
-- Some explicit `app/vinayak/legacy/*` adapters remain, but the supported runtime no longer depends on them for active data-preparation or option-metrics paths.
+- `ExecutionService` still exists behind the facade because the reviewed-trade approval contract has not been fully collapsed into the canonical domain pipeline.
+- `app/vinayak/legacy/*` remains as an explicit migration boundary, but the supported runtime does not import it.
 - Legacy tests and docs still exist for historical validation and need a separate deprecation sweep.
-- Full `src/` retirement requires migrating or deleting the old Streamlit/operator surfaces after equivalent `app/` workflows are confirmed.
+- Full `src/` retirement requires deleting or replacing the old Streamlit/operator surfaces after equivalent `app/` workflows are confirmed.

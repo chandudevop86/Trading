@@ -3,6 +3,7 @@ import inspect
 from pathlib import Path
 
 from vinayak.api.routes import executions as executions_route
+from vinayak.api.routes import reviewed_trades as reviewed_trades_route
 from vinayak.execution import gateway as execution_gateway
 
 
@@ -16,7 +17,6 @@ def test_execution_service_import_smoke() -> None:
 def test_reviewed_trade_service_import_smoke() -> None:
     module = importlib.import_module('vinayak.execution.reviewed_trade_service')
 
-    assert hasattr(module, 'ReviewedTradeService')
     assert hasattr(module, 'ReviewedTradeCreateCommand')
     assert hasattr(module, 'ReviewedTradeStatusUpdateCommand')
 
@@ -52,13 +52,24 @@ def test_execution_route_uses_execution_facade_boundary() -> None:
     source = inspect.getsource(executions_route.create_execution)
 
     assert '_execution_facade(db)' in source
-    assert '.create_execution(' in source
+    assert '.submit_reviewed_trade_execution(' in source
 
 
 
-def test_workspace_gateway_uses_execution_facade_execute_request() -> None:
+def test_reviewed_trade_routes_use_execution_facade_boundary() -> None:
+    create_source = inspect.getsource(reviewed_trades_route.create_reviewed_trade)
+    update_source = inspect.getsource(reviewed_trades_route.update_reviewed_trade_status)
+
+    assert '_execution_facade(db)' in create_source
+    assert '.create_reviewed_trade(' in create_source
+    assert '_execution_facade(db)' in update_source
+    assert '.update_reviewed_trade_status(' in update_source
+
+
+
+def test_workspace_gateway_uses_workspace_runtime_delegate() -> None:
     source = inspect.getsource(execution_gateway.execute_workspace_candidates)
 
-    assert 'execution_facade = build_execution_facade(db_session)' in source
-    assert 'execution_facade.execute_request(execution_request)' in source
+    assert 'from vinayak.execution.workspace_runtime import run_workspace_execution' in source
+    assert 'run_workspace_execution(' in source
 

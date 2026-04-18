@@ -2,13 +2,12 @@ from __future__ import annotations
 
 """Backend helpers for web login and logout flows."""
 
-import os
-
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from vinayak.api.dependencies.admin_auth import COOKIE_NAME, LEGACY_COOKIE_NAME
 from vinayak.auth.service import ADMIN_ROLE, AuthenticatedUser, UserAuthService
+from vinayak.core.config import get_settings
 
 
 class WebAuthBackend:
@@ -47,8 +46,7 @@ class WebAuthBackend:
 
     @staticmethod
     def secure_cookies_enabled() -> bool:
-        value = str(os.getenv('VINAYAK_SECURE_COOKIES', 'true') or 'true').strip().lower()
-        return value not in {'0', 'false', 'no'}
+        return get_settings().auth.secure_cookies
 
 
-__all__ = ["WebAuthBackend"]
+__all__ = ['WebAuthBackend']

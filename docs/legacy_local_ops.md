@@ -1,51 +1,30 @@
-# Legacy Local Ops
+# Archived Legacy Local Ops
 
-Scope: current supported local/operator guidance for the legacy runtime.
+This document is retained only as migration history.
 
-## Supported Local Entrypoints
+## Status
 
-- UI: `streamlit run src/Trading.py`
-- Local launcher: `tools/run_app.ps1`
-- Breakout CLI: `py -3 -m src.breakout_bot ...`
-- Backtest workflow: `py -3 -m src.auto_backtest ...`
-- End-to-end operator pipeline: `py -3 -m src.auto_run ...`
-- Broker/account utilities: `py -3 -m src.dhan_example ...` and `py -3 -m src.dhan_account ...`
+The legacy local/operator runtime documented here is deprecated and not a supported current workflow.
 
-## Local Setup
+Do not use:
+- `streamlit run src/Trading.py`
+- `tools/run_app.ps1`
+- `py -3 -m src.auto_run ...`
+- `py -3 -m src.auto_backtest ...`
+- `py -3 -m src.breakout_bot ...`
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-```
+## Supported replacement
 
-## Local UI Run
-
-```bash
-streamlit run src/Trading.py
-```
-
-What the local UI supports now:
-- operator-led symbol / timeframe / strategy selection
-- trade generation
-- backtest initiation
-- paper execution flow
-- live-routing checks when explicitly enabled
-
-## Local AWS-Optional Flow
-
-1. Install dependencies:
-   - `py -3 -m pip install -r requirements.txt`
-2. Configure local AWS credentials if you want S3 mirroring.
-3. Run the UI locally:
-   - `streamlit run src/Trading.py`
-4. Use AWS/S3-related options only as local operator features, not as evidence of a hardened production deployment profile.
-
-## Local Runtime Artifacts
-
-Primary runtime artifacts are written under:
-- `data/`
-- `logs/`
-
-Current active-surface reference:
+Use the FastAPI runtime documented in:
+- `README.md`
 - `docs/active_code_surface.md`
+- `DEPLOYMENT.md`
+
+Supported local entrypoint:
+```bash
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+## Reason this file still exists
+
+It remains only to explain historical references that may still appear in archived docs, reports, snapshots, or old operational notes.

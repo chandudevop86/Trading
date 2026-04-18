@@ -3,23 +3,25 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    APP_HOME=/app
+    APP_HOME=/app \
+    PYTHONPATH=/app
 
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
-    git \
  && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN useradd --create-home --shell /bin/bash appuser
 
-COPY . .
+COPY app/vinayak/requirements.txt /tmp/requirements.txt
+RUN pip install --upgrade pip && pip install -r /tmp/requirements.txt
 
-RUN mkdir -p /app/data /app/logs
+COPY . /app
+RUN mkdir -p /app/app/vinayak/data /app/app/vinayak/logs && chown -R appuser:appuser /app
 
-EXPOSE 8501
+USER appuser
 
-CMD ["streamlit", "run", "src/Trading.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+EXPOSE 8000
+
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

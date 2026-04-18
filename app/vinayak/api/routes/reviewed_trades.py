@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -7,10 +7,15 @@ from vinayak.api.dependencies.admin_auth import require_admin_session
 from vinayak.api.dependencies.db import get_db
 from vinayak.api.schemas.signal import ReviewedTradeListResponse, ReviewedTradeResponse
 from vinayak.api.schemas.strategy import ReviewedTradeCreateRequest, ReviewedTradeStatusUpdateRequest
-from vinayak.execution.reviewed_trade_service import ReviewedTradeCreateCommand, ReviewedTradeService, ReviewedTradeStatusUpdateCommand
+from vinayak.execution.reviewed_trade_service import ReviewedTradeCreateCommand, ReviewedTradeStatusUpdateCommand
+from vinayak.execution.runtime import build_execution_facade
 
 
 router = APIRouter(prefix='/reviewed-trades', tags=['reviewed-trades'], dependencies=[Depends(require_admin_session)])
+
+
+def _execution_facade(db: Session):
+    return build_execution_facade(db)
 
 
 def _to_response(record) -> ReviewedTradeResponse:
@@ -33,17 +38,15 @@ def _to_response(record) -> ReviewedTradeResponse:
 
 @router.get('', response_model=ReviewedTradeListResponse)
 def list_reviewed_trades(db: Session = Depends(get_db)) -> ReviewedTradeListResponse:
-    service = ReviewedTradeService(db)
-    records = service.list_reviewed_trades()
+    records = _execution_facade(db).list_reviewed_trades()
     reviewed_trades = [_to_response(record) for record in records]
     return ReviewedTradeListResponse(total=len(reviewed_trades), reviewed_trades=reviewed_trades)
 
 
 @router.post('', response_model=ReviewedTradeResponse)
 def create_reviewed_trade(request: ReviewedTradeCreateRequest, db: Session = Depends(get_db)) -> ReviewedTradeResponse:
-    service = ReviewedTradeService(db)
     try:
-        record = service.create_reviewed_trade(
+        record = _execution_facade(db).create_reviewed_trade(
             ReviewedTradeCreateCommand(
                 signal_id=request.signal_id,
                 strategy_name=request.strategy_name,
@@ -69,9 +72,8 @@ def update_reviewed_trade_status(
     request: ReviewedTradeStatusUpdateRequest,
     db: Session = Depends(get_db),
 ) -> ReviewedTradeResponse:
-    service = ReviewedTradeService(db)
     try:
-        record = service.update_reviewed_trade_status(
+        record = _execution_facade(db).update_reviewed_trade_status(
             ReviewedTradeStatusUpdateCommand(
                 reviewed_trade_id=reviewed_trade_id,
                 status=request.status,

@@ -90,7 +90,7 @@ class SqlAlchemyExecutionRepository(ExecutionRepositoryPort):
                 processed_at=result.processed_at,
             )
         )
-        self.session.commit()
+        self.session.flush()
         return result
 
 
@@ -108,7 +108,7 @@ class SqlAlchemyAuditRepository(AuditRepositoryPort):
                 occurred_at=event.occurred_at,
             )
         )
-        self.session.commit()
+        self.session.flush()
 
     def list_events(self, *, limit: int = 100) -> list[AuditEvent]:
         records = (

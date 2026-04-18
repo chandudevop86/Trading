@@ -1,27 +1,15 @@
 version: '3.9'
 
 services:
-  trading-ui:
+  vinayak-api:
     build: .
-    container_name: trading-ui
+    container_name: vinayak-api
     env_file:
-      - infra/config/trading.env.example
+      - app/vinayak/.env.example
     ports:
-      - '8501:8501'
+      - '8000:8000'
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - ./app/vinayak/data:/app/app/vinayak/data
+      - ./app/vinayak/logs:/app/app/vinayak/logs
     restart: unless-stopped
-    command: ["streamlit", "run", "src/Trading.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
-
-  trading-daemon:
-    build: .
-    container_name: trading-daemon
-    env_file:
-      - infra/config/trading.env.example
-    volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
-    restart: unless-stopped
-    command: ["python", "-m", "src.operational_daemon", "--env-file", "infra/config/trading.env.example"]
-
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

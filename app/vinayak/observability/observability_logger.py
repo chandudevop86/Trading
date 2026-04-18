@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from vinayak.observability.correlation import get_correlation_id
 from vinayak.observability.observability_metrics import increment_metric
 
 
@@ -42,6 +43,7 @@ def log_event(
         'strategy': str(strategy or ''),
         'severity': str(severity or 'INFO').upper(),
         'message': str(message or ''),
+        'correlation_id': get_correlation_id(),
         'context_json': dict(context_json or {}),
     }
     try:

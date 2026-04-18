@@ -1,48 +1,25 @@
-# Legacy Deployment Limits
+# Archived Legacy Deployment Limits
 
-Scope: current deployment boundaries for the legacy runtime.
+This document is retained only as migration/reference history for the deprecated `src/` runtime.
 
-## Current Position
+## Status
 
-The legacy runtime supports local and operator-led deployment paths today.
-Production-style deployment assets exist in the repository, but they should be treated as non-default or aspirational surfaces until runtime hardening is complete.
+The legacy deployment surface is not the supported current production contract.
 
-## Supported Now
-
-- local Streamlit run via `src/Trading.py`
-- local launcher via `tools/run_app.ps1`
-- local Docker-oriented experimentation via `deploy/docker/`
-
-## Not a Current Legacy Production Contract
-
-Do not treat these as evidence of a fully hardened production profile:
-- `deploy/k8s/`
-- `deploy/aws/`
-- reverse-proxy / public-domain examples
-- cloud scaling assumptions beyond the current single-runtime legacy architecture
-
-## Why The Limit Exists
-
-The legacy runtime still carries monolithic coupling across:
-- UI and operator workflow control
-- execution and broker routing
-- local/runtime artifact management
-- mixed local and deployment assumptions
-
-The repo also still contains reference and historical surfaces that can be mistaken for deployable targets unless operators stay within the active-surface contract.
-
-## Required Active Deployment Surface
-
-If you need a supported current-state target, use only:
+Do not treat any of the following as active deployment targets:
 - `src/Trading.py`
 - `tools/run_app.ps1`
-- `deploy/docker/Dockerfile`
-- `deploy/docker/docker-compose.yml`
+- deprecated Streamlit/systemd/docker paths for `src`
 
-## Reference Docs
+## Supported deployment surface
 
+Use only the FastAPI deployment contract documented in:
+- `README.md`
 - `docs/active_code_surface.md`
+- `DEPLOYMENT.md`
+- `ROLLBACK.md`
 - `docs/aws_deployment.md`
-- `src/EXPERIMENTAL_SURFACE.md`
-- `src/_archive/README.md`
-- `snapshots/README.md`
+
+## Why this file still exists
+
+It helps explain historical repository references while the last archived `src` materials remain in the repo for migration traceability.

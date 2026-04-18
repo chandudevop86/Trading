@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from vinayak.api.middleware.request_context import RequestContextMiddleware
 from vinayak.api.routes.catalog import router as catalog_router
 from vinayak.api.routes.dashboard import router as dashboard_router
 from vinayak.api.routes.executions import router as executions_router
@@ -10,16 +11,20 @@ from vinayak.api.routes.production import router as production_router
 from vinayak.api.routes.reviewed_trades import router as reviewed_trades_router
 from vinayak.api.routes.signals import router as signals_router
 from vinayak.api.routes.strategies import router as strategies_router
+from vinayak.core.config import SettingsValidationError
 from vinayak.core.config import should_auto_initialize_database
+from vinayak.core.config import validate_settings
 from vinayak.db.session import initialize_database
 from vinayak.web.app.main import router as web_router
 
 
 app = FastAPI(title='Vinayak Trading Platform', version='0.2.0')
+app.add_middleware(RequestContextMiddleware)
 
 
 @app.on_event('startup')
 def startup_initialize_database() -> None:
+    validate_settings(startup=True)
     if should_auto_initialize_database():
         initialize_database()
 
@@ -27,6 +32,11 @@ def startup_initialize_database() -> None:
 @app.exception_handler(ValueError)
 def handle_value_error(_, exc):
     return JSONResponse(status_code=400, content={'error': str(exc)})
+
+
+@app.exception_handler(SettingsValidationError)
+def handle_settings_validation_error(_, exc: SettingsValidationError):
+    return JSONResponse(status_code=503, content={'error': str(exc)})
 
 
 app.include_router(health_router)

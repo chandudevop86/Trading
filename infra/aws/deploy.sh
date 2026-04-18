@@ -3,10 +3,9 @@ set -euo pipefail
 
 APP_DIR="/opt/trading"
 DOMAIN="chandudevopai.shop"
+SERVICE_NAME="vinayak-api"
 
 export APP_ENV="${APP_ENV:-production}"
-export LEGACY_DEPLOYMENT_TARGET="production"
-python3 -m src.deployment_guard --target production
 
 echo "[1/9] Installing packages..."
 sudo apt update
@@ -25,31 +24,36 @@ cd "$APP_DIR"
 echo "[3/9] Python env + deps..."
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r app/vinayak/requirements.txt alembic
 
-echo "[4/9] Streamlit config..."
-mkdir -p .streamlit
-cp web/streamlit/config.toml .streamlit/config.toml
+echo "[4/9] Production env..."
+sudo mkdir -p /etc/trading
+if [ ! -f /etc/trading/vinayak.production.env ]; then
+  sudo cp infra/production/env/vinayak.production.env.example /etc/trading/vinayak.production.env
+  sudo chmod 600 /etc/trading/vinayak.production.env
+fi
 
-echo "[5/9] Systemd service..."
-sudo cp infra/aws/intratrade.service /etc/systemd/system/intratrade.service
+echo "[5/9] Database migrations..."
+python -m alembic -c app/vinayak/alembic.ini upgrade head
+
+echo "[6/9] Systemd service..."
+sudo cp infra/production/systemd/vinayak-api.service /etc/systemd/system/vinayak-api.service
 sudo systemctl daemon-reload
-sudo systemctl enable intratrade
-sudo systemctl restart intratrade
+sudo systemctl enable vinayak-api.service
+sudo systemctl restart vinayak-api.service
 
-echo "[6/9] Nginx config..."
+echo "[7/9] Nginx config..."
 sudo cp infra/aws/chandudevopai.shop.nginx.conf /etc/nginx/sites-available/$DOMAIN.conf
 sudo ln -sf /etc/nginx/sites-available/$DOMAIN.conf /etc/nginx/sites-enabled/$DOMAIN.conf
 sudo nginx -t
 sudo systemctl reload nginx
 
-echo "[7/9] Certbot SSL..."
+echo "[8/9] Certbot SSL..."
 sudo certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" --non-interactive --agree-tos -m REPLACE_EMAIL --redirect || true
 
-echo "[8/9] Health checks..."
-sudo systemctl status intratrade --no-pager || true
+echo "[9/9] Health checks..."
+sudo systemctl status vinayak-api.service --no-pager || true
 sudo systemctl status nginx --no-pager || true
 
-echo "[9/9] Done. Open: https://$DOMAIN"
-
+echo "Done. Open: https://$DOMAIN"

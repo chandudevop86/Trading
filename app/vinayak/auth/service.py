@@ -9,6 +9,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from vinayak.core.config import get_settings
 from vinayak.db.models.user import UserRecord
 from vinayak.db.repositories.user_repository import UserRepository
 
@@ -66,7 +67,13 @@ class UserAuthService:
 
     @staticmethod
     def _required_admin_env(name: str) -> str:
-        value = str(os.getenv(name, '') or '').strip()
+        settings = get_settings()
+        mapping = {
+            'VINAYAK_ADMIN_USERNAME': settings.auth.admin_username,
+            'VINAYAK_ADMIN_PASSWORD': settings.auth.admin_password,
+            'VINAYAK_ADMIN_SECRET': settings.auth.admin_secret,
+        }
+        value = str(mapping.get(name, '') or '').strip()
         if not value:
             raise RuntimeError(f'{name} must be configured for Vinayak admin authentication.')
         if UserAuthService._is_disallowed_admin_env_value(name, value):
@@ -141,11 +148,10 @@ class UserAuthService:
 
     @staticmethod
     def _should_sync_default_admin_credentials() -> bool:
-        env = str(os.getenv('APP_ENV', 'dev') or 'dev').strip().lower()
-        if env in {'dev', 'development', 'test'}:
+        settings = get_settings()
+        if settings.runtime.is_development_like:
             return True
-        flag = str(os.getenv('VINAYAK_SYNC_ADMIN_FROM_ENV', '') or '').strip().lower()
-        return flag in {'1', 'true', 'yes', 'on'}
+        return settings.auth.sync_admin_from_env and not settings.runtime.is_production
 
     def authenticate(self, username: str, password: str) -> AuthenticatedUser | None:
         record = self.users.get_by_username(username)

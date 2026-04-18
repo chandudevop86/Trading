@@ -30,7 +30,9 @@ This migration pass:
 - removes the `app.main` path hack
 - moves active live-OHLCV fetching and Dhan security-map handling onto app-owned modules
 - moves active OHLCV normalization and option-chain helpers onto app-owned infrastructure modules
-- updates operator docs so `app/` is the primary code surface
+- routes reviewed-trade and execution APIs through one facade boundary
+- adds request-id middleware and structured request logging to the FastAPI runtime
+- updates Docker and CI so the supported surface is `app.main:app`
 
 ## Related Context Docs
 

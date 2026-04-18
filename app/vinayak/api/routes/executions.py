@@ -99,7 +99,7 @@ def list_execution_audit_logs_for_execution(execution_id: int, db: Session = Dep
 @router.post('', response_model=ExecutionResponse)
 def create_execution(request: ExecutionCreateRequest, db: Session = Depends(get_db)) -> ExecutionResponse:
     try:
-        record = _execution_facade(db).create_execution(
+        record = _execution_facade(db).submit_reviewed_trade_execution(
             ExecutionCreateCommand(
                 signal_id=request.signal_id,
                 reviewed_trade_id=request.reviewed_trade_id,
@@ -150,6 +150,7 @@ def create_execution(request: ExecutionCreateRequest, db: Session = Depends(get_
         broker_reference=record.broker_reference,
         notes=record.notes,
     )
+
 
 
 

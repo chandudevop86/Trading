@@ -77,40 +77,50 @@ class CanonicalExecutionService:
         if existing is not None:
             return existing
 
-        self.execution_repository.save_request(request)
-        self._emit_event(TRADE_EXECUTE_REQUESTED, request.request_id, {'idempotency_key': request.idempotency_key})
+        session = self._session()
+        try:
+            self.execution_repository.save_request(request)
+            self._emit_event(TRADE_EXECUTE_REQUESTED, request.request_id, {'idempotency_key': request.idempotency_key})
 
-        decision = self.execution_guard.evaluate(request, daily_realized_pnl=daily_realized_pnl)
-        if not decision.allowed:
-            rejection = self.execution_guard.build_rejection_result(request, decision)
-            stored = self.execution_repository.save_result(rejection)
+            decision = self.execution_guard.evaluate(request, daily_realized_pnl=daily_realized_pnl)
+            if not decision.allowed:
+                rejection = self.execution_guard.build_rejection_result(request, decision)
+                stored = self.execution_repository.save_result(rejection)
+                self._emit_event(
+                    TRADE_EXECUTION_REJECTED,
+                    request.request_id,
+                    {
+                        'failure_reason': rejection.failure_reason.value,
+                        'message': rejection.message,
+                        'signal_id': str(request.signal.signal_id),
+                    },
+                )
+                if session is not None:
+                    session.commit()
+                return stored
+
+            adapter = self.live_adapter if request.mode.value == 'LIVE' else self.paper_adapter
+            result = adapter.place_order(request)
+            stored = self.execution_repository.save_result(result)
+            if stored.status == DomainExecutionStatus.EXECUTED:
+                self.execution_guard.mark_executed(request)
             self._emit_event(
-                TRADE_EXECUTION_REJECTED,
+                TRADE_EXECUTED,
                 request.request_id,
                 {
-                    'failure_reason': rejection.failure_reason.value,
-                    'message': rejection.message,
-                    'signal_id': str(request.signal.signal_id),
+                    'execution_id': str(stored.execution_id),
+                    'status': stored.status.value,
+                    'failure_reason': stored.failure_reason.value,
+                    'order_reference': stored.order_reference or '',
                 },
             )
+            if session is not None:
+                session.commit()
             return stored
-
-        adapter = self.live_adapter if request.mode.value == 'LIVE' else self.paper_adapter
-        result = adapter.place_order(request)
-        stored = self.execution_repository.save_result(result)
-        if stored.status == DomainExecutionStatus.EXECUTED:
-            self.execution_guard.mark_executed(request)
-        self._emit_event(
-            TRADE_EXECUTED,
-            request.request_id,
-            {
-                'execution_id': str(stored.execution_id),
-                'status': stored.status.value,
-                'failure_reason': stored.failure_reason.value,
-                'order_reference': stored.order_reference or '',
-            },
-        )
-        return stored
+        except Exception:
+            if session is not None:
+                session.rollback()
+            raise
 
     def _emit_event(self, event_name: str, correlation_id: UUID, payload: dict[str, Any]) -> None:
         self.audit_repository.save_event(
@@ -128,6 +138,9 @@ class CanonicalExecutionService:
         if event_name == TRADE_EXECUTION_REJECTED:
             return AuditEventType.EXECUTION_REJECTED
         return AuditEventType.EXECUTION_COMPLETED
+
+    def _session(self):
+        return getattr(self.execution_repository, 'session', None) or getattr(self.audit_repository, 'session', None)
 
 
 ProductionExecutionService = CanonicalExecutionService

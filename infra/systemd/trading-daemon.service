@@ -1,17 +1,17 @@
 [Unit]
-Description=Trading Execution Daemon
+Description=Vinayak FastAPI service (deprecated compatibility unit name)
 After=network.target
 
 [Service]
 Type=simple
 User=ubuntu
 WorkingDirectory=/opt/trading
-EnvironmentFile=/etc/trading/trading.env
-ExecStart=/opt/trading/.venv/bin/python -m src.operational_daemon --env-file /etc/trading/trading.env
+EnvironmentFile=/etc/trading/vinayak.production.env
+ExecStart=/opt/trading/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=10
-StandardOutput=append:/var/log/trading/daemon.log
-StandardError=append:/var/log/trading/daemon-error.log
+StandardOutput=append:/var/log/trading/api.log
+StandardError=append:/var/log/trading/api-error.log
 
 [Install]
 WantedBy=multi-user.target

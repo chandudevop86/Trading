@@ -12,6 +12,10 @@ def set_correlation_id(value: str) -> str:
     return value
 
 
+def clear_correlation_id() -> None:
+    _CORRELATION_ID.set('')
+
+
 def get_correlation_id() -> str:
     current = _CORRELATION_ID.get()
     if current:

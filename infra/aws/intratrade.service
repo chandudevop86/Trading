@@ -1,13 +1,14 @@
 [Unit]
-Description=Intratrade Streamlit App
+Description=Vinayak FastAPI App
 After=network.target
 
 [Service]
 Type=simple
 User=ubuntu
 WorkingDirectory=/opt/trading
+EnvironmentFile=/etc/trading/vinayak.production.env
 Environment="PATH=/opt/trading/.venv/bin"
-ExecStart=/opt/trading/.venv/bin/streamlit run src/Trading.py --server.port 8501 --server.address 0.0.0.0
+ExecStart=/opt/trading/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
 

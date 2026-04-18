@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse,JSONResponse
+from fastapi import APIRouter, Depends, Form, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from vinayak.api.dependencies.admin_auth import (
-    COOKIE_NAME,
-    LEGACY_COOKIE_NAME,
-    get_current_user,
-    require_admin_session,
-)
+from vinayak.api.dependencies.admin_auth import get_current_user, require_admin_session
 from vinayak.api.dependencies.db import get_db
+from vinayak.auth.backend import WebAuthBackend
 from vinayak.auth.service import ADMIN_ROLE, UserAuthService
 from vinayak.db.repositories.deferred_execution_job_repository import DeferredExecutionJobRepository
 from vinayak.messaging.outbox import OutboxService
@@ -211,15 +207,6 @@ def _auth_config_error_message(*, admin_only: bool) -> str:
         'to real non-placeholder values and restart the app.'
     )
 
-def _secure_cookies_enabled() -> bool:
-    value = str(__import__('os').getenv('VINAYAK_SECURE_COOKIES', 'true') or 'true').strip().lower()
-    return value not in {'0', 'false', 'no'}
-
-
-def _set_session_cookie(response: RedirectResponse, token: str) -> None:
-    response.set_cookie(COOKIE_NAME, token, httponly=True, samesite='lax', secure=_secure_cookies_enabled())
-
-
 def _redirect_for_role(role: str) -> str:
     return '/admin/dashboard' if str(role).upper() == ADMIN_ROLE else '/app'
 
@@ -248,27 +235,22 @@ def login_page(request: Request) -> HTMLResponse:
 
 @router.post('/login', response_model=None)
 def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    auth = UserAuthService(db)
+    backend = WebAuthBackend(db)
     try:
-        user = auth.authenticate(username, password)
+        user = backend.login_user(username, password)
     except RuntimeError:
         return _render_login(_auth_config_error_message(admin_only=False))
     if user is None:
         return _render_login('Invalid username or password.')
-    response = RedirectResponse(url=_redirect_for_role(user.role), status_code=303)
     try:
-        _set_session_cookie(response, auth.create_session_token(user))
+        return backend.build_login_response(user, redirect_to=_redirect_for_role(user.role))
     except RuntimeError:
         return _render_login(_auth_config_error_message(admin_only=False))
-    return response
 
 
 @router.post('/logout', response_model=None)
 def logout():
-    response = RedirectResponse(url='/login', status_code=303)
-    response.delete_cookie(COOKIE_NAME)
-    response.delete_cookie(LEGACY_COOKIE_NAME)
-    return response
+    return WebAuthBackend.build_logout_response(redirect_to='/login')
 
 
 @router.get('/app', response_class=HTMLResponse)
@@ -482,25 +464,19 @@ def admin_create_user(
 
 @router.post('/admin/login', response_model=None)
 def admin_login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    auth = UserAuthService(db)
+    backend = WebAuthBackend(db)
     try:
-        auth.ensure_default_admin()
+        user = backend.login_admin(username, password)
     except RuntimeError:
         return _render_login(_auth_config_error_message(admin_only=True), form_action='/admin/login')
-    user = auth.authenticate(username, password)
-    if user is None or str(user.role).upper() != ADMIN_ROLE:
+    if user is None:
         return _render_login('Invalid admin username or password.', form_action='/admin/login')
-    response = RedirectResponse(url='/admin/dashboard', status_code=303)
-    _set_session_cookie(response, auth.create_session_token(user))
-    return response
+    return backend.build_login_response(user, redirect_to='/admin/dashboard')
 
 
 @router.post('/admin/logout', response_model=None)
 def admin_logout():
-    response = RedirectResponse(url='/admin', status_code=303)
-    response.delete_cookie(COOKIE_NAME)
-    response.delete_cookie(LEGACY_COOKIE_NAME)
-    return response
+    return WebAuthBackend.build_logout_response(redirect_to='/admin')
 
 
 

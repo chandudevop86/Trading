@@ -1,0 +1,40 @@
+apiversion: app/v1
+kind: deployment
+meta data:
+ Name: web
+ labels:
+ app : nginx
+spec:
+ replicas: 1
+match labels:
+  app: nginx
+  spec:
+      containers:
+      - name: nginx-container
+        image: nginx:1.21.6
+        ports:
+        - containerPort: 80
+        
+        # --- SECTION 1: RESOURCE MANAGEMENT ---
+        resources:
+          requests:
+            memory: "64Mi"   # Guaranteed amount (What it needs to start)
+            cpu: "250m"      # 1/4 of a CPU core
+          limits:
+            memory: "128Mi"  # Maximum allowed (Hard ceiling)
+            cpu: "500m"      # 1/2 of a CPU core
+            
+        # --- SECTION 2: HEALTH CHECKS (PROBES) ---
+        livenessProbe:       # "Are you alive?" (If no, K8s restarts it)
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:      # "Are you ready for traffic?" (If no, K8s stops sending users)
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 2
+          periodSeconds: 5
+   
